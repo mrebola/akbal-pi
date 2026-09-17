@@ -10,7 +10,7 @@ Raspberry Pi OS 64-bit (Debian Trixie), conectando por SSH al hostname Tailscale
 |---|---|---|
 | LLM | [Ollama](https://ollama.com) + `qwen3:1.7b` (Q4_K_M) | Corre en CPU, ~1.4GB en disco. `ENABLE_THINKING=false` para respuestas rápidas. |
 | ASR (voz→texto) | [faster-whisper](https://github.com/SYSTRAN/faster-whisper), modelo `base` | `int8` en CPU, `beam_size=1`, idioma fijo en español (`FASTER_WHISPER_LANGUAGE=es`). ~1.8s por transcripción, ver [`performance-tuning.md`](./performance-tuning.md). |
-| TTS (texto→voz) | [Piper](https://github.com/OHF-Voice/piper1-gpl), voz `es_MX-ald-medium` (hombre, español de México) | Servido vía `piper-http` en `localhost:8805`. |
+| TTS (texto→voz) | [Piper](https://github.com/OHF-Voice/piper1-gpl), voz `es_ES-davefx-medium` (hombre, español de España) | Servido vía `piper-http` en `localhost:8805`. Ver [`piper-voice-selection.md`](./piper-voice-selection.md) para cómo se eligió. |
 | Batería | [PiSugar Power Manager](https://github.com/PiSugar/pisugar-power-manager-rs) | Necesario para el PiSugar 3 Plus (lectura de batería en pantalla). |
 | Orquestación | [whisplay-ai-chatbot](https://github.com/PiSugar/whisplay-ai-chatbot) | Clonado en `~/whisplay-ai-chatbot` en la Pi (no vive dentro de este repo). |
 
@@ -30,8 +30,9 @@ Raspberry Pi OS 64-bit (Debian Trixie), conectando por SSH al hostname Tailscale
    `pip install faster-whisper 'piper-tts[http]' --break-system-packages`
    (no vienen en `python/requirements.txt` del proyecto, son opcionales según el
    backend de ASR/TTS elegido). Voz de Piper descargada con
-   `python3 -m piper.download_voices es_MX-ald-medium` (voz de hombre, español de
-   México; ver el listado completo en la nota más abajo).
+   `python3 -m piper.download_voices es_ES-davefx-medium` (voz de hombre,
+   español de España; ver [`piper-voice-selection.md`](./piper-voice-selection.md)
+   para cómo se eligió y otras opciones probadas).
 6. **PiSugar Power Manager**: instalado con el script oficial de PiSugar para que
    el chatbot pueda leer el nivel de batería (puerto TCP 8423).
 7. **Configuración**: `.env` armado a partir de `.env.template` — ver
@@ -53,20 +54,15 @@ Raspberry Pi OS 64-bit (Debian Trixie), conectando por SSH al hostname Tailscale
     LLM (Ollama) y el TTS (Piper) ya corrían como servicios HTTP persistentes de
     fábrica en `whisplay-ai-chatbot`, así que no necesitaron cambios. Detalle
     completo en [`performance-tuning.md`](./performance-tuning.md).
-11. **Cambio de voz**: se reemplazó `es_MX-claude-high` por `es_MX-ald-medium`
-    a pedido (voz de hombre en español de México). Confirmado directamente en
-    la [ficha del dataset de entrenamiento](https://huggingface.co/datasets/rmcpantoja/Ald_Mexican_Spanish_speech_dataset)
-    (`Speaker: Aldo`) — no por el nombre de la voz, que no siempre indica género
-    de forma confiable. Descarga con
-    `python3 -m piper.download_voices es_MX-ald-medium` y ajustar
-    `PIPER_HTTP_MODEL` en `.env`.
-
-    Otras voces en español existen en el catálogo de Piper (`es_ES-davefx-medium`,
-    `es_ES-sharvard-medium` con 2 speakers M/F, `es_AR-daniela-high`, etc.), pero
-    no verificamos el género de cada una — antes de usar otra, confirmar en la
-    ficha del dataset (`voices.json` → `dataset` URL) en vez de asumir por el
-    nombre. Listado completo:
-    `curl -s https://huggingface.co/rhasspy/piper-voices/resolve/main/voices.json | jq 'keys[] | select(startswith("es_"))'`.
+11. **Cambio de voz (1)**: se reemplazó `es_MX-claude-high` por `es_MX-ald-medium`
+    a pedido (voz de hombre en español de México). Confirmado por el dataset de
+    entrenamiento (`Speaker: Aldo`), no por el nombre de la voz.
+12. **Cambio de voz (2)**: feedback real fue que `es_MX-ald-medium` sonaba mal.
+    Se probaron varias voces midiendo la frecuencia fundamental (F0) real de
+    cada una en vez de adivinar por el nombre, y se cambió a
+    `es_ES-davefx-medium` (hombre, español de España, F0 ~118 Hz, calidad
+    `medium`). Metodología completa, mediciones y todas las voces probadas en
+    [`piper-voice-selection.md`](./piper-voice-selection.md).
 
 ## Estado verificado
 

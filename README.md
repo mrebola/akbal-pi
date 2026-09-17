@@ -24,7 +24,7 @@ Raspberry Pi OS 64-bit, basado en Debian Trixie.
 |---|---|
 | LLM | [Ollama](https://ollama.com) con `qwen3:1.7b` |
 | Voz→texto (ASR) | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (modelo `base`, español) |
-| Texto→voz (TTS) | [Piper](https://github.com/OHF-Voice/piper1-gpl) (voz `es_MX-ald-medium`, hombre, español de México) |
+| Texto→voz (TTS) | [Piper](https://github.com/OHF-Voice/piper1-gpl) (voz `es_ES-davefx-medium`, hombre, español de España) |
 | Batería | [PiSugar Power Manager](https://github.com/PiSugar/pisugar-power-manager-rs) |
 | Orquestación | [whisplay-ai-chatbot](https://github.com/PiSugar/whisplay-ai-chatbot) |
 
@@ -124,7 +124,7 @@ ajustando `OLLAMA_MODEL` en el `.env`.
 ```bash
 pip install faster-whisper 'piper-tts[http]' --break-system-packages
 mkdir -p ~/piper && cd ~/piper
-python3 -m piper.download_voices es_MX-ald-medium   # hombre, español de México; ver docs/SETUP.md para más opciones
+python3 -m piper.download_voices es_ES-davefx-medium   # hombre, español de España; ver docs/piper-voice-selection.md para más opciones
 ```
 
 Estos dos paquetes no vienen en `python/requirements.txt` de la app: son
@@ -206,7 +206,10 @@ el chatbot como servicio systemd (`chatbot.service`, arranque automático). Ver
 [`docs/piper-tts-silent-fix.md`](docs/piper-tts-silent-fix.md) para los bugs de
 hardware/software que se encontraron y arreglaron durante la instalación, y
 [`docs/performance-tuning.md`](docs/performance-tuning.md) para la optimización
-de velocidad del ASR (~3x más rápido, de 5.2s a 1.8s por transcripción).
+de velocidad del ASR (~3x más rápido, de 5.2s a 1.8s por transcripción), y
+[`docs/piper-voice-selection.md`](docs/piper-voice-selection.md) para cómo se
+eligió la voz (con medición real de tono, no adivinando por el nombre) y todas
+las voces que se probaron.
 
 Pendiente: wake word (activación por voz sin botón).
 

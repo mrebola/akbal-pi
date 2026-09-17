@@ -24,7 +24,7 @@ Raspberry Pi OS 64-bit, basado en Debian Trixie.
 |---|---|
 | LLM | [Ollama](https://ollama.com) con `qwen3:1.7b` |
 | Voz→texto (ASR) | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (modelo `base`, español) |
-| Texto→voz (TTS) | [Piper](https://github.com/OHF-Voice/piper1-gpl) (voz `es_MX-claude-high`) |
+| Texto→voz (TTS) | [Piper](https://github.com/OHF-Voice/piper1-gpl) (voz `es_MX-ald-medium`, hombre, español de México) |
 | Batería | [PiSugar Power Manager](https://github.com/PiSugar/pisugar-power-manager-rs) |
 | Orquestación | [whisplay-ai-chatbot](https://github.com/PiSugar/whisplay-ai-chatbot) |
 
@@ -124,7 +124,7 @@ ajustando `OLLAMA_MODEL` en el `.env`.
 ```bash
 pip install faster-whisper 'piper-tts[http]' --break-system-packages
 mkdir -p ~/piper && cd ~/piper
-python3 -m piper.download_voices es_MX-claude-high   # o la voz que prefieras
+python3 -m piper.download_voices es_MX-ald-medium   # hombre, español de México; ver docs/SETUP.md para más opciones
 ```
 
 Estos dos paquetes no vienen en `python/requirements.txt` de la app: son

@@ -88,6 +88,15 @@ pecho) en vez de los lados, ya que el personaje está centrado horizontalmente.
   recibiendo pero ya no se dibuja en pantalla. Los modos de cámara
   (`camera_mode`) e imagen generada (`image_path`, para el tool de generación
   de imágenes) siguen funcionando igual que antes, sin tocar.
+- **Overlay de selección/carga de modelo**: cuando `model_ui` viene en
+  `"select"`, `"confirm"` o `"loading"` (ver
+  [`voice-commands.md`](./voice-commands.md)), `render_model_ui_screen()`
+  reemplaza el GIF del personaje por una pantalla verde-sobre-negro estilo
+  terminal — nombre del modelo, puntos de paginación o barra de progreso
+  según el modo (`model_ui_percent`, `model_ui_index`/`model_ui_total`,
+  `model_ui_active`). `model_ui: ""` (cadena vacía, no `null` — mismo criterio
+  que `image: ""`, porque Python no puede distinguir "campo ausente" de
+  "campo en null" en el JSON) vuelve a mostrar el GIF normal.
 - Se eliminó el código que ya no se usa: header con texto de estado,
   pastillas de herramientas, barra de progreso de música, scroll de texto, y
   el modo de aprobación del puente de Whisplay IM (no lo usamos en este

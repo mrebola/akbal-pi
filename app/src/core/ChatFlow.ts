@@ -53,6 +53,8 @@ class ChatFlow implements ChatFlowContext {
   pendingExternalReply: string = "";
   pendingExternalEmoji: string = "";
   pendingExternalImageUrl: string = "";
+  pendingModelSwitchTag: string = "";
+  pendingModelSwitchLabel: string = "";
   pendingApprovalRequest: WhisplayIMApprovalRequest | null = null;
   currentExternalEmoji: string = "";
   stateMachine: FlowStateMachine;

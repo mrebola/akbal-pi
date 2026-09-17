@@ -39,6 +39,15 @@ export interface Status {
   music_progress: number | undefined;
   music_duration_ms: number | undefined;
   approval_mode: boolean;
+  // Model select/switch overlay (see chat-flow/model-select-mode.ts and
+  // cloud-api/local/ollama-llm.ts). Replaces the character GIF with a
+  // hacker-style screen while browsing models or loading one.
+  model_ui: "" | "select" | "confirm" | "loading";
+  model_ui_label: string;
+  model_ui_percent: number;
+  model_ui_index: number;
+  model_ui_total: number;
+  model_ui_active: boolean;
 }
 
 export class WhisplayDisplay {
@@ -65,6 +74,12 @@ export class WhisplayDisplay {
     music_progress: undefined,
     music_duration_ms: undefined,
     approval_mode: false,
+    model_ui: "",
+    model_ui_label: "",
+    model_ui_percent: 0,
+    model_ui_index: 0,
+    model_ui_total: 0,
+    model_ui_active: false,
   };
 
   private client = null as Socket | null;
@@ -415,6 +430,12 @@ export class WhisplayDisplay {
       music_progress,
       music_duration_ms,
       approval_mode,
+      model_ui,
+      model_ui_label,
+      model_ui_percent,
+      model_ui_index,
+      model_ui_total,
+      model_ui_active,
     } = {
       ...this.currentStatus,
       ...normalizedStatus,
@@ -447,7 +468,13 @@ export class WhisplayDisplay {
     this.currentStatus.music_progress = music_progress;
     this.currentStatus.music_duration_ms = music_duration_ms;
     this.currentStatus.approval_mode = approval_mode;
-    
+    this.currentStatus.model_ui = model_ui;
+    this.currentStatus.model_ui_label = model_ui_label;
+    this.currentStatus.model_ui_percent = model_ui_percent;
+    this.currentStatus.model_ui_index = model_ui_index;
+    this.currentStatus.model_ui_total = model_ui_total;
+    this.currentStatus.model_ui_active = model_ui_active;
+
     const changedValuesObj = Object.fromEntries(changedValues);
     changedValuesObj.brightness = 100;
     if (

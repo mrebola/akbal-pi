@@ -11,7 +11,9 @@ export type FlowName =
   | "answer"
   | "image"
   | "approval"
-  | "external_answer";
+  | "external_answer"
+  | "model_select"
+  | "model_loading";
 
 export type FlowStateHandler = (ctx: ChatFlowContext) => void;
 
@@ -36,6 +38,8 @@ export interface ChatFlowContext {
   pendingExternalReply: string;
   pendingExternalEmoji: string;
   pendingExternalImageUrl: string;
+  pendingModelSwitchTag: string;
+  pendingModelSwitchLabel: string;
   pendingApprovalRequest: WhisplayIMApprovalRequest | null;
   currentExternalEmoji: string;
   isFromWakeListening: boolean;

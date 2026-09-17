@@ -1,9 +1,4 @@
 import { setVolumeByAmixer, getCurrentLogPercent } from "../../utils/volume";
-import {
-  getCurrentModel,
-  setCurrentModel,
-  listOllamaModels,
-} from "../../cloud-api/local/ollama-llm";
 
 // Volume and model-switch voice commands are matched here, in plain JS,
 // BEFORE the recognized text ever reaches the LLM. Doing this through LLM
@@ -11,10 +6,14 @@ import {
 // chat request (not just these commands), which measured ~15x slower
 // responses on this hardware — see docs/llm-model-selection.md. This keeps
 // normal conversation exactly as fast as before.
+//
+// Matching a model command here only *detects* intent (see
+// matchVoiceCommand). Actually switching models — including the button-driven
+// menu and the loading-screen progress — lives in model-select-mode.ts and
+// cloud-api/local/ollama-llm.ts, since that involves display state and an
+// async warm-up call, not just a synchronous reply string.
 
-const STABLE_MODEL_TAG = "qwen3:1.7b";
-
-type ModelAlias = {
+export type ModelAlias = {
   key: string;
   tag: string;
   label: string;
@@ -23,7 +22,7 @@ type ModelAlias = {
 
 // Short, spoken-friendly names for the models actually installed on this Pi
 // (checked with `ollama list` — see docs/llm-model-selection.md).
-const MODEL_ALIASES: ModelAlias[] = [
+export const MODEL_ALIASES: ModelAlias[] = [
   {
     key: "1",
     tag: "deepseek-r1:1.5b",
@@ -62,7 +61,7 @@ const MODEL_ALIASES: ModelAlias[] = [
   },
   {
     key: "6",
-    tag: STABLE_MODEL_TAG,
+    tag: "qwen3:1.7b",
     label: "modelo 6, qwen 3, el más estable",
     synonyms: ["6", "seis", "six", "qwen3", "qwen 3"],
   },
@@ -211,64 +210,31 @@ export function matchVoiceCommand(rawText: string): VoiceCommand | null {
   return matchModelCommand(norm) || matchVolumeCommand(norm);
 }
 
-function aliasForTag(tag: string): ModelAlias | undefined {
+export function aliasForTag(tag: string): ModelAlias | undefined {
   return MODEL_ALIASES.find((a) => a.tag.toLowerCase() === tag.toLowerCase());
 }
 
-function buildModelMenuText(): string {
-  const current = getCurrentModel();
-  const currentLabel = aliasForTag(current)?.label || current;
-  const options = MODEL_ALIASES.map((a) => a.label).join(". ");
-  return (
-    `Tenemos estos modelos. ${options}. ` +
-    `Para cambiar, decí "cambia el modelo a" y el número o el nombre, por ` +
-    `ejemplo "cambia el modelo a 1" o "cambia el modelo a deepseek". ` +
-    `Ahora mismo estoy usando el ${currentLabel}.`
-  );
-}
-
+// Only handles volume — a plain, synchronous action with no visual feedback
+// needed beyond the spoken reply. Model commands (model_menu, model_switch,
+// model_switch_failed) are handled by the "model_select"/"model_loading" flow
+// states in states.ts instead, since they drive the on-screen menu and
+// loading progress (see model-select-mode.ts).
 export async function handleVoiceCommand(
-  command: VoiceCommand,
+  command: Extract<VoiceCommand, { type: "volume" }>,
 ): Promise<string> {
-  switch (command.type) {
-    case "volume": {
-      if (command.action === "set") {
-        setVolumeByAmixer(command.percent);
-        return `Volumen ajustado a ${command.percent} por ciento.`;
-      }
-      const currentLogPercent = getCurrentLogPercent();
-      if (command.action === "increase") {
-        if (currentLogPercent >= 100) return "El volumen ya está al máximo.";
-        const next = Math.min(currentLogPercent + 10, 100);
-        setVolumeByAmixer(next);
-        return `Volumen subido a ${next} por ciento.`;
-      }
-      if (currentLogPercent <= 0) return "El volumen ya está al mínimo.";
-      const next = Math.max(currentLogPercent - 10, 0);
-      setVolumeByAmixer(next);
-      return `Volumen bajado a ${next} por ciento.`;
-    }
-    case "model_menu":
-      return buildModelMenuText();
-    case "model_switch": {
-      const installed = await listOllamaModels().catch(() => [] as string[]);
-      const isInstalled = installed.some(
-        (tag) => tag.toLowerCase() === command.alias.tag.toLowerCase(),
-      );
-      if (!isInstalled) {
-        setCurrentModel(STABLE_MODEL_TAG);
-        return `Ese modelo ya no está instalado. Dejé activado el más estable. ${buildModelMenuText()}`;
-      }
-      if (command.alias.tag.toLowerCase() === getCurrentModel().toLowerCase()) {
-        return `Ya estoy usando el ${command.alias.label}.`;
-      }
-      setCurrentModel(command.alias.tag);
-      return `Listo, cambié al ${command.alias.label}.`;
-    }
-    case "model_switch_failed":
-      setCurrentModel(STABLE_MODEL_TAG);
-      return `No reconocí ese modelo, dejé el más estable activado. ${buildModelMenuText()}`;
-    default:
-      return "";
+  if (command.action === "set") {
+    setVolumeByAmixer(command.percent);
+    return `Volumen ajustado a ${command.percent} por ciento.`;
   }
+  const currentLogPercent = getCurrentLogPercent();
+  if (command.action === "increase") {
+    if (currentLogPercent >= 100) return "El volumen ya está al máximo.";
+    const next = Math.min(currentLogPercent + 10, 100);
+    setVolumeByAmixer(next);
+    return `Volumen subido a ${next} por ciento.`;
+  }
+  if (currentLogPercent <= 0) return "El volumen ya está al mínimo.";
+  const next = Math.max(currentLogPercent - 10, 0);
+  setVolumeByAmixer(next);
+  return `Volumen bajado a ${next} por ciento.`;
 }

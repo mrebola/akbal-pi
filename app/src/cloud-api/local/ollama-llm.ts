@@ -37,7 +37,11 @@ const ollamaEndpoint =
   process.env.OLLAMA_ENDPOINT || `http://localhost:${defaultPortMap.ollama}`;
 // Mutable so voice commands (see chat-flow/voice-commands.ts) can switch the
 // active model at runtime without restarting the process.
-let currentOllamaModel = process.env.OLLAMA_MODEL || "deepseek-r1:1.5b";
+// Falls back to the documented best-performing model (see
+// docs/llm-model-selection.md) if OLLAMA_MODEL is missing from .env, instead
+// of an arbitrary untested one.
+let currentOllamaModel =
+  process.env.OLLAMA_MODEL || "huihui_ai/qwen3.5-abliterated:2B";
 const ollamaEnableTools = process.env.OLLAMA_ENABLE_TOOLS === "true";
 const ollamaMaxToolRounds = Math.max(
   0,
@@ -94,10 +98,10 @@ const messages: OllamaMessage[] = [
   },
 ];
 
-const keepAliveOllama = () => {
+const warmUpModel = (model: string): Promise<void> =>
   axios
     .post(`${ollamaEndpoint}/api/chat`, {
-      model: currentOllamaModel,
+      model,
       messages: [
         {
           role: "system",
@@ -126,38 +130,90 @@ const keepAliveOllama = () => {
     })
     .catch((err) => {
       console.error("Error initializing Ollama model:", err.message);
+      throw err;
     });
-};
 
 if (llmServer.trim().toLowerCase() === "ollama") {
   // initialize request to ollama server with empty prompt, to load the model into memory
-  keepAliveOllama();
+  warmUpModel(currentOllamaModel).catch(() => {});
 }
 
-// Exposed for the voice-command flow (see chat-flow/voice-commands.ts) so it
-// can read/switch the active model without going through LLM tool-calling
-// (which would attach every tool schema to every request — far too slow on
-// this hardware, see docs/llm-model-selection.md).
+// Exposed for the voice-command flow (see chat-flow/voice-commands.ts and
+// chat-flow/model-select-mode.ts) so it can read/switch the active model
+// without going through LLM tool-calling (which would attach every tool
+// schema to every request — far too slow on this hardware, see
+// docs/llm-model-selection.md).
 export const getCurrentModel = (): string => currentOllamaModel;
 
-export const setCurrentModel = (model: string): void => {
-  if (!model || model === currentOllamaModel) return;
-  console.log(`[Ollama] Switching model: ${currentOllamaModel} -> ${model}`);
-  currentOllamaModel = model;
-  ollamaContextWindowCache = undefined;
-  persistEnvVar("OLLAMA_MODEL", model);
-  if (llmServer.trim().toLowerCase() === "ollama") {
-    keepAliveOllama();
+// Rough bytes/ms throughput used only to *pace* the loading-screen progress
+// bar (see chat-flow/model-select-mode.ts) while Ollama loads the model into
+// memory — it has no real progress API for that (only for pulls/downloads).
+// The bar is capped at 90% until the warm-up call actually resolves, so a
+// wrong estimate only makes the bar move at the wrong speed, never lie about
+// completion.
+const ASSUMED_LOAD_BYTES_PER_MS = (90 * 1024 * 1024) / 1000;
+const MIN_ESTIMATED_LOAD_MS = 2000;
+const MAX_ESTIMATED_LOAD_MS = 30000;
+const FALLBACK_ESTIMATED_LOAD_MS = 8000;
+
+const estimateLoadMs = async (model: string): Promise<number> => {
+  try {
+    const installed = await listOllamaModelsWithSize();
+    const found = installed.find(
+      (m) => m.name.toLowerCase() === model.toLowerCase(),
+    );
+    if (!found?.size) return FALLBACK_ESTIMATED_LOAD_MS;
+    const ms = found.size / ASSUMED_LOAD_BYTES_PER_MS;
+    return Math.min(MAX_ESTIMATED_LOAD_MS, Math.max(MIN_ESTIMATED_LOAD_MS, ms));
+  } catch {
+    return FALLBACK_ESTIMATED_LOAD_MS;
   }
 };
 
-export const listOllamaModels = async (): Promise<string[]> => {
+// Switches the active model and reports simulated progress (0-90%) while it
+// loads, resolving at 100% once Ollama confirms it's actually ready to
+// answer. Used by both direct voice-alias switches and the button-driven
+// model menu (see chat-flow/model-select-mode.ts) so any model change shows
+// the same loading screen instead of switching silently.
+export const switchModelWithProgress = async (
+  model: string,
+  onProgress: (percent: number) => void,
+): Promise<void> => {
+  if (model !== currentOllamaModel) {
+    console.log(`[Ollama] Switching model: ${currentOllamaModel} -> ${model}`);
+    currentOllamaModel = model;
+    ollamaContextWindowCache = undefined;
+    persistEnvVar("OLLAMA_MODEL", model);
+  }
+  onProgress(0);
+  const estimatedMs = await estimateLoadMs(model);
+  const startedAt = Date.now();
+  const ticker = setInterval(() => {
+    const elapsed = Date.now() - startedAt;
+    onProgress(Math.min(90, Math.round((elapsed / estimatedMs) * 90)));
+  }, 120);
+  try {
+    await warmUpModel(model);
+  } finally {
+    clearInterval(ticker);
+  }
+  onProgress(100);
+};
+
+export const listOllamaModelsWithSize = async (): Promise<
+  { name: string; size: number }[]
+> => {
   const response = await axios.get(`${ollamaEndpoint}/api/tags`);
   const models = response.data?.models;
   return Array.isArray(models)
-    ? models.map((m: any) => m?.name || m?.model).filter(Boolean)
+    ? models
+        .map((m: any) => ({ name: m?.name || m?.model, size: Number(m?.size) || 0 }))
+        .filter((m: { name: string }) => Boolean(m.name))
     : [];
 };
+
+export const listOllamaModels = async (): Promise<string[]> =>
+  (await listOllamaModelsWithSize()).map((m) => m.name);
 
 const resetChatHistory = (): void => {
   messages.length = 0;

@@ -28,6 +28,7 @@ curl -s http://localhost:11434/api/chat -d '{
 | `qwen3:1.7b` | 1.4 GB | Rápido (referencia original) | Usado desde el setup inicial, ver [`SETUP.md`](./SETUP.md). |
 | `hf.co/mradermacher/Qwen3.5-4B-Uncensored-GGUF:Q4_K_M` | 3.2 GB | ~2.9 tok/s | **Descartado.** Además de lento (4B en CPU pura), no respetaba el token de stop: con `think:false` igual siguió generando más de 500 tokens para "di hola en una palabra" sin terminar. El `.gguf` trae un `mmproj` (es una variante VL/multimodal) y el `llama-server` que levanta Ollama para este modelo no fuerza `--chat-template chatml` como sí hace para `qwen3:1.7b` — probablemente la plantilla Jinja embebida en este quant comunitario no emite bien el EOS. |
 | `huihui_ai/qwen3.5-abliterated:2B` | 1.9 GB | ~9 tok/s, responde en <1s para respuestas cortas | **El que se usa ahora.** Con `think:false` corta bien (`done_reason: "stop"`) y es más rápido que el modelo de 4B. |
+| `huihui_ai/qwen3-abliterated:1.7b` (modelo 4 del menú de voz) | 1.1 GB | Rápido | **No usar como default.** Con prompts cortos ("Dime algo.", "¡Venga!") a veces repite el prompt del usuario en vez de responder — se detectó en producción el 2026-09-17 después de que un comando de voz mal reconocido lo dejó activo (ver `docs/voice-commands.md`, el menú de voz ya no cambia de modelo a ciegas por esto). Sigue disponible como opción manual en el menú, pero no como fallback automático. |
 
 ## Configuración actual
 

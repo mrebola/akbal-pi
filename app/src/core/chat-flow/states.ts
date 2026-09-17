@@ -39,6 +39,17 @@ import {
 } from "./camera-mode";
 import { DEFAULT_EMOJI } from "../../utils";
 import { matchVoiceCommand, handleVoiceCommand } from "./voice-commands";
+import {
+  enterModelSelectMode,
+  handleModelSelectPress,
+  handleModelSelectRelease,
+  onModelSelectConfirm,
+  onModelSelectTimeout,
+} from "./model-select-mode";
+import {
+  listOllamaModels,
+  switchModelWithProgress,
+} from "../../cloud-api/local/ollama-llm";
 import { isMusicPlaying, getCurrentTrackTitle, stopMusicPlayback, startPendingMusicPlayback, onMusicTrackChange, onMusicPlaybackEnd } from "../../device/music-player";
 import { autoSaveExchange, prepareMemoryPrompt } from "../../config/local-memory";
 
@@ -73,6 +84,11 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       emoji: "😴",
       RGB: "#000055",
       rag_icon_visible: false,
+      // Always clear the model-select/loading overlay here, since "sleep" is
+      // the common return point from every flow — including the idle timeout
+      // in "model_select", which has no other cleanup step.
+      model_ui: "",
+      model_ui_percent: 0,
       ...(getCurrentStatus().text.endsWith("Escuchando...") || !getCurrentStatus().text
         ? {
           text: `Mantén presionado el botón para hablar${ctx.enableCamera ? ",\ndoble clic para abrir la cámara" : ""
@@ -273,10 +289,23 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
         // going through the LLM — see voice-commands.ts for why.
         const voiceCommand = matchVoiceCommand(result);
         if (voiceCommand) {
-          const reply = await handleVoiceCommand(voiceCommand);
-          if (ctx.currentFlowName !== "asr") return;
-          ctx.pendingExternalReply = reply;
-          ctx.transitionTo("external_answer");
+          if (voiceCommand.type === "volume") {
+            const reply = await handleVoiceCommand(voiceCommand);
+            if (ctx.currentFlowName !== "asr") return;
+            ctx.pendingExternalReply = reply;
+            ctx.transitionTo("external_answer");
+            return;
+          }
+          if (voiceCommand.type === "model_switch") {
+            ctx.pendingModelSwitchTag = voiceCommand.alias.tag;
+            ctx.pendingModelSwitchLabel = voiceCommand.alias.label;
+            ctx.transitionTo("model_loading");
+            return;
+          }
+          // "model_menu" (generic "cambia modelo") and "model_switch_failed"
+          // (misheard model name) both open the visual, button-driven menu
+          // instead of guessing — see model-select-mode.ts.
+          ctx.transitionTo("model_select");
           return;
         }
         ctx.transitionTo("answer");
@@ -641,5 +670,74 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       // Image only, no text to speak — go to image display mode
       ctx.transitionTo("image");
     }
+  },
+  model_select: (ctx: ChatFlowContext) => {
+    onButtonDoubleClick(null);
+    onModelSelectConfirm((alias) => {
+      ctx.pendingModelSwitchTag = alias.tag;
+      ctx.pendingModelSwitchLabel = alias.label;
+      ctx.transitionTo("model_loading");
+    });
+    onModelSelectTimeout(() => {
+      if (ctx.currentFlowName === "model_select") {
+        ctx.transitionTo("sleep");
+      }
+    });
+    onButtonPressed(() => handleModelSelectPress());
+    onButtonReleased(() => handleModelSelectRelease());
+    enterModelSelectMode();
+  },
+  model_loading: (ctx: ChatFlowContext) => {
+    onButtonDoubleClick(null);
+    onButtonPressed(noop);
+    onButtonReleased(noop);
+    const tag = ctx.pendingModelSwitchTag;
+    const label = ctx.pendingModelSwitchLabel || tag;
+    ctx.pendingModelSwitchTag = "";
+    ctx.pendingModelSwitchLabel = "";
+
+    const finish = (text: string): void => {
+      display({
+        status: "idle",
+        model_ui: "",
+        model_ui_percent: 0,
+        text,
+      });
+      setTimeout(() => {
+        if (ctx.currentFlowName === "model_loading") {
+          ctx.transitionTo("sleep");
+        }
+      }, 2500);
+    };
+
+    display({
+      status: "model_loading",
+      model_ui: "loading",
+      model_ui_label: label,
+      model_ui_percent: 0,
+      text: `Cargando modelo\n${label}`,
+    });
+
+    listOllamaModels()
+      .catch(() => [] as string[])
+      .then((installed) => {
+        if (ctx.currentFlowName !== "model_loading") return;
+        if (!installed.some((m) => m.toLowerCase() === tag.toLowerCase())) {
+          finish(`Ese modelo ya no está instalado.`);
+          return;
+        }
+        switchModelWithProgress(tag, (percent) => {
+          if (ctx.currentFlowName !== "model_loading") return;
+          display({ model_ui_percent: percent });
+        })
+          .then(() => {
+            if (ctx.currentFlowName !== "model_loading") return;
+            finish(`Modelo "${label}" listo para contestar.`);
+          })
+          .catch(() => {
+            if (ctx.currentFlowName !== "model_loading") return;
+            finish(`No se pudo cargar el modelo "${label}".`);
+          });
+      });
   },
 };

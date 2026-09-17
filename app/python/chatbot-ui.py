@@ -40,7 +40,17 @@ TOP_BAR_MARGIN_X = 14
 TOP_BAR_RIGHT_INSET_PCT = 0.10
 GIF_FPS = 10
 TERMINAL_FG = (80, 255, 120, 255)
+TERMINAL_DIM = (30, 90, 55, 255)
 TOOL_PLACEHOLDER_RE = re.compile(r"\{tool:([A-Za-z0-9_-]+)\}")
+
+# Model select/switch overlay (see chat-flow/model-select-mode.ts). Replaces
+# the character GIF with a hacker-style screen while browsing models,
+# confirming a hold-to-select, or loading the chosen model.
+MODEL_UI_TITLES = {
+    "select": "ELEGIR MODELO",
+    "confirm": "CONFIRMANDO",
+    "loading": "CARGANDO MODELO",
+}
 
 
 def apply_tool_placeholders(text):
@@ -99,6 +109,12 @@ current_image_icon_visible = False
 current_music_progress = None
 current_music_duration_ms = None
 current_approval_mode = False
+current_model_ui = ""
+current_model_ui_label = ""
+current_model_ui_percent = 0
+current_model_ui_index = 0
+current_model_ui_total = 0
+current_model_ui_active = False
 camera_mode = False
 camera_capture_image_path = ""
 camera_thread = None
@@ -133,6 +149,11 @@ class RenderThread(threading.Thread):
         self.top_bar_cache_key = None
         self.pending_auto_scroll_after_hold = False
         self.render_event = threading.Event()
+        self.model_ui_title_font = ImageFont.truetype(self.font_path, 13)
+        self.model_ui_label_font = ImageFont.truetype(self.font_path, 19)
+        self.model_ui_pct_font = ImageFont.truetype(self.font_path, 24)
+        self.model_ui_hint_font = ImageFont.truetype(self.font_path, 13)
+        self.model_ui_cache_key = None
 
     def render_init_screen(self):
         # Display logo on startup
@@ -149,6 +170,13 @@ class RenderThread(threading.Thread):
         self.pending_auto_scroll_after_hold = False
         if camera_mode:
             return False  # Skip rendering if in camera mode
+        if current_model_ui:
+            return self.render_model_ui_screen(apply_tool_placeholders(text))
+        if self.model_ui_cache_key is not None:
+            # Something else (GIF/image) is about to overwrite the video area
+            # the model-ui screen drew into — force a full redraw next time
+            # it's shown instead of trusting a stale cache key.
+            self.model_ui_cache_key = None
         if current_image_path not in [None, ""]:
             # Try to load image from path
             if current_image is not None:
@@ -181,6 +209,81 @@ class RenderThread(threading.Thread):
         else:
             current_image = None
             return self.render_idle_screen(status, apply_tool_placeholders(text))
+
+    def render_model_ui_screen(self, text):
+        """Hacker-style green-on-black screen shown instead of the character
+        GIF while browsing the model menu, holding to confirm, or loading the
+        chosen model (see chat-flow/model-select-mode.ts)."""
+        self.render_top_bar()
+
+        mode = current_model_ui
+        label = (current_model_ui_label or "").upper()
+        percent = max(0, min(100, current_model_ui_percent or 0))
+        index = current_model_ui_index or 0
+        total = max(current_model_ui_total or 0, 0)
+
+        cache_key = (mode, label, percent, index, total, current_model_ui_active)
+        if cache_key != self.model_ui_cache_key:
+            self.model_ui_cache_key = cache_key
+            frame = Image.new("RGBA", (VIDEO_WIDTH, VIDEO_HEIGHT), (0, 0, 0, 255))
+            draw = ImageDraw.Draw(frame)
+
+            title = MODEL_UI_TITLES.get(mode, "MODELO")
+            draw.text((14, 10), f">_ {title}", font=self.model_ui_title_font, fill=TERMINAL_FG)
+
+            max_label_width = VIDEO_WIDTH - 28
+            label_lines = [
+                line for line in TextUtils.wrap_text(draw, label, self.model_ui_label_font, max_label_width)
+                if line
+            ][:2]
+            ascent, descent = self.model_ui_label_font.getmetrics()
+            line_height = ascent + descent
+            label_y = 44
+            for line in label_lines:
+                bbox = draw.textbbox((0, 0), line, font=self.model_ui_label_font)
+                line_w = bbox[2] - bbox[0]
+                draw.text(((VIDEO_WIDTH - line_w) // 2, label_y), line, font=self.model_ui_label_font, fill=TERMINAL_FG)
+                label_y += line_height
+
+            if mode == "select":
+                if current_model_ui_active:
+                    self._draw_centered(draw, "[ ACTIVO ]", self.model_ui_hint_font, label_y + 6)
+                total_dots = max(total, 1)
+                dot_r = 3
+                spacing = 16
+                start_x = VIDEO_WIDTH / 2 - (total_dots - 1) * spacing / 2
+                dot_y = VIDEO_HEIGHT - 44
+                for i in range(total_dots):
+                    x = start_x + i * spacing
+                    if i == index - 1:
+                        draw.ellipse((x - dot_r - 2, dot_y - dot_r - 2, x + dot_r + 2, dot_y + dot_r + 2), outline=TERMINAL_FG)
+                        draw.ellipse((x - dot_r, dot_y - dot_r, x + dot_r, dot_y + dot_r), fill=TERMINAL_FG)
+                    else:
+                        draw.ellipse((x - dot_r, dot_y - dot_r, x + dot_r, dot_y + dot_r), outline=TERMINAL_DIM)
+                self._draw_centered(draw, f"[{index}/{total_dots}]", self.model_ui_hint_font, VIDEO_HEIGHT - 26)
+            else:
+                # "confirm" (holding the button) and "loading" (real model
+                # load) both use the same bracket progress bar, just with a
+                # different title above.
+                pct_text = f"{int(percent)}%"
+                self._draw_centered(draw, pct_text, self.model_ui_pct_font, VIDEO_HEIGHT - 84)
+                bar_w, bar_h = VIDEO_WIDTH - 40, 16
+                bar_x, bar_y = 20, VIDEO_HEIGHT - 54
+                draw.rectangle((bar_x, bar_y, bar_x + bar_w, bar_y + bar_h), outline=TERMINAL_FG, width=2)
+                fill_w = int((bar_w - 4) * percent / 100)
+                if fill_w > 0:
+                    draw.rectangle((bar_x + 2, bar_y + 2, bar_x + 2 + fill_w, bar_y + bar_h - 2), fill=TERMINAL_FG)
+
+            rgb565_data = ImageUtils.image_to_rgb565(frame, VIDEO_WIDTH, VIDEO_HEIGHT)
+            self.whisplay.draw_image(0, TOP_BAR_HEIGHT, VIDEO_WIDTH, VIDEO_HEIGHT, rgb565_data)
+
+        self.render_bottom_text(text)
+        return False  # event-driven: Node pushes a new frame on every change
+
+    def _draw_centered(self, draw, text, font, y):
+        bbox = draw.textbbox((0, 0), text, font=font)
+        w = bbox[2] - bbox[0]
+        draw.text(((VIDEO_WIDTH - w) // 2, y), text, font=font, fill=TERMINAL_FG)
 
     def render_idle_screen(self, status, text):
         """Thin wifi/battery bar on top, full-width looping GIF (standing /
@@ -281,7 +384,9 @@ def update_display_data(status=None, emoji=None, text=None,
                   scroll_speed=None, scroll_sync=None, battery_level=None, battery_color=None, image_path=None,
                   network_connected=None, vpn_connected=None, rag_icon_visible=None, image_icon_visible=None, transaction_id=None,
                   wifi_signal_level=None, tool_placeholders=None,
-                  music_progress=None, music_duration_ms=None, approval_mode=None, terminal_text=None):
+                  music_progress=None, music_duration_ms=None, approval_mode=None, terminal_text=None,
+                  model_ui=None, model_ui_label=None, model_ui_percent=None,
+                  model_ui_index=None, model_ui_total=None, model_ui_active=None):
     global current_status, current_emoji, current_text, current_battery_level
     global current_terminal_text
     global current_tool_placeholders
@@ -293,6 +398,8 @@ def update_display_data(status=None, emoji=None, text=None,
     global current_wifi_signal_level
     global current_music_progress, current_music_duration_ms
     global current_approval_mode
+    global current_model_ui, current_model_ui_label, current_model_ui_percent
+    global current_model_ui_index, current_model_ui_total, current_model_ui_active
     global render_thread
 
     next_text = text
@@ -389,6 +496,21 @@ def update_display_data(status=None, emoji=None, text=None,
         current_music_duration_ms = music_duration_ms if music_duration_ms > 0 else None
     if approval_mode is not None:
         current_approval_mode = bool(approval_mode)
+    if model_ui is not None:
+        current_model_ui = model_ui
+    if model_ui_label is not None:
+        current_model_ui_label = model_ui_label
+    if model_ui_percent is not None:
+        try:
+            current_model_ui_percent = int(model_ui_percent)
+        except (TypeError, ValueError):
+            print(f"[Display] Invalid model_ui_percent payload: {model_ui_percent}")
+    if model_ui_index is not None:
+        current_model_ui_index = model_ui_index
+    if model_ui_total is not None:
+        current_model_ui_total = model_ui_total
+    if model_ui_active is not None:
+        current_model_ui_active = bool(model_ui_active)
     if render_thread is not None:
         render_thread.request_render()
 
@@ -500,6 +622,12 @@ def handle_client(client_socket, addr, whisplay):
                     trigger_camera_capture = content.get("camera_capture", None)
                     # boolean to enable camera mode
                     set_camera_mode = content.get("camera_mode", None)
+                    model_ui = content.get("model_ui", None)
+                    model_ui_label = content.get("model_ui_label", None)
+                    model_ui_percent = content.get("model_ui_percent", None)
+                    model_ui_index = content.get("model_ui_index", None)
+                    model_ui_total = content.get("model_ui_total", None)
+                    model_ui_active = content.get("model_ui_active", None)
 
                     if rgbled:
                         rgb255_tuple = ColorUtils.get_rgb255_from_any(rgbled)
@@ -546,7 +674,9 @@ def handle_client(client_socket, addr, whisplay):
                             (rag_icon_visible is not None) or (image_icon_visible is not None) or (scroll_sync is not None) or \
                             (tool_placeholders is not None) or \
                             (music_progress is not None) or (music_duration_ms is not None) or (approval_mode is not None) or \
-                            (terminal_text is not None):
+                            (terminal_text is not None) or \
+                            (model_ui is not None) or (model_ui_label is not None) or (model_ui_percent is not None) or \
+                            (model_ui_index is not None) or (model_ui_total is not None) or (model_ui_active is not None):
                         update_display_data(status=status, emoji=emoji,
                                      text=text, text_delta=text_delta, scroll_speed=scroll_speed, scroll_sync=scroll_sync,
                                      battery_level=battery_level, battery_color=battery_tuple,
@@ -560,7 +690,13 @@ def handle_client(client_socket, addr, whisplay):
                                                  music_progress=music_progress,
                                                  music_duration_ms=music_duration_ms,
                                                  approval_mode=approval_mode,
-                                                 terminal_text=terminal_text)
+                                                 terminal_text=terminal_text,
+                                                 model_ui=model_ui,
+                                                 model_ui_label=model_ui_label,
+                                                 model_ui_percent=model_ui_percent,
+                                                 model_ui_index=model_ui_index,
+                                                 model_ui_total=model_ui_total,
+                                                 model_ui_active=model_ui_active)
 
                     client_socket.send(b"OK\n")
                     if response_to_client:

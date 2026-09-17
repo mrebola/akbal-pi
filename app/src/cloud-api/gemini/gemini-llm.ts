@@ -1,0 +1,358 @@
+import { isEmpty } from "lodash";
+import * as fs from "fs";
+import * as path from "path";
+import { LLMTool } from "../../type";
+import {
+  shouldResetChatHistory,
+  systemPrompt,
+  updateLastMessageTime,
+} from "../../config/llm-config";
+import { gemini, geminiModel } from "./gemini";
+import { llmFuncMap, llmToolsForGemini } from "../../config/llm-tools";
+import dotenv from "dotenv";
+import { FunctionCall, Message } from "../../type";
+import {
+  ChatWithLLMStreamFunction,
+  SummaryTextWithLLMFunction,
+} from "../interface";
+import { ToolListUnion, ToolUnion, Part, Content } from "@google/genai";
+import moment from "moment";
+import { chatHistoryDir } from "../../utils/dir";
+import {
+  consumePendingCapturedImgForChat,
+  hasPendingCapturedImgForChat,
+  getImageMimeType,
+} from "../../utils/image";
+import { formatToolResultsForLog } from "../../utils";
+import { compactMessagesForContextWindow } from "../context-window";
+
+dotenv.config();
+
+const useCapturedImageInChat =
+  (process.env.USE_CAPTURED_IMAGE_IN_CHAT || "false").toLowerCase() ===
+  "true";
+
+const chatHistoryFileName = `gemini_chat_history_${moment().format(
+  "YYYY-MM-DD_HH-mm-ss",
+)}.json`;
+
+const resetChatHistory = (): void => {
+  // messages.length = 0;
+  // messages.push({
+  //   role: "system",
+  //   content: systemPrompt,
+  // });
+};
+
+// Convert tools to Gemini format
+const convertToolsToGeminiFormat = (tools: LLMTool[]): ToolListUnion => {
+  return [
+    {
+      functionDeclarations: tools.map((tool) => ({
+        name: tool.function.name,
+        description: tool.function.description,
+        parameters: tool.function.parameters,
+      })),
+    } as ToolUnion,
+  ];
+};
+
+function createGeminiChatInstance(
+  history?: Content[],
+  customSystemPrompt?: string,
+) {
+  return gemini?.chats.create({
+    model: geminiModel,
+    config: {
+      tools: convertToolsToGeminiFormat(llmToolsForGemini),
+      systemInstruction: {
+        parts: [{ text: customSystemPrompt || systemPrompt }],
+        role: "system",
+      },
+    },
+    history,
+  })!;
+}
+
+let chat = createGeminiChatInstance();
+
+const contentText = (content: Content): string => {
+  return (content.parts || [])
+    .map((part: any) => part.text || "")
+    .filter(Boolean)
+    .join("\n");
+};
+
+const compactGeminiHistory = async (
+  invokeFunctionCallback?: (functionName: string, result?: string) => void,
+): Promise<void> => {
+  const history = chat.getHistory();
+  if (history.length <= 1) return;
+
+  const compactableMessages: Message[] = [
+    { role: "system", content: systemPrompt },
+    ...history
+      .map((content): Message | null => {
+        const text = contentText(content);
+        if (!text) return null;
+        return {
+          role: content.role === "model" ? "assistant" : "user",
+          content: text,
+        };
+      })
+      .filter((message): message is Message => Boolean(message)),
+  ];
+
+  const beforeLength = compactableMessages.length;
+  await compactMessagesForContextWindow({
+    provider: "gemini",
+    model: geminiModel,
+    messages: compactableMessages,
+    tools: llmToolsForGemini,
+    invokeFunctionCallback,
+  });
+  if (compactableMessages.length === beforeLength) return;
+
+  const summaryMessages = compactableMessages.filter(
+    (message, index) =>
+      index > 0 &&
+      message.role === "system" &&
+      message.content.startsWith("[Earlier conversation summary]"),
+  );
+  const nextSystemPrompt = [systemPrompt, ...summaryMessages.map((message) => message.content)]
+    .filter(Boolean)
+    .join("\n\n");
+  const nextHistory: Content[] = compactableMessages
+    .slice(1)
+    .filter((message) => message.role !== "system")
+    .map((message) => ({
+      role: message.role === "assistant" ? "model" : "user",
+      parts: [{ text: message.content }],
+    }));
+  chat = createGeminiChatInstance(nextHistory, nextSystemPrompt);
+};
+
+const chatWithLLMStream: ChatWithLLMStreamFunction = async (
+  inputMessages: Message[] = [],
+  partialCallback: (partialAnswer: string) => void,
+  endCallback: () => void,
+  partialThinkingCallback?: (partialThinking: string) => void,
+  invokeFunctionCallback?: (functionName: string, result?: string) => void,
+): Promise<void> => {
+  if (!gemini || !chat) {
+    console.error("Google Gemini API key is not set.");
+    return;
+  }
+
+  if (shouldResetChatHistory()) {
+    resetChatHistory();
+  }
+  updateLastMessageTime();
+
+  const chatHistory = chat.getHistory();
+  const knowledgePrompt = inputMessages.find((msg) => msg.role === "system");
+  if (knowledgePrompt) {
+    chatHistory.push({
+      parts: [{ text: knowledgePrompt.content }],
+      role: "system",
+    });
+    // recreate chat instance to include system prompt
+    chat = createGeminiChatInstance(chatHistory);
+  }
+  await compactGeminiHistory(invokeFunctionCallback);
+
+  let endResolve: () => void = () => {};
+  const promise = new Promise<void>((resolve) => {
+    endResolve = resolve;
+  }).finally(() => {
+    // save chat history to file
+    fs.writeFileSync(
+      path.join(chatHistoryDir, chatHistoryFileName),
+      JSON.stringify(chat.getHistory(), null, 2),
+    );
+  });
+
+  let partialAnswer = "";
+  const functionCallsPackages: any[] = [];
+
+  try {
+    const lastUserMessageIndex = inputMessages
+      .map((msg, index) => ({ msg, index }))
+      .filter(({ msg }) => msg.role === "user")
+      .map(({ index }) => index)
+      .pop();
+    const capturedImagePath =
+      useCapturedImageInChat &&
+      lastUserMessageIndex !== undefined &&
+      hasPendingCapturedImgForChat()
+        ? consumePendingCapturedImgForChat()
+        : "";
+    const imagePart = capturedImagePath
+      ? {
+          inlineData: {
+            mimeType: getImageMimeType(capturedImagePath),
+            data: fs.readFileSync(capturedImagePath).toString("base64"),
+          },
+        }
+      : null;
+
+    const geminiPart: Part[] = inputMessages
+      .map((msg, index) => {
+        if (msg.role === "user") {
+          const parts: any[] = [{ text: msg.content }];
+          if (
+            imagePart &&
+            lastUserMessageIndex !== undefined &&
+            index === lastUserMessageIndex
+          ) {
+            parts.push(imagePart);
+          }
+          return parts;
+        } else if (msg.role === "assistant") {
+          return { text: msg.content };
+        } else if (msg.role === "tool") {
+          return {
+            functionResponse: {
+              name: msg.tool_call_id!,
+              response: { result: msg.content },
+            },
+          };
+        }
+        return null;
+      })
+      .flat()
+      .filter((item) => item !== null) as Part[];
+
+    const response = await chat.sendMessageStream({
+      message: geminiPart,
+    });
+
+    for await (const chunk of response) {
+      const chunkText = chunk.text;
+      if (chunkText) {
+        partialCallback(chunkText);
+        partialAnswer += chunkText;
+      }
+
+      // Handle function calls
+      const functionCalls = chunk.functionCalls;
+      if (functionCalls) {
+        functionCalls.forEach((call: any) => {
+          functionCallsPackages.push({
+            id: `call_${Date.now()}_${Math.random()}`,
+            type: "function",
+            function: {
+              name: call.name,
+              arguments: JSON.stringify(call.args || {}),
+            },
+          });
+        });
+      }
+    }
+
+    console.log("Stream ended");
+    const functionCalls = functionCallsPackages;
+    console.log("functionCalls: ", JSON.stringify(functionCalls));
+
+    if (!isEmpty(functionCalls)) {
+      const results = await Promise.all(
+        functionCalls.map(async (call: FunctionCall) => {
+          const {
+            function: { arguments: argString, name },
+            id,
+          } = call;
+          let args: Record<string, any> = {};
+          try {
+            args = JSON.parse(argString || "{}");
+          } catch {
+            console.error(
+              `Error parsing arguments for function ${name}:`,
+              argString,
+            );
+          }
+          const func = llmFuncMap[name! as string];
+          if (func) {
+            invokeFunctionCallback?.(name! as string);
+            return [
+              id,
+              await func(args)
+                .then((res) => {
+                  invokeFunctionCallback?.(name! as string, res);
+                  return res;
+                })
+                .catch((err) => {
+                  console.error(`Error executing function ${name}:`, err);
+                  return `Error executing function ${name}: ${err.message}`;
+                }),
+            ];
+          } else {
+            console.error(`Function ${name} not found`);
+            return [id, `Function ${name} not found`];
+          }
+        }),
+      );
+
+      console.log("call results: ", formatToolResultsForLog(results, functionCalls));
+      const newMessages: Message[] = results.map(([id, result]: any) => ({
+        role: "tool",
+        content: result as string,
+        tool_call_id: id as string,
+      }));
+
+      await chatWithLLMStream(
+        newMessages,
+        partialCallback,
+        () => {
+          endResolve();
+          endCallback();
+        },
+        partialThinkingCallback,
+        invokeFunctionCallback,
+      );
+      return;
+    } else {
+      endResolve();
+      endCallback();
+    }
+  } catch (error: any) {
+    console.error("Error:", error.message);
+    endResolve();
+  }
+
+  return promise;
+};
+
+const summaryTextWithLLM: SummaryTextWithLLMFunction = async (
+  text: string,
+  promptPrefix: string,
+): Promise<string> => {
+  if (!gemini) {
+    console.error("Gemini API key is not set. Using original text.");
+    return text;
+  }
+  const response = await gemini.models.generateContent({
+    model: geminiModel,
+    contents: [
+      {
+        parts: [{ text: `${promptPrefix}\n\n${text}\n\n` }],
+        role: "user",
+      },
+    ],
+  }).catch((error) => {
+    console.log("Error during Gemini summary request:", error.message);
+    return null;
+  });
+  if (!response) {
+    return text;
+  }
+  if (response && response.text) {
+    const summary = response.text;
+    console.log("Gemini summary:", summary);
+    return summary;
+  } else {
+    console.log("No summary returned from Gemini. Using original text.");
+    return text;
+  }
+};
+
+export default { chatWithLLMStream, resetChatHistory, summaryTextWithLLM };

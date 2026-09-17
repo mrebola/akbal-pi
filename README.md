@@ -30,16 +30,29 @@ Raspberry Pi OS 64-bit, basado en Debian Trixie.
 
 Detalle completo del setup en [`docs/SETUP.md`](docs/SETUP.md).
 
+## Estructura del repo
+
+- [`app/`](app/) — código de la aplicación que corre en la Pi (fork de trabajo de
+  `whisplay-ai-chatbot`, con nuestros fixes aplicados). Se despliega copiando esta
+  carpeta a `~/whisplay-ai-chatbot` en el dispositivo y siguiendo `docs/SETUP.md`.
+  No incluye `.env` (usar `app/.env.template` o `setup/akbal.env.example` como base),
+  `node_modules`, `dist` ni datos de runtime — todo eso se genera/instala en el
+  propio dispositivo.
+- [`docs/`](docs/) — bitácora de instalación y fixes encontrados en el camino.
+- [`setup/`](setup/) — patches aplicados y `.env` de referencia (sin secretos).
+
 ## Estado
 
-Primera versión completa corriendo en la Raspberry Pi: driver de audio del Whisplay
-HAT, LLM/ASR/TTS locales, batería PiSugar, y el chatbot como servicio systemd
-(`chatbot.service`, arranque automático). Ver [`docs/SETUP.md`](docs/SETUP.md) para
-el detalle y [`docs/whisplay-audio-fix.md`](docs/whisplay-audio-fix.md) para un bug
-de hardware que se encontró y arregló durante la instalación.
+Primera versión completa corriendo en la Raspberry Pi, con flujo de voz de punta a
+punta probado en el hardware físico (botón → graba → transcribe → responde → se
+escucha): driver de audio del Whisplay HAT, LLM/ASR/TTS locales, batería PiSugar, y
+el chatbot como servicio systemd (`chatbot.service`, arranque automático). Ver
+[`docs/SETUP.md`](docs/SETUP.md) para el detalle, y
+[`docs/whisplay-audio-fix.md`](docs/whisplay-audio-fix.md) /
+[`docs/piper-tts-silent-fix.md`](docs/piper-tts-silent-fix.md) para los bugs de
+hardware/software que se encontraron y arreglaron durante la instalación.
 
-Pendiente: probar el flujo de voz completo con el hardware físico (botón, mic,
-altavoz) y evaluar wake word.
+Pendiente: wake word (activación por voz sin botón).
 
 ## Notas de seguridad
 

@@ -1,0 +1,383 @@
+import { get, isArray } from "lodash";
+import { FunctionCall } from "../type";
+import { exec } from "child_process";
+import { existsSync, readFileSync, writeFileSync } from "fs";
+import mp3Duration from "mp3-duration";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+// 输入 [[{"function":{"arguments":"","name":"setVolume"},"id":"call_wdpwgmiszun2ej6radzriaq0","index":0,"type":"function"}],[{"function":{"arguments":" {\""},"index":0}],[{"function":{"arguments":"volume"},"index":0}],[{"function":{"arguments":"\":"},"index":0}],[{"function":{"arguments":" "},"index":0}],[{"function":{"arguments":"2"},"index":0}],[{"function":{"arguments":"1"},"index":0}],[{"function":{"arguments":"}"},"index":0}]]
+// 输出 [{"function":{"arguments":" {\"volume\": 21}","name":"setVolume"},"id":"call_wdpwgmiszun2ej6radzriaq0","index":0,"type":"function"}]
+export const combineFunction = (packages: FunctionCall[][]): FunctionCall[] => {
+  return packages.reduce((callFunctions: FunctionCall[], itemArray) => {
+    if (!isArray(itemArray)) {
+      itemArray = [itemArray];
+    }
+    itemArray.forEach((call) => {
+      const index = call.index;
+      if (callFunctions[index]) {
+        const existingCall = callFunctions[index];
+        const existingArguments = get(existingCall, "function.arguments", "");
+        const newArguments = get(call, "function.arguments", "");
+        const combinedArguments = existingArguments + newArguments;
+        const combinedCall: FunctionCall = {
+          ...existingCall,
+          function: {
+            ...existingCall.function,
+            arguments: combinedArguments,
+          },
+        };
+        callFunctions[index] = combinedCall;
+      } else {
+        callFunctions[index] = call;
+      }
+    });
+    return callFunctions;
+  }, []);
+};
+
+const verboseToolNames = new Set([
+  "web_search",
+  "search_web",
+  "fetch_webpage",
+  "webSearch",
+  "searchWeb",
+  "fetchWebpage",
+]);
+
+export const formatToolResultsForLog = (
+  results: any[],
+  functionCalls: FunctionCall[] = [],
+): any[] => {
+  const toolNameById = new Map(
+    functionCalls
+      .filter((call) => call.id && call.function?.name)
+      .map((call) => [call.id as string, call.function.name as string]),
+  );
+
+  return results.map((result) => {
+    if (!Array.isArray(result)) {
+      return result;
+    }
+
+    const [first, second, third] = result;
+    if (typeof second === "string" && verboseToolNames.has(second)) {
+      return [first, second, summarizeVerboseToolResult(second, third)];
+    }
+    if (typeof first === "string" && verboseToolNames.has(first)) {
+      return [first, summarizeVerboseToolResult(first, second)];
+    }
+
+    const toolName = typeof first === "string" ? toolNameById.get(first) : undefined;
+    if (toolName && verboseToolNames.has(toolName)) {
+      return [first, summarizeVerboseToolResult(toolName, second)];
+    }
+
+    return result;
+  });
+};
+
+function summarizeVerboseToolResult(toolName: string, result: any): any {
+  if (typeof result !== "string") {
+    return result;
+  }
+
+  return {
+    tool: toolName,
+    resultLength: result.length,
+    resultPreview: summarizeLogText(result),
+  };
+}
+
+function summarizeLogText(text: string, maxChars = 300): string {
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  if (cleaned.length <= maxChars) {
+    return cleaned;
+  }
+  return `${cleaned.slice(0, maxChars)}...`;
+}
+
+// combineFunction([[{"function":{"arguments":"","name":"setVolume"},"id":"call_wdpwgmiszun2ej6radzriaq0","index":0,"type":"function"}],[{"function":{"arguments":" {\""},"index":0}],[{"function":{"arguments":"volume"},"index":0}],[{"function":{"arguments":"\":"},"index":0}],[{"function":{"arguments":" "},"index":0}],[{"function":{"arguments":"2"},"index":0}],[{"function":{"arguments":"1"},"index":0}],[{"function":{"arguments":"}"},"index":0}]])
+
+const _isEmoji = (s: string): boolean =>
+  /^[\p{Emoji_Presentation}\u200d\ufe0f]+$/u.test(s);
+
+/** Default emoji shown on the display, configurable via DEFAULT_EMOJI env var. */
+export const DEFAULT_EMOJI: string = (() => {
+  const env = (process.env.DEFAULT_EMOJI ?? "").trim();
+  return env && _isEmoji(env) ? env : "😐";
+})();
+
+export const extractEmojis = (str: string): string => {
+  const array = [
+    ...str.matchAll(/([\p{Emoji_Presentation}\u200d\ufe0f])/gu),
+  ].map((match) => match[0]);
+
+  if (array.length > 0) {
+    return array[0];
+  }
+  return DEFAULT_EMOJI;
+};
+
+export const getCurrentTimeTag = (): string => {
+  const date = new Date();
+  const pad = (value: number): string => String(value).padStart(2, "0");
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+  ].join("-") + " " + [
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds()),
+  ].join(":");
+};
+
+export function splitSentences(text: string): {
+  sentences: string[];
+  remaining: string;
+} {
+  const regex = /.*?([。！？!?，,]|(?<!\d)\.)(?=\s|$)/gs;
+
+  const sentences: string[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(text)) !== null) {
+    const sentence = match[0].trim();
+    // Check if the sentence is just numbers and punctuations
+    if (/[0-9\.。！？!?，,]/.test(sentence)) {
+      sentences.push(sentence);
+      lastIndex = regex.lastIndex;
+    } else {
+      // If it's just numbers and punctuations, reset lastIndex to include this in the next match
+      regex.lastIndex = match.index;
+      break;
+    }
+  }
+
+  const remaining = text.slice(lastIndex).trim();
+
+  // merge short sentences
+  const newSentences: string[] = [];
+  let buffer = "";
+  sentences.forEach((sentence) => {
+    if ((buffer + `${sentence} `).length <= 60) {
+      buffer += `${sentence} `;
+    } else {
+      if (buffer) {
+        newSentences.push(buffer);
+      }
+      buffer = `${sentence} `;
+    }
+  });
+  if (buffer) {
+    newSentences.push(buffer);
+  }
+
+  return { sentences: newSentences, remaining };
+}
+
+export function getPcmWavDurationMs(
+  buffer: Buffer<ArrayBuffer>,
+  params: {
+    channels?: number;
+    sampleRate?: number;
+    sampleWidth?: number;
+  }
+): number {
+  const dataLength = buffer.length;
+
+  const channels = params.channels || 1;
+  const sampleRate = params.sampleRate || 16000;
+  const sampleWidth = params.sampleWidth || 2; // 每个采样字节数（16-bit）
+
+  const durationSeconds = dataLength / (sampleRate * channels * sampleWidth);
+  return Math.round(durationSeconds * 1000);
+}
+
+export function getWavFileDurationMs(buffer: Buffer<ArrayBuffer>): number {
+  // WAV 文件头部信息在前 44 字节
+  const header = buffer.subarray(0, 44);
+  const channels = header.readUInt16LE(22); // 通道数
+  const sampleRate = header.readUInt32LE(24); // 采样率
+  const sampleWidth = header.readUInt16LE(34) / 8; // 每个采样字节数（位深度除以8）
+  const body = buffer.subarray(44);
+
+  return getPcmWavDurationMs(body, {
+    sampleRate,
+    channels,
+    sampleWidth,
+  });
+}
+
+export const killAllProcesses = (pid: number) => {
+  exec(`ps --ppid ${pid} -o pid=`, (err, stdout, stderr) => {
+    if (err) {
+      console.error("Error getting child processes:", stderr);
+      return;
+    }
+    // 子进程 PID 输出在 stdout 中
+    const childPids = stdout.trim().split("\n");
+
+    // 给父进程和所有子进程发送 kill 信号
+    const allPids = [pid, ...childPids];
+    allPids.forEach((childPid) => {
+      exec(`kill -2 ${childPid}`, (err, stdout, stderr) => {
+        if (err) {
+          console.error(`Error killing process ${childPid}:`, stderr);
+        } else {
+          console.log(`Killed process ${childPid}`);
+        }
+      });
+    });
+  });
+};
+
+export const transformToGeminiType = (parameters: Object) => {
+  const { Type: GeminiType } = require("@google/genai");
+  // 遍历 parameters 对象，将所有key为type字段值转换为geminiType的类型
+  const jsonString = JSON.stringify(parameters);
+  const newObject = JSON.parse(jsonString, (key, value) => {
+    if (key === "type") {
+      switch (value) {
+        case "string":
+          return GeminiType.STRING;
+        case "number":
+          return GeminiType.NUMBER;
+        case "integer":
+          return GeminiType.INTEGER;
+        case "boolean":
+          return GeminiType.BOOLEAN;
+        case "array":
+          return GeminiType.ARRAY;
+        case "object":
+          return GeminiType.OBJECT;
+        default:
+          return value;
+      }
+    }
+    return value;
+  });
+  return newObject;
+};
+
+export const purifyTextForTTS = (text: string): string => {
+  return text
+    .replace(/https?:\/\/\S+/giu, " link ")
+    .replace(/www\.\S+/giu, " link ")
+    .replace(/[`*_#~^=+|\\/<>$@•·●○◆◇■□▪▫✓✔✕✖→←↑↓⇒⇐⇧⇩]/gu, " ")
+    .replace(/[{}\u200b-\u200f\u202a-\u202e\ufe0e\ufe0f]/gu, "")
+    .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, "")
+    .replace(/[—–-]+/g, "，")
+    .replace(/[，,、]{2,}/g, "，")
+    .replace(/[。.!?！？]{2,}/g, "。")
+    .replace(/[^\p{L}\p{N}\p{M}\s.,!?;:'"()[\]，。！？；：、（）《》“”‘’]/gu, " ")
+    .replace(/\s+/g, " ")
+    .replace(/\s+([，。！？；：、,.!?;:])/g, "$1")
+    .replace(/([（([])\s+/g, "$1")
+    .replace(/\s+([）)\]])/g, "$1")
+    .trim();
+};
+
+export const getRecordFileDurationMs = async (
+  filePath: string
+): Promise<number> => {
+  if (!existsSync(filePath)) return 0;
+
+  // Check file size first - if non-empty, try to get duration
+  const data = readFileSync(filePath);
+  if (data.length === 0) return 0;
+
+  const format = filePath.endsWith(".mp3") ? "mp3" : filePath.endsWith(".wav") ? "wav" : "other";
+
+  try {
+    if (format === "wav") {
+      return getWavFileDurationMs(data);
+    } else if (format === "mp3") {
+      // Check if it's actually a WebM file (browser recordings)
+      const isWebM = data.length >= 4 && data.slice(0, 4).toString("hex") === "1a45dfa3";
+      if (isWebM) {
+        // Use ffprobe for WebM files
+        return await getMediaDurationWithFfprobe(filePath);
+      }
+      return (await mp3Duration(data)) * 1000;
+    } else {
+      // For unknown formats, use ffprobe
+      return await getMediaDurationWithFfprobe(filePath);
+    }
+  } catch (error) {
+    // If all else fails but file has content, assume it's valid (1 second minimum)
+    return data.length > 1000 ? 1000 : 0;
+  }
+};
+
+const getMediaDurationWithFfprobe = (filePath: string): Promise<number> => {
+  return new Promise((resolve) => {
+    exec(
+      `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`,
+      (error, stdout) => {
+        if (error) {
+          resolve(0);
+          return;
+        }
+        const duration = parseFloat(stdout.trim());
+        resolve(isNaN(duration) ? 0 : duration * 1000);
+      }
+    );
+  });
+};
+
+export function pcmToWav(
+  pcmBuffer: Buffer,
+  sampleRate = 24000,
+  numChannels = 1
+) {
+  const bytesPerSample = 2; // LINEAR16 = 16bit = 2 bytes
+  const byteRate = sampleRate * numChannels * bytesPerSample;
+
+  const header = Buffer.alloc(44);
+
+  // ChunkID "RIFF"
+  header.write("RIFF", 0);
+  // ChunkSize = 36 + SubChunk2Size
+  header.writeUInt32LE(36 + pcmBuffer.length, 4);
+  // Format "WAVE"
+  header.write("WAVE", 8);
+
+  // Subchunk1ID "fmt "
+  header.write("fmt ", 12);
+  // Subchunk1Size = 16 for PCM
+  header.writeUInt32LE(16, 16);
+  // AudioFormat = 1 (PCM)
+  header.writeUInt16LE(1, 20);
+  // NumChannels
+  header.writeUInt16LE(numChannels, 22);
+  // SampleRate
+  header.writeUInt32LE(sampleRate, 24);
+  // ByteRate
+  header.writeUInt32LE(byteRate, 28);
+  // BlockAlign
+  header.writeUInt16LE(numChannels * bytesPerSample, 32);
+  // BitsPerSample
+  header.writeUInt16LE(bytesPerSample * 8, 34);
+
+  // Subchunk2ID "data"
+  header.write("data", 36);
+  // Subchunk2Size = pcmBuffer.length
+  header.writeUInt32LE(pcmBuffer.length, 40);
+
+  return Buffer.concat([header, pcmBuffer]);
+}
+
+export function savePcmAsWav(
+  pcmBuffer: Buffer,
+  outputPath: string,
+  sampleRate = 24000,
+  numOfChannels = 1
+) {
+  const wavBuffer = pcmToWav(pcmBuffer, sampleRate, numOfChannels);
+  writeFileSync(outputPath, wavBuffer);
+  console.log("Saved WAV:", outputPath);
+}

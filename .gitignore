@@ -1,9 +1,18 @@
 # Secrets / config local
 .env
 .env.*
+!.env.template
+!**/.env.template
 *.key
 *.pem
 secrets/
+
+# App runtime artifacts (rebuilt on the device, not checked in)
+app/node_modules/
+app/dist/
+app/data/
+app/chatbot.log
+app/**/__pycache__/
 
 # Python
 __pycache__/

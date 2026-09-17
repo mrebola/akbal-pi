@@ -1,0 +1,247 @@
+#!/bin/bash
+NVM_VERSION="0.39.3"
+NVM_URL="https://cdn.pisugar.com/PiSugar-wificonfig/script/nvm/v$NVM_VERSION.tar.gz"
+NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmjs.org}"
+NODE_BINARY_INSTALL_URL="https://cdn.pisugar.com/PiSugar-wificonfig/script/node-binary/install-node-v20.19.5.sh"
+
+# read parameters --use-npm
+if [ -f "use_npm" ]; then
+  use_npm=true
+else
+  use_npm=false
+fi
+
+# Function to check if a command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# apt install sox libsox-fmt-mp3 mpg123 and other dependencies
+sudo apt-get update
+sudo apt-get install -y sox mpg123 libsox-fmt-mp3 python3-dev libcairo2 libcairo2-dev unzip python3-lgpio ffmpeg \
+    python3-numpy python3-pillow python3-flask python3-opencv python3-spidev python3-rpi.gpio patchelf
+
+# Fix libmad executable stack issue on modern kernels (required for MP3 support)
+# Without this fix, sox cannot encode/decode MP3 files on Raspberry Pi OS Bookworm+
+if [ -f "/lib/arm-linux-gnueabihf/libmad.so.0" ]; then
+    echo "Fixing libmad executable stack flag for MP3 support..."
+    sudo patchelf --clear-execstack /lib/arm-linux-gnueabihf/libmad.so.0 2>/dev/null || true
+fi
+
+# enable spi
+sudo raspi-config nonint do_spi 0
+
+# install python dependencies
+echo "Installing Python dependencies..."
+cd python
+pip install -r requirements.txt --break-system-packages
+# download fonts and emojis
+if command_exists wget; then
+    if [ ! -f "NotoSansSC-Bold.ttf" ]; then
+        wget -O NotoSansSC-Bold.ttf https://storage.whisplay.ai/whisplay-ai-chatbot/NotoSansSC-Bold.ttf
+    else
+        echo "NotoSansSC-Bold.ttf already exists, skip download."
+    fi
+
+    if [ ! -f "emoji_svg.zip" ]; then
+        wget -O emoji_svg.zip https://storage.whisplay.ai/whisplay-ai-chatbot/emoji_svg.zip
+    else
+        echo "emoji_svg.zip already exists, skip download."
+    fi
+elif command_exists curl; then
+    if [ ! -f "NotoSansSC-Bold.ttf" ]; then
+        curl -fL -o NotoSansSC-Bold.ttf https://storage.whisplay.ai/whisplay-ai-chatbot/NotoSansSC-Bold.ttf
+    else
+        echo "NotoSansSC-Bold.ttf already exists, skip download."
+    fi
+
+    if [ ! -f "emoji_svg.zip" ]; then
+        curl -fL -o emoji_svg.zip https://storage.whisplay.ai/whisplay-ai-chatbot/emoji_svg.zip
+    else
+        echo "emoji_svg.zip already exists, skip download."
+    fi
+else
+    echo "Neither wget nor curl is installed."
+    exit 1
+fi
+# overwrite if exists
+unzip -o emoji_svg.zip
+cd ..
+
+
+# Check if git is installed
+# if ! command_exists git; then
+#     echo "git is not installed. Installing git..."
+#     sudo apt-get install -y git
+
+#     # Verify installation
+#     if command_exists git; then
+#         echo "git installed successfully."
+#     else
+#         echo "Failed to install git."
+#         exit 1
+#     fi
+# fi
+
+# Function to install nvm and Node.js 20
+install_node_nvm() {
+    echo "Installing Node.js 20 using nvm..."
+    
+    # Install nvm if it's not already installed
+    if [ ! -d "$HOME/.nvm" ]; then
+        echo "Installing nvm..."
+        TEMP_DIR=$(mktemp -d)
+        curl -o $TEMP_DIR/nvm-$NVM_VERSION.tar.gz -L $NVM_URL
+        tar -xzf $TEMP_DIR/nvm-$NVM_VERSION.tar.gz -C $TEMP_DIR
+        mv $TEMP_DIR/nvm-$NVM_VERSION $HOME/.nvm
+        rm -rf $TEMP_DIR
+
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+        [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+
+        # check if nvm is in the bash profile
+        if ! grep -q "nvm" $HOME/.bashrc; then
+            echo "export NVM_DIR=\"$HOME/.nvm\"" >> $HOME/.bashrc
+            echo "[ -s \"\$NVM_DIR/nvm.sh\" ] && \. \"\$NVM_DIR/nvm.sh\"" >> $HOME/.bashrc
+            echo "[ -s \"\$NVM_DIR/bash_completion\" ] && \. \"\$NVM_DIR/bash_completion\"" >> $HOME/.bashrc
+        fi
+    else
+        echo "nvm is already installed."
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+        [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+    fi
+
+    # Install and use Node.js 20
+    echo "Switch to Node.js 20"
+    nvm install 20
+    nvm use 20
+    nvm alias default 20
+
+    # Verify installation
+    if command_exists node && [[ "$(node -v)" =~ ^v20 ]]; then
+        echo "Node.js 20 installed successfully."
+    else
+        echo "Failed to install Node.js 20."
+        exit 1
+    fi
+}
+
+install_node_binary() {
+    echo "Installing Node.js 20 for pi zero..."
+    TEMP_DIR=$(mktemp -d)
+    curl -o $TEMP_DIR/install-node-v20.19.5.sh -L $NODE_BINARY_INSTALL_URL
+    chmod +x $TEMP_DIR/install-node-v20.19.5.sh
+    sudo bash $TEMP_DIR/install-node-v20.19.5.sh
+    rm -rf $TEMP_DIR
+
+    # Add /opt/nodejs/bin to PATH if not already present
+    if [ -d "/opt/nodejs/bin" ]; then
+        export PATH="/opt/nodejs/bin:$PATH"
+        if ! grep -q "/opt/nodejs/bin" "$HOME/.bashrc" 2>/dev/null; then
+            echo 'export PATH="/opt/nodejs/bin:$PATH"' >> "$HOME/.bashrc"
+            echo "Added /opt/nodejs/bin to PATH in ~/.bashrc"
+        fi
+        if ! grep -q "/opt/nodejs/bin" "$HOME/.profile" 2>/dev/null; then
+            echo 'export PATH="/opt/nodejs/bin:$PATH"' >> "$HOME/.profile"
+        fi
+    fi
+
+    # Verify installation
+    if command_exists node && [[ "$(node -v)" =~ ^v20 ]]; then
+        echo "Node.js 20 installed successfully."
+    else
+        echo "Failed to install Node.js 20."
+        exit 1
+    fi
+}
+
+install_node() {
+    if [[ "$(uname -m)" == "armv6l" ]]; then
+        install_node_binary
+    else
+        install_node_nvm
+    fi
+}
+
+# Check if Node.js is installed and is version 20
+if command_exists node; then
+    NODE_VERSION=$(node -v)
+    if [[ "$NODE_VERSION" =~ ^v20 ]]; then
+        echo "Node.js 20 is already installed."
+    else
+        echo "Different version of Node.js detected: $NODE_VERSION"
+        install_node
+    fi
+else
+    echo "Node.js is not installed."
+    install_node
+fi
+
+# Check if npm is installed
+if ! command_exists npm; then
+    echo "npm is not installed. Installing npm..."
+    sudo apt-get install -y npm
+
+    # Verify installation
+    if command_exists npm; then
+        echo "npm installed successfully."
+    else
+        echo "Failed to install npm."
+        exit 1
+    fi
+fi
+
+# check if yarn is installed, fallback to npm if installation fails
+if [ "$use_npm" = false ] && ! command_exists yarn; then
+    echo "yarn is not installed. Installing yarn..."
+    npm config set registry $NPM_REGISTRY
+    npm install -g yarn
+    export PATH="$HOME/.yarn/bin:$HOME/.config/yarn/global/node_modules/.bin:$PATH"
+
+    # Verify installation, fallback to npm if yarn install failed
+    if command_exists yarn; then
+        echo "yarn installed successfully."
+    else
+        echo "WARNING: Failed to install yarn. Falling back to npm."
+        use_npm=true
+    fi
+fi
+
+#sudo ln -s "$NVM_DIR/versions/node/$(nvm version)/bin/node" "/usr/local/bin/node"
+#sudo ln -s "$NVM_DIR/versions/node/$(nvm version)/bin/npm" "/usr/local/bin/npm"
+#sudo ln -s "$NVM_DIR/versions/node/$(nvm version)/bin/npx" "/usr/local/bin/npx"
+
+echo "Installing Node.js dependencies..."
+if [ "$use_npm" = true ]; then
+    echo "Using npm to install dependencies."
+    npm i --registry=$NPM_REGISTRY
+else
+    echo "Using yarn to install dependencies."
+    if ! yarn --registry=$NPM_REGISTRY; then
+        echo "WARNING: yarn failed. Falling back to npm."
+        use_npm=true
+        npm i --registry=$NPM_REGISTRY
+    fi
+fi
+
+# Install whisplay CLI
+echo "Installing whisplay CLI..."
+chmod +x "$(pwd)/bin/whisplay"
+WHISPLAY_BIN="$(pwd)/bin/whisplay"
+
+# Try symlink to /usr/local/bin (may need sudo on some systems)
+if sudo ln -sf "$WHISPLAY_BIN" /usr/local/bin/whisplay 2>/dev/null; then
+    echo "whisplay CLI installed to /usr/local/bin/whisplay"
+else
+    # Fallback: add project bin/ to PATH via .bashrc
+    WHISPLAY_BIN_DIR="$(pwd)/bin"
+    if ! grep -q "$WHISPLAY_BIN_DIR" "$HOME/.bashrc" 2>/dev/null; then
+        echo "export PATH=\"$WHISPLAY_BIN_DIR:\$PATH\"" >> "$HOME/.bashrc"
+        echo "whisplay CLI added to PATH via ~/.bashrc (restart shell or run: source ~/.bashrc)"
+    fi
+    export PATH="$WHISPLAY_BIN_DIR:$PATH"
+fi
+echo "whisplay CLI installed. Run 'whisplay help' to get started."
+echo "If you run into installation issues, ask in our Discord forum: https://discord.gg/NMpCMP8RS8"

@@ -1,0 +1,156 @@
+export interface Message {
+  role: "system" | "user" | "assistant" | "tool";
+  content: string;
+  tool_calls?: FunctionCall[];
+  tool_call_id?: string;
+}
+
+export interface OllamaMessage {
+  role: "system" | "user" | "assistant" | "tool";
+  content: string
+  tool_calls?: OllamaFunctionCall[][];
+  tool_name?: string;
+}
+
+export enum ASRServer {
+  test = "test",
+  volcengine = "volcengine",
+  tencent = "tencent",
+  openai = "openai",
+  gemini = "gemini",
+  vosk = "vosk",
+  whisper = "whisper",
+  whisperhttp = "whisper-http",
+  llm8850whisper = "llm8850whisper",
+  fasterwhisper = "faster-whisper",
+  hailowhisper = "hailowhisper",
+  picovoice = "picovoice",
+}
+
+export enum LLMServer {
+  test = "test",
+  volcengine = "volcengine",
+  openai = "openai",
+  ollama = "ollama",
+  gemini = "gemini",
+  grok = "grok",
+  anthropic = "anthropic",
+  minimax = "minimax",
+  kimi = "kimi",
+  qwen = "qwen",
+  llm8850 = "llm8850",
+  whisplayim = "whisplay-im",
+  imagetooldirect = "image-tool-direct",
+  perplexity = "perplexity",
+  openrouter = "openrouter",
+}
+
+export enum TTSServer {
+  test = "test",
+  volcengine = "volcengine",
+  openai = "openai",
+  tencent = "tencent",
+  gemini = "gemini",
+  piper = "piper",
+  piperhttp = "piper-http",
+  espeakng = "espeak-ng",
+  llm8850melotts = "llm8850melotts",
+  supertonic = "supertonic",
+  picovoice = "picovoice",
+}
+
+export enum VectorDBServer {
+  qdrant = "qdrant",
+  aws = "aws",
+}
+
+export enum EmbeddingServer {
+  ollama = "ollama",
+  aws = "aws",
+}
+
+export enum ImageGenerationServer {
+  openai = "openai",
+  gemini = "gemini",
+  volcengine = "volcengine",
+  llm8850lcm = "llm8850lcm",
+}
+
+export enum VisionServer {
+  ollama = "ollama",
+  openai = "openai",
+  gemini = "gemini",
+  volcengine = "volcengine",
+}
+
+
+export interface FunctionCall {
+  function: {
+    arguments: string;
+    name?: string;
+  };
+  id?: string;
+  index: number;
+  type?: string;
+}
+
+// {"function":{"index":0,"name":"setVolume","arguments":{"percent":50}}}
+export interface OllamaFunctionCall {
+  function: {
+    index: number;
+    name: string;
+    arguments: Record<string, any>;
+  };
+}
+
+
+export type LLMFunc = (params: any) => Promise<string>
+
+export interface LLMTool {
+  id?: string;
+  type: "function";
+  function: {
+    name: string
+    description: string
+    parameters: {
+      type?: string
+      properties?: {
+        [key: string]: {
+          type: string
+          description: string
+          enum?: string[]
+          items?: {
+            type: string
+            description?: string
+            properties?: {
+              [key: string]: {
+                type: string
+                description: string
+              }
+            }
+            required?: string[]
+          }
+        }
+      }
+      items?: {
+        type: string
+        description: string
+      }
+      required?: string[]
+    }
+  }
+  func: LLMFunc
+}
+
+export enum ToolReturnTag {
+  Success = "[success]",
+  Error = "[error]",
+  Response = "[response]", // use as assistant response
+}
+
+export type TTSResult = {
+  filePath?: string;
+  base64?: string;
+  buffer?: Buffer;
+  duration: number;
+};

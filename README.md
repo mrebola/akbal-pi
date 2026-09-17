@@ -18,9 +18,28 @@ El proyecto toma como base el repositorio [PiSugar/whisplay-ai-chatbot](https://
 
 Raspberry Pi OS 64-bit, basado en Debian Trixie.
 
+## Stack de software (100% local)
+
+| Función | Software |
+|---|---|
+| LLM | [Ollama](https://ollama.com) con `qwen3:1.7b` |
+| Voz→texto (ASR) | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (modelo `small`, español) |
+| Texto→voz (TTS) | [Piper](https://github.com/OHF-Voice/piper1-gpl) (voz `es_MX-claude-high`) |
+| Batería | [PiSugar Power Manager](https://github.com/PiSugar/pisugar-power-manager-rs) |
+| Orquestación | [whisplay-ai-chatbot](https://github.com/PiSugar/whisplay-ai-chatbot) |
+
+Detalle completo del setup en [`docs/SETUP.md`](docs/SETUP.md).
+
 ## Estado
 
-Proyecto en etapa inicial. Próximos pasos: montar el hardware, flashear el OS, y adaptar el chatbot de referencia (whisplay-ai-chatbot) para correr como asistente local en la Pi.
+Primera versión completa corriendo en la Raspberry Pi: driver de audio del Whisplay
+HAT, LLM/ASR/TTS locales, batería PiSugar, y el chatbot como servicio systemd
+(`chatbot.service`, arranque automático). Ver [`docs/SETUP.md`](docs/SETUP.md) para
+el detalle y [`docs/whisplay-audio-fix.md`](docs/whisplay-audio-fix.md) para un bug
+de hardware que se encontró y arregló durante la instalación.
+
+Pendiente: probar el flujo de voz completo con el hardware físico (botón, mic,
+altavoz) y evaluar wake word.
 
 ## Notas de seguridad
 

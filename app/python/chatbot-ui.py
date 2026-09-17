@@ -74,7 +74,7 @@ def load_gif_frames(path, width, height):
 # Global variables
 current_status = "Hello"
 current_emoji = "😄"
-current_text = "Waiting for message..."
+current_text = "Esperando mensaje..."
 current_terminal_text = ""
 current_tool_placeholders = {}
 current_battery_level = 100

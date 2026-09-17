@@ -72,9 +72,9 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       emoji: "😴",
       RGB: "#000055",
       rag_icon_visible: false,
-      ...(getCurrentStatus().text.endsWith("Listening...") || !getCurrentStatus().text
+      ...(getCurrentStatus().text.endsWith("Escuchando...") || !getCurrentStatus().text
         ? {
-          text: `Long Press the button to say something${ctx.enableCamera ? ",\ndouble click to launch camera" : ""
+          text: `Mantén presionado el botón para hablar${ctx.enableCamera ? ",\ndoble clic para abrir la cámara" : ""
             }.`,
         }
         : {}),
@@ -115,7 +115,7 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     // Update display when track changes during continuous playback
     onMusicTrackChange((title) => {
       if (ctx.currentFlowName === "music") {
-        display({ text: `Now playing: ${title}` });
+        display({ text: `Reproduciendo: ${title}` });
       }
     });
 
@@ -146,8 +146,8 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       text:
         ctx.musicDisplayText ||
         (isMusicPlaying() && trackTitle
-          ? `Now playing: ${trackTitle}`
-          : "Music mode. Press the button to talk."),
+          ? `Reproduciendo: ${trackTitle}`
+          : "Modo música. Presiona el botón para hablar."),
       rag_icon_visible: false,
     });
   },
@@ -200,7 +200,7 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       status: "listening",
       emoji: DEFAULT_EMOJI,
       RGB: "#00ff00",
-      text: "Listening...",
+      text: "Escuchando...",
       rag_icon_visible: false,
     });
   },
@@ -219,7 +219,7 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       status: "detecting",
       emoji: DEFAULT_EMOJI,
       RGB: "#00ff00",
-      text: "Detecting voice level...",
+      text: "Detectando nivel de voz...",
       rag_icon_visible: false,
     });
     getDynamicVoiceDetectLevel().then((level) => {
@@ -227,7 +227,7 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
         status: "listening",
         emoji: DEFAULT_EMOJI,
         RGB: "#00ff00",
-        text: `(Detect level: ${level}%) Listening...`,
+        text: `(Nivel detectado: ${level}%) Escuchando...`,
         rag_icon_visible: false,
       });
       recordAudio(ctx.currentRecordFilePath, ctx.wakeRecordMaxSec, level)
@@ -316,7 +316,7 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
             display({
               status: "error",
               emoji: "⚠️",
-              text: "OpenClaw send failed",
+              text: "Falló el envío a OpenClaw",
               image_icon_visible: false,
             });
           }
@@ -541,7 +541,7 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       display({
         status: approved ? "Allowed" : "Denied",
         emoji: approved ? "✅" : "⛔",
-        text: approved ? "Operation allowed." : "Operation denied.",
+        text: approved ? "Operación permitida." : "Operación denegada.",
         RGB: approved ? "#00c8a3" : "#ff3030",
         approval_mode: false,
         scroll_speed: 0,

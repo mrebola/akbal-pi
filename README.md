@@ -22,12 +22,13 @@ Raspberry Pi OS 64-bit, basado en Debian Trixie.
 
 | Función | Software |
 |---|---|
-| LLM | [Ollama](https://ollama.com) con `qwen3:1.7b` |
+| LLM | [Ollama](https://ollama.com) con `huihui_ai/qwen3.5-abliterated:2B` por defecto, cambiable por voz o desde un menú en pantalla ([`docs/llm-model-selection.md`](docs/llm-model-selection.md), [`docs/voice-commands.md`](docs/voice-commands.md)) |
 | Voz→texto (ASR) | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (modelo `base`, español) |
 | Texto→voz (TTS) | [Piper](https://github.com/OHF-Voice/piper1-gpl) (voz `es_ES-davefx-medium`, hombre, español de España) |
 | Batería | [PiSugar Power Manager](https://github.com/PiSugar/pisugar-power-manager-rs) |
 | Orquestación | [whisplay-ai-chatbot](https://github.com/PiSugar/whisplay-ai-chatbot) |
-| Pantalla | UI propia minimalista: íconos de wifi/batería arriba, personaje animado (cara en primer plano) al medio, texto verde terminal abajo ([`docs/display-ui.md`](docs/display-ui.md)) |
+| Pantalla | UI propia minimalista: íconos de wifi/batería arriba, personaje animado (cara en primer plano) al medio, texto verde terminal abajo ([`docs/display-ui.md`](docs/display-ui.md)); pantalla dedicada estilo terminal para elegir/cargar modelo de LLM ([`docs/voice-commands.md`](docs/voice-commands.md)) |
+| Comandos de voz | Volumen y cambio/consulta de modelo de LLM, resueltos por expresiones regulares antes de llegar al LLM — instantáneo, sin gastar un turno ([`docs/voice-commands.md`](docs/voice-commands.md)) |
 
 Detalle completo del setup en [`docs/SETUP.md`](docs/SETUP.md).
 
@@ -113,12 +114,17 @@ el chatbot para mostrarla en pantalla.
 
 ```bash
 curl -fsSL https://ollama.com/install.sh | sh
-ollama pull qwen3:1.7b
+ollama pull huihui_ai/qwen3.5-abliterated:2B
 ```
 
-`qwen3:1.7b` (Q4_K_M, ~1.4GB) da un buen balance velocidad/calidad en CPU para
-un Pi 5 de 8GB. Se puede cambiar por otro modelo de [ollama.com/library](https://ollama.com/library)
-ajustando `OLLAMA_MODEL` en el `.env`.
+`huihui_ai/qwen3.5-abliterated:2B` (Q4_K_M, ~1.9GB) es el que mejor balance
+velocidad/calidad dio en CPU para un Pi 5 de 8GB, de varios modelos medidos —
+ver [`docs/llm-model-selection.md`](docs/llm-model-selection.md) para la
+metodología y por qué se descartaron los otros. Se puede cambiar por otro
+modelo de [ollama.com/library](https://ollama.com/library) ajustando
+`OLLAMA_MODEL` en el `.env`, o en caliente por voz / desde el menú en
+pantalla sin reiniciar el servicio — ver
+[`docs/voice-commands.md`](docs/voice-commands.md).
 
 ### 7. ASR y TTS locales (faster-whisper + Piper)
 
@@ -209,14 +215,24 @@ escucha): driver de audio del Whisplay HAT, LLM/ASR/TTS locales, batería PiSuga
 el chatbot como servicio systemd (`chatbot.service`, arranque automático). Ver
 [`docs/SETUP.md`](docs/SETUP.md) para el detalle, y
 [`docs/whisplay-audio-fix.md`](docs/whisplay-audio-fix.md) /
-[`docs/piper-tts-silent-fix.md`](docs/piper-tts-silent-fix.md) para los bugs de
+[`docs/piper-tts-silent-fix.md`](docs/piper-tts-silent-fix.md) /
+[`docs/recording-hang-fix.md`](docs/recording-hang-fix.md) para los bugs de
 hardware/software que se encontraron y arreglaron durante la instalación, y
 [`docs/performance-tuning.md`](docs/performance-tuning.md) para la optimización
 de velocidad del ASR (~3x más rápido, de 5.2s a 1.8s por transcripción), y
 [`docs/piper-voice-selection.md`](docs/piper-voice-selection.md) para cómo se
 eligió la voz (con medición real de tono, no adivinando por el nombre) y todas
-las voces que se probaron, y [`docs/display-ui.md`](docs/display-ui.md) para
-la interfaz de pantalla minimalista (personaje animado + texto).
+las voces que se probaron, [`docs/display-ui.md`](docs/display-ui.md) para
+la interfaz de pantalla minimalista (personaje animado + texto), y
+[`docs/voice-commands.md`](docs/voice-commands.md) para el control de
+volumen y modelo de LLM por voz — incluye el menú visual en pantalla para
+elegir modelo con el botón del Whisplay HAT (click para recorrer opciones,
+mantener 3 segundos para confirmar, doble clic para cancelar) y la pantalla
+de carga con el progreso mientras Ollama carga el modelo elegido.
+[`docs/llm-model-selection.md`](docs/llm-model-selection.md) documenta cómo
+se eligió el modelo por defecto y por qué el menú de voz ya no cambia de
+modelo a ciegas ante un comando mal reconocido (causó una regresión real:
+dejó activado un modelo con problemas de eco en respuestas cortas).
 
 Pendiente: wake word (activación por voz sin botón).
 

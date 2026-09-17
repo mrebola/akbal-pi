@@ -23,7 +23,7 @@ Raspberry Pi OS 64-bit, basado en Debian Trixie.
 | Función | Software |
 |---|---|
 | LLM | [Ollama](https://ollama.com) con `qwen3:1.7b` |
-| Voz→texto (ASR) | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (modelo `small`, español) |
+| Voz→texto (ASR) | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (modelo `base`, español) |
 | Texto→voz (TTS) | [Piper](https://github.com/OHF-Voice/piper1-gpl) (voz `es_MX-claude-high`) |
 | Batería | [PiSugar Power Manager](https://github.com/PiSugar/pisugar-power-manager-rs) |
 | Orquestación | [whisplay-ai-chatbot](https://github.com/PiSugar/whisplay-ai-chatbot) |
@@ -204,7 +204,9 @@ el chatbot como servicio systemd (`chatbot.service`, arranque automático). Ver
 [`docs/SETUP.md`](docs/SETUP.md) para el detalle, y
 [`docs/whisplay-audio-fix.md`](docs/whisplay-audio-fix.md) /
 [`docs/piper-tts-silent-fix.md`](docs/piper-tts-silent-fix.md) para los bugs de
-hardware/software que se encontraron y arreglaron durante la instalación.
+hardware/software que se encontraron y arreglaron durante la instalación, y
+[`docs/performance-tuning.md`](docs/performance-tuning.md) para la optimización
+de velocidad del ASR (~3x más rápido, de 5.2s a 1.8s por transcripción).
 
 Pendiente: wake word (activación por voz sin botón).
 

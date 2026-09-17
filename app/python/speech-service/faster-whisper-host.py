@@ -21,7 +21,7 @@ print("[INIT] Loading whisper model...")
 model = WhisperModel(
   MODEL_NAME,
   device=DEVICE,
-  cpu_threads=3,   # Limit CPU threads for Pi
+  cpu_threads=4,   # Limit CPU threads for Pi
   compute_type=COMPUTE_TYPE,
 )
 t1 = time.perf_counter()
@@ -77,7 +77,8 @@ def recognize():
     segments, info = model.transcribe(
       audio_path,
       language=language,
-      vad_filter=True
+      vad_filter=True,
+      beam_size=1
     )
 
     text = "".join(seg.text for seg in segments).strip()

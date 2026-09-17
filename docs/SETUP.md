@@ -9,7 +9,7 @@ Raspberry Pi OS 64-bit (Debian Trixie), conectando por SSH al hostname Tailscale
 | Función | Software | Notas |
 |---|---|---|
 | LLM | [Ollama](https://ollama.com) + `qwen3:1.7b` (Q4_K_M) | Corre en CPU, ~1.4GB en disco. `ENABLE_THINKING=false` para respuestas rápidas. |
-| ASR (voz→texto) | [faster-whisper](https://github.com/SYSTRAN/faster-whisper), modelo `small` | `int8` en CPU, idioma fijo en español (`FASTER_WHISPER_LANGUAGE=es`). |
+| ASR (voz→texto) | [faster-whisper](https://github.com/SYSTRAN/faster-whisper), modelo `base` | `int8` en CPU, `beam_size=1`, idioma fijo en español (`FASTER_WHISPER_LANGUAGE=es`). ~1.8s por transcripción, ver [`performance-tuning.md`](./performance-tuning.md). |
 | TTS (texto→voz) | [Piper](https://github.com/OHF-Voice/piper1-gpl), voz `es_MX-claude-high` | Servido vía `piper-http` en `localhost:8805`. |
 | Batería | [PiSugar Power Manager](https://github.com/PiSugar/pisugar-power-manager-rs) | Necesario para el PiSugar 3 Plus (lectura de batería en pantalla). |
 | Orquestación | [whisplay-ai-chatbot](https://github.com/PiSugar/whisplay-ai-chatbot) | Clonado en `~/whisplay-ai-chatbot` en la Pi (no vive dentro de este repo). |
@@ -46,6 +46,12 @@ Raspberry Pi OS 64-bit (Debian Trixie), conectando por SSH al hostname Tailscale
    funcionaba pero no se escuchaba la respuesta. Ver
    [`piper-tts-silent-fix.md`](./piper-tts-silent-fix.md) — el cliente de Piper HTTP
    del chatbot le pega a la URL equivocada del servidor de síntesis.
+10. **Optimización de velocidad del ASR**: el modelo `small` tardaba ~5.2s en
+    transcribir un audio de ~2.9s (peor que tiempo real). Se bajó a `base` y se
+    ajustaron `beam_size`/`cpu_threads`, quedando en ~1.8s (~3x más rápido). El
+    LLM (Ollama) y el TTS (Piper) ya corrían como servicios HTTP persistentes de
+    fábrica en `whisplay-ai-chatbot`, así que no necesitaron cambios. Detalle
+    completo en [`performance-tuning.md`](./performance-tuning.md).
 
 ## Estado verificado
 
@@ -60,8 +66,6 @@ Raspberry Pi OS 64-bit (Debian Trixie), conectando por SSH al hostname Tailscale
 
 ## Pendiente / posibles siguientes pasos
 
-- Evaluar si el modelo `small` de faster-whisper es lo bastante rápido en uso real;
-  bajar a `base`/`tiny` si la latencia molesta.
 - Wake word (activación por voz sin botón) — ver wiki de whisplay-ai-chatbot.
 - Decidir si conviene pasar a modo headless (`startup.sh` puede rehacerse para
   deshabilitar la GUI).

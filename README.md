@@ -27,6 +27,7 @@ Raspberry Pi OS 64-bit, basado en Debian Trixie.
 | Texto→voz (TTS) | [Piper](https://github.com/OHF-Voice/piper1-gpl) (voz `es_ES-davefx-medium`, hombre, español de España) |
 | Batería | [PiSugar Power Manager](https://github.com/PiSugar/pisugar-power-manager-rs) |
 | Orquestación | [whisplay-ai-chatbot](https://github.com/PiSugar/whisplay-ai-chatbot) |
+| Pantalla | UI propia minimalista: personaje animado a pantalla completa + texto verde terminal ([`docs/display-ui.md`](docs/display-ui.md)) |
 
 Detalle completo del setup en [`docs/SETUP.md`](docs/SETUP.md).
 
@@ -135,7 +136,10 @@ locales, sin depender de APIs de nube).
 
 Copia la carpeta [`app/`](app/) de este repo a la Pi como `~/whisplay-ai-chatbot`
 (ya incluye los fixes aplicados, como el de Piper HTTP — ver
-[`docs/piper-tts-silent-fix.md`](docs/piper-tts-silent-fix.md)):
+[`docs/piper-tts-silent-fix.md`](docs/piper-tts-silent-fix.md) — y la interfaz
+de pantalla minimalista con los GIFs de personaje ya generados, ver
+[`docs/display-ui.md`](docs/display-ui.md); no hace falta ningún paso extra
+para la pantalla):
 
 ```bash
 rsync -az /ruta/local/akbal-pi/app/ <usuario>@<host-de-la-pi>:~/whisplay-ai-chatbot/
@@ -193,7 +197,9 @@ PiSugar).
   `node_modules`, `dist` ni datos de runtime — todo eso se genera/instala en el
   propio dispositivo.
 - [`docs/`](docs/) — bitácora de instalación y fixes encontrados en el camino.
-- [`setup/`](setup/) — patches aplicados y `.env` de referencia (sin secretos).
+- [`setup/`](setup/) — patches aplicados, `.env` de referencia (sin secretos), y
+  los videos originales del personaje en
+  [`setup/display-source-videos/`](setup/display-source-videos/).
 
 ## Estado
 
@@ -209,7 +215,8 @@ hardware/software que se encontraron y arreglaron durante la instalación, y
 de velocidad del ASR (~3x más rápido, de 5.2s a 1.8s por transcripción), y
 [`docs/piper-voice-selection.md`](docs/piper-voice-selection.md) para cómo se
 eligió la voz (con medición real de tono, no adivinando por el nombre) y todas
-las voces que se probaron.
+las voces que se probaron, y [`docs/display-ui.md`](docs/display-ui.md) para
+la interfaz de pantalla minimalista (personaje animado + texto).
 
 Pendiente: wake word (activación por voz sin botón).
 

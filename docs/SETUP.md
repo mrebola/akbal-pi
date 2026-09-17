@@ -13,6 +13,7 @@ Raspberry Pi OS 64-bit (Debian Trixie), conectando por SSH al hostname Tailscale
 | TTS (texto→voz) | [Piper](https://github.com/OHF-Voice/piper1-gpl), voz `es_ES-davefx-medium` (hombre, español de España) | Servido vía `piper-http` en `localhost:8805`. Ver [`piper-voice-selection.md`](./piper-voice-selection.md) para cómo se eligió. |
 | Batería | [PiSugar Power Manager](https://github.com/PiSugar/pisugar-power-manager-rs) | Necesario para el PiSugar 3 Plus (lectura de batería en pantalla). |
 | Orquestación | [whisplay-ai-chatbot](https://github.com/PiSugar/whisplay-ai-chatbot) | Clonado en `~/whisplay-ai-chatbot` en la Pi (no vive dentro de este repo). |
+| Pantalla | UI propia en `python/chatbot-ui.py` | Minimalista: video de personaje a pantalla completa + 2 líneas de texto. Ver [`display-ui.md`](./display-ui.md). |
 
 ## Pasos realizados
 
@@ -63,6 +64,13 @@ Raspberry Pi OS 64-bit (Debian Trixie), conectando por SSH al hostname Tailscale
     `es_ES-davefx-medium` (hombre, español de España, F0 ~118 Hz, calidad
     `medium`). Metodología completa, mediciones y todas las voces probadas en
     [`piper-voice-selection.md`](./piper-voice-selection.md).
+13. **Rediseño de la interfaz de pantalla**: se reemplazó el header con
+    emoji/batería/wifi y el texto con scroll por una interfaz minimalista:
+    un personaje animado (GIF, generado a partir de dos videos cortos) a
+    pantalla completa, con hasta 2 líneas de texto en verde estilo terminal
+    abajo. `standing.gif` en reposo, `talking.gif` mientras responde. Detalle
+    completo, cómo se generaron los GIFs y cómo reemplazarlos en
+    [`display-ui.md`](./display-ui.md).
 
 ## Estado verificado
 
@@ -74,6 +82,9 @@ Raspberry Pi OS 64-bit (Debian Trixie), conectando por SSH al hostname Tailscale
 - Flujo de voz completo probado con el hardware físico: botón → graba → transcribe
   → responde → se escucha por el altavoz. `INITIAL_VOLUME_PERCENT=90` fijado en
   `.env` para que no se resetee a 80% en cada reinicio del servicio.
+- Interfaz de pantalla minimalista (video + texto) probada en vivo en el
+  hardware físico durante un ciclo completo (botón → escuchar → responder →
+  reposo), sin errores.
 
 ## Pendiente / posibles siguientes pasos
 

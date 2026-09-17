@@ -29,10 +29,14 @@ Los modelos disponibles se definen en `MODEL_ALIASES` dentro de
 `voice-commands.ts`, a partir de lo que hay instalado ahora mismo
 (`ollama list` en la Pi — ver [`llm-model-selection.md`](./llm-model-selection.md)):
 
-| Nombre corto | Modelo real | Cuándo usarlo |
+| Nombre corto | Modelo real | Notas |
 |---|---|---|
-| **uno** / one | `qwen3:1.7b` | El más rápido y estable. Fallback automático si algo falla. |
-| **dos** / two | `huihui_ai/qwen3.5-abliterated:2B` | El que se usa por defecto ahora. |
+| **modelo 1** / deepseek | `deepseek-r1:1.5b` | |
+| **modelo 2** / llama 3 | `llama3.2:3b` | |
+| **modelo 3** / qwen 3.5 | `qwen3.5:2B` | |
+| **modelo 4** / qwen sin censura | `huihui_ai/qwen3-abliterated:1.7b` | |
+| **modelo 5** / qwen sin censura 2 | `huihui_ai/qwen3.5-abliterated:2B` | El que se usa por defecto ahora. |
+| **modelo 6** / qwen 3 | `qwen3:1.7b` | El más rápido y estable. Fallback automático si algo falla. |
 
 El `Qwen3.5-4B-Uncensored-GGUF` probado y descartado (lento, no corta la
 generación) **no** está en esta lista — no tiene sentido ofrecerlo como opción
@@ -42,14 +46,14 @@ de voz.
 modelo" o simplemente "cambiar modelo" (sin decir cuál) — el asistente
 responde con los nombres cortos y cómo pedir el cambio.
 
-**Para cambiar:** "cambia el modelo a uno", "cambia el modelo a dos", "usa el
-modelo uno", "switch to model two". Hace falta decir la palabra
-"modelo"/"model" + un verbo de cambio ("cambia", "usa", "pon", "switch",
-"change"...) + el nombre corto.
+**Para cambiar:** "cambia el modelo a 1", "modelo 3", "usa el modelo
+deepseek", "cambia el modelo a qwen sin censura 2". Alcanza con decir
+"modelo" + el número o el nombre corto — no hace falta el verbo de cambio si
+ya nombrás un modelo válido (por ejemplo, decir solo "modelo 4" ya cambia).
 
 **Si falla o no se entiende cuál pediste** (dijiste "modelo" + intención de
 cambio pero el nombre no coincide con ninguno de la lista): el asistente dice
-que no reconoció el modelo, **deja activado el modelo 1** (`qwen3:1.7b`, el
+que no reconoció el modelo, **deja activado el modelo 6** (`qwen3:1.7b`, el
 más estable) y repite el menú. También revisa contra `ollama list` en tiempo
 real antes de cambiar — si el modelo pedido ya no está instalado, aplica el
 mismo fallback.

@@ -22,21 +22,49 @@ type ModelAlias = {
 };
 
 // Short, spoken-friendly names for the models actually installed on this Pi
-// (checked with `ollama list` — see docs/llm-model-selection.md). The
-// discarded Qwen3.5-4B-Uncensored-GGUF is intentionally left out: it's slow
-// and doesn't stop generating, so it's not offered as a voice option.
+// (checked with `ollama list` — see docs/llm-model-selection.md).
 const MODEL_ALIASES: ModelAlias[] = [
   {
-    key: "uno",
-    tag: STABLE_MODEL_TAG,
-    label: "modelo uno, el más rápido y estable",
-    synonyms: ["uno", "one", "1", "rapido", "rápido", "fast", "estable"],
+    key: "1",
+    tag: "deepseek-r1:1.5b",
+    label: "modelo 1, deepseek",
+    synonyms: ["1", "uno", "one", "deepseek"],
   },
   {
-    key: "dos",
+    key: "2",
+    tag: "llama3.2:3b",
+    label: "modelo 2, llama 3",
+    synonyms: ["2", "dos", "two", "llama3", "llama 3", "ollama3", "ollama 3", "llama"],
+  },
+  {
+    key: "3",
+    tag: "qwen3.5:2B",
+    label: "modelo 3, qwen 3.5",
+    synonyms: ["3", "tres", "three", "qwen3.5", "qwen 3.5", "qwen3 5"],
+  },
+  {
+    key: "4",
+    tag: "huihui_ai/qwen3-abliterated:1.7b",
+    label: "modelo 4, qwen sin censura",
+    synonyms: ["4", "cuatro", "four", "qwen sin censura"],
+  },
+  {
+    key: "5",
     tag: "huihui_ai/qwen3.5-abliterated:2B",
-    label: "modelo dos, el que uso normalmente",
-    synonyms: ["dos", "two", "2"],
+    label: "modelo 5, qwen sin censura 2",
+    synonyms: [
+      "5",
+      "cinco",
+      "five",
+      "qwen sin censura 2",
+      "qwen sin censura dos",
+    ],
+  },
+  {
+    key: "6",
+    tag: STABLE_MODEL_TAG,
+    label: "modelo 6, qwen 3, el más estable",
+    synonyms: ["6", "seis", "six", "qwen3", "qwen 3"],
   },
 ];
 
@@ -56,6 +84,10 @@ function normalize(text: string): string {
     .replace(/[^a-z0-9%\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 const VOLUME_WORD = /\bvolum(en|e)\b/;
@@ -125,29 +157,51 @@ const MODEL_INTENT =
 const MODEL_QUERY_INTENT =
   /\b(que|cuales|cual|lista|opciones|menu|which|list|options|tenemos|hay)\b/;
 
-function findAliasByToken(token: string): ModelAlias | undefined {
-  return MODEL_ALIASES.find((alias) => alias.synonyms.includes(token));
+// Words that can trail "modelo"/"model" without actually naming a target
+// (articles, connectors, filler, and the query words above), so they don't
+// get mistaken for a (failed) model name.
+const NON_TARGET_WORDS = new Set([
+  "el", "la", "los", "las", "de", "a", "al", "to", "es", "un", "una",
+  "por", "favor", "porfavor", "please", "gracias", "ahora", "mismo", "ya",
+  "que", "cuales", "cual", "lista", "opciones", "menu", "which", "list",
+  "options", "tenemos", "hay", "modelo", "modelos", "model", "models",
+]);
+
+function meaningfulTokens(phrase: string): string[] {
+  return phrase.split(" ").filter((w) => w && !NON_TARGET_WORDS.has(w));
 }
 
-function extractRequestedModelToken(norm: string): string | null {
-  const afterConnector = norm.match(
-    /model(o)?s?\b[^a-z0-9]*(?:a|al|to|es)\s+([a-z0-9]+)/,
-  );
-  if (afterConnector) return afterConnector[2];
-  const afterVerb = norm.match(
-    /\b(usa|usar|use|pon)\b[^a-z0-9]*model(o)?\b\s+([a-z0-9]+)/,
-  );
-  if (afterVerb) return afterVerb[3];
-  return null;
+function findAliasByPhrase(remainder: string): ModelAlias | undefined {
+  let best: { alias: ModelAlias; length: number } | undefined;
+  for (const alias of MODEL_ALIASES) {
+    for (const synonym of alias.synonyms) {
+      const normSynonym = normalize(synonym);
+      if (!normSynonym) continue;
+      if (new RegExp(`\\b${escapeRegExp(normSynonym)}\\b`).test(remainder)) {
+        if (!best || normSynonym.length > best.length) {
+          best = { alias, length: normSynonym.length };
+        }
+      }
+    }
+  }
+  return best?.alias;
 }
 
 function matchModelCommand(norm: string): VoiceCommand | null {
   if (!MODEL_WORD.test(norm)) return null;
-  if (!MODEL_INTENT.test(norm) && !MODEL_QUERY_INTENT.test(norm)) return null;
-  const token = extractRequestedModelToken(norm);
-  if (!token) return { type: "model_menu" };
-  const alias = findAliasByToken(token);
+
+  const afterModelWord = norm.match(/model(o)?s?\b\s*(.*)$/);
+  const candidatePhrase = afterModelWord ? afterModelWord[2] : "";
+  const tokens = meaningfulTokens(candidatePhrase);
+  const remainder = tokens.join(" ");
+  const alias = remainder ? findAliasByPhrase(remainder) : undefined;
+
   if (alias) return { type: "model_switch", alias };
+
+  const hasIntent = MODEL_INTENT.test(norm) || MODEL_QUERY_INTENT.test(norm);
+  if (!hasIntent) return null;
+
+  if (!remainder) return { type: "model_menu" };
   return { type: "model_switch_failed" };
 }
 
@@ -164,11 +218,12 @@ function aliasForTag(tag: string): ModelAlias | undefined {
 function buildModelMenuText(): string {
   const current = getCurrentModel();
   const currentLabel = aliasForTag(current)?.label || current;
-  const options = MODEL_ALIASES.map((a) => `${a.key}: ${a.label}`).join(". ");
+  const options = MODEL_ALIASES.map((a) => a.label).join(". ");
   return (
     `Tenemos estos modelos. ${options}. ` +
-    `Para cambiar, decí "cambia el modelo a" y el nombre, por ejemplo ` +
-    `"cambia el modelo a uno". Ahora mismo estoy usando el ${currentLabel}.`
+    `Para cambiar, decí "cambia el modelo a" y el número o el nombre, por ` +
+    `ejemplo "cambia el modelo a 1" o "cambia el modelo a deepseek". ` +
+    `Ahora mismo estoy usando el ${currentLabel}.`
   );
 }
 

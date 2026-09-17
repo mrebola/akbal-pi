@@ -87,11 +87,29 @@ const removeRecordingProcess = (child: ChildProcess): void => {
   recordingProcessList = recordingProcessList.filter((item) => item !== child);
 };
 
+const RECORDING_KILL_GRACE_MS = 1000;
+
 const killRecordingProcess = (child: ChildProcess): void => {
   console.log("Killing recording process", child.pid);
   try {
     child.kill("SIGINT");
   } catch (e) { }
+  // SIGINT normally makes sox finish the WAV header and exit, but it's been
+  // observed to leave sox stuck holding the ALSA capture device (confirmed
+  // via /proc/asound/.../status still RUNNING minutes later) — every
+  // subsequent recording then fails instantly (device busy) with no visible
+  // error, which looks like the button doing nothing. Force it after a short
+  // grace period if it's still alive.
+  const pid = child.pid;
+  setTimeout(() => {
+    if (pid === undefined || child.exitCode !== null || child.signalCode !== null) {
+      return;
+    }
+    console.warn(`[Audio] Recording process ${pid} didn't exit after SIGINT, sending SIGKILL`);
+    try {
+      child.kill("SIGKILL");
+    } catch (e) { }
+  }, RECORDING_KILL_GRACE_MS);
   removeRecordingProcess(child);
 };
 
@@ -265,9 +283,20 @@ const recordAudioManually = (
     stopFunc = () => {
       killRecordingProcess(recordingProcess);
     };
-    recordingProcess.on("exit", () => {
+    recordingProcess.on("exit", (code, signal) => {
       removeRecordingProcess(recordingProcess);
-      resolve(outputPath);
+      // A signal (SIGINT/SIGKILL from stop()/killRecordingProcess above) or
+      // a clean 0 is the normal "button released, recording done" path.
+      // Anything else means sox failed right after spawning — most often the
+      // ALSA device was still busy from a previous recording that didn't
+      // actually exit — and outputPath is empty/invalid, so surface it as a
+      // real error instead of silently "succeeding" with a bad file (that
+      // used to just look like the button doing nothing).
+      if (signal || code === 0 || code === null) {
+        resolve(outputPath);
+      } else {
+        reject(new Error(`sox exited with code ${code}`));
+      }
     });
   });
   return {

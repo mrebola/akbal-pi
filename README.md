@@ -235,7 +235,3 @@ modelo a ciegas ante un comando mal reconocido (causó una regresión real:
 dejó activado un modelo con problemas de eco en respuestas cortas).
 
 Pendiente: wake word (activación por voz sin botón).
-
-## Notas de seguridad
-
-Este repositorio es público. No se deben commitear credenciales, tokens, claves de API ni ningún otro dato sensible. Usar variables de entorno o archivos ignorados por git (`.gitignore`) para configuración local.

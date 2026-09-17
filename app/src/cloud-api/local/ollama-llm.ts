@@ -28,13 +28,16 @@ import {
   hasPendingCapturedImgForChat,
 } from "../../utils/image";
 import { compactMessagesForContextWindow } from "../context-window";
+import { persistEnvVar } from "../../utils/env-file";
 
 dotenv.config();
 
 // Ollama LLM configuration
 const ollamaEndpoint =
   process.env.OLLAMA_ENDPOINT || `http://localhost:${defaultPortMap.ollama}`;
-const ollamaModel = process.env.OLLAMA_MODEL || "deepseek-r1:1.5b";
+// Mutable so voice commands (see chat-flow/voice-commands.ts) can switch the
+// active model at runtime without restarting the process.
+let currentOllamaModel = process.env.OLLAMA_MODEL || "deepseek-r1:1.5b";
 const ollamaEnableTools = process.env.OLLAMA_ENABLE_TOOLS === "true";
 const ollamaMaxToolRounds = Math.max(
   0,
@@ -71,7 +74,7 @@ const findContextWindowValue = (value: unknown): number | undefined => {
 const resolveOllamaContextWindow = async (): Promise<number | undefined> => {
   if (ollamaContextWindowCache) return ollamaContextWindowCache;
   const response = await axios.post(`${ollamaEndpoint}/api/show`, {
-    model: ollamaModel,
+    model: currentOllamaModel,
   });
   ollamaContextWindowCache =
     findContextWindowValue(response.data?.model_info) ||
@@ -94,7 +97,7 @@ const messages: OllamaMessage[] = [
 const keepAliveOllama = () => {
   axios
     .post(`${ollamaEndpoint}/api/chat`, {
-      model: ollamaModel,
+      model: currentOllamaModel,
       messages: [
         {
           role: "system",
@@ -130,6 +133,31 @@ if (llmServer.trim().toLowerCase() === "ollama") {
   // initialize request to ollama server with empty prompt, to load the model into memory
   keepAliveOllama();
 }
+
+// Exposed for the voice-command flow (see chat-flow/voice-commands.ts) so it
+// can read/switch the active model without going through LLM tool-calling
+// (which would attach every tool schema to every request — far too slow on
+// this hardware, see docs/llm-model-selection.md).
+export const getCurrentModel = (): string => currentOllamaModel;
+
+export const setCurrentModel = (model: string): void => {
+  if (!model || model === currentOllamaModel) return;
+  console.log(`[Ollama] Switching model: ${currentOllamaModel} -> ${model}`);
+  currentOllamaModel = model;
+  ollamaContextWindowCache = undefined;
+  persistEnvVar("OLLAMA_MODEL", model);
+  if (llmServer.trim().toLowerCase() === "ollama") {
+    keepAliveOllama();
+  }
+};
+
+export const listOllamaModels = async (): Promise<string[]> => {
+  const response = await axios.get(`${ollamaEndpoint}/api/tags`);
+  const models = response.data?.models;
+  return Array.isArray(models)
+    ? models.map((m: any) => m?.name || m?.model).filter(Boolean)
+    : [];
+};
 
 const resetChatHistory = (): void => {
   messages.length = 0;
@@ -186,7 +214,7 @@ const answerFromAvailableToolResults = async ({
     const response = await axios.post(
       `${ollamaEndpoint}/api/chat`,
       {
-        model: ollamaModel,
+        model: currentOllamaModel,
         messages: [
           ...messages.map((msg) => ({
             role: msg.role,
@@ -275,7 +303,7 @@ const chatWithLLMStreamInternal = async (
   messages.push(...(inputMessages as OllamaMessage[]));
   await compactMessagesForContextWindow({
     provider: "ollama",
-    model: ollamaModel,
+    model: currentOllamaModel,
     messages,
     tools: ollamaEnableTools ? llmTools : undefined,
     outputReserveTokens: ollamaPredictNum,
@@ -315,7 +343,7 @@ const chatWithLLMStreamInternal = async (
     const response = await axios.post(
       `${ollamaEndpoint}/api/chat`,
       {
-        model: ollamaModel,
+        model: currentOllamaModel,
         messages: messages.map((msg, index) => ({
           role: msg.role,
           content: msg.content,
@@ -550,7 +578,7 @@ const summaryTextWithLLM: SummaryTextWithLLMFunction = async (
   const response = await axios.post(
     `${ollamaEndpoint}/api/generate`,
     {
-      model: ollamaModel,
+      model: currentOllamaModel,
       prompt: prompt,
       stream: false,
       think: false,

@@ -38,6 +38,7 @@ import {
   resetCameraModeControl,
 } from "./camera-mode";
 import { DEFAULT_EMOJI } from "../../utils";
+import { matchVoiceCommand, handleVoiceCommand } from "./voice-commands";
 import { isMusicPlaying, getCurrentTrackTitle, stopMusicPlayback, startPendingMusicPlayback, onMusicTrackChange, onMusicPlaybackEnd } from "../../device/music-player";
 import { autoSaveExchange, prepareMemoryPrompt } from "../../config/local-memory";
 
@@ -254,7 +255,7 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
         });
         onButtonReleased(noop);
       }),
-    ]).then((result) => {
+    ]).then(async (result) => {
       if (ctx.currentFlowName !== "asr") return;
       if (result === "[UserPress]") {
         ctx.transitionTo("listening");
@@ -268,6 +269,16 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
           ctx.wakeSessionLastSpeechAt = Date.now();
         }
         display({ status: "recognizing", text: result });
+        // Volume/model voice commands are handled directly here, without
+        // going through the LLM — see voice-commands.ts for why.
+        const voiceCommand = matchVoiceCommand(result);
+        if (voiceCommand) {
+          const reply = await handleVoiceCommand(voiceCommand);
+          if (ctx.currentFlowName !== "asr") return;
+          ctx.pendingExternalReply = reply;
+          ctx.transitionTo("external_answer");
+          return;
+        }
         ctx.transitionTo("answer");
         return;
       }

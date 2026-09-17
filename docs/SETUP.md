@@ -90,6 +90,13 @@ Raspberry Pi OS 64-bit (Debian Trixie), conectando por SSH al hostname Tailscale
     y se descartó (muy lento y no cortaba la generación); se adoptó
     `huihui_ai/qwen3.5-abliterated:2B` en su lugar. Detalle completo,
     benchmarks y metodología en [`llm-model-selection.md`](./llm-model-selection.md).
+17. **Comandos de voz (volumen y modelo)**: se probó primero el tool-calling
+    nativo de Ollama y se descartó (misma razón que arriba: manda todas las
+    herramientas en cada request, ~15x más lento en *toda* la conversación).
+    Se implementó en su lugar un matcher por expresiones regulares que
+    intercepta el texto del ASR antes de llegar al LLM, en
+    `src/core/chat-flow/voice-commands.ts`. Detalle completo, ejemplos de
+    frases y menú de modelos en [`voice-commands.md`](./voice-commands.md).
 
 ## Estado verificado
 

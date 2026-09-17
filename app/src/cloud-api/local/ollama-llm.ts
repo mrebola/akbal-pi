@@ -100,6 +100,14 @@ const keepAliveOllama = () => {
           role: "system",
           content: systemPrompt,
         },
+        {
+          // Some chat templates raise an error if there's no user turn at
+          // all (e.g. "No user query found in messages."), so the warm-up
+          // ping needs a minimal one even though we don't care about the
+          // answer.
+          role: "user",
+          content: "Hola",
+        },
       ],
       options: {
         temperature: 0.7,

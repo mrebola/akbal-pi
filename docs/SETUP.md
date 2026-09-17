@@ -8,7 +8,7 @@ Raspberry Pi OS 64-bit (Debian Trixie), conectando por SSH al hostname Tailscale
 
 | Función | Software | Notas |
 |---|---|---|
-| LLM | [Ollama](https://ollama.com) + `qwen3:1.7b` (Q4_K_M) | Corre en CPU, ~1.4GB en disco. `ENABLE_THINKING=false` para respuestas rápidas. |
+| LLM | [Ollama](https://ollama.com) + `huihui_ai/qwen3.5-abliterated:2B` | Corre en CPU, ~1.9GB en disco, ~9 tok/s. `ENABLE_THINKING=false` para respuestas rápidas. Ver [`llm-model-selection.md`](./llm-model-selection.md) para por qué se cambió del `qwen3:1.7b` original y qué otro modelo se descartó. |
 | ASR (voz→texto) | [faster-whisper](https://github.com/SYSTRAN/faster-whisper), modelo `base` | `int8` en CPU, `beam_size=1`, idioma fijo en español (`FASTER_WHISPER_LANGUAGE=es`). ~1.8s por transcripción, ver [`performance-tuning.md`](./performance-tuning.md). |
 | TTS (texto→voz) | [Piper](https://github.com/OHF-Voice/piper1-gpl), voz `es_ES-davefx-medium` (hombre, español de España) | Servido vía `piper-http` en `localhost:8805`. Ver [`piper-voice-selection.md`](./piper-voice-selection.md) para cómo se eligió. |
 | Batería | [PiSugar Power Manager](https://github.com/PiSugar/pisugar-power-manager-rs) | Necesario para el PiSugar 3 Plus (lectura de batería en pantalla). |
@@ -78,6 +78,18 @@ Raspberry Pi OS 64-bit (Debian Trixie), conectando por SSH al hostname Tailscale
     original). Verificado cuadro por cuadro en ambos videos para que la
     cabeza no se salga de encuadre. Detalle en
     [`display-ui.md`](./display-ui.md).
+15. **Fix de los íconos de wifi/batería**: `WifiStatusIcon.measure()` reportaba
+    el tamaño del ícono sin escalar mientras que `render()` sí lo dibujaba
+    escalado (1.4x), lo que desalineaba el ancho reservado para cada ícono en
+    la barra superior. Se corrigió para que `measure()` refleje el tamaño real
+    del bitmap ya escalado. Además, el borde derecho del panel físico queda
+    tapado por el bisel de la carcasa (~10% del ancho), así que el clúster de
+    íconos se corrió esa misma proporción hacia la izquierda
+    (`TOP_BAR_RIGHT_INSET_PCT` en `chatbot-ui.py`) para que se vean completos.
+16. **Cambio de modelo LLM**: se probó `hf.co/mradermacher/Qwen3.5-4B-Uncensored-GGUF:Q4_K_M`
+    y se descartó (muy lento y no cortaba la generación); se adoptó
+    `huihui_ai/qwen3.5-abliterated:2B` en su lugar. Detalle completo,
+    benchmarks y metodología en [`llm-model-selection.md`](./llm-model-selection.md).
 
 ## Estado verificado
 

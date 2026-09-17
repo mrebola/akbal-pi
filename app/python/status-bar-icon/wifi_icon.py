@@ -33,7 +33,13 @@ class WifiStatusIcon:
         self.icon_name = WIFI_LEVEL_ICONS[self.signal_level]
         self.base_icon_width = self._get_width_for_height(self.icon_name, self.icon_height)
         self.icon_image = self._get_scaled_icon(self.icon_name, self.icon_height, self.icon_center_scale)
-        self.icon_width = self.base_icon_width if self.base_icon_width else (self.icon_image.width if self.icon_image else 18)
+        # Report the actual scaled bitmap size (not the unscaled target height)
+        # so callers center/space it correctly instead of clipping it.
+        if self.icon_image:
+            self.icon_width = self.icon_image.width
+            self.icon_height = self.icon_image.height
+        else:
+            self.icon_width = self.base_icon_width if self.base_icon_width else 18
 
     def measure(self):
         return (self.icon_width, self.icon_height)
@@ -44,9 +50,7 @@ class WifiStatusIcon:
     def render(self, draw, x, y):
         if not self.icon_image or not hasattr(draw, "_image"):
             return
-        paste_x = x + (self.icon_width - self.icon_image.width) // 2
-        paste_y = y + (self.icon_height - self.icon_image.height) // 2
-        draw._image.paste(self.icon_image, (paste_x, paste_y), self.icon_image)
+        draw._image.paste(self.icon_image, (x, y), self.icon_image)
 
     @classmethod
     def _get_source_icon(cls, icon_name):

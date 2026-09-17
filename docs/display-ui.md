@@ -106,3 +106,21 @@ pecho) en vez de los lados, ya que el personaje está centrado horizontalmente.
 4. Sobrescribir `app/python/img/standing.gif` o `talking.gif`, copiar a
    `~/whisplay-ai-chatbot/python/img/` en la Pi, y
    `sudo systemctl restart chatbot.service`.
+
+## Íconos de wifi/batería: tamaño y posición
+
+Dos bugs encontrados al verificar los íconos en el hardware real:
+
+- **`WifiStatusIcon.measure()` no reflejaba el escalado real**: el ícono se
+  dibuja escalado 1.4x (`NETWORK_ICON_CENTER_SCALE` en `icon_constants.py`)
+  respecto al PNG fuente para compensar que el propio PNG tiene bastante
+  relleno transparente, pero `measure()` devolvía el tamaño *sin* escalar. Eso
+  hacía que `render_top_bar()` reservara menos espacio del que el ícono
+  realmente ocupaba al dibujarse, produciendo recorte/solape con el ícono de
+  batería. Se corrigió en `status-bar-icon/wifi_icon.py` para que
+  `measure()` reporte el tamaño real del bitmap ya escalado.
+- **El bisel de la carcasa tapa el borde derecho del panel** (~10% del ancho).
+  Aunque los íconos se dibujen sin recorte dentro de la imagen renderizada,
+  quedaban parcialmente ocultos físicamente. Se agregó
+  `TOP_BAR_RIGHT_INSET_PCT = 0.10` en `chatbot-ui.py`, que corre todo el
+  clúster de íconos ese porcentaje del ancho de pantalla hacia la izquierda.

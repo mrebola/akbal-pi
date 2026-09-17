@@ -34,7 +34,10 @@ TEXT_BAND_HEIGHT = 64  # LCD_HEIGHT (280) = TOP_BAR_HEIGHT (20) + VIDEO_HEIGHT (
 BOTTOM_TEXT_MAX_LINES = 2
 BOTTOM_TEXT_FONT_SIZE = 16
 BOTTOM_TEXT_MARGIN_X = 10
-TOP_BAR_MARGIN_X = 8
+TOP_BAR_MARGIN_X = 14
+# The right ~10% of the panel is hidden behind the case bezel, so the
+# wifi/battery icon cluster is shifted left by that much to stay fully visible.
+TOP_BAR_RIGHT_INSET_PCT = 0.10
 GIF_FPS = 10
 TERMINAL_FG = (80, 255, 120, 255)
 TOOL_PLACEHOLDER_RE = re.compile(r"\{tool:([A-Za-z0-9_-]+)\}")
@@ -212,11 +215,15 @@ class RenderThread(threading.Thread):
 
         icons = []
         if current_wifi_signal_level:
-            icons.append(WifiStatusIcon(self.top_bar_font_size, current_wifi_signal_level))
+            # icon_center_scale=1.0 keeps the wifi icon at its native 15px
+            # height so it fits inside the 20px top bar without clipping
+            # (the default 1.4x scale renders it taller than the bar).
+            icons.append(WifiStatusIcon(self.top_bar_font_size, current_wifi_signal_level, icon_center_scale=1.0))
         if current_battery_level is not None:
             icons.append(BatteryStatusIcon(current_battery_level, current_battery_color, self.battery_font, self.top_bar_font_size))
 
-        cursor_x = self.whisplay.LCD_WIDTH - TOP_BAR_MARGIN_X
+        right_inset = int(self.whisplay.LCD_WIDTH * TOP_BAR_RIGHT_INSET_PCT)
+        cursor_x = self.whisplay.LCD_WIDTH - TOP_BAR_MARGIN_X - right_inset
         for icon in icons:
             icon_width, icon_height = icon.measure()
             icon_x = cursor_x - icon_width

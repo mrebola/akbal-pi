@@ -42,6 +42,11 @@ Raspberry Pi OS 64-bit (Debian Trixie), conectando por SSH al hostname Tailscale
    la interfaz gráfica de la Pi (el script lo ofrece); el servicio corre igual
    sobre `graphical.target`.
 
+9. **Bug de software encontrado y arreglado**: el flujo de voz completo (ASR → LLM)
+   funcionaba pero no se escuchaba la respuesta. Ver
+   [`piper-tts-silent-fix.md`](./piper-tts-silent-fix.md) — el cliente de Piper HTTP
+   del chatbot le pega a la URL equivocada del servidor de síntesis.
+
 ## Estado verificado
 
 - Tarjeta de sonido `whisplaysound` (WM8960) con playback y captura funcionando.
@@ -49,10 +54,12 @@ Raspberry Pi OS 64-bit (Debian Trixie), conectando por SSH al hostname Tailscale
 - Ollama, faster-whisper (puerto 8803) y Piper HTTP (puerto 8805) arrancan como
   subprocesos del propio chatbot.
 - PiSugar conectado (batería visible en pantalla).
+- Flujo de voz completo probado con el hardware físico: botón → graba → transcribe
+  → responde → se escucha por el altavoz. `INITIAL_VOLUME_PERCENT=90` fijado en
+  `.env` para que no se resetee a 80% en cada reinicio del servicio.
 
 ## Pendiente / posibles siguientes pasos
 
-- Probar el flujo completo de voz (botón → grabar → responder) con el hardware físico.
 - Evaluar si el modelo `small` de faster-whisper es lo bastante rápido en uso real;
   bajar a `base`/`tiny` si la latencia molesta.
 - Wake word (activación por voz sin botón) — ver wiki de whisplay-ai-chatbot.

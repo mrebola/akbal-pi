@@ -73,7 +73,8 @@ export type VoiceCommand =
   | { type: "volume"; action: "decrease" }
   | { type: "model_menu" }
   | { type: "model_switch"; alias: ModelAlias }
-  | { type: "model_switch_failed" };
+  | { type: "model_switch_failed" }
+  | { type: "model_current" };
 
 function normalize(text: string): string {
   return text
@@ -155,6 +156,11 @@ const MODEL_INTENT =
   /\b(cambia|cambiar|switch|change|usa|usar|use|pon|selecciona|elige)\b/;
 const MODEL_QUERY_INTENT =
   /\b(que|cuales|cual|lista|opciones|menu|which|list|options|tenemos|hay)\b/;
+// "qué modelo usás" / "qué modelo estás usando" — asks which model is
+// currently active, answered verbally, without touching it or opening the
+// menu. Checked before MODEL_INTENT/MODEL_QUERY_INTENT so it doesn't fall
+// through to "model_switch_failed" (none of these words name a model).
+const MODEL_CURRENT_INTENT = /\b(usas|usando|activo|activado|corriendo)\b/;
 
 // Words that can trail "modelo"/"model" without actually naming a target
 // (articles, connectors, filler, and the query words above), so they don't
@@ -196,6 +202,8 @@ function matchModelCommand(norm: string): VoiceCommand | null {
   const alias = remainder ? findAliasByPhrase(remainder) : undefined;
 
   if (alias) return { type: "model_switch", alias };
+
+  if (MODEL_CURRENT_INTENT.test(norm)) return { type: "model_current" };
 
   const hasIntent = MODEL_INTENT.test(norm) || MODEL_QUERY_INTENT.test(norm);
   if (!hasIntent) return null;

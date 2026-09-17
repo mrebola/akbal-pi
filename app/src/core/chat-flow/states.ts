@@ -38,15 +38,18 @@ import {
   resetCameraModeControl,
 } from "./camera-mode";
 import { DEFAULT_EMOJI } from "../../utils";
-import { matchVoiceCommand, handleVoiceCommand } from "./voice-commands";
+import { matchVoiceCommand, handleVoiceCommand, aliasForTag } from "./voice-commands";
 import {
   enterModelSelectMode,
+  handleModelSelectCancel,
   handleModelSelectPress,
   handleModelSelectRelease,
+  onModelSelectCancel,
   onModelSelectConfirm,
   onModelSelectTimeout,
 } from "./model-select-mode";
 import {
+  getCurrentModel,
   listOllamaModels,
   switchModelWithProgress,
 } from "../../cloud-api/local/ollama-llm";
@@ -300,6 +303,13 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
             ctx.pendingModelSwitchTag = voiceCommand.alias.tag;
             ctx.pendingModelSwitchLabel = voiceCommand.alias.label;
             ctx.transitionTo("model_loading");
+            return;
+          }
+          if (voiceCommand.type === "model_current") {
+            const activeTag = getCurrentModel();
+            const label = aliasForTag(activeTag)?.label || activeTag;
+            ctx.pendingExternalReply = `Estoy usando el ${label}.`;
+            ctx.transitionTo("external_answer");
             return;
           }
           // "model_menu" (generic "cambia modelo") and "model_switch_failed"
@@ -672,7 +682,6 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     }
   },
   model_select: (ctx: ChatFlowContext) => {
-    onButtonDoubleClick(null);
     onModelSelectConfirm((alias) => {
       ctx.pendingModelSwitchTag = alias.tag;
       ctx.pendingModelSwitchLabel = alias.label;
@@ -683,6 +692,14 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
         ctx.transitionTo("sleep");
       }
     });
+    onModelSelectCancel(() => {
+      if (ctx.currentFlowName === "model_select") {
+        ctx.transitionTo("sleep");
+      }
+    });
+    // Double click backs out without picking a model — the idle timeout
+    // above is only a fallback for walking away mid-menu.
+    onButtonDoubleClick(() => handleModelSelectCancel());
     onButtonPressed(() => handleModelSelectPress());
     onButtonReleased(() => handleModelSelectRelease());
     enterModelSelectMode();
@@ -715,7 +732,11 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       model_ui: "loading",
       model_ui_label: label,
       model_ui_percent: 0,
-      text: `Cargando modelo\n${label}`,
+      // A single line, no "\n" — the bottom-text renderer (see
+      // chatbot-ui.py render_bottom_text) wraps by character width only and
+      // doesn't understand embedded newlines, so a literal "\n" here breaks
+      // its line-height math instead of producing a clean second line.
+      text: `Cargando modelo: ${label}`,
     });
 
     listOllamaModels()

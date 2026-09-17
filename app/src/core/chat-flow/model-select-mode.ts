@@ -20,6 +20,7 @@ let confirmTimer: ReturnType<typeof setTimeout> | null = null;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let onConfirmCallback: (alias: ModelAlias) => void = () => {};
 let onTimeoutCallback: () => void = () => {};
+let onCancelCallback: () => void = () => {};
 
 function clearHoldTimers(): void {
   if (holdTicker) {
@@ -58,7 +59,9 @@ function renderSelectScreen(): void {
     model_ui_index: selectedIndex + 1,
     model_ui_total: MODEL_ALIASES.length,
     model_ui_active: isActive,
-    text: "Click: siguiente modelo\nMantené 3s: elegirlo",
+    // One line, no "\n" — see the comment on the "model_loading" screen's
+    // text in states.ts for why an embedded newline breaks the bottom band.
+    text: "Click: siguiente · Doble clic: cancelar",
   });
 }
 
@@ -76,6 +79,18 @@ export function onModelSelectConfirm(
 
 export function onModelSelectTimeout(callback: () => void): void {
   onTimeoutCallback = callback;
+}
+
+export function onModelSelectCancel(callback: () => void): void {
+  onCancelCallback = callback;
+}
+
+// Explicit "get me out of here" gesture, bound to a double click (see
+// states.ts) — the idle timeout alone (IDLE_TIMEOUT_MS) is a safety net, but
+// isn't a great primary way to back out without picking a model.
+export function handleModelSelectCancel(): void {
+  resetModelSelectControl();
+  onCancelCallback();
 }
 
 export function enterModelSelectMode(): void {

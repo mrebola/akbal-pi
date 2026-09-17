@@ -59,6 +59,10 @@ activado un modelo peor sin que nadie lo pidiera (ver
 `docs/llm-model-selection.md`). Ahora simplemente abre el mismo menú visual
 para elegir a propósito.
 
+**Para preguntar cuál está activo sin cambiar nada:** "qué modelo usás",
+"qué modelo estás usando", "qué modelo tenés activo" — responde hablado
+("Estoy usando el modelo X") y no toca el menú ni el modelo.
+
 ### Menú visual (botón del Whisplay HAT)
 
 Con la pantalla en modo selección (fondo negro, texto verde estilo terminal):
@@ -72,8 +76,10 @@ Con la pantalla en modo selección (fondo negro, texto verde estilo terminal):
   una barra y el porcentaje de carga, y el nombre del modelo abajo. Cuando
   termina, vuelve el personaje animado con el texto `Modelo "..." listo para
   contestar.` y el flujo normal sigue (botón para hablar).
-- Si no se toca el botón por 20 segundos, el menú se cierra solo y vuelve al
-  reposo.
+- **Doble clic**: cancela y vuelve directo al reposo sin cambiar nada — la
+  forma explícita de salir del menú.
+- Si no se toca el botón por 20 segundos, el menú también se cierra solo y
+  vuelve al reposo (red de seguridad si te alejás a mitad del menú).
 
 El cambio de modelo (por voz directo o por el menú):
 - Actualiza el modelo en memoria del proceso ya corriendo (no hace falta

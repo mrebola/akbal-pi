@@ -1,62 +1,73 @@
-# Interfaz de pantalla minimalista (video + texto)
+# Interfaz de pantalla minimalista (íconos + video + texto)
 
-Se reemplazó la interfaz original del Whisplay HAT (header con emoji, estado,
-batería, wifi, barra de progreso de música, scroll de texto con pastillas de
-herramientas) por una interfaz minimalista: un personaje animado a pantalla
-completa y hasta dos líneas de texto abajo.
+Se reemplazó la interfaz original del Whisplay HAT (header con emoji, estado
+en texto, batería, wifi, barra de progreso de música, scroll de texto con
+pastillas de herramientas) por una interfaz de 3 franjas: una barra delgada
+con íconos de wifi/batería arriba, un personaje animado en el medio, y hasta
+dos líneas de texto abajo.
 
 ## Layout (pantalla 240x280)
 
 ```
 ┌─────────────────────────┐
+│  📶            🔋 87%   │  ← franja de íconos, 240x20
+├─────────────────────────┤
 │                         │
-│   GIF (240x216)         │  ← "standing" en reposo, "talking" al responder
+│   GIF (240x196)         │  ← "standing" en reposo, "talking" al responder
+│   cara en primer plano  │     (recorte cercano a la cara, poco cuerpo)
 │   loop 10fps            │
-│                         │
 ├─────────────────────────┤
 │   texto (hasta 2 líneas)│  ← franja negra fija, 240x64
 │   verde estilo terminal │
 └─────────────────────────┘
 ```
 
-- **Video**: 216 de los 280px de alto (el resto es la franja de texto). Sin
-  emoji, sin header, sin iconos de batería/wifi/vpn — pantalla dedicada al
-  personaje y a la respuesta.
+- **Barra de íconos (20px)**: wifi (si hay señal reportada) y batería
+  (nivel + color), reutilizando las mismas clases `WifiStatusIcon` /
+  `BatteryStatusIcon` que ya existían en `status-bar-icon/`. Sin texto de
+  estado ni emoji — solo los dos íconos, alineados a la derecha. Se vuelve a
+  dibujar únicamente cuando cambia el nivel de batería o de señal (no en cada
+  frame de animación).
+- **Video (196px)**: recorte cercano a la cara del personaje (ver abajo),
+  sin header, sin emoji.
 - **Qué GIF se muestra**: `talking.gif` mientras `status` (el que manda el
   chatbot por el socket) empieza con "answer" (cubre `"answering"`,
   `"answering..."`, etc.); `standing.gif` en cualquier otro estado (sleep,
   listening, recognizing, thinking, tool calling...).
-- **Texto**: verde estilo terminal (`#50FF78`, el mismo verde que ya usaba la
-  interfaz para salida de comandos), sin fondo blanco ni subrayado — se decidió
-  así porque texto negro sobre fondo negro (lo pedido originalmente) sería
-  invisible. Solo se muestran las últimas 2 líneas del texto actual (se recorta
-  desde arriba, no hace scroll).
+- **Texto (64px)**: verde estilo terminal (`#50FF78`, el mismo verde que ya
+  usaba la interfaz para salida de comandos), sin fondo blanco ni subrayado —
+  se decidió así porque texto negro sobre fondo negro (lo pedido
+  originalmente) sería invisible. Solo se muestran las últimas 2 líneas del
+  texto actual (se recorta desde arriba, no hace scroll).
 
-## Cómo se generaron los GIFs
+## Cómo se generaron los GIFs (recorte cara en primer plano)
 
-Los videos originales (`standing.mp4`, `talking.mp4`, 640x640, 24fps, ~5s) se
-recortan verticalmente a la proporción del área de video (240x216) y se bajan
-a 10fps para que sean livianos:
+Los videos originales (`standing.mp4`, `talking.mp4`, 640x640, 24fps, ~5s)
+tenían al personaje de medio cuerpo (cabeza ocupando ~50% del alto del
+cuadro). Se recorta la región de la cara+cuello (`crop=490:400:75:0`,
+verificado cuadro por cuadro en las dos animaciones para que la cabeza no se
+salga del cuadro en ningún momento) y se escala a 240x196 — la cara llena
+casi toda la pantalla del HAT, con muy poco cuerpo visible:
 
 ```bash
-ffmpeg -i standing.mp4 -vf "crop=640:576:0:32,scale=240:216:flags=lanczos,fps=10,split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse=dither=bayer" -loop 0 standing.gif
+ffmpeg -i standing.mp4 -vf "crop=490:400:75:0,scale=240:196:flags=lanczos,fps=10,split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse=dither=bayer" -loop 0 standing.gif
 ```
 
-(mismo comando para `talking.mp4`). Resultado: ~240x216, 50 frames, 10fps,
-~520-820KB cada uno. Los archivos finales están en
+(mismo comando para `talking.mp4`). Resultado: 240x196, 50 frames, 10fps,
+~600-830KB cada uno. Los archivos finales están en
 [`../app/python/img/standing.gif`](../app/python/img/standing.gif) y
 [`../app/python/img/talking.gif`](../app/python/img/talking.gif).
 
 Los videos originales (640x640, sin comprimir a GIF) están guardados en
 [`../setup/display-source-videos/`](../setup/display-source-videos/) por si se
-quieren regenerar los GIFs con otros parámetros (más fps, otro recorte, etc.)
-sin depender de tener el archivo fuente en otra máquina.
+quieren regenerar los GIFs con otro recorte/fps sin depender de tener el
+archivo fuente en otra máquina.
 
-Por qué el recorte es `640:576:0:32` (no todo el cuadro 640x640): el área de
-video en pantalla es 240x216 (relación de aspecto 1.111), así que se recorta
-el video cuadrado a esa misma relación (640x576, quitando 32px arriba y abajo)
-*antes* de escalar, para no tener que hacer letterboxing/crop en tiempo real
-en la Pi — el frame ya sale del tamaño exacto que necesita la pantalla.
+Por qué `490:400:75:0` y no otro recorte: el área de video en pantalla es
+240x196 (relación de aspecto ≈1.224); se buscó una caja con esa misma relación
+que mantuviera la cabeza completa (con margen) en los 50 cuadros muestreados
+de cada video (cada 15 frames), recortando de más abajo del cuadro (hombros,
+pecho) en vez de los lados, ya que el personaje está centrado horizontalmente.
 
 ## Cómo funciona en el código (`app/python/chatbot-ui.py`)
 
@@ -68,23 +79,30 @@ en la Pi — el frame ya sale del tamaño exacto que necesita la pantalla.
 - `render_idle_screen()` calcula qué frame tocar mostrar según el reloj
   (`time.time()`), no según un contador que se pueda desincronizar, y solo
   manda el frame por SPI si cambió desde el último render (evita reescribir la
-  pantalla con el mismo contenido).
+  pantalla con el mismo contenido). Lo mismo aplica a `render_top_bar()`
+  (solo redibuja si cambia batería/wifi) y `render_bottom_text()` (solo
+  redibuja si cambia el texto visible).
 - El socket/protocolo hacia el proceso Node.js (puerto 12345, mismo JSON de
-  siempre: `status`, `text`, `text_delta`, `RGB`, `battery_level`, etc.) **no
-  cambió** — el campo `emoji` se sigue recibiendo pero ya no se dibuja en
-  pantalla. Los modos de cámara (`camera_mode`) e imagen generada
-  (`image_path`, para el tool de generación de imágenes) siguen funcionando
-  igual que antes, sin tocar.
-- Se eliminó todo el código que ya no se usa: header, iconos de estado
-  (batería/wifi/vpn/rag/imagen), pastillas de herramientas, barra de progreso
-  de música, scroll de texto, y el modo de aprobación del puente de Whisplay
-  IM (no lo usamos en este proyecto).
+  siempre: `status`, `text`, `text_delta`, `RGB`, `battery_level`,
+  `wifi_signal_level`, etc.) **no cambió** — el campo `emoji` se sigue
+  recibiendo pero ya no se dibuja en pantalla. Los modos de cámara
+  (`camera_mode`) e imagen generada (`image_path`, para el tool de generación
+  de imágenes) siguen funcionando igual que antes, sin tocar.
+- Se eliminó el código que ya no se usa: header con texto de estado,
+  pastillas de herramientas, barra de progreso de música, scroll de texto, y
+  el modo de aprobación del puente de Whisplay IM (no lo usamos en este
+  proyecto). Los íconos de wifi/batería sí se reincorporaron (franja superior
+  delgada); los de VPN/RAG/imagen-generada no, para mantener la barra mínima.
 
 ## Para reemplazar los videos más adelante
 
 1. Poner el nuevo video en el Mac (cuadrado o no, cualquier resolución).
-2. Ajustar el comando ffmpeg de arriba si la relación de aspecto de origen
-   cambia (el `crop` debe dar una relación 240:216 antes de escalar).
-3. Sobrescribir `app/python/img/standing.gif` o `talking.gif`, copiar a
+2. Extraer varios frames a lo largo del clip y revisar visualmente dónde cae
+   la cara, para elegir un `crop=w:h:x:y` que la mantenga completa en todo el
+   video (no solo en un frame).
+3. Ajustar el `scale` final para que su relación de aspecto sea 240:196
+   (o los valores que tenga `VIDEO_WIDTH`/`VIDEO_HEIGHT` en `chatbot-ui.py`
+   si se cambia el layout).
+4. Sobrescribir `app/python/img/standing.gif` o `talking.gif`, copiar a
    `~/whisplay-ai-chatbot/python/img/` en la Pi, y
    `sudo systemctl restart chatbot.service`.

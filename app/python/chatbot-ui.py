@@ -12,19 +12,29 @@ from camera import CameraThread
 from utils import ColorUtils, ImageUtils, TextUtils
 from whisplay_client import create_whisplay_hardware
 
+STATUS_ICON_DIR = os.path.join(os.path.dirname(__file__), "status-bar-icon")
+if STATUS_ICON_DIR not in sys.path:
+    sys.path.append(STATUS_ICON_DIR)
+
+from battery_icon import BatteryStatusIcon
+from wifi_icon import WifiStatusIcon
+
 IMG_DIR = os.path.join(os.path.dirname(__file__), "img")
 
 # ==================== Minimalist idle/talking video UI ====================
-# The top of the screen shows a looping GIF (character standing idle, or
-# talking while the assistant is answering) and the bottom is a fixed black
-# band with up to two lines of green terminal-style text for the current
-# response. No header, no emoji, no status icons.
+# A thin top bar shows the wifi and battery icons. Below it, the screen shows
+# a looping GIF (character standing idle, or talking while the assistant is
+# answering), and the bottom is a fixed black band with up to two lines of
+# green terminal-style text for the current response. No header text, no
+# emoji.
+TOP_BAR_HEIGHT = 20
 VIDEO_WIDTH = 240
-VIDEO_HEIGHT = 216
-TEXT_BAND_HEIGHT = 64  # LCD_HEIGHT (280) - VIDEO_HEIGHT (216)
+VIDEO_HEIGHT = 196
+TEXT_BAND_HEIGHT = 64  # LCD_HEIGHT (280) = TOP_BAR_HEIGHT (20) + VIDEO_HEIGHT (196) + TEXT_BAND_HEIGHT (64)
 BOTTOM_TEXT_MAX_LINES = 2
 BOTTOM_TEXT_FONT_SIZE = 16
 BOTTOM_TEXT_MARGIN_X = 10
+TOP_BAR_MARGIN_X = 8
 GIF_FPS = 10
 TERMINAL_FG = (80, 255, 120, 255)
 TOOL_PLACEHOLDER_RE = re.compile(r"\{tool:([A-Za-z0-9_-]+)\}")
@@ -107,6 +117,8 @@ class RenderThread(threading.Thread):
         self.bottom_text_font = ImageFont.truetype(self.font_path, BOTTOM_TEXT_FONT_SIZE)
         ascent, descent = self.bottom_text_font.getmetrics()
         self.bottom_text_line_height = ascent + descent
+        self.top_bar_font_size = 14
+        self.battery_font = ImageFont.truetype(self.font_path, 11)
         self.gif_frames = {
             "standing": load_gif_frames(os.path.join(IMG_DIR, "standing.gif"), VIDEO_WIDTH, VIDEO_HEIGHT),
             "talking": load_gif_frames(os.path.join(IMG_DIR, "talking.gif"), VIDEO_WIDTH, VIDEO_HEIGHT),
@@ -115,6 +127,7 @@ class RenderThread(threading.Thread):
         self.last_drawn_gif_key = None
         self.last_drawn_frame_index = -1
         self.bottom_text_cache_key = None
+        self.top_bar_cache_key = None
         self.pending_auto_scroll_after_hold = False
         self.render_event = threading.Event()
 
@@ -167,24 +180,52 @@ class RenderThread(threading.Thread):
             return self.render_idle_screen(status, apply_tool_placeholders(text))
 
     def render_idle_screen(self, status, text):
-        """Full-screen looping GIF (standing / talking) with a two-line
-        green terminal-style caption band at the bottom."""
+        """Thin wifi/battery bar on top, full-width looping GIF (standing /
+        talking) in the middle, and a two-line green terminal-style caption
+        band at the bottom."""
+        self.render_top_bar()
+
         gif_key = "talking" if is_answering_status(status) else "standing"
         frames = self.gif_frames.get(gif_key) or []
         if frames:
             elapsed = time.time() - self.gif_start_time
             frame_index = int(elapsed * GIF_FPS) % len(frames)
             if gif_key != self.last_drawn_gif_key or frame_index != self.last_drawn_frame_index:
-                self.whisplay.draw_image(0, 0, VIDEO_WIDTH, VIDEO_HEIGHT, frames[frame_index])
+                self.whisplay.draw_image(0, TOP_BAR_HEIGHT, VIDEO_WIDTH, VIDEO_HEIGHT, frames[frame_index])
                 self.last_drawn_gif_key = gif_key
                 self.last_drawn_frame_index = frame_index
         elif self.last_drawn_gif_key != gif_key:
             black = bytes(VIDEO_WIDTH * VIDEO_HEIGHT * 2)
-            self.whisplay.draw_image(0, 0, VIDEO_WIDTH, VIDEO_HEIGHT, black)
+            self.whisplay.draw_image(0, TOP_BAR_HEIGHT, VIDEO_WIDTH, VIDEO_HEIGHT, black)
             self.last_drawn_gif_key = gif_key
 
         self.render_bottom_text(text)
         return True  # keep looping so the animation keeps playing
+
+    def render_top_bar(self):
+        cache_key = (current_wifi_signal_level, current_battery_level, current_battery_color)
+        if cache_key == self.top_bar_cache_key:
+            return
+        self.top_bar_cache_key = cache_key
+        bar = Image.new("RGBA", (self.whisplay.LCD_WIDTH, TOP_BAR_HEIGHT), (0, 0, 0, 255))
+        draw = ImageDraw.Draw(bar)
+
+        icons = []
+        if current_wifi_signal_level:
+            icons.append(WifiStatusIcon(self.top_bar_font_size, current_wifi_signal_level))
+        if current_battery_level is not None:
+            icons.append(BatteryStatusIcon(current_battery_level, current_battery_color, self.battery_font, self.top_bar_font_size))
+
+        cursor_x = self.whisplay.LCD_WIDTH - TOP_BAR_MARGIN_X
+        for icon in icons:
+            icon_width, icon_height = icon.measure()
+            icon_x = cursor_x - icon_width
+            icon_y = (TOP_BAR_HEIGHT - icon_height) // 2
+            icon.render(draw, icon_x, icon_y)
+            cursor_x = icon_x - TOP_BAR_MARGIN_X
+
+        rgb565_data = ImageUtils.image_to_rgb565(bar, self.whisplay.LCD_WIDTH, TOP_BAR_HEIGHT)
+        self.whisplay.draw_image(0, 0, self.whisplay.LCD_WIDTH, TOP_BAR_HEIGHT, rgb565_data)
 
     def render_bottom_text(self, text):
         if text == self.bottom_text_cache_key:
@@ -204,7 +245,7 @@ class RenderThread(threading.Thread):
                 draw.text((BOTTOM_TEXT_MARGIN_X, y), line, font=font, fill=TERMINAL_FG)
                 y += line_height
         rgb565_data = ImageUtils.image_to_rgb565(band, self.whisplay.LCD_WIDTH, TEXT_BAND_HEIGHT)
-        self.whisplay.draw_image(0, VIDEO_HEIGHT, self.whisplay.LCD_WIDTH, TEXT_BAND_HEIGHT, rgb565_data)
+        self.whisplay.draw_image(0, TOP_BAR_HEIGHT + VIDEO_HEIGHT, self.whisplay.LCD_WIDTH, TEXT_BAND_HEIGHT, rgb565_data)
 
     def request_render(self):
         self.render_event.set()

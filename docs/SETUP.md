@@ -71,6 +71,13 @@ Raspberry Pi OS 64-bit (Debian Trixie), conectando por SSH al hostname Tailscale
     abajo. `standing.gif` en reposo, `talking.gif` mientras responde. Detalle
     completo, cómo se generaron los GIFs y cómo reemplazarlos en
     [`display-ui.md`](./display-ui.md).
+14. **Ajuste de la interfaz**: se recuperaron los íconos de wifi y batería
+    (franja delgada arriba, sin texto de estado ni emoji) y se recortaron los
+    GIFs para que la cara del personaje se vea más grande y en primer plano,
+    con mucho menos cuerpo visible (`crop=490:400:75:0` en vez del recorte
+    original). Verificado cuadro por cuadro en ambos videos para que la
+    cabeza no se salga de encuadre. Detalle en
+    [`display-ui.md`](./display-ui.md).
 
 ## Estado verificado
 

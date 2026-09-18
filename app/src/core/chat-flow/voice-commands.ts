@@ -1,4 +1,5 @@
 import { setVolumeByAmixer, getCurrentLogPercent } from "../../utils/volume";
+import type { DeviceMode } from "../../config/device-mode";
 
 // Volume and model-switch voice commands are matched here, in plain JS,
 // BEFORE the recognized text ever reaches the LLM. Doing this through LLM
@@ -74,7 +75,8 @@ export type VoiceCommand =
   | { type: "model_menu" }
   | { type: "model_switch"; alias: ModelAlias }
   | { type: "model_switch_failed" }
-  | { type: "model_current" };
+  | { type: "model_current" }
+  | { type: "device_mode_menu"; target: DeviceMode | null };
 
 function normalize(text: string): string {
   return text
@@ -212,10 +214,52 @@ function matchModelCommand(norm: string): VoiceCommand | null {
   return { type: "model_switch_failed" };
 }
 
+// "modo" (device mode: agent vs local) is a different word from "modelo"
+// (LLM model) — \b word boundaries mean this never collides with
+// matchModelCommand above, even normalized ("modelo" never contains "modo"
+// as a whole word).
+const MODE_WORD = /\bmodo\b/;
+const AGENT_MODE_TARGET = /\b(agente|agent|openclaw)\b/;
+const LOCAL_MODE_TARGET = /\blocal(es)?\b/;
+const MODE_INTENT =
+  /\b(activa|activar|cambia|cambiar|switch|change|usa|usar|use|pon|selecciona|elige|desactiva|desactivar|apaga|apagar)\b/;
+// "desactiva modo agente" names "agente" but means the opposite of
+// "activa modo agente" — flip the pre-selected target when a negation verb
+// is present, instead of treating any mention of "agente" as "go agent".
+const MODE_NEGATION = /\b(desactiva|desactivar|apaga|apagar|quita|quitar)\b/;
+
+// Always opens the on-screen menu (mode-select-mode.ts) pre-positioned on
+// the mode named, if any — it never switches directly from voice alone.
+// Unlike model switching, flipping this changes whether the device talks to
+// a local model or ships the conversation out to an external OpenClaw agent
+// (tool execution, approvals, network calls) — worth the extra button-hold
+// confirmation. See docs/agent-mode.md.
+function matchDeviceModeCommand(norm: string): VoiceCommand | null {
+  if (!MODE_WORD.test(norm)) return null;
+  const wantsAgent = AGENT_MODE_TARGET.test(norm);
+  const wantsLocal = LOCAL_MODE_TARGET.test(norm);
+  const negated = MODE_NEGATION.test(norm);
+
+  if (wantsAgent && !wantsLocal) {
+    return { type: "device_mode_menu", target: negated ? "local" : "agent" };
+  }
+  if (wantsLocal && !wantsAgent) {
+    return { type: "device_mode_menu", target: negated ? "agent" : "local" };
+  }
+  if (MODE_INTENT.test(norm)) {
+    return { type: "device_mode_menu", target: null };
+  }
+  return null;
+}
+
 export function matchVoiceCommand(rawText: string): VoiceCommand | null {
   const norm = normalize(rawText || "");
   if (!norm) return null;
-  return matchModelCommand(norm) || matchVolumeCommand(norm);
+  return (
+    matchModelCommand(norm) ||
+    matchDeviceModeCommand(norm) ||
+    matchVolumeCommand(norm)
+  );
 }
 
 export function aliasForTag(tag: string): ModelAlias | undefined {

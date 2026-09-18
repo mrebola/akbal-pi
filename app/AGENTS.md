@@ -309,6 +309,8 @@ The chat flow uses a finite state machine (`src/core/chat-flow/stateMachine.ts`)
 | `answering` | TTS playing response |
 | `camera_mode` | Camera preview active |
 | `external_answer` | IM bridge receiving external message |
+| `mode_select` | On-screen menu to switch between "modo agente" (OpenClaw via the `whisplay-im` bridge) and "modo local" (see `docs/agent-mode.md`) |
+| `mode_loading` | Confirms the agent/local mode switch and persists it to `.env` (`DEVICE_MODE`) |
 
 State transitions are triggered by button events, wake word detection, or completion of async operations.
 

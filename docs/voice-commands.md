@@ -1,4 +1,4 @@
-# Comandos de voz (volumen y modelo)
+# Comandos de voz (volumen, modelo y modo)
 
 Volumen y cambio de modelo se controlan por voz **sin pasar por el LLM**. Se
 probó primero activar el tool-calling nativo de Ollama (`OLLAMA_ENABLE_TOOLS`)
@@ -89,6 +89,38 @@ El cambio de modelo (por voz directo o por el menú):
   la pantalla de carga simula el progreso (Ollama no expone un % real para
   cargar un modelo ya descargado a memoria, solo para descargas) pero nunca
   llega a 100% hasta que Ollama confirma que el modelo respondió.
+
+## Cambiar de modo (agente / local)
+
+Además del modelo local, el dispositivo puede correr en dos modos — ver
+[`agent-mode.md`](./agent-mode.md) para el diseño completo:
+
+| Modo | Qué hace |
+|---|---|
+| **Modo local** | Contesta con el proveedor de `LLM_SERVER` (Ollama, por defecto). Es el modo normal. |
+| **Modo agente** | Manda lo que se dice a un OpenClaw externo por el bridge `whisplay-im`, y contesta lo que ese agente responda (con tool calls, aprobaciones, etc.). |
+
+**Para abrir el menú visual:** "activa modo agente" o "modo agente" lo abre
+pre-posicionado en "Modo agente (OpenClaw)". "activa modo local", "modo
+local" o "desactiva modo agente" lo abre pre-posicionado en "Modo local". Un
+"cambiar modo" genérico (sin decir cuál) lo abre en el modo que ya está
+activo.
+
+**A diferencia del modelo, no hay atajo de voz directo** — decir "modo
+agente" nunca cambia el modo por sí solo, siempre pasa por el mismo menú
+visual de abajo con el mantené-presionado-3-segundos. Cambiar a modo agente
+significa que todo lo que se dice sale del dispositivo hacia un proceso
+externo; vale la confirmación explícita con el botón.
+
+### Menú visual
+
+Mismo mecanismo que el selector de modelo (ver arriba): click corto pasa
+entre "Modo agente (OpenClaw)" / "Modo local", mantener 3 segundos confirma
+(con `[ACTIVO]` en el que está corriendo), doble clic cancela, 20 segundos
+sin tocar el botón cierra el menú solo.
+
+El cambio se guarda en `DEVICE_MODE` dentro de `.env`, así sobrevive a un
+reinicio — igual que el cambio de modelo se guarda en `OLLAMA_MODEL`.
 
 ## Si se agrega o se borra un modelo con `ollama pull` / `ollama rm`
 

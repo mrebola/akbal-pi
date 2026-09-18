@@ -17,7 +17,7 @@ import {
   getDynamicVoiceDetectLevel,
 } from "../../device/audio";
 import { chatWithLLMStream } from "../../cloud-api/server";
-import { isImMode, summaryTextWithLLM } from "../../cloud-api/llm";
+import { summaryTextWithLLM } from "../../cloud-api/llm";
 import { getSystemPromptWithKnowledge } from "../Knowledge";
 import { enableRAG } from "../../cloud-api/knowledge";
 import { cameraDir } from "../../utils/dir";
@@ -48,6 +48,16 @@ import {
   onModelSelectConfirm,
   onModelSelectTimeout,
 } from "./model-select-mode";
+import {
+  enterModeSelectMode,
+  handleModeSelectCancel,
+  handleModeSelectPress,
+  handleModeSelectRelease,
+  onModeSelectCancel,
+  onModeSelectConfirm,
+  onModeSelectTimeout,
+} from "./mode-select-mode";
+import { isAgentMode, setDeviceMode } from "../../config/device-mode";
 import {
   getCurrentModel,
   listOllamaModels,
@@ -312,6 +322,11 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
             ctx.transitionTo("external_answer");
             return;
           }
+          if (voiceCommand.type === "device_mode_menu") {
+            ctx.pendingDeviceModeSwitch = voiceCommand.target || "";
+            ctx.transitionTo("mode_select");
+            return;
+          }
           // "model_menu" (generic "cambia modelo") and "model_switch_failed"
           // (misheard model name) both open the visual, button-driven menu
           // instead of guessing — see model-select-mode.ts.
@@ -343,7 +358,7 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       RGB: "#00c8a3",
     });
     const currentAnswerId = ctx.answerId;
-    if (isImMode) {
+    if (isAgentMode()) {
       const prompt: {
         role: "system" | "user";
         content: string;
@@ -760,5 +775,65 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
             finish(`No se pudo cargar el modelo "${label}".`);
           });
       });
+  },
+  mode_select: (ctx: ChatFlowContext) => {
+    onModeSelectConfirm((option) => {
+      ctx.pendingDeviceModeSwitch = option.key;
+      ctx.transitionTo("mode_loading");
+    });
+    onModeSelectTimeout(() => {
+      if (ctx.currentFlowName === "mode_select") {
+        ctx.transitionTo("sleep");
+      }
+    });
+    onModeSelectCancel(() => {
+      if (ctx.currentFlowName === "mode_select") {
+        ctx.transitionTo("sleep");
+      }
+    });
+    // Double click backs out without switching mode — same "no silent
+    // change" reasoning as model_select (see mode-select-mode.ts).
+    onButtonDoubleClick(() => handleModeSelectCancel());
+    onButtonPressed(() => handleModeSelectPress());
+    onButtonReleased(() => handleModeSelectRelease());
+    enterModeSelectMode(ctx.pendingDeviceModeSwitch || undefined);
+  },
+  mode_loading: (ctx: ChatFlowContext) => {
+    onButtonDoubleClick(null);
+    onButtonPressed(noop);
+    onButtonReleased(noop);
+    const target = ctx.pendingDeviceModeSwitch || "local";
+    ctx.pendingDeviceModeSwitch = "";
+    const label =
+      target === "agent" ? "Modo agente (OpenClaw)" : "Modo local (modelos locales)";
+
+    display({
+      status: "mode_loading",
+      model_ui: "loading",
+      model_ui_label: label,
+      model_ui_percent: 50,
+      text: `Cambiando a: ${label}`,
+    });
+
+    // No real warm-up step here (unlike an Ollama model load) — starting the
+    // bridge server, if needed, is effectively instant. The brief loading
+    // screen is only to keep the switch feeling deliberate, consistent with
+    // model_loading.
+    if (target === "agent") {
+      ctx.ensureAgentBridge();
+    }
+    setDeviceMode(target);
+
+    display({
+      status: "idle",
+      model_ui: "",
+      model_ui_percent: 0,
+      text: `${label} activado.`,
+    });
+    setTimeout(() => {
+      if (ctx.currentFlowName === "mode_loading") {
+        ctx.transitionTo("sleep");
+      }
+    }, 2500);
   },
 };

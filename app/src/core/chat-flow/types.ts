@@ -1,5 +1,6 @@
 import { StreamResponser } from "../StreamResponsor";
 import type { WhisplayIMApprovalRequest } from "../../device/im-bridge";
+import type { DeviceMode } from "../../config/device-mode";
 
 export type FlowName =
   | "sleep"
@@ -13,7 +14,9 @@ export type FlowName =
   | "approval"
   | "external_answer"
   | "model_select"
-  | "model_loading";
+  | "model_loading"
+  | "mode_select"
+  | "mode_loading";
 
 export type FlowStateHandler = (ctx: ChatFlowContext) => void;
 
@@ -40,6 +43,7 @@ export interface ChatFlowContext {
   pendingExternalImageUrl: string;
   pendingModelSwitchTag: string;
   pendingModelSwitchLabel: string;
+  pendingDeviceModeSwitch: DeviceMode | "";
   pendingApprovalRequest: WhisplayIMApprovalRequest | null;
   currentExternalEmoji: string;
   isFromWakeListening: boolean;
@@ -63,4 +67,5 @@ export interface ChatFlowContext {
   shouldContinueWakeSession: () => boolean;
   shouldEndAfterAnswer: (text: string) => boolean;
   streamExternalReply: (text: string, emoji?: string) => Promise<void>;
+  ensureAgentBridge: () => void;
 }

@@ -5,7 +5,7 @@ import {
 } from "./../utils/index";
 import { display } from "../device/display";
 import { recognizeAudio, ttsProcessor } from "../cloud-api/server";
-import { isImMode } from "../cloud-api/llm";
+import { isAgentMode } from "../config/device-mode";
 import { DEFAULT_EMOJI, extractEmojis } from "../utils";
 import { StreamResponser } from "./StreamResponsor";
 import { recordingsDir } from "../utils/dir";
@@ -55,6 +55,7 @@ class ChatFlow implements ChatFlowContext {
   pendingExternalImageUrl: string = "";
   pendingModelSwitchTag: string = "";
   pendingModelSwitchLabel: string = "";
+  pendingDeviceModeSwitch: "local" | "agent" | "" = "";
   pendingApprovalRequest: WhisplayIMApprovalRequest | null = null;
   currentExternalEmoji: string = "";
   stateMachine: FlowStateMachine;
@@ -132,79 +133,91 @@ class ChatFlow implements ChatFlowContext {
       this.wakeWordListener.start();
     }
 
-    if (isImMode) {
-      this.whisplayIMBridge = new WhisplayIMBridgeServer();
-      this.whisplayIMBridge.on(
-        "reply",
-        (payload: { reply: string; emoji?: string; imagePath?: string }) => {
-          this.pendingExternalReply = payload.reply;
-          this.pendingExternalEmoji = payload.emoji || "";
-          this.pendingExternalImageUrl = payload.imagePath || "";
-          this.transitionTo("external_answer");
-        },
-      );
-      this.whisplayIMBridge.on(
-        "status",
-        (payload: { status: string; emoji?: string; text?: string; tool?: string }) => {
-          const statusText = payload.tool
-            ? `[${payload.tool}] ${payload.text || ""}`
-            : payload.text || "";
-          const textInputEnabled =
-            payload.status === "idle" && this.currentFlowName === "sleep";
-          const statusMap: Record<string, Partial<Status>> = {
-            thinking: {
-              status: "Thinking",
-              emoji: payload.emoji || "🤔",
-              text: statusText,
-              RGB: "#ff6800",
-              scroll_speed: 6,
-              text_input_enabled: false,
-            },
-            tool_calling: {
-              status: "Tool calling",
-              emoji: payload.emoji || "🔧",
-              text: statusText,
-              RGB: "#ff6800",
-              scroll_speed: 4,
-              text_input_enabled: false,
-            },
-            answering: {
-              status: "answering...",
-              emoji: payload.emoji || "💬",
-              RGB: "#00c8a3",
-              text_input_enabled: false,
-            },
-            idle: {
-              status: "idle",
-              emoji: payload.emoji || "😊",
-              RGB: "#000055",
-              text_input_enabled: textInputEnabled,
-            },
-          };
-          const displayPayload = statusMap[payload.status] || {
-            status: payload.status,
-            emoji: payload.emoji || "🤖",
-            text: statusText,
-            RGB: "#ff6800",
-            text_input_enabled: false,
-          };
-          display(displayPayload);
-        },
-      );
-      this.whisplayIMBridge.on(
-        "approval",
-        (request: WhisplayIMApprovalRequest) => {
-          if (this.pendingApprovalRequest) {
-            request.respond(false);
-            return;
-          }
-          this.pendingApprovalRequest = request;
-          this.transitionTo("approval");
-        },
-      );
-      this.whisplayIMBridge.start();
+    if (isAgentMode()) {
+      this.ensureAgentBridge();
     }
   }
+
+  // Starts the whisplay-im bridge server the device uses to reach an
+  // external OpenClaw agent, if it isn't already running. Called eagerly at
+  // startup when agent mode is the current default, and also from the
+  // "mode_loading" flow state the first time the user switches into agent
+  // mode by voice/menu (see chat-flow/states.ts) — either way it's a no-op
+  // once the bridge exists, so switching back to "modo local" and back to
+  // "modo agente" again doesn't restart it.
+  ensureAgentBridge = (): void => {
+    if (this.whisplayIMBridge) return;
+    this.whisplayIMBridge = new WhisplayIMBridgeServer();
+    this.whisplayIMBridge.on(
+      "reply",
+      (payload: { reply: string; emoji?: string; imagePath?: string }) => {
+        this.pendingExternalReply = payload.reply;
+        this.pendingExternalEmoji = payload.emoji || "";
+        this.pendingExternalImageUrl = payload.imagePath || "";
+        this.transitionTo("external_answer");
+      },
+    );
+    this.whisplayIMBridge.on(
+      "status",
+      (payload: { status: string; emoji?: string; text?: string; tool?: string }) => {
+        const statusText = payload.tool
+          ? `[${payload.tool}] ${payload.text || ""}`
+          : payload.text || "";
+        const textInputEnabled =
+          payload.status === "idle" && this.currentFlowName === "sleep";
+        const statusMap: Record<string, Partial<Status>> = {
+          thinking: {
+            status: "Thinking",
+            emoji: payload.emoji || "🤔",
+            text: statusText,
+            RGB: "#ff6800",
+            scroll_speed: 6,
+            text_input_enabled: false,
+          },
+          tool_calling: {
+            status: "Tool calling",
+            emoji: payload.emoji || "🔧",
+            text: statusText,
+            RGB: "#ff6800",
+            scroll_speed: 4,
+            text_input_enabled: false,
+          },
+          answering: {
+            status: "answering...",
+            emoji: payload.emoji || "💬",
+            RGB: "#00c8a3",
+            text_input_enabled: false,
+          },
+          idle: {
+            status: "idle",
+            emoji: payload.emoji || "😊",
+            RGB: "#000055",
+            text_input_enabled: textInputEnabled,
+          },
+        };
+        const displayPayload = statusMap[payload.status] || {
+          status: payload.status,
+          emoji: payload.emoji || "🤖",
+          text: statusText,
+          RGB: "#ff6800",
+          text_input_enabled: false,
+        };
+        display(displayPayload);
+      },
+    );
+    this.whisplayIMBridge.on(
+      "approval",
+      (request: WhisplayIMApprovalRequest) => {
+        if (this.pendingApprovalRequest) {
+          request.respond(false);
+          return;
+        }
+        this.pendingApprovalRequest = request;
+        this.transitionTo("approval");
+      },
+    );
+    this.whisplayIMBridge.start();
+  };
 
   async recognizeAudio(path: string, isFromAutoListening?: boolean): Promise<string> {
     if (!isFromAutoListening && (await getRecordFileDurationMs(path)) < 500) {

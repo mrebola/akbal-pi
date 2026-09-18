@@ -65,6 +65,4 @@ try {
   console.warn(e.message);
 }
 
-const isImMode = llmServer === LLMServer.whisplayim;
-
-export { chatWithLLMStream, resetChatHistory, summaryTextWithLLM, isImMode };
+export { chatWithLLMStream, resetChatHistory, summaryTextWithLLM };

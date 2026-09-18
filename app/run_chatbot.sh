@@ -77,7 +77,7 @@ get_env_value() {
 # load .env variables, exclude comments and empty lines
 # check if .env file exists
 initial_volume_percent=""
-default_initial_volume_percent=80
+default_initial_volume_percent=60
 serve_ollama=false
 if [ -f ".env" ]; then
   # Load only SERVE_OLLAMA from .env (ignore comments/other vars)

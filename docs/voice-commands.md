@@ -1,5 +1,26 @@
 # Comandos de voz (volumen, modelo y modo)
 
+## Lista rápida
+
+Todo lo que se puede pedir por voz, de un vistazo (detalle y más ejemplos en
+las secciones de abajo):
+
+| Comando | Ejemplos |
+|---|---|
+| Subir volumen 10% | "sube el volumen", "súbele", "aumenta el volumen", "volume up", "louder" |
+| Bajar volumen 10% | "baja el volumen", "bájale", "disminuye el volumen", "volume down", "quieter" |
+| Poner volumen exacto | "pon el volumen en 40", "volumen al 70%", "set the volume to 50" |
+| Abrir menú de modelo (sin elegir) | "cambia modelo", "cambiar modelo" |
+| Cambiar de modelo directo | "modelo 3", "cambia el modelo a 1", "usa el modelo deepseek", "cambia el modelo a qwen sin censura 2" |
+| Preguntar qué modelo está activo | "qué modelo usás", "qué modelo estás usando", "qué modelo tenés activo" |
+| Abrir menú de modo en "modo agente" | "activa modo agente", "modo agente" |
+| Abrir menú de modo en "modo local" | "activa modo local", "modo local", "desactiva modo agente" |
+| Abrir menú de modo (sin decir cuál) | "cambiar modo" |
+
+El volumen inicial al prender el dispositivo es **60%** por defecto
+(`INITIAL_VOLUME_PERCENT` en `.env`, ver [`SETUP.md`](./SETUP.md)); estos
+comandos lo ajustan después, en caliente.
+
 Volumen y cambio de modelo se controlan por voz **sin pasar por el LLM**. Se
 probó primero activar el tool-calling nativo de Ollama (`OLLAMA_ENABLE_TOOLS`)
 para que el modelo interprete estos comandos, pero eso manda la descripción de

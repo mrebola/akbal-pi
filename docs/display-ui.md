@@ -42,31 +42,33 @@ dos líneas de texto abajo.
 
 ## Cómo se generaron los GIFs (recorte cara en primer plano)
 
-Los videos originales (`standing.mp4`, `talking.mp4`, 640x640, 24fps, ~5s)
-tenían al personaje de medio cuerpo (cabeza ocupando ~50% del alto del
-cuadro). Se recorta la región de la cara+cuello (`crop=490:400:75:0`,
-verificado cuadro por cuadro en las dos animaciones para que la cabeza no se
-salga del cuadro en ningún momento) y se escala a 240x196 — la cara llena
-casi toda la pantalla del HAT, con muy poco cuerpo visible:
+Los videos originales (`standing.mp4`, `talking.mp4`, 594x706, 24fps, ~5s)
+tienen al personaje de medio cuerpo, retrato vertical (cabeza cerca de la
+parte superior del cuadro). Se recorta la región de la cara+cuello
+(`crop=526:430:34:50`, verificado cuadro por cuadro en las dos animaciones
+para que la cabeza no se salga del cuadro en ningún momento) y se escala a
+240x196 — la cara llena casi toda la pantalla del HAT, con muy poco cuerpo
+visible:
 
 ```bash
-ffmpeg -i standing.mp4 -vf "crop=490:400:75:0,scale=240:196:flags=lanczos,fps=10,split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse=dither=bayer" -loop 0 standing.gif
+ffmpeg -i standing.mp4 -vf "crop=526:430:34:50,scale=240:196:flags=lanczos,fps=10,split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse=dither=bayer" -loop 0 standing.gif
 ```
 
 (mismo comando para `talking.mp4`). Resultado: 240x196, 50 frames, 10fps,
-~600-830KB cada uno. Los archivos finales están en
+~1.15-1.2MB cada uno (más pesados que la versión anterior por el detalle del
+cabello/textura del nuevo personaje). Los archivos finales están en
 [`../app/python/img/standing.gif`](../app/python/img/standing.gif) y
 [`../app/python/img/talking.gif`](../app/python/img/talking.gif).
 
-Los videos originales (640x640, sin comprimir a GIF) están guardados en
+Los videos originales (594x706, sin comprimir a GIF) están guardados en
 [`../setup/display-source-videos/`](../setup/display-source-videos/) por si se
 quieren regenerar los GIFs con otro recorte/fps sin depender de tener el
 archivo fuente en otra máquina.
 
-Por qué `490:400:75:0` y no otro recorte: el área de video en pantalla es
+Por qué `526:430:34:50` y no otro recorte: el área de video en pantalla es
 240x196 (relación de aspecto ≈1.224); se buscó una caja con esa misma relación
-que mantuviera la cabeza completa (con margen) en los 50 cuadros muestreados
-de cada video (cada 15 frames), recortando de más abajo del cuadro (hombros,
+que mantuviera la cabeza completa (con margen) en los cuadros muestreados de
+cada video (cada 15 frames), recortando de más abajo del cuadro (hombros,
 pecho) en vez de los lados, ya que el personaje está centrado horizontalmente.
 
 ## Cómo funciona en el código (`app/python/chatbot-ui.py`)

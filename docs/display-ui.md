@@ -44,18 +44,19 @@ dos líneas de texto abajo.
 
 Los videos originales (`standing.mp4`, `talking.mp4`, 594x706, 24fps, ~5s)
 tienen al personaje de medio cuerpo, retrato vertical (cabeza cerca de la
-parte superior del cuadro). Se recorta la región de la cara+cuello
-(`crop=526:430:34:50`, verificado cuadro por cuadro en las dos animaciones
-para que la cabeza no se salga del cuadro en ningún momento) y se escala a
-240x196 — la cara llena casi toda la pantalla del HAT, con muy poco cuerpo
-visible:
+parte superior del cuadro, con muy poco margen: el pelo empieza ~10-12px
+debajo del borde superior del video). Se recorta la región de cabeza+cuello
+(`crop=563:460:16:0`, verificado cuadro por cuadro en las dos animaciones
+para que el pelo no se corte arriba ni la barbilla abajo en ningún momento)
+y se escala a 240x196 — la cara llena casi toda la pantalla del HAT, con muy
+poco cuerpo visible:
 
 ```bash
-ffmpeg -i standing.mp4 -vf "crop=526:430:34:50,scale=240:196:flags=lanczos,fps=10,split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse=dither=bayer" -loop 0 standing.gif
+ffmpeg -i standing.mp4 -vf "crop=563:460:16:0,scale=240:196:flags=lanczos,fps=10,split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse=dither=bayer" -loop 0 standing.gif
 ```
 
 (mismo comando para `talking.mp4`). Resultado: 240x196, 50 frames, 10fps,
-~1.15-1.2MB cada uno (más pesados que la versión anterior por el detalle del
+~1-1.1MB cada uno (más pesados que la versión anterior por el detalle del
 cabello/textura del nuevo personaje). Los archivos finales están en
 [`../app/python/img/standing.gif`](../app/python/img/standing.gif) y
 [`../app/python/img/talking.gif`](../app/python/img/talking.gif).
@@ -65,11 +66,14 @@ Los videos originales (594x706, sin comprimir a GIF) están guardados en
 quieren regenerar los GIFs con otro recorte/fps sin depender de tener el
 archivo fuente en otra máquina.
 
-Por qué `526:430:34:50` y no otro recorte: el área de video en pantalla es
+Por qué `563:460:16:0` y no otro recorte: el área de video en pantalla es
 240x196 (relación de aspecto ≈1.224); se buscó una caja con esa misma relación
-que mantuviera la cabeza completa (con margen) en los cuadros muestreados de
-cada video (cada 15 frames), recortando de más abajo del cuadro (hombros,
-pecho) en vez de los lados, ya que el personaje está centrado horizontalmente.
+que mantuviera la cabeza (pelo incluido) y la barbilla completas, medido
+píxel por píxel en frames muestreados de todo el clip (cada 3 frames) de
+ambos videos — el pelo del personaje casi toca el borde superior del video
+original, así que `y=0` es necesario para no cortarlo; se recorta de más
+abajo del cuadro (hombros, pecho) en vez de los lados, ya que el personaje
+está centrado horizontalmente.
 
 ## Cómo funciona en el código (`app/python/chatbot-ui.py`)
 

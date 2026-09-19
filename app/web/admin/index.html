@@ -18,7 +18,7 @@
       <button class="tab-btn" data-tab="usb">USB</button>
       <button class="tab-btn" data-tab="wardrive">Wardriving</button>
       <a href="/wifiradar" class="tab-link" title="Visualización WiFi en 3D">WIFIRADAR</a>
-      <button class="tab-btn" data-tab="settings" title="Configuración">⚙️</button>
+      <button class="tab-btn" data-tab="settings" title="Configuración">Config</button>
     </nav>
     <div class="status" id="status-pill">—</div>
     <div class="sys-stats" id="sys-stats" title="Recursos del sistema">
@@ -238,41 +238,123 @@
     </section>
 
     <section id="tab-settings" class="tab-panel">
-      <div class="usb-block">
-        <div class="usb-block-title">Audio</div>
-        <div class="chat-toolbar">
-          <label for="audio-output-select">Salida de audio</label>
-          <select id="audio-output-select">
-            <option value="hat">Bocina de la Pi</option>
-          </select>
-          <button type="button" id="audio-output-refresh" class="secondary" title="Volver a buscar bocinas emparejadas">↻</button>
+      <div class="cfg">
+        <div class="cfg-head">
+          <h2 class="cfg-title">Configuración</h2>
+        </div>
+        <nav class="cfg-nav" id="cfg-nav">
+          <button class="cfg-nav-btn active" data-cfg="general">General</button>
+          <button class="cfg-nav-btn" data-cfg="audio">Audio</button>
+          <button class="cfg-nav-btn" data-cfg="ia">IA</button>
+          <button class="cfg-nav-btn" data-cfg="almacenamiento">Almacenamiento</button>
+          <button class="cfg-nav-btn" data-cfg="sistema">Sistema</button>
+        </nav>
+
+        <!-- GENERAL -->
+        <div class="cfg-panel active" data-cfg-panel="general">
+          <div class="cfg-card">
+            <div class="cfg-card-head"><span class="cfg-card-title">Resumen del dispositivo</span></div>
+            <div class="cfg-rows">
+              <div class="cfg-row"><span class="cfg-key">Modelo de IA</span><span id="ov-model" class="cfg-val">—</span></div>
+              <div class="cfg-row"><span class="cfg-key">Salida de audio</span><span id="ov-audio" class="cfg-val">—</span></div>
+              <div class="cfg-row"><span class="cfg-key">Wifi</span><span id="ov-wifi" class="cfg-val">—</span></div>
+              <div class="cfg-row"><span class="cfg-key">Batería</span><span id="ov-battery" class="cfg-val">—</span></div>
+            </div>
+          </div>
         </div>
 
-        <div class="usb-block-title" style="margin-top:14px;">Bocinas bluetooth emparejadas</div>
-        <ul id="bt-paired-list" class="usb-devices-list"></ul>
+        <!-- AUDIO -->
+        <div class="cfg-panel" data-cfg-panel="audio">
+          <div class="cfg-card">
+            <div class="cfg-card-head">
+              <span class="cfg-card-title">Salida de audio</span>
+              <button type="button" id="audio-output-refresh" class="cfg-icon-btn" title="Refrescar">↻</button>
+            </div>
+            <div class="cfg-device">
+              <span id="audio-active-name" class="cfg-device-name">—</span>
+              <span id="audio-active-state" class="cfg-badge">—</span>
+            </div>
+            <label class="cfg-field">
+              <span class="cfg-key">Reproducir por</span>
+              <select id="audio-output-select">
+                <option value="hat">Bocina de la Pi</option>
+              </select>
+            </label>
+          </div>
 
-        <div class="chat-toolbar" style="margin-top:12px;">
-          <button type="button" id="bt-scan-btn" class="secondary" title="Buscar bocinas bluetooth cercanas para emparejar">Buscar bocinas nuevas</button>
-          <span id="bt-scan-status" class="usb-item-meta"></span>
+          <div class="cfg-card">
+            <div class="cfg-card-head">
+              <span class="cfg-card-title">Bluetooth</span>
+              <button type="button" id="bt-scan-btn" class="cfg-btn cfg-btn-accent">+ Vincular dispositivo</button>
+            </div>
+            <span id="bt-scan-status" class="cfg-meta"></span>
+            <ul id="bt-found-list" class="cfg-list"></ul>
+            <div class="cfg-sub">Dispositivos vinculados</div>
+            <ul id="bt-paired-list" class="cfg-list"></ul>
+          </div>
         </div>
-        <ul id="bt-found-list" class="usb-devices-list"></ul>
-      </div>
 
-      <div class="usb-block">
-        <div class="usb-block-title">Modelo de IA</div>
-        <div class="chat-toolbar">
-          <span id="model-load-indicator" class="model-load-indicator" title="¿El modelo está cargado en RAM?">—</span>
-          <button type="button" id="unload-model-btn" class="secondary" title="Liberar el modelo de la memoria de la Pi">Unload model</button>
+        <!-- IA -->
+        <div class="cfg-panel" data-cfg-panel="ia">
+          <div class="cfg-card">
+            <div class="cfg-card-head"><span class="cfg-card-title">Modelo de IA</span></div>
+            <div class="cfg-device">
+              <span id="ia-model-name" class="cfg-device-name">—</span>
+              <span id="model-load-indicator" class="cfg-badge" title="¿El modelo está cargado en RAM?">—</span>
+            </div>
+            <div class="cfg-row"><span class="cfg-key">RAM usada</span><span id="ia-ram" class="cfg-val">—</span></div>
+            <div class="cfg-progress"><div id="ia-ram-bar" class="cfg-progress-fill"></div></div>
+            <label class="cfg-field">
+              <span class="cfg-key">Cambiar modelo</span>
+              <select id="ia-model-select"></select>
+            </label>
+            <div class="cfg-actions">
+              <button type="button" id="unload-model-btn" class="cfg-btn" title="Liberar el modelo de la memoria de la Pi">Descargar de memoria</button>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div class="usb-block">
-        <div class="usb-block-title">Almacenamiento USB</div>
-        <div class="usb-toolbar">
-          <button type="button" id="settings-usb-refresh-btn" class="secondary">Refrescar</button>
-          <span id="settings-usb-status" class="muted"></span>
+        <!-- ALMACENAMIENTO -->
+        <div class="cfg-panel" data-cfg-panel="almacenamiento">
+          <div class="cfg-card">
+            <div class="cfg-card-head">
+              <span class="cfg-card-title">Disco interno</span>
+              <button type="button" id="cfg-storage-refresh" class="cfg-icon-btn" title="Refrescar">↻</button>
+            </div>
+            <div class="cfg-row"><span class="cfg-key">Uso</span><span id="disk-usage" class="cfg-val">—</span></div>
+            <div class="cfg-progress"><div id="disk-bar" class="cfg-progress-fill"></div></div>
+          </div>
+
+          <div class="cfg-card">
+            <div class="cfg-card-head">
+              <span class="cfg-card-title">Almacenamiento USB</span>
+              <button type="button" id="settings-usb-refresh-btn" class="cfg-icon-btn" title="Refrescar">↻</button>
+            </div>
+            <span id="settings-usb-status" class="cfg-meta"></span>
+            <ul id="settings-usb-eject-list" class="cfg-list"></ul>
+          </div>
         </div>
-        <ul id="settings-usb-eject-list" class="usb-devices-list"></ul>
+
+        <!-- SISTEMA -->
+        <div class="cfg-panel" data-cfg-panel="sistema">
+          <div class="cfg-card">
+            <div class="cfg-card-head"><span class="cfg-card-title">Recursos</span></div>
+            <div class="cfg-row"><span class="cfg-key">CPU</span><span id="sys-cpu" class="cfg-val">—</span></div>
+            <div class="cfg-progress"><div id="sys-cpu-bar" class="cfg-progress-fill"></div></div>
+            <div class="cfg-row"><span class="cfg-key">RAM</span><span id="sys-ram" class="cfg-val">—</span></div>
+            <div class="cfg-progress"><div id="sys-ram-bar" class="cfg-progress-fill"></div></div>
+          </div>
+
+          <div class="cfg-card">
+            <div class="cfg-card-head">
+              <span class="cfg-card-title">Respaldo</span>
+              <button type="button" id="backup-create-btn" class="cfg-btn cfg-btn-accent">+ Crear respaldo</button>
+            </div>
+            <p class="cfg-meta">Guarda la configuración (incluye claves y wifi) en la microSD de la Pi. No se sube al repositorio. Úsalo para restaurar si algo falla.</p>
+            <span id="backup-status" class="cfg-meta"></span>
+            <ul id="backup-list" class="cfg-list"></ul>
+          </div>
+        </div>
       </div>
     </section>
   </main>

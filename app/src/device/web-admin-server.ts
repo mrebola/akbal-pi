@@ -38,6 +38,13 @@ import {
 import { getBatteryReading } from "../status/battery-status";
 import { getSystemStats } from "../utils/system-stats";
 import {
+  listBackups,
+  createBackup,
+  restoreBackup,
+  deleteBackup,
+  resolveBackupPath,
+} from "../utils/backup";
+import {
   connectToEmergencyWifi,
   connectToWifi,
   forgetWifi,
@@ -334,6 +341,80 @@ export class WebAdminServer {
         setAudioOutputTarget("hat");
       }
       ctx.body = { ok: true, audioOutput: getAudioOutputTarget() };
+    });
+
+    // ---- Config backups (stored on the Pi's microSD, never in git) ----
+    router.get("/api/backup/list", async (ctx) => {
+      try {
+        ctx.body = { backups: listBackups() };
+      } catch (err: any) {
+        ctx.status = 500;
+        ctx.body = { error: err?.message || String(err) };
+      }
+    });
+
+    router.post("/api/backup/create", async (ctx) => {
+      try {
+        const entry = await createBackup();
+        ctx.body = { ok: true, backup: entry };
+      } catch (err: any) {
+        ctx.status = 500;
+        ctx.body = { ok: false, error: err?.message || String(err) };
+      }
+    });
+
+    router.get("/api/backup/download", async (ctx) => {
+      const name = String(ctx.query.name || "");
+      try {
+        const full = resolveBackupPath(name);
+        if (!fs.existsSync(full)) {
+          ctx.status = 404;
+          ctx.body = { error: "no existe" };
+          return;
+        }
+        ctx.set("Content-Type", "application/gzip");
+        ctx.set("Content-Disposition", `attachment; filename="${name}"`);
+        ctx.body = fs.createReadStream(full);
+      } catch (err: any) {
+        ctx.status = 400;
+        ctx.body = { error: err?.message || String(err) };
+      }
+    });
+
+    router.post("/api/backup/restore", async (ctx) => {
+      const name = (ctx.request.body as any)?.name;
+      if (typeof name !== "string" || !name) {
+        ctx.status = 400;
+        ctx.body = { error: "nombre requerido" };
+        return;
+      }
+      try {
+        const res = await restoreBackup(name);
+        ctx.body = {
+          ok: true,
+          safetyBackup: res.safetyBackup,
+          note: "Reinicia el servicio para aplicar la configuración restaurada.",
+        };
+      } catch (err: any) {
+        ctx.status = 500;
+        ctx.body = { ok: false, error: err?.message || String(err) };
+      }
+    });
+
+    router.post("/api/backup/delete", async (ctx) => {
+      const name = (ctx.request.body as any)?.name;
+      if (typeof name !== "string" || !name) {
+        ctx.status = 400;
+        ctx.body = { error: "nombre requerido" };
+        return;
+      }
+      try {
+        deleteBackup(name);
+        ctx.body = { ok: true };
+      } catch (err: any) {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: err?.message || String(err) };
+      }
     });
 
     router.get("/api/models", async (ctx) => {

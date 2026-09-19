@@ -111,13 +111,55 @@ async function loadStatus() {
     statusPill.textContent = `${data.model} · ${wifiLabel}`;
     updateBatteryIndicator(data.battery);
     updateSystemStats(data.system);
-    modelLoadIndicator.textContent = data.modelLoaded ? "cargado" : "descargado";
+    modelLoadIndicator.textContent = data.modelLoaded ? "Cargado" : "Descargado";
     modelLoadIndicator.classList.toggle("loaded", Boolean(data.modelLoaded));
+    modelLoadIndicator.classList.toggle("ok", Boolean(data.modelLoaded));
     if (data.audioOutput && audioOutputSelect.value !== data.audioOutput) {
       audioOutputSelect.value = data.audioOutput;
     }
+    updateSettingsOverview(data);
   } catch {
     statusPill.textContent = "sin conexión con el dispositivo";
+  }
+}
+
+function setText(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+
+function setBar(id, percent) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const p = Math.max(0, Math.min(100, Number(percent) || 0));
+  el.style.width = `${p}%`;
+  el.classList.toggle("warn", p >= 85);
+}
+
+function formatBytes(bytes) {
+  const n = Number(bytes) || 0;
+  if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(1)} GB`;
+  if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(0)} MB`;
+  return `${(n / 1024).toFixed(0)} KB`;
+}
+
+// Fill the redesigned Configuración cards (General/IA/Almacenamiento/Sistema)
+// from the /api/status payload.
+function updateSettingsOverview(data) {
+  const sys = data.system;
+  setText("ov-model", data.model || "—");
+  setText("ov-wifi", data.wifi?.connected ? data.wifi.ssid : "sin wifi");
+  setText("ov-battery", data.battery?.connected ? `${data.battery.level}%` : "—");
+  setText("ia-model-name", data.model || "—");
+  if (sys) {
+    setText("ia-ram", `${formatBytes(sys.ram.usedBytes)} / ${formatBytes(sys.ram.totalBytes)} (${sys.ram.percent}%)`);
+    setBar("ia-ram-bar", sys.ram.percent);
+    setText("disk-usage", `${formatBytes(sys.disk.usedBytes)} / ${formatBytes(sys.disk.totalBytes)} (${sys.disk.percent}%)`);
+    setBar("disk-bar", sys.disk.percent);
+    setText("sys-cpu", `${sys.cpuPercent}%`);
+    setBar("sys-cpu-bar", sys.cpuPercent);
+    setText("sys-ram", `${sys.ram.percent}%`);
+    setBar("sys-ram-bar", sys.ram.percent);
   }
 }
 
@@ -199,6 +241,18 @@ async function loadAudioOutputs() {
     }
     if (data.active) audioOutputSelect.value = data.active;
     renderPairedList(paired);
+
+    // Active-device summary card + General overview.
+    const activeOpt = data.options.find((o) => o.key === data.active) || data.options[0];
+    const activeName = activeOpt ? activeOpt.label : "Bocina de la Pi";
+    setText("audio-active-name", activeName);
+    setText("ov-audio", activeName);
+    const stateEl = document.getElementById("audio-active-state");
+    if (stateEl) {
+      const isBt = activeOpt && activeOpt.key.startsWith("bt:");
+      stateEl.textContent = isBt ? (activeOpt.connected ? "Conectada" : "Desconectada") : "Activa";
+      stateEl.classList.toggle("ok", !isBt || Boolean(activeOpt.connected));
+    }
   } catch {
     /* leave the fallback "Bocina de la Pi" option in place */
   }
@@ -209,26 +263,65 @@ function renderPairedList(paired) {
   btPairedList.innerHTML = "";
   if (!paired.length) {
     const li = document.createElement("li");
-    li.className = "usb-item-meta";
-    li.textContent = "No hay bocinas bluetooth emparejadas.";
+    li.className = "cfg-empty";
+    li.textContent = "No hay dispositivos vinculados.";
     btPairedList.appendChild(li);
     return;
   }
   for (const opt of paired) {
     const mac = opt.key.slice(3);
     const li = document.createElement("li");
-    const label = document.createElement("span");
-    label.textContent = opt.connected ? `${opt.label} (conectada)` : opt.label;
-    const del = document.createElement("button");
-    del.type = "button";
-    del.className = "secondary";
-    del.textContent = "Eliminar";
-    del.addEventListener("click", () => void removeBtSpeaker(mac, opt.label, del));
-    li.appendChild(label);
-    li.appendChild(del);
+
+    const left = document.createElement("div");
+    left.className = "cfg-item-left";
+    const name = document.createElement("span");
+    name.className = "cfg-item-name";
+    name.textContent = opt.label;
+    const meta = document.createElement("span");
+    meta.className = "cfg-item-meta";
+    meta.textContent = opt.connected ? "Conectada" : "Vinculada";
+    left.appendChild(name);
+    left.appendChild(meta);
+
+    // ••• menu -> Desvincular
+    const actions = document.createElement("div");
+    actions.className = "cfg-item-actions";
+    const menuBtn = document.createElement("button");
+    menuBtn.type = "button";
+    menuBtn.className = "cfg-menu-btn";
+    menuBtn.textContent = "•••";
+    menuBtn.setAttribute("aria-label", "Opciones");
+    const menu = document.createElement("div");
+    menu.className = "cfg-menu hidden";
+    const unlink = document.createElement("button");
+    unlink.type = "button";
+    unlink.className = "danger";
+    unlink.textContent = "Desvincular";
+    unlink.addEventListener("click", () => {
+      menu.classList.add("hidden");
+      void removeBtSpeaker(mac, opt.label, menuBtn);
+    });
+    menu.appendChild(unlink);
+    menuBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      closeAllCfgMenus(menu);
+      menu.classList.toggle("hidden");
+    });
+    actions.appendChild(menuBtn);
+    actions.appendChild(menu);
+
+    li.appendChild(left);
+    li.appendChild(actions);
     btPairedList.appendChild(li);
   }
 }
+
+function closeAllCfgMenus(except) {
+  for (const m of document.querySelectorAll(".cfg-menu")) {
+    if (m !== except) m.classList.add("hidden");
+  }
+}
+document.addEventListener("click", () => closeAllCfgMenus(null));
 
 async function removeBtSpeaker(mac, label, btn) {
   btn.disabled = true;
@@ -256,26 +349,31 @@ async function removeBtSpeaker(mac, label, btn) {
 async function scanBtSpeakers() {
   if (!btScanBtn) return;
   btScanBtn.disabled = true;
-  btScanStatus.textContent = "Buscando bocinas cercanas...";
+  btScanStatus.textContent = "Buscando dispositivos cercanos...";
   btFoundList.innerHTML = "";
   try {
     const res = await apiFetch("/api/bluetooth/scan");
     const data = await res.json();
     const speakers = Array.isArray(data.speakers) ? data.speakers : [];
     if (!speakers.length) {
-      btScanStatus.textContent = "No se encontraron bocinas nuevas. Ponla en modo emparejamiento e intenta de nuevo.";
+      btScanStatus.textContent = "No se encontraron dispositivos. Pon la bocina en modo emparejamiento e intenta de nuevo.";
       return;
     }
-    btScanStatus.textContent = `${speakers.length} bocina(s) encontrada(s).`;
+    btScanStatus.textContent = `${speakers.length} dispositivo(s) encontrado(s).`;
     for (const sp of speakers) {
       const li = document.createElement("li");
-      const label = document.createElement("span");
-      label.textContent = sp.name;
+      const left = document.createElement("div");
+      left.className = "cfg-item-left";
+      const name = document.createElement("span");
+      name.className = "cfg-item-name";
+      name.textContent = sp.name;
+      left.appendChild(name);
       const pairBtn = document.createElement("button");
       pairBtn.type = "button";
-      pairBtn.textContent = "Emparejar";
+      pairBtn.className = "cfg-btn cfg-btn-accent";
+      pairBtn.textContent = "Vincular";
       pairBtn.addEventListener("click", () => void pairBtSpeaker(sp.mac, sp.name, pairBtn));
-      li.appendChild(label);
+      li.appendChild(left);
       li.appendChild(pairBtn);
       btFoundList.appendChild(li);
     }
@@ -288,7 +386,7 @@ async function scanBtSpeakers() {
 
 async function pairBtSpeaker(mac, name, btn) {
   btn.disabled = true;
-  btn.textContent = "Emparejando...";
+  btn.textContent = "Vinculando...";
   try {
     const res = await apiFetch("/api/bluetooth/pair", {
       method: "POST",
@@ -297,7 +395,7 @@ async function pairBtSpeaker(mac, name, btn) {
     });
     const data = await res.json();
     if (data.ok) {
-      addMessage("system", `Bocina emparejada y activada: ${name}.`);
+      addMessage("system", `Dispositivo vinculado y activado: ${name}.`);
       btFoundList.innerHTML = "";
       btScanStatus.textContent = "";
       await loadAudioOutputs();
@@ -305,12 +403,12 @@ async function pairBtSpeaker(mac, name, btn) {
     } else {
       addMessage("system", `No se pudo emparejar ${name}: ${data.error || ""}`);
       btn.disabled = false;
-      btn.textContent = "Emparejar";
+      btn.textContent = "Vincular";
     }
   } catch (err) {
     addMessage("system", `Error emparejando ${name}: ${err.message}`);
     btn.disabled = false;
-    btn.textContent = "Emparejar";
+    btn.textContent = "Vincular";
   }
 }
 
@@ -1119,9 +1217,233 @@ async function ejectUsbVolume(volumeName, btn) {
 
 settingsUsbRefreshBtn.addEventListener("click", () => void loadSettingsUsbVolumes());
 
+// ---- Configuración: navegación interna (General/Audio/IA/Almacenamiento/Sistema) ----
+const cfgNav = document.getElementById("cfg-nav");
+if (cfgNav) {
+  cfgNav.addEventListener("click", (e) => {
+    const btn = e.target.closest(".cfg-nav-btn");
+    if (!btn) return;
+    const key = btn.dataset.cfg;
+    for (const b of cfgNav.querySelectorAll(".cfg-nav-btn")) b.classList.toggle("active", b === btn);
+    for (const p of document.querySelectorAll(".cfg-panel")) {
+      p.classList.toggle("active", p.dataset.cfgPanel === key);
+    }
+    if (key === "audio") void loadAudioOutputs();
+    else if (key === "ia") void loadIaModels();
+    else if (key === "almacenamiento") void loadSettingsUsbVolumes();
+    else if (key === "sistema") void loadBackups();
+  });
+}
+
+const cfgStorageRefresh = document.getElementById("cfg-storage-refresh");
+cfgStorageRefresh?.addEventListener("click", () => {
+  void loadStatus();
+});
+
+// ---- IA: selector de modelo (espeja el de Chat, misma API) ----
+const iaModelSelect = document.getElementById("ia-model-select");
+async function loadIaModels() {
+  if (!iaModelSelect) return;
+  try {
+    const [modelsRes, statusRes] = await Promise.all([fetch("/api/models"), fetch("/api/status")]);
+    const models = await modelsRes.json();
+    const status = await statusRes.json();
+    iaModelSelect.innerHTML = "";
+    for (const m of models) {
+      const opt = document.createElement("option");
+      opt.value = m.name;
+      opt.textContent = m.name;
+      if (m.name === status.model) opt.selected = true;
+      iaModelSelect.appendChild(opt);
+    }
+  } catch {
+    /* dejar vacío */
+  }
+}
+iaModelSelect?.addEventListener("change", async () => {
+  const tag = iaModelSelect.value;
+  addMessage("system", `Cambiando a ${tag}...`);
+  try {
+    const res = await fetch("/api/models/select", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tag }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      addMessage("system", `Modelo activo: ${data.model}`);
+      history = [];
+      if (modelSelect) modelSelect.value = data.model;
+      void loadStatus();
+    } else {
+      addMessage("system", `No se pudo cambiar el modelo: ${data.error || ""}`);
+    }
+  } catch (err) {
+    addMessage("system", `Error cambiando el modelo: ${err.message}`);
+  }
+});
+
+// ---- Respaldo (config en la microSD, nunca en el repo) ----
+const backupCreateBtn = document.getElementById("backup-create-btn");
+const backupStatus = document.getElementById("backup-status");
+const backupList = document.getElementById("backup-list");
+
+function backupDateLabel(mtime) {
+  try {
+    return new Date(mtime).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" });
+  } catch {
+    return "";
+  }
+}
+
+async function loadBackups() {
+  if (!backupList) return;
+  backupList.innerHTML = "";
+  try {
+    const res = await apiFetch("/api/backup/list");
+    const data = await res.json();
+    const backups = Array.isArray(data.backups) ? data.backups : [];
+    if (!backups.length) {
+      const li = document.createElement("li");
+      li.className = "cfg-empty";
+      li.textContent = "No hay respaldos todavía.";
+      backupList.appendChild(li);
+      return;
+    }
+    for (const b of backups) {
+      const li = document.createElement("li");
+      const left = document.createElement("div");
+      left.className = "cfg-item-left";
+      const name = document.createElement("span");
+      name.className = "cfg-item-name";
+      name.textContent = backupDateLabel(b.mtime);
+      const meta = document.createElement("span");
+      meta.className = "cfg-item-meta";
+      meta.textContent = `${formatBytes(b.size)} · ${b.name}`;
+      left.appendChild(name);
+      left.appendChild(meta);
+
+      const actions = document.createElement("div");
+      actions.className = "cfg-item-actions";
+      const dl = document.createElement("a");
+      dl.className = "cfg-icon-btn";
+      dl.textContent = "↓";
+      dl.title = "Descargar";
+      dl.href = `/api/backup/download?name=${encodeURIComponent(b.name)}`;
+      dl.setAttribute("download", b.name);
+
+      const menuBtn = document.createElement("button");
+      menuBtn.type = "button";
+      menuBtn.className = "cfg-menu-btn";
+      menuBtn.textContent = "•••";
+      const menu = document.createElement("div");
+      menu.className = "cfg-menu hidden";
+      const restore = document.createElement("button");
+      restore.type = "button";
+      restore.textContent = "Restaurar";
+      restore.addEventListener("click", () => {
+        menu.classList.add("hidden");
+        void restoreBackup(b.name);
+      });
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "danger";
+      del.textContent = "Eliminar";
+      del.addEventListener("click", () => {
+        menu.classList.add("hidden");
+        void deleteBackup(b.name);
+      });
+      menu.appendChild(restore);
+      menu.appendChild(del);
+      menuBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeAllCfgMenus(menu);
+        menu.classList.toggle("hidden");
+      });
+      actions.appendChild(dl);
+      actions.appendChild(menuBtn);
+      actions.appendChild(menu);
+
+      li.appendChild(left);
+      li.appendChild(actions);
+      backupList.appendChild(li);
+    }
+  } catch (err) {
+    backupList.innerHTML = `<li class="cfg-empty">Error: ${err.message}</li>`;
+  }
+}
+
+backupCreateBtn?.addEventListener("click", async () => {
+  backupCreateBtn.disabled = true;
+  if (backupStatus) backupStatus.textContent = "Creando respaldo...";
+  try {
+    const res = await apiFetch("/api/backup/create", { method: "POST" });
+    const data = await res.json();
+    if (backupStatus) {
+      backupStatus.textContent = data.ok ? "Respaldo creado." : `Error: ${data.error || ""}`;
+    }
+  } catch (err) {
+    if (backupStatus) backupStatus.textContent = `Error: ${err.message}`;
+  } finally {
+    backupCreateBtn.disabled = false;
+    void loadBackups();
+  }
+});
+
+async function restoreBackup(name) {
+  if (backupStatus) backupStatus.textContent = "Restaurando...";
+  try {
+    const res = await apiFetch("/api/backup/restore", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    const data = await res.json();
+    if (backupStatus) {
+      backupStatus.textContent = data.ok
+        ? "Configuración restaurada. Reinicia el servicio de akbal para aplicarla."
+        : `Error: ${data.error || ""}`;
+    }
+    addMessage(
+      "system",
+      data.ok
+        ? "Respaldo restaurado. Se guardó una copia de seguridad de la configuración anterior. Reinicia el servicio para aplicar."
+        : `No se pudo restaurar: ${data.error || ""}`,
+    );
+  } catch (err) {
+    if (backupStatus) backupStatus.textContent = `Error: ${err.message}`;
+  } finally {
+    void loadBackups();
+  }
+}
+
+async function deleteBackup(name) {
+  try {
+    const res = await apiFetch("/api/backup/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    const data = await res.json();
+    if (backupStatus) {
+      backupStatus.textContent = data.ok ? "Respaldo eliminado." : `Error: ${data.error || ""}`;
+    }
+  } catch (err) {
+    if (backupStatus) backupStatus.textContent = `Error: ${err.message}`;
+  } finally {
+    void loadBackups();
+  }
+}
+
 async function refreshSettings() {
   settingsUsbStatus.textContent = "";
-  await Promise.all([loadStatus(), loadSettingsUsbVolumes(), loadAudioOutputs()]);
+  await Promise.all([
+    loadStatus(),
+    loadSettingsUsbVolumes(),
+    loadAudioOutputs(),
+    loadIaModels(),
+    loadBackups(),
+  ]);
 }
 
 // ---- Boot ----

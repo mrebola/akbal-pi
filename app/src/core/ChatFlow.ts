@@ -61,7 +61,8 @@ class ChatFlow implements ChatFlowContext {
   pendingModelSwitchTag: string = "";
   pendingModelSwitchLabel: string = "";
   pendingDeviceModeSwitch: "local" | "agent" | "" = "";
-  pendingAudioOutputSwitch: "hat" | "bluetooth" | "" = "";
+  pendingAudioOutputSwitch: string = "";
+  pendingAudioOutputLabel: string = "";
   pendingApprovalRequest: WhisplayIMApprovalRequest | null = null;
   currentExternalEmoji: string = "";
   stateMachine: FlowStateMachine;

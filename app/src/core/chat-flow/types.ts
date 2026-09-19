@@ -54,6 +54,7 @@ export interface ChatFlowContext {
   pendingModelSwitchLabel: string;
   pendingDeviceModeSwitch: DeviceMode | "";
   pendingAudioOutputSwitch: AudioOutputTarget | "";
+  pendingAudioOutputLabel: string;
   pendingApprovalRequest: WhisplayIMApprovalRequest | null;
   agentReplyExpired: boolean;
   currentExternalEmoji: string;

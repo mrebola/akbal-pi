@@ -113,6 +113,7 @@ import {
 } from "./wifi-radar-mode";
 import { isAgentMode, setDeviceMode } from "../../config/device-mode";
 import { setAudioOutputTarget } from "../../config/audio-output";
+import { connectSpeaker } from "../../device/bluetooth-audio";
 import {
   DEFAULT_OLLAMA_MODEL,
   getCurrentModel,
@@ -1032,6 +1033,7 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
   audio_output_select: (ctx: ChatFlowContext) => {
     onAudioOutputSelectConfirm((option) => {
       ctx.pendingAudioOutputSwitch = option.key;
+      ctx.pendingAudioOutputLabel = option.label;
       ctx.transitionTo("audio_output_loading");
     });
     onAudioOutputSelectTimeout(() => {
@@ -1049,15 +1051,21 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     onButtonDoubleClick(() => handleAudioOutputSelectCancel());
     onButtonPressed(() => handleAudioOutputSelectPress());
     onButtonReleased(() => handleAudioOutputSelectRelease());
-    enterAudioOutputSelectMode();
+    void enterAudioOutputSelectMode();
   },
   audio_output_loading: (ctx: ChatFlowContext) => {
     onButtonDoubleClick(null);
     onButtonPressed(noop);
     onButtonReleased(noop);
     const target = ctx.pendingAudioOutputSwitch || "hat";
+    const label = ctx.pendingAudioOutputLabel || "Bocina de la Pi";
     ctx.pendingAudioOutputSwitch = "";
-    const label = target === "bluetooth" ? "Bocina bluetooth" : "Bocina de la Pi";
+    ctx.pendingAudioOutputLabel = "";
+
+    // Picking a specific Bluetooth speaker needs its MAC connected first (the
+    // radio holds only one A2DP speaker at a time, so this also disconnects
+    // any other one). "hat" and legacy "bluetooth" need no connect step.
+    const mac = target.startsWith("bt:") ? target.slice(3) : null;
 
     display({
       status: "audio_output_loading",
@@ -1065,21 +1073,38 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       model_ui_title: "AUDIO",
       model_ui_label: label,
       model_ui_description: "",
-      text: "Preparando...",
+      text: mac ? "Conectando bocina..." : "Preparando...",
     });
 
-    setAudioOutputTarget(target);
-
-    display({
-      status: "idle",
-      model_ui: "",
-      text: `${label} activada.`,
-    });
-    setTimeout(() => {
-      if (ctx.currentFlowName === "audio_output_loading") {
-        ctx.transitionTo("sleep");
+    const finish = (ok: boolean) => {
+      if (ok) {
+        setAudioOutputTarget(target);
+        display({
+          status: "idle",
+          model_ui: "",
+          text: `${label} activada.`,
+        });
+      } else {
+        display({
+          status: "idle",
+          model_ui: "",
+          text: `No se pudo conectar ${label}.`,
+        });
       }
-    }, 2500);
+      setTimeout(() => {
+        if (ctx.currentFlowName === "audio_output_loading") {
+          ctx.transitionTo("sleep");
+        }
+      }, 2500);
+    };
+
+    if (mac) {
+      void connectSpeaker(mac)
+        .then((res) => finish(res.ok))
+        .catch(() => finish(false));
+    } else {
+      finish(true);
+    }
   },
   help: (ctx: ChatFlowContext) => {
     onHelpExit(() => {

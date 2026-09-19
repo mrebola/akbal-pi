@@ -24,7 +24,9 @@ import {
   AudioOutputTarget,
   getAudioOutputTarget,
   setAudioOutputTarget,
+  bluetoothTarget,
 } from "../config/audio-output";
+import { listPairedSpeakers, connectSpeaker } from "./bluetooth-audio";
 import { getBatteryReading } from "../status/battery-status";
 import { getSystemStats } from "../utils/system-stats";
 import {
@@ -230,16 +232,45 @@ export class WebAdminServer {
       };
     });
 
-    // Two fixed options (unlike /api/models, which lists whatever's pulled
-    // in Ollama) — "hat" (onboard Whisplay speaker, default) or "bluetooth"
-    // (whichever speaker is currently paired/connected). See
-    // config/audio-output.ts and device/audio.ts.
+    // Speaker options: HAT (onboard Whisplay speaker, default) + one entry per
+    // paired Bluetooth speaker, discovered live. See config/audio-output.ts,
+    // device/bluetooth-audio.ts and device/audio.ts.
+    router.get("/api/audio-output/options", async (ctx) => {
+      const active = getAudioOutputTarget();
+      let speakers: { mac: string; name: string; connected: boolean }[] = [];
+      try {
+        speakers = await listPairedSpeakers();
+      } catch {
+        speakers = [];
+      }
+      const options = [
+        { key: "hat", label: "Bocina de la Pi", connected: true },
+        ...speakers.map((sp) => ({
+          key: bluetoothTarget(sp.mac),
+          label: sp.name,
+          connected: sp.connected,
+        })),
+      ];
+      ctx.body = { active, options };
+    });
+
     router.post("/api/audio-output/select", async (ctx) => {
       const target = (ctx.request.body as any)?.target;
-      if (target !== "hat" && target !== "bluetooth") {
+      if (typeof target !== "string" || !target) {
         ctx.status = 400;
-        ctx.body = { error: "target debe ser 'hat' o 'bluetooth'" };
+        ctx.body = { error: "target requerido" };
         return;
+      }
+      // A specific Bluetooth speaker must be connected before we route to it
+      // (single-A2DP radio → this also disconnects any other speaker).
+      const mac = target.startsWith("bt:") ? target.slice(3) : null;
+      if (mac) {
+        const res = await connectSpeaker(mac);
+        if (!res.ok) {
+          ctx.status = 502;
+          ctx.body = { ok: false, error: res.error || "no se pudo conectar la bocina" };
+          return;
+        }
       }
       setAudioOutputTarget(target as AudioOutputTarget);
       ctx.body = { ok: true, audioOutput: getAudioOutputTarget() };

@@ -1,16 +1,38 @@
 import { display } from "../../device/display";
-import { getAudioOutputTarget, AudioOutputTarget } from "../../config/audio-output";
+import { getAudioOutputTarget, bluetoothTarget } from "../../config/audio-output";
+import { listPairedSpeakers } from "../../device/bluetooth-audio";
 
 // Button-driven speaker picker, entered from the quick menu (states.ts).
 // Deliberately mirrors mode-select-mode.ts's press/hold/confirm timing so the
 // on-device UX is consistent — the same "a misheard/short click should never
 // silently flip where the assistant speaks" reasoning applies here.
-export type AudioOutputOption = { key: AudioOutputTarget; label: string; description: string };
+export type AudioOutputOption = { key: string; label: string; description: string };
 
-export const AUDIO_OUTPUT_OPTIONS: AudioOutputOption[] = [
-  { key: "hat", label: "Bocina de la Pi", description: "Altavoz del HAT Whisplay" },
-  { key: "bluetooth", label: "Bocina bluetooth", description: "Bocina emparejada por bluetooth" },
-];
+const HAT_OPTION: AudioOutputOption = {
+  key: "hat",
+  label: "Bocina de la Pi",
+  description: "Altavoz del HAT Whisplay",
+};
+
+// Options are HAT + one entry per paired Bluetooth speaker, rebuilt each time
+// the picker is opened so newly paired speakers show up automatically.
+let options: AudioOutputOption[] = [HAT_OPTION];
+
+const buildOptions = async (): Promise<AudioOutputOption[]> => {
+  try {
+    const speakers = await listPairedSpeakers();
+    return [
+      HAT_OPTION,
+      ...speakers.map((sp) => ({
+        key: bluetoothTarget(sp.mac),
+        label: sp.name,
+        description: sp.connected ? "Bluetooth · conectada" : "Bluetooth · emparejada",
+      })),
+    ];
+  } catch {
+    return [HAT_OPTION];
+  }
+};
 
 const SHORT_PRESS_MAX_MS = 400;
 // Matches mode-select-mode.ts / model-select-mode.ts / quick-menu-mode.ts.
@@ -51,7 +73,7 @@ function armIdleTimer(): void {
 }
 
 function currentOption(): AudioOutputOption {
-  return AUDIO_OUTPUT_OPTIONS[selectedIndex];
+  return options[selectedIndex] || HAT_OPTION;
 }
 
 function renderSelectScreen(): void {
@@ -64,7 +86,7 @@ function renderSelectScreen(): void {
     model_ui_label: option.label,
     model_ui_description: option.description,
     model_ui_index: selectedIndex + 1,
-    model_ui_total: AUDIO_OUTPUT_OPTIONS.length,
+    model_ui_total: options.length,
     model_ui_active: isActive,
     text: "Click: siguiente · Mantén: elegir",
   });
@@ -97,10 +119,21 @@ export function handleAudioOutputSelectCancel(): void {
   onCancelCallback();
 }
 
-export function enterAudioOutputSelectMode(): void {
+export async function enterAudioOutputSelectMode(): Promise<void> {
   resetAudioOutputSelectControl();
+  // Listing paired speakers shells out to bluetoothctl, so show a brief
+  // placeholder while it runs.
+  display({
+    status: "audio_output_select",
+    model_ui: "loading",
+    model_ui_title: "AUDIO",
+    model_ui_label: "Buscando bocinas...",
+    model_ui_description: "",
+    text: "",
+  });
+  options = await buildOptions();
   const activeKey = getAudioOutputTarget();
-  const idx = AUDIO_OUTPUT_OPTIONS.findIndex((o) => o.key === activeKey);
+  const idx = options.findIndex((o) => o.key === activeKey);
   selectedIndex = idx >= 0 ? idx : 0;
   renderSelectScreen();
   armIdleTimer();
@@ -133,7 +166,7 @@ export function handleAudioOutputSelectRelease(): void {
   clearHoldTimers();
   pressStartedAt = 0;
   if (duration > 0 && duration <= SHORT_PRESS_MAX_MS) {
-    selectedIndex = (selectedIndex + 1) % AUDIO_OUTPUT_OPTIONS.length;
+    selectedIndex = (selectedIndex + 1) % options.length;
   }
   renderSelectScreen();
   armIdleTimer();

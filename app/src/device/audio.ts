@@ -7,7 +7,7 @@ import { pluginRegistry } from "../plugin";
 import type { ASRPlugin, TTSPlugin, AudioFormat } from "../plugin";
 import { ASRServer, TTSResult, TTSServer } from "../type";
 import { webAudioBridge } from "./web-audio-bridge";
-import { getAudioOutputTarget } from "../config/audio-output";
+import { isBluetoothOutput } from "../config/audio-output";
 
 export { getDynamicVoiceDetectLevel } from "./voice-detect";
 
@@ -89,9 +89,11 @@ const getAlsaOutputDevice = (): string => {
   if (process.env.ALSA_OUTPUT_DEVICE) {
     return process.env.ALSA_OUTPUT_DEVICE;
   }
-  return getAudioOutputTarget() === "bluetooth"
-    ? BLUETOOTH_ALSA_OUTPUT_DEVICE
-    : getHatOutputDevice();
+  // Any Bluetooth speaker (legacy "bluetooth" or a specific "bt:<MAC>") plays
+  // through the ALSA "pulse" PCM. The selector connects exactly one Bluetooth
+  // speaker at a time (see device/bluetooth-audio.ts), which WirePlumber makes
+  // PipeWire's default sink, so "pulse" lands on the chosen speaker.
+  return isBluetoothOutput() ? BLUETOOTH_ALSA_OUTPUT_DEVICE : getHatOutputDevice();
 };
 const normalizeAudioFormat = (value: string | undefined, fallback: AudioFormat): AudioFormat => {
   const normalized = (value || "").toLowerCase();

@@ -20,6 +20,7 @@ const logoutBtn = document.getElementById("logout-btn");
 const modelLoadIndicator = document.getElementById("model-load-indicator");
 const unloadModelBtn = document.getElementById("unload-model-btn");
 const audioOutputSelect = document.getElementById("audio-output-select");
+const audioOutputRefreshBtn = document.getElementById("audio-output-refresh");
 
 logoutBtn.addEventListener("click", async () => {
   await fetch("/api/logout", { method: "POST" }).catch(() => {});
@@ -175,8 +176,34 @@ modelSelect.addEventListener("change", async () => {
   }
 });
 
+// Populate the speaker dropdown from the live list (HAT + paired Bluetooth
+// speakers). Called on boot, when the Settings tab opens, and via the ↻ button.
+async function loadAudioOutputs() {
+  try {
+    const res = await apiFetch("/api/audio-output/options");
+    const data = await res.json();
+    if (!Array.isArray(data.options)) return;
+    audioOutputSelect.innerHTML = "";
+    for (const opt of data.options) {
+      const el = document.createElement("option");
+      el.value = opt.key;
+      el.textContent = opt.connected && opt.key !== "hat" ? `${opt.label} (conectada)` : opt.label;
+      audioOutputSelect.appendChild(el);
+    }
+    if (data.active) audioOutputSelect.value = data.active;
+  } catch {
+    /* leave the fallback "Bocina de la Pi" option in place */
+  }
+}
+
+audioOutputRefreshBtn?.addEventListener("click", () => void loadAudioOutputs());
+
 audioOutputSelect.addEventListener("change", async () => {
   const target = audioOutputSelect.value;
+  const label = audioOutputSelect.options[audioOutputSelect.selectedIndex]?.textContent || target;
+  const isBt = target.startsWith("bt:");
+  audioOutputSelect.disabled = true;
+  if (isBt) addMessage("system", `Conectando ${label}...`);
   try {
     const res = await apiFetch("/api/audio-output/select", {
       method: "POST",
@@ -185,14 +212,17 @@ audioOutputSelect.addEventListener("change", async () => {
     });
     const data = await res.json();
     if (data.ok) {
-      const label = target === "bluetooth" ? "bocina bluetooth" : "bocina de la Pi";
       addMessage("system", `Audio activo: ${label}.`);
+      await loadAudioOutputs();
       void loadStatus();
     } else {
       addMessage("system", `No se pudo cambiar la salida de audio: ${data.error || ""}`);
+      await loadAudioOutputs();
     }
   } catch (err) {
     addMessage("system", `Error cambiando la salida de audio: ${err.message}`);
+  } finally {
+    audioOutputSelect.disabled = false;
   }
 });
 
@@ -972,12 +1002,13 @@ settingsUsbRefreshBtn.addEventListener("click", () => void loadSettingsUsbVolume
 
 async function refreshSettings() {
   settingsUsbStatus.textContent = "";
-  await Promise.all([loadStatus(), loadSettingsUsbVolumes()]);
+  await Promise.all([loadStatus(), loadSettingsUsbVolumes(), loadAudioOutputs()]);
 }
 
 // ---- Boot ----
 
 void loadStatus();
+void loadAudioOutputs();
 void loadModels();
 // Battery (and the rest of /api/status) refreshes on its own — no manual
 // reload needed to see the % move.

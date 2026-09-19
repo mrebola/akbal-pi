@@ -164,19 +164,36 @@ export const switchModel = async (model: string): Promise<void> => {
 };
 
 export const listOllamaModelsWithSize = async (): Promise<
-  { name: string; size: number }[]
+  { name: string; size: number; contextLength: number | undefined }[]
 > => {
   const response = await axios.get(`${ollamaEndpoint}/api/tags`);
   const models = response.data?.models;
   return Array.isArray(models)
     ? models
-        .map((m: any) => ({ name: m?.name || m?.model, size: Number(m?.size) || 0 }))
+        .map((m: any) => ({
+          name: m?.name || m?.model,
+          size: Number(m?.size) || 0,
+          // /api/tags already includes each model's context_length in
+          // `details` — no need for a separate /api/show call per model
+          // (see model-select-mode.ts, which shows this in the carousel).
+          contextLength: findContextWindowValue(m?.details),
+        }))
         .filter((m: { name: string }) => Boolean(m.name))
     : [];
 };
 
 export const listOllamaModels = async (): Promise<string[]> =>
   (await listOllamaModelsWithSize()).map((m) => m.name);
+
+// "131072" -> "128K" — short label for the model-select carousel (see
+// model-select-mode.ts). Ollama reports context length in raw tokens; the
+// K-rounded form is what fits the small screen and matches how model specs
+// are usually quoted anyway.
+export const formatContextWindow = (length: number | undefined): string => {
+  if (!length || length <= 0) return "";
+  if (length >= 1024) return `${Math.round(length / 1024)}K contexto`;
+  return `${length} contexto`;
+};
 
 const resetChatHistory = (): void => {
   messages.length = 0;

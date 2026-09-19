@@ -73,6 +73,13 @@ function armIdleTimer(): void {
 function renderScreen(): void {
   const body = PAGES[pageIndex].flatMap(([label, example]) => [label, example]).join("\n");
   display({
+    // Whatever screen we arrived from (most often the quick menu, mid-hold
+    // on "confirm") can leave model_ui non-empty — chatbot-ui.py's
+    // render_frame checks model_ui *before* help_ui, so without this the
+    // help screen would never actually draw: the display would just sit
+    // frozen on the previous screen forever. This was the "el menú ayuda se
+    // traba" bug.
+    model_ui: "",
     help_ui: "view",
     help_ui_body: body,
     help_ui_page: pageIndex + 1,

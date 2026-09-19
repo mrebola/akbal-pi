@@ -131,21 +131,26 @@ para elegir a propósito.
 
 ### Menú visual (botón del Whisplay HAT)
 
-La tarjeta muestra el nombre corto del modelo, una descripción de una línea,
-una pastilla **"● Activo"** si es el que está corriendo, y la posición
-("2 de 4") — solo modelos que `ollama list` confirma instalados en ese
-momento (ver más abajo).
+La tarjeta muestra el nombre corto del modelo, su contexto ("131K
+contexto", tomado directo de `ollama list`), una pastilla **"● Activo"** si
+es el que está corriendo, y la posición ("2 de 4").
 
 - **Click corto**: pasa al siguiente modelo del carrusel.
 - **Mantener presionado**: aparece un anillo de progreso real llenándose. Si
   soltás antes de ~0.9 segundos, se cancela y te quedás viendo el mismo
-  modelo — nada cambia.
+  modelo — nada cambia. El texto de abajo dice **"Mantén presionado para
+  activar"** cuando el modelo mostrado no es el activo (y no dice nada de
+  eso si ya lo es — no hace falta invitarte a activar lo que ya está
+  activo).
 - **Mantener ~0.9 segundos**: confirma. La pantalla pasa a "Preparando
   modelo..." con un spinner indeterminado (Ollama no expone un % real para
   cargar un modelo ya descargado a memoria, así que no se inventa uno) y el
   nombre del modelo abajo. Cuando termina, vuelve el personaje animado con
   el texto `Modelo "..." listo para contestar.` y el flujo normal sigue
-  (botón para hablar).
+  (botón para hablar). **Si estabas en modo agente, elegir un modelo local
+  te pasa a modo local** — elegir un modelo específico es una señal
+  explícita de que querés contestar con ese modelo, no que OpenClaw lo siga
+  ignorando.
 - **Doble clic**: cancela y vuelve directo al reposo sin cambiar nada — la
   forma explícita de salir del menú.
 - Si no se toca el botón por 20 segundos, el menú también se cierra solo y
@@ -157,13 +162,17 @@ El cambio de modelo (por voz directo o por el menú):
 - Se guarda en `OLLAMA_MODEL` dentro de `.env`, así sobrevive a un reinicio.
 - Dispara un nuevo "keep-alive" para precargar el modelo elegido en Ollama.
 
-**Solo modelos instalados:** al abrir el menú, `model-select-mode.ts` le
-pregunta a Ollama (`ollama list`, vía `listOllamaModels()`) cuáles de
-`MODEL_ALIASES` están realmente instalados y solo esos entran al carrusel —
-si borraste un modelo con `ollama rm`, ya no aparece como opción (antes
-había que acordarse de sacarlo de `MODEL_ALIASES` a mano). Si Ollama no
-responde, se usa la lista completa como respaldo en vez de dejar el menú
-vacío.
+**Todos los modelos instalados, siempre al día:** al abrir el menú,
+`model-select-mode.ts` le pregunta a Ollama (`ollama list`, vía
+`listOllamaModelsWithSize()`) qué hay instalado en ese momento y arma el
+carrusel con eso — no con una lista fija. Si pulliaste un modelo nuevo
+desde la última vez que abriste el menú, ya aparece sin tocar código; si
+borraste uno con `ollama rm`, ya no aparece. `MODEL_ALIASES` sigue
+existiendo para darle un nombre corto/lindo y una frase hablada a los
+modelos que sí están curados ahí — un modelo instalado que no está en
+`MODEL_ALIASES` igual aparece, con un nombre generado automáticamente a
+partir del tag (`autoShortName` en `model-select-mode.ts`). Si Ollama no
+responde, el menú muestra "Sin modelos" en vez de fallar.
 
 ## Cambiar de modo (agente / local)
 
@@ -225,7 +234,14 @@ línea sin desbordar la pantalla), recompilar (`npm run build`) y reiniciar
 
 ## Si se agrega o se borra un modelo con `ollama pull` / `ollama rm`
 
-Editar el array `MODEL_ALIASES` en `voice-commands.ts` (nombre corto,
-sinónimos que dispara el reconocimiento, tag exacto de `ollama list`, y una
-etiqueta corta para la respuesta hablada), recompilar (`npm run build`) y
-reiniciar `chatbot.service`.
+**Para que aparezca/desaparezca del menú de pantalla**: nada que hacer —
+`model-select-mode.ts` lee `ollama list` cada vez que se abre el menú (ver
+arriba).
+
+**Para que tenga nombre corto, sinónimos por voz ("modelo 3", "qwen sin
+censura") y una frase hablada linda** (si no, funciona igual pero con un
+nombre autogenerado del tag, y solo se puede pedir por voz diciendo el tag
+completo): agregar una entrada al array `MODEL_ALIASES` en
+`voice-commands.ts` (nombre corto, sinónimos que dispara el reconocimiento,
+tag exacto de `ollama list`, y una etiqueta corta para la respuesta
+hablada), recompilar (`npm run build`) y reiniciar `chatbot.service`.

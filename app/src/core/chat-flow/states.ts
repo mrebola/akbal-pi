@@ -897,6 +897,16 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
         switchModel(tag)
           .then(() => {
             if (ctx.currentFlowName !== "model_loading") return;
+            // Picking a specific local model is an explicit "answer with
+            // this, locally" choice — if modo agente was active, switch to
+            // modo local instead of loading the model just to keep routing
+            // to OpenClaw. Doesn't apply to the agent-fallback's own
+            // switchModel call in the "answer" state, which calls it
+            // directly rather than going through this flow state.
+            if (isAgentMode()) {
+              setDeviceMode("local");
+              display({ top_bar_mode: "local" });
+            }
             finish(`Modelo "${label}" listo para contestar.`);
           })
           .catch(() => {

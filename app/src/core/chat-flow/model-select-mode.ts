@@ -1,6 +1,10 @@
 import { display } from "../../device/display";
-import { getCurrentModel, listOllamaModels } from "../../cloud-api/local/ollama-llm";
-import { MODEL_ALIASES, ModelAlias } from "./voice-commands";
+import {
+  formatContextWindow,
+  getCurrentModel,
+  listOllamaModelsWithSize,
+} from "../../cloud-api/local/ollama-llm";
+import { MODEL_ALIASES } from "./voice-commands";
 
 // Button-driven model picker, entered when the user says "cambia modelo" /
 // "cambiar modelo" (see states.ts), or from the quick menu. A single click
@@ -16,13 +20,27 @@ const CONFIRM_HOLD_MS = 900;
 const HOLD_TICK_MS = 60;
 const IDLE_TIMEOUT_MS = 20000;
 
-let options: ModelAlias[] = MODEL_ALIASES;
+// What the carousel actually needs — built fresh from `ollama list` every
+// time the menu opens (see resolveOptions), not from MODEL_ALIASES alone,
+// so a model pulled or removed since the last visit shows up without
+// anyone having to edit MODEL_ALIASES by hand.
+export type ModelOption = {
+  tag: string;
+  shortName: string;
+  // Spoken form ("Modelo 5, qwen sin censura 2" / just the short name for
+  // an uncurated model) — used for TTS confirmations, unaffected by what
+  // the card shows on screen.
+  label: string;
+  contextWindow: string;
+};
+
+let options: ModelOption[] = [];
 let selectedIndex = 0;
 let pressStartedAt = 0;
 let holdTicker: ReturnType<typeof setInterval> | null = null;
 let confirmTimer: ReturnType<typeof setTimeout> | null = null;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
-let onConfirmCallback: (alias: ModelAlias) => void = () => {};
+let onConfirmCallback: (option: ModelOption) => void = () => {};
 let onTimeoutCallback: () => void = () => {};
 let onCancelCallback: () => void = () => {};
 
@@ -49,23 +67,34 @@ function armIdleTimer(): void {
   idleTimer = setTimeout(() => onTimeoutCallback(), IDLE_TIMEOUT_MS);
 }
 
-function currentAlias(): ModelAlias {
+function currentOption(): ModelOption {
   return options[selectedIndex];
 }
 
+// "huihui_ai/qwen3-abliterated:1.7b" -> "Qwen3 Abliterated" — only used for
+// a model that's installed but not in MODEL_ALIASES (so it still shows up
+// with *some* readable name instead of the raw tag).
+function autoShortName(tag: string): string {
+  const withoutQuant = tag.split(":")[0];
+  const base = withoutQuant.split("/").pop() || withoutQuant;
+  const spaced = base.replace(/[-_]+/g, " ").trim();
+  const titled = spaced.replace(/\b\w/g, (c) => c.toUpperCase());
+  return titled || tag;
+}
+
 function renderSelectScreen(): void {
-  const alias = currentAlias();
-  const isActive = alias.tag.toLowerCase() === getCurrentModel().toLowerCase();
+  const option = currentOption();
+  const isActive = option.tag.toLowerCase() === getCurrentModel().toLowerCase();
   display({
     status: "model_select",
     model_ui: "select",
     model_ui_title: "MODELO",
-    model_ui_label: alias.shortName,
-    model_ui_description: alias.description,
+    model_ui_label: option.shortName,
+    model_ui_description: option.contextWindow,
     model_ui_index: selectedIndex + 1,
     model_ui_total: options.length,
     model_ui_active: isActive,
-    text: "Click: siguiente · Mantén: elegir",
+    text: isActive ? "Click: siguiente" : "Mantén presionado para activar",
   });
 }
 
@@ -76,7 +105,7 @@ export function resetModelSelectControl(): void {
 }
 
 export function onModelSelectConfirm(
-  callback: (alias: ModelAlias) => void,
+  callback: (option: ModelOption) => void,
 ): void {
   onConfirmCallback = callback;
 }
@@ -97,31 +126,51 @@ export function handleModelSelectCancel(): void {
   onCancelCallback();
 }
 
-// Only offers models `ollama list` actually reports installed — showing an
-// alias for a model that isn't there any more used to just fail later, in
-// model_loading. Falls back to the full curated list if Ollama can't be
-// reached at all (better a possibly-stale menu than a broken one), and
-// never returns an empty menu even if nothing matched.
-async function resolveInstalledOptions(): Promise<ModelAlias[]> {
+// Every model `ollama list` actually reports installed, not just the
+// curated MODEL_ALIASES ones — a model pulled since the last visit shows up
+// automatically. MODEL_ALIASES still supplies the nicer name/spoken label
+// when a tag matches one; anything else gets an auto-generated name (see
+// autoShortName) so it's still legible instead of showing the raw tag.
+async function resolveOptions(): Promise<ModelOption[]> {
   try {
-    const installed = await listOllamaModels();
-    const installedSet = new Set(installed.map((m) => m.toLowerCase()));
-    const filtered = MODEL_ALIASES.filter((alias) =>
-      installedSet.has(alias.tag.toLowerCase()),
-    );
-    return filtered.length > 0 ? filtered : MODEL_ALIASES;
+    const installed = await listOllamaModelsWithSize();
+    if (installed.length === 0) return [];
+    return installed.map(({ name, contextLength }) => {
+      const alias = MODEL_ALIASES.find((a) => a.tag.toLowerCase() === name.toLowerCase());
+      return {
+        tag: name,
+        shortName: alias?.shortName || autoShortName(name),
+        label: alias?.label || autoShortName(name),
+        contextWindow: formatContextWindow(contextLength),
+      };
+    });
   } catch (err) {
-    console.warn("[model-select] Failed to list installed models, showing full list:", err);
-    return MODEL_ALIASES;
+    console.warn("[model-select] Failed to list installed models:", err);
+    return [];
   }
 }
 
 export async function enterModelSelectMode(): Promise<void> {
   resetModelSelectControl();
-  options = await resolveInstalledOptions();
+  options = await resolveOptions();
+  if (options.length === 0) {
+    display({
+      status: "model_select",
+      model_ui: "select",
+      model_ui_title: "MODELO",
+      model_ui_label: "Sin modelos",
+      model_ui_description: "Ollama no responde",
+      model_ui_index: 0,
+      model_ui_total: 0,
+      model_ui_active: false,
+      text: "Doble clic: salir",
+    });
+    armIdleTimer();
+    return;
+  }
   const activeTag = getCurrentModel().toLowerCase();
   const activeIndex = options.findIndex(
-    (a) => a.tag.toLowerCase() === activeTag,
+    (o) => o.tag.toLowerCase() === activeTag,
   );
   selectedIndex = activeIndex >= 0 ? activeIndex : 0;
   renderSelectScreen();
@@ -129,6 +178,7 @@ export async function enterModelSelectMode(): Promise<void> {
 }
 
 export function handleModelSelectPress(): void {
+  if (options.length === 0) return;
   clearIdleTimer();
   pressStartedAt = Date.now();
   holdTicker = setInterval(() => {
@@ -138,15 +188,15 @@ export function handleModelSelectPress(): void {
       status: "model_select",
       model_ui: "confirm",
       model_ui_title: "MODELO",
-      model_ui_label: currentAlias().shortName,
-      model_ui_description: currentAlias().description,
+      model_ui_label: currentOption().shortName,
+      model_ui_description: currentOption().contextWindow,
       model_ui_percent: percent,
       text: "Manteniendo presionado...",
     });
   }, HOLD_TICK_MS);
   confirmTimer = setTimeout(() => {
     clearHoldTimers();
-    onConfirmCallback(currentAlias());
+    onConfirmCallback(currentOption());
   }, CONFIRM_HOLD_MS);
 }
 
@@ -158,6 +208,7 @@ export function handleModelSelectRelease(): void {
   const duration = Date.now() - pressStartedAt;
   clearHoldTimers();
   pressStartedAt = 0;
+  if (options.length === 0) return;
   if (duration > 0 && duration <= SHORT_PRESS_MAX_MS) {
     selectedIndex = (selectedIndex + 1) % options.length;
   }

@@ -69,6 +69,20 @@ arrancarlo siempre desde el boot: quien nunca activó modo agente no debería
 tener un listener HTTP corriendo (sin auth si no configuraste
 `WHISPLAY_IM_TOKEN`) por default.
 
+## Elegir un modelo local sale de modo agente
+
+Si estás en modo agente y elegís un modelo específico (por voz o desde el
+menú de modelo — ver `docs/voice-commands.md`), el dispositivo pasa a modo
+local automáticamente (`model_loading` en `states.ts`, después de que
+`switchModel` confirma el cambio). La lógica: elegir un modelo puntual es
+una señal explícita de "quiero que contestes con este modelo", y si el
+dispositivo se quedara en modo agente, ese modelo recién cargado ni
+siquiera se usaría (seguiría mandando todo a OpenClaw) hasta el próximo
+fallback por timeout. Esto no aplica al `switchModel` interno que usa el
+fallback de abajo — ese no pasa por `model_loading`, así que no dispara este
+cambio de modo (no tendría sentido: el fallback YA está corriendo porque el
+modo agente falló).
+
 ## Fallback automático al modelo local
 
 En "modo agente", cada turno intenta primero OpenClaw — pero si no contesta

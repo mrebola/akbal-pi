@@ -21,6 +21,10 @@ const modelLoadIndicator = document.getElementById("model-load-indicator");
 const unloadModelBtn = document.getElementById("unload-model-btn");
 const audioOutputSelect = document.getElementById("audio-output-select");
 const audioOutputRefreshBtn = document.getElementById("audio-output-refresh");
+const btPairedList = document.getElementById("bt-paired-list");
+const btScanBtn = document.getElementById("bt-scan-btn");
+const btScanStatus = document.getElementById("bt-scan-status");
+const btFoundList = document.getElementById("bt-found-list");
 
 logoutBtn.addEventListener("click", async () => {
   await fetch("/api/logout", { method: "POST" }).catch(() => {});
@@ -176,27 +180,142 @@ modelSelect.addEventListener("change", async () => {
   }
 });
 
-// Populate the speaker dropdown from the live list (HAT + paired Bluetooth
-// speakers). Called on boot, when the Settings tab opens, and via the ↻ button.
+// Populate the speaker dropdown + the paired-speakers list (with a "delete"
+// button each) from the live options. Called on boot, when the Settings tab
+// opens, and via the ↻ button.
 async function loadAudioOutputs() {
   try {
     const res = await apiFetch("/api/audio-output/options");
     const data = await res.json();
     if (!Array.isArray(data.options)) return;
     audioOutputSelect.innerHTML = "";
+    const paired = [];
     for (const opt of data.options) {
       const el = document.createElement("option");
       el.value = opt.key;
       el.textContent = opt.connected && opt.key !== "hat" ? `${opt.label} (conectada)` : opt.label;
       audioOutputSelect.appendChild(el);
+      if (opt.key.startsWith("bt:")) paired.push(opt);
     }
     if (data.active) audioOutputSelect.value = data.active;
+    renderPairedList(paired);
   } catch {
     /* leave the fallback "Bocina de la Pi" option in place */
   }
 }
 
+function renderPairedList(paired) {
+  if (!btPairedList) return;
+  btPairedList.innerHTML = "";
+  if (!paired.length) {
+    const li = document.createElement("li");
+    li.className = "usb-item-meta";
+    li.textContent = "No hay bocinas bluetooth emparejadas.";
+    btPairedList.appendChild(li);
+    return;
+  }
+  for (const opt of paired) {
+    const mac = opt.key.slice(3);
+    const li = document.createElement("li");
+    const label = document.createElement("span");
+    label.textContent = opt.connected ? `${opt.label} (conectada)` : opt.label;
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "secondary";
+    del.textContent = "Eliminar";
+    del.addEventListener("click", () => void removeBtSpeaker(mac, opt.label, del));
+    li.appendChild(label);
+    li.appendChild(del);
+    btPairedList.appendChild(li);
+  }
+}
+
+async function removeBtSpeaker(mac, label, btn) {
+  btn.disabled = true;
+  try {
+    const res = await apiFetch("/api/bluetooth/remove", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mac }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      addMessage("system", `Bocina eliminada: ${label}.`);
+    } else {
+      addMessage("system", `No se pudo eliminar ${label}: ${data.error || ""}`);
+    }
+  } catch (err) {
+    addMessage("system", `Error eliminando ${label}: ${err.message}`);
+  } finally {
+    await loadAudioOutputs();
+    void loadStatus();
+  }
+}
+
+// Scan for nearby speakers and render each with an "Emparejar" button.
+async function scanBtSpeakers() {
+  if (!btScanBtn) return;
+  btScanBtn.disabled = true;
+  btScanStatus.textContent = "Buscando bocinas cercanas...";
+  btFoundList.innerHTML = "";
+  try {
+    const res = await apiFetch("/api/bluetooth/scan");
+    const data = await res.json();
+    const speakers = Array.isArray(data.speakers) ? data.speakers : [];
+    if (!speakers.length) {
+      btScanStatus.textContent = "No se encontraron bocinas nuevas. Ponla en modo emparejamiento e intenta de nuevo.";
+      return;
+    }
+    btScanStatus.textContent = `${speakers.length} bocina(s) encontrada(s).`;
+    for (const sp of speakers) {
+      const li = document.createElement("li");
+      const label = document.createElement("span");
+      label.textContent = sp.name;
+      const pairBtn = document.createElement("button");
+      pairBtn.type = "button";
+      pairBtn.textContent = "Emparejar";
+      pairBtn.addEventListener("click", () => void pairBtSpeaker(sp.mac, sp.name, pairBtn));
+      li.appendChild(label);
+      li.appendChild(pairBtn);
+      btFoundList.appendChild(li);
+    }
+  } catch (err) {
+    btScanStatus.textContent = `Error al buscar: ${err.message}`;
+  } finally {
+    btScanBtn.disabled = false;
+  }
+}
+
+async function pairBtSpeaker(mac, name, btn) {
+  btn.disabled = true;
+  btn.textContent = "Emparejando...";
+  try {
+    const res = await apiFetch("/api/bluetooth/pair", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mac }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      addMessage("system", `Bocina emparejada y activada: ${name}.`);
+      btFoundList.innerHTML = "";
+      btScanStatus.textContent = "";
+      await loadAudioOutputs();
+      void loadStatus();
+    } else {
+      addMessage("system", `No se pudo emparejar ${name}: ${data.error || ""}`);
+      btn.disabled = false;
+      btn.textContent = "Emparejar";
+    }
+  } catch (err) {
+    addMessage("system", `Error emparejando ${name}: ${err.message}`);
+    btn.disabled = false;
+    btn.textContent = "Emparejar";
+  }
+}
+
 audioOutputRefreshBtn?.addEventListener("click", () => void loadAudioOutputs());
+btScanBtn?.addEventListener("click", () => void scanBtSpeakers());
 
 audioOutputSelect.addEventListener("change", async () => {
   const target = audioOutputSelect.value;

@@ -24,9 +24,17 @@ import {
   AudioOutputTarget,
   getAudioOutputTarget,
   setAudioOutputTarget,
+  getBluetoothMac,
   bluetoothTarget,
 } from "../config/audio-output";
-import { listPairedSpeakers, connectSpeaker } from "./bluetooth-audio";
+import {
+  listPairedSpeakers,
+  connectSpeaker,
+  scanForNewSpeakers,
+  pairSpeaker,
+  removeSpeaker,
+  isValidMac,
+} from "./bluetooth-audio";
 import { getBatteryReading } from "../status/battery-status";
 import { getSystemStats } from "../utils/system-stats";
 import {
@@ -273,6 +281,58 @@ export class WebAdminServer {
         }
       }
       setAudioOutputTarget(target as AudioOutputTarget);
+      ctx.body = { ok: true, audioOutput: getAudioOutputTarget() };
+    });
+
+    // Discover nearby, not-yet-paired Bluetooth speakers. Blocks for the scan
+    // window, so the frontend shows a spinner.
+    router.get("/api/bluetooth/scan", async (ctx) => {
+      try {
+        ctx.body = { speakers: await scanForNewSpeakers() };
+      } catch (err: any) {
+        ctx.status = 500;
+        ctx.body = { error: err?.message || String(err) };
+      }
+    });
+
+    // Pair + trust + connect a discovered speaker, then make it the active
+    // output. Anyone with admin access can add their own speaker this way.
+    router.post("/api/bluetooth/pair", async (ctx) => {
+      const mac = (ctx.request.body as any)?.mac;
+      if (typeof mac !== "string" || !isValidMac(mac)) {
+        ctx.status = 400;
+        ctx.body = { error: "mac inválida" };
+        return;
+      }
+      const res = await pairSpeaker(mac);
+      if (!res.ok) {
+        ctx.status = 502;
+        ctx.body = { ok: false, error: res.error || "no se pudo emparejar" };
+        return;
+      }
+      setAudioOutputTarget(bluetoothTarget(mac));
+      ctx.body = { ok: true, audioOutput: getAudioOutputTarget() };
+    });
+
+    // Unpair/forget a speaker so it leaves the picker and can be paired fresh.
+    router.post("/api/bluetooth/remove", async (ctx) => {
+      const mac = (ctx.request.body as any)?.mac;
+      if (typeof mac !== "string" || !isValidMac(mac)) {
+        ctx.status = 400;
+        ctx.body = { error: "mac inválida" };
+        return;
+      }
+      const res = await removeSpeaker(mac);
+      if (!res.ok) {
+        ctx.status = 502;
+        ctx.body = { ok: false, error: res.error || "no se pudo eliminar" };
+        return;
+      }
+      // If we just removed the active speaker, fall back to the HAT so the
+      // assistant stays audible.
+      if (getBluetoothMac()?.toUpperCase() === mac.toUpperCase()) {
+        setAudioOutputTarget("hat");
+      }
       ctx.body = { ok: true, audioOutput: getAudioOutputTarget() };
     });
 

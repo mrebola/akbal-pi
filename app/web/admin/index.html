@@ -245,8 +245,17 @@
           <select id="audio-output-select">
             <option value="hat">Bocina de la Pi</option>
           </select>
-          <button type="button" id="audio-output-refresh" class="secondary" title="Volver a buscar bocinas bluetooth emparejadas">↻</button>
+          <button type="button" id="audio-output-refresh" class="secondary" title="Volver a buscar bocinas emparejadas">↻</button>
         </div>
+
+        <div class="usb-block-title" style="margin-top:14px;">Bocinas bluetooth emparejadas</div>
+        <ul id="bt-paired-list" class="usb-devices-list"></ul>
+
+        <div class="chat-toolbar" style="margin-top:12px;">
+          <button type="button" id="bt-scan-btn" class="secondary" title="Buscar bocinas bluetooth cercanas para emparejar">Buscar bocinas nuevas</button>
+          <span id="bt-scan-status" class="usb-item-meta"></span>
+        </div>
+        <ul id="bt-found-list" class="usb-devices-list"></ul>
       </div>
 
       <div class="usb-block">

@@ -125,6 +125,7 @@ current_model_ui_percent = 0
 current_model_ui_index = 0
 current_model_ui_total = 0
 current_model_ui_active = False
+current_model_ui_qr_path = ""
 current_help_ui = ""
 current_help_ui_body = ""
 current_help_ui_page = 0
@@ -278,7 +279,8 @@ class RenderThread(threading.Thread):
         # "loading" redraws every tick (spinner animation); everything else
         # only redraws when its content actually changes.
         spinner_frame = int(time.time() * 4) % 12 if mode == "loading" else 0
-        cache_key = (mode, title, label, description, percent, index, total, current_model_ui_active, spinner_frame)
+        qr_path = current_model_ui_qr_path
+        cache_key = (mode, title, label, description, percent, index, total, current_model_ui_active, spinner_frame, qr_path)
         if cache_key != self.model_ui_cache_key:
             self.model_ui_cache_key = cache_key
             frame = Image.new("RGBA", (VIDEO_WIDTH, VIDEO_HEIGHT), (0, 0, 0, 255))
@@ -315,6 +317,14 @@ class RenderThread(threading.Thread):
                 self._draw_centered(draw, f"{int(percent)}%", self.model_ui_hint_font, VIDEO_HEIGHT - 54, center_x, ACCENT_GREEN)
             elif mode == "loading":
                 self._draw_spinner(draw, center_x, VIDEO_HEIGHT - 46, 16, spinner_frame, ACCENT_GREEN)
+            elif mode == "network" and qr_path and os.path.exists(qr_path):
+                try:
+                    qr_image = Image.open(qr_path).convert("RGBA")
+                    qr_size = min(VIDEO_HEIGHT - name_y - 8, content_width)
+                    qr_image = qr_image.resize((qr_size, qr_size), Image.NEAREST)
+                    frame.paste(qr_image, (center_x - qr_size // 2, name_y + 4), qr_image)
+                except Exception as e:
+                    print(f"[Render] Failed to load QR {qr_path}: {e}")
 
             rgb565_data = ImageUtils.image_to_rgb565(frame, VIDEO_WIDTH, VIDEO_HEIGHT)
             self.whisplay.draw_image(0, TOP_BAR_HEIGHT, VIDEO_WIDTH, VIDEO_HEIGHT, rgb565_data)
@@ -529,7 +539,7 @@ def update_display_data(status=None, emoji=None, text=None,
                   wifi_signal_level=None, tool_placeholders=None,
                   music_progress=None, music_duration_ms=None, approval_mode=None, terminal_text=None,
                   model_ui=None, model_ui_title=None, model_ui_label=None, model_ui_description=None, model_ui_percent=None,
-                  model_ui_index=None, model_ui_total=None, model_ui_active=None,
+                  model_ui_index=None, model_ui_total=None, model_ui_active=None, model_ui_qr_path=None,
                   help_ui=None, help_ui_body=None, help_ui_page=None, help_ui_total=None,
                   top_bar_mode=None):
     global current_status, current_emoji, current_text, current_battery_level
@@ -544,7 +554,7 @@ def update_display_data(status=None, emoji=None, text=None,
     global current_music_progress, current_music_duration_ms
     global current_approval_mode
     global current_model_ui, current_model_ui_title, current_model_ui_label, current_model_ui_description, current_model_ui_percent
-    global current_model_ui_index, current_model_ui_total, current_model_ui_active
+    global current_model_ui_index, current_model_ui_total, current_model_ui_active, current_model_ui_qr_path
     global current_help_ui, current_help_ui_body, current_help_ui_page, current_help_ui_total
     global current_top_bar_mode
     global render_thread
@@ -662,6 +672,8 @@ def update_display_data(status=None, emoji=None, text=None,
         current_model_ui_total = model_ui_total
     if model_ui_active is not None:
         current_model_ui_active = bool(model_ui_active)
+    if model_ui_qr_path is not None:
+        current_model_ui_qr_path = model_ui_qr_path
     if help_ui is not None:
         current_help_ui = help_ui
     if help_ui_body is not None:
@@ -797,6 +809,7 @@ def handle_client(client_socket, addr, whisplay):
                     model_ui_index = content.get("model_ui_index", None)
                     model_ui_total = content.get("model_ui_total", None)
                     model_ui_active = content.get("model_ui_active", None)
+                    model_ui_qr_path = content.get("model_ui_qr_path", None)
                     help_ui = content.get("help_ui", None)
                     help_ui_body = content.get("help_ui_body", None)
                     help_ui_page = content.get("help_ui_page", None)
@@ -852,6 +865,7 @@ def handle_client(client_socket, addr, whisplay):
                             (model_ui is not None) or (model_ui_title is not None) or (model_ui_label is not None) or \
                             (model_ui_description is not None) or (model_ui_percent is not None) or \
                             (model_ui_index is not None) or (model_ui_total is not None) or (model_ui_active is not None) or \
+                            (model_ui_qr_path is not None) or \
                             (help_ui is not None) or (help_ui_body is not None) or \
                             (help_ui_page is not None) or (help_ui_total is not None) or (top_bar_mode is not None):
                         update_display_data(status=status, emoji=emoji,
@@ -876,6 +890,7 @@ def handle_client(client_socket, addr, whisplay):
                                                  model_ui_index=model_ui_index,
                                                  model_ui_total=model_ui_total,
                                                  model_ui_active=model_ui_active,
+                                                 model_ui_qr_path=model_ui_qr_path,
                                                  help_ui=help_ui,
                                                  help_ui_body=help_ui_body,
                                                  help_ui_page=help_ui_page,

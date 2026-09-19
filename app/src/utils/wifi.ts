@@ -101,6 +101,81 @@ export async function scanWifiNetworks(): Promise<WifiNetwork[]> {
   }
 }
 
+export type WifiScanDetail = {
+  ssid: string;
+  bssid: string;
+  channel: number;
+  freqMhz: number;
+  signalPercent: number;
+  signalDbm: number;
+  distanceMeters: number;
+  security: string;
+  active: boolean;
+};
+
+// nmcli only reports a 0-100 "quality" percentage, normalized from the raw
+// RSSI. This undoes that using the same linear mapping NetworkManager uses
+// internally (0% = -100dBm, 100% = -50dBm, see src/linux/wifi-utils-nl80211.c
+// upstream) — an approximation of the original dBm, not a second real
+// measurement.
+function percentToDbm(percent: number): number {
+  return Math.round(percent / 2 - 100);
+}
+
+// Log-distance path loss model — the standard RSSI-to-distance estimate
+// used by BLE/WiFi proximity apps: distance = 10 ^ ((measuredPower - rssi) / (10 * n))
+// measuredPower is the expected RSSI at 1m (~-40dBm for a typical AP), n is
+// the path-loss exponent (2 = free space/no obstacles, higher indoors with
+// walls in the way — 2.7 is a reasonable "average home" middle ground).
+// This is a rough order-of-magnitude estimate: real indoor RSSI is noisy
+// and non-monotonic with distance, not a precise measurement.
+const RSSI_AT_1M_DBM = -40;
+const PATH_LOSS_EXPONENT = 2.7;
+function estimateDistanceMeters(dbm: number): number {
+  const meters = Math.pow(10, (RSSI_AT_1M_DBM - dbm) / (10 * PATH_LOSS_EXPONENT));
+  return Math.round(meters * 10) / 10;
+}
+
+// Per-BSSID (not deduped by SSID like scanWifiNetworks) — the "RF analysis"
+// panel wants to show every individual access point in range, including
+// multiple APs broadcasting the same SSID (mesh systems, dual-band
+// routers), each with its own real signal reading.
+export async function scanWifiNetworksDetailed(): Promise<WifiScanDetail[]> {
+  try {
+    await runNmcli(["dev", "wifi", "rescan"]).catch(() => {});
+    const output = await runNmcli([
+      "-t",
+      "-f",
+      "active,ssid,bssid,chan,freq,signal,security",
+      "dev",
+      "wifi",
+      "list",
+    ]);
+    const results: WifiScanDetail[] = [];
+    for (const line of output.split("\n")) {
+      const [active, ssid, bssid, chanRaw, freqRaw, signalRaw, security] = splitTerseLine(line);
+      if (!bssid) continue;
+      const signalPercent = parseInt(signalRaw, 10) || 0;
+      const signalDbm = percentToDbm(signalPercent);
+      results.push({
+        ssid: ssid || "(oculta)",
+        bssid,
+        channel: parseInt(chanRaw, 10) || 0,
+        freqMhz: parseInt(freqRaw, 10) || 0,
+        signalPercent,
+        signalDbm,
+        distanceMeters: estimateDistanceMeters(signalDbm),
+        security: security && security !== "--" ? security : "abierta",
+        active: active === "yes",
+      });
+    }
+    return results.sort((a, b) => b.signalPercent - a.signalPercent);
+  } catch (err) {
+    console.warn("[wifi] scanWifiNetworksDetailed failed:", err);
+    return [];
+  }
+}
+
 export async function connectToWifi(
   ssid: string,
   password?: string,

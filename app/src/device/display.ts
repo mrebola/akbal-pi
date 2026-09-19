@@ -46,7 +46,7 @@ export interface Status {
   // position) while browsing or confirming an option, or loading one.
   // model_ui_title distinguishes which of the three is showing ("MODELO" /
   // "MODO" / "MENÚ") — see docs/display-ui.md.
-  model_ui: "" | "select" | "confirm" | "loading";
+  model_ui: "" | "select" | "confirm" | "loading" | "network";
   model_ui_title: string;
   model_ui_label: string;
   model_ui_description: string;
@@ -57,6 +57,10 @@ export interface Status {
   model_ui_index: number;
   model_ui_total: number;
   model_ui_active: boolean;
+  // Path to a QR PNG (network-info-mode.ts) — only meaningful when
+  // model_ui === "network"; chatbot-ui.py pastes it into the card in place
+  // of the ring/spinner the confirm/loading modes draw there.
+  model_ui_qr_path: string;
   // Voice-command cheat sheet overlay ("ayuda" — see chat-flow/help-mode.ts).
   // Same card look as model_ui, paging through short command pairs; exits
   // via hold/double-click like the other menus, not a dedicated screen.
@@ -102,6 +106,7 @@ export class WhisplayDisplay {
     model_ui_index: 0,
     model_ui_total: 0,
     model_ui_active: false,
+    model_ui_qr_path: "",
     help_ui: "",
     help_ui_body: "",
     help_ui_page: 0,
@@ -465,6 +470,7 @@ export class WhisplayDisplay {
       model_ui_index,
       model_ui_total,
       model_ui_active,
+      model_ui_qr_path,
       help_ui,
       help_ui_body,
       help_ui_page,
@@ -510,6 +516,7 @@ export class WhisplayDisplay {
     this.currentStatus.model_ui_index = model_ui_index;
     this.currentStatus.model_ui_total = model_ui_total;
     this.currentStatus.model_ui_active = model_ui_active;
+    this.currentStatus.model_ui_qr_path = model_ui_qr_path;
     this.currentStatus.help_ui = help_ui;
     this.currentStatus.help_ui_body = help_ui_body;
     this.currentStatus.help_ui_page = help_ui_page;

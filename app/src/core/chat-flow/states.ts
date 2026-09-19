@@ -88,6 +88,13 @@ import {
   handleWifiManagerRelease,
   onWifiManagerDone,
 } from "./wifi-manager-mode";
+import {
+  enterNetworkInfoMode,
+  handleNetworkInfoDoubleClick,
+  handleNetworkInfoPress,
+  handleNetworkInfoRelease,
+  onNetworkInfoExit,
+} from "./network-info-mode";
 import { isAgentMode, setDeviceMode } from "../../config/device-mode";
 import {
   DEFAULT_OLLAMA_MODEL,
@@ -213,6 +220,10 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       }
       if (key === "wifi") {
         ctx.transitionTo("wifi_manager");
+        return;
+      }
+      if (key === "network") {
+        ctx.transitionTo("network_info");
         return;
       }
       const captureImgPath = `${cameraDir}/capture-${moment().format(
@@ -1020,5 +1031,16 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     onButtonPressed(() => handleWifiManagerPress());
     onButtonReleased(() => handleWifiManagerRelease());
     void enterWifiManagerMode();
+  },
+  network_info: (ctx: ChatFlowContext) => {
+    onNetworkInfoExit(() => {
+      if (ctx.currentFlowName === "network_info") {
+        ctx.transitionTo("sleep");
+      }
+    });
+    onButtonDoubleClick(() => handleNetworkInfoDoubleClick());
+    onButtonPressed(() => handleNetworkInfoPress());
+    onButtonReleased(() => handleNetworkInfoRelease());
+    enterNetworkInfoMode();
   },
 };

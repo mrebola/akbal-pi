@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import http from "http";
+import crypto from "crypto";
 import { Readable } from "stream";
 import Koa from "koa";
 import Router from "@koa/router";
@@ -23,6 +24,7 @@ import {
   getWifiStatus,
   hasEmergencyWifiConfigured,
   scanWifiNetworks,
+  scanWifiNetworksDetailed,
 } from "../utils/wifi";
 import {
   ensureMounted,
@@ -33,6 +35,13 @@ import {
   listUsbWifiAdapters,
   resolveFilePath,
 } from "../utils/usb";
+
+const SESSION_COOKIE = "akbal_session";
+const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days — a LAN admin
+// page for a single household device, not worth re-logging-in constantly for.
+// Paths reachable with no session at all — just enough to render and submit
+// the login form itself.
+const PUBLIC_PATHS = new Set(["/login", "/login.html", "/api/login"]);
 
 // Small local admin UI, reachable from any device on the LAN — a chat page
 // for the local Ollama models (like a mini OpenWebUI) and a wifi settings
@@ -54,7 +63,12 @@ export class WebAdminServer {
     this.username = options.username;
     this.password = options.password;
     this.app = new Koa();
-    this.app.use(this.basicAuth());
+    // Signs the session cookie — generated fresh per process start, so a
+    // service restart (deploy, reboot) just means logging in again. Not
+    // persisted to disk on purpose: keeps this out of anything that could
+    // leak via a backup or a stray log line.
+    this.app.keys = [crypto.randomBytes(32).toString("hex")];
+    this.app.use(this.sessionAuth());
     this.app.use(bodyParser());
 
     const router = new Router();
@@ -66,23 +80,54 @@ export class WebAdminServer {
     this.app.use(serve(publicRoot));
   }
 
-  private basicAuth() {
-    const username = this.username;
-    const password = this.password;
+  private sessionAuth() {
     return async (ctx: Koa.Context, next: Koa.Next) => {
-      const header = ctx.headers.authorization || "";
-      const expected = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
-      if (header !== expected) {
-        ctx.status = 401;
-        ctx.set("WWW-Authenticate", 'Basic realm="Akbal"');
-        ctx.body = "Unauthorized";
+      if (PUBLIC_PATHS.has(ctx.path)) {
+        await next();
         return;
       }
-      await next();
+      if (ctx.cookies.get(SESSION_COOKIE, { signed: true }) === "ok") {
+        await next();
+        return;
+      }
+      if (ctx.path.startsWith("/api/")) {
+        ctx.status = 401;
+        ctx.body = { error: "No autenticado" };
+        return;
+      }
+      ctx.status = 302;
+      ctx.redirect("/login");
     };
   }
 
   private registerRoutes(router: Router): void {
+    router.get("/login", (ctx) => {
+      ctx.set("Cache-Control", "no-store");
+      ctx.type = "text/html";
+      ctx.body = fs.createReadStream(path.resolve(__dirname, "../..", "web", "admin", "login.html"));
+    });
+
+    router.post("/api/login", (ctx) => {
+      const { username: u, password: p } = (ctx.request.body as any) || {};
+      if (u === this.username && p === this.password) {
+        ctx.cookies.set(SESSION_COOKIE, "ok", {
+          signed: true,
+          httpOnly: true,
+          sameSite: "lax",
+          maxAge: SESSION_MAX_AGE_MS,
+        });
+        ctx.body = { ok: true };
+      } else {
+        ctx.status = 401;
+        ctx.body = { ok: false, error: "Usuario o contraseña incorrectos" };
+      }
+    });
+
+    router.post("/api/logout", (ctx) => {
+      ctx.cookies.set(SESSION_COOKIE, "", { maxAge: 0 });
+      ctx.body = { ok: true };
+    });
+
     router.get("/", (ctx) => {
       ctx.set("Cache-Control", "no-store");
       ctx.type = "text/html";
@@ -224,6 +269,10 @@ export class WebAdminServer {
 
     router.get("/api/wifi/status", async (ctx) => {
       ctx.body = await getWifiStatus();
+    });
+
+    router.get("/api/wifi/scan-detailed", async (ctx) => {
+      ctx.body = await scanWifiNetworksDetailed();
     });
 
     router.get("/api/wifi/scan", async (ctx) => {

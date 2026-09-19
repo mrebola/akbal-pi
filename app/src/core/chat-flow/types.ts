@@ -20,7 +20,8 @@ export type FlowName =
   | "help"
   | "quick_menu"
   | "volume_adjust"
-  | "wifi_manager";
+  | "wifi_manager"
+  | "network_info";
 
 export type FlowStateHandler = (ctx: ChatFlowContext) => void;
 

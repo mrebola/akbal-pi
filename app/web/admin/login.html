@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Akbal</title>
+  <style>
+    :root {
+      --bg: #0b0d0f;
+      --bg-raised: #10141a;
+      --border: #1d2f22;
+      --text-primary: #e8fff0;
+      --text-secondary: #6d8f79;
+      --accent: #50ff78;
+      --danger: #ff6b6b;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text-primary);
+      font-family: "Courier New", Courier, monospace;
+    }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      position: relative;
+      overflow: hidden;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background: repeating-linear-gradient(
+        0deg,
+        rgba(80, 255, 120, 0.03),
+        rgba(80, 255, 120, 0.03) 1px,
+        transparent 1px,
+        transparent 3px
+      );
+    }
+    .card {
+      position: relative;
+      width: 100%;
+      max-width: 340px;
+      background: var(--bg-raised);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 28px 26px 24px;
+      box-shadow: 0 0 24px rgba(80, 255, 120, 0.08), inset 0 0 40px rgba(80, 255, 120, 0.03);
+    }
+    .prompt {
+      font-size: 12px;
+      color: var(--text-secondary);
+      letter-spacing: 0.08em;
+    }
+    h1 {
+      margin: 6px 0 2px;
+      font-size: 26px;
+      letter-spacing: 0.16em;
+      color: var(--accent);
+      text-shadow: 0 0 10px rgba(80, 255, 120, 0.5);
+    }
+    .subtitle {
+      margin: 0 0 22px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    label {
+      display: block;
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin: 14px 0 4px;
+      letter-spacing: 0.05em;
+    }
+    input {
+      width: 100%;
+      background: #000;
+      border: 1px solid var(--border);
+      color: var(--accent);
+      font-family: inherit;
+      font-size: 14px;
+      padding: 10px 12px;
+      border-radius: 6px;
+      outline: none;
+    }
+    input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 8px rgba(80, 255, 120, 0.35);
+    }
+    button {
+      width: 100%;
+      margin-top: 20px;
+      background: var(--accent);
+      color: #06140b;
+      border: none;
+      border-radius: 6px;
+      padding: 11px 16px;
+      font-weight: 700;
+      font-family: inherit;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:disabled { opacity: 0.6; cursor: default; }
+    .error {
+      min-height: 1.2em;
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--danger);
+      text-align: center;
+    }
+    .cursor {
+      display: inline-block;
+      width: 8px;
+      height: 14px;
+      background: var(--accent);
+      margin-left: 4px;
+      vertical-align: -2px;
+      animation: blink 1s steps(1) infinite;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+  </style>
+</head>
+<body>
+  <form class="card" id="login-form" autocomplete="off">
+    <div class="prompt">root@akbal-pi:~$ ./acceso</div>
+    <h1>AKBAL<span class="cursor"></span></h1>
+    <p class="subtitle">Panel de control — acceso restringido</p>
+
+    <label for="username">usuario</label>
+    <input id="username" name="username" type="text" autocomplete="username" required autofocus />
+
+    <label for="password">contraseña</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required />
+
+    <button type="submit" id="submit-btn">Entrar</button>
+    <div class="error" id="error"></div>
+  </form>
+
+  <script>
+    const form = document.getElementById("login-form");
+    const errorEl = document.getElementById("error");
+    const submitBtn = document.getElementById("submit-btn");
+
+    const params = new URLSearchParams(window.location.search);
+    const nextPath = params.get("next") && params.get("next").startsWith("/") ? params.get("next") : "/";
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errorEl.textContent = "";
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Verificando...";
+      try {
+        const res = await fetch("/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: document.getElementById("username").value,
+            password: document.getElementById("password").value,
+          }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          window.location.href = nextPath;
+        } else {
+          errorEl.textContent = data.error || "Acceso denegado.";
+        }
+      } catch (err) {
+        errorEl.textContent = err.message;
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Entrar";
+      }
+    });
+  </script>
+</body>
+</html>

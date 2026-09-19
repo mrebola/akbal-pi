@@ -27,6 +27,7 @@
       <span id="battery-icon">🔋</span>
       <span id="battery-pct">—</span>
     </div>
+    <button id="logout-btn" class="secondary logout-btn" title="Cerrar sesión">Salir</button>
   </header>
 
   <main>
@@ -57,6 +58,34 @@
         <span class="muted">Redes guardadas</span>
       </div>
       <ul id="wifi-saved-list" class="wifi-list"></ul>
+
+      <div class="rf-panel">
+        <div class="rf-panel-header">
+          <span class="rf-panel-title">// ANÁLISIS DE ESPECTRO RF</span>
+          <span class="muted" id="rf-scan-status"></span>
+        </div>
+        <canvas id="rf-spectrum" class="rf-spectrum" width="640" height="170"></canvas>
+        <div class="rf-legend">
+          <span class="rf-legend-item"><span class="rf-dot rf-dot-strong"></span>estable</span>
+          <span class="rf-legend-item"><span class="rf-dot rf-dot-mid"></span>media</span>
+          <span class="rf-legend-item"><span class="rf-dot rf-dot-weak"></span>débil</span>
+        </div>
+        <div class="rf-table-wrap">
+          <table class="rf-table">
+            <thead>
+              <tr>
+                <th>SSID</th>
+                <th>BSSID</th>
+                <th>CH</th>
+                <th>dBm</th>
+                <th>~DIST</th>
+                <th>SEG</th>
+              </tr>
+            </thead>
+            <tbody id="rf-table-body"></tbody>
+          </table>
+        </div>
+      </div>
     </section>
 
     <section id="tab-usb" class="tab-panel">

@@ -16,6 +16,24 @@ const batteryPct = document.getElementById("battery-pct");
 const statCpu = document.getElementById("stat-cpu");
 const statRam = document.getElementById("stat-ram");
 const statDisk = document.getElementById("stat-disk");
+const logoutBtn = document.getElementById("logout-btn");
+
+logoutBtn.addEventListener("click", async () => {
+  await fetch("/api/logout", { method: "POST" }).catch(() => {});
+  window.location.href = "/login";
+});
+
+// The session cookie can expire (or the server can restart, which throws
+// away the in-memory signing key — see web-admin-server.ts) while this
+// page is still open; a 401 on any API call means "log in again", not a
+// transient error.
+async function apiFetch(input, init) {
+  const res = await fetch(input, init);
+  if (res.status === 401) {
+    window.location.href = "/login";
+  }
+  return res;
+}
 
 let history = [];
 let sending = false;
@@ -79,11 +97,10 @@ function addMessage(role, text) {
 
 async function loadStatus() {
   try {
-    const res = await fetch("/api/status");
+    const res = await apiFetch("/api/status");
     const data = await res.json();
-    const modeLabel = data.deviceMode === "agent" ? "agente" : "local";
     const wifiLabel = data.wifi?.connected ? data.wifi.ssid : "sin wifi";
-    statusPill.textContent = `${data.model} · modo ${modeLabel} · ${wifiLabel}`;
+    statusPill.textContent = `${data.model} · ${wifiLabel}`;
     updateBatteryIndicator(data.battery);
     updateSystemStats(data.system);
   } catch {
@@ -410,9 +427,142 @@ async function refreshWifi() {
   } catch (err) {
     wifiScanStatus.textContent = `Error buscando redes: ${err.message}`;
   }
+  void loadRfSpectrum();
 }
 
 wifiScanBtn.addEventListener("click", () => void refreshWifi());
+
+// ---- RF analysis panel ----
+// Per-BSSID signal breakdown (not deduped by SSID, unlike the list above —
+// see scanWifiNetworksDetailed) with an estimated dBm, distance, and a
+// channel/strength spectrum chart, so it's visible at a glance which
+// nearby APs would actually make a stable connection.
+
+function classifyRfStrength(signalPercent) {
+  if (signalPercent >= 60) return "strong";
+  if (signalPercent >= 30) return "mid";
+  return "weak";
+}
+
+function rfStrengthColor(cls) {
+  if (cls === "strong") return "#50ff78";
+  if (cls === "mid") return "#ffd166";
+  return "#ff6b6b";
+}
+
+function drawRfSpectrum(networks) {
+  const canvas = document.getElementById("rf-spectrum");
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, w, h);
+
+  if (networks.length === 0) {
+    ctx.fillStyle = "#3a5a46";
+    ctx.font = "12px monospace";
+    ctx.fillText("sin datos", 12, h / 2);
+    return;
+  }
+
+  const marginLeft = 34;
+  const marginBottom = 16;
+  const marginTop = 10;
+  const plotW = w - marginLeft - 10;
+  const plotH = h - marginBottom - marginTop;
+
+  // dBm gridlines, -30 (very close) down to -100 (barely there)
+  ctx.strokeStyle = "#12241a";
+  ctx.fillStyle = "#3a5a46";
+  ctx.font = "9px monospace";
+  for (let dbm = -30; dbm >= -100; dbm -= 10) {
+    const y = marginTop + plotH * (1 - (dbm + 100) / 70);
+    ctx.beginPath();
+    ctx.moveTo(marginLeft, y);
+    ctx.lineTo(w - 10, y);
+    ctx.stroke();
+    ctx.fillText(`${dbm}`, 2, y + 3);
+  }
+
+  const channels = [...new Set(networks.map((n) => n.channel))].sort((a, b) => a - b);
+  const slotW = plotW / channels.length;
+  const byChannel = new Map();
+  for (const n of networks) {
+    if (!byChannel.has(n.channel)) byChannel.set(n.channel, []);
+    byChannel.get(n.channel).push(n);
+  }
+
+  channels.forEach((ch, i) => {
+    const group = byChannel.get(ch);
+    const barW = Math.max(4, Math.min(16, slotW / group.length - 3));
+    const groupW = group.length * (barW + 3);
+    const slotX = marginLeft + i * slotW + (slotW - groupW) / 2;
+    group.forEach((n, j) => {
+      const normalized = Math.max(0, Math.min(1, (n.signalDbm + 100) / 70));
+      const barH = normalized * plotH;
+      const x = slotX + j * (barW + 3);
+      const y = marginTop + plotH - barH;
+      const color = rfStrengthColor(classifyRfStrength(n.signalPercent));
+      ctx.fillStyle = color;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 5;
+      ctx.fillRect(x, y, barW, barH);
+      ctx.shadowBlur = 0;
+    });
+    ctx.fillStyle = "#5a7a68";
+    ctx.font = "9px monospace";
+    ctx.fillText(`${ch}`, marginLeft + i * slotW + slotW / 2 - 6, h - 4);
+  });
+}
+
+function renderRfTable(networks) {
+  const tbody = document.getElementById("rf-table-body");
+  tbody.innerHTML = "";
+  if (networks.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 6;
+    td.className = "muted";
+    td.textContent = "Sin redes detectadas.";
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+  for (const n of networks) {
+    const cls = classifyRfStrength(n.signalPercent);
+    const tr = document.createElement("tr");
+    const cells = [
+      { text: `${n.ssid}${n.active ? " ●" : ""}`, className: "rf-ssid" },
+      { text: n.bssid, className: "rf-bssid" },
+      { text: String(n.channel) },
+      { text: String(n.signalDbm), className: `rf-${cls}` },
+      { text: `~${n.distanceMeters}m` },
+      { text: n.security },
+    ];
+    for (const cell of cells) {
+      const td = document.createElement("td");
+      if (cell.className) td.className = cell.className;
+      td.textContent = cell.text;
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+}
+
+async function loadRfSpectrum() {
+  const status = document.getElementById("rf-scan-status");
+  status.textContent = "Escaneando...";
+  try {
+    const res = await fetch("/api/wifi/scan-detailed");
+    const networks = await res.json();
+    drawRfSpectrum(networks);
+    renderRfTable(networks);
+    status.textContent = `${networks.length} punto(s) de acceso detectados`;
+  } catch (err) {
+    status.textContent = `Error: ${err.message}`;
+  }
+}
 
 // ---- USB ----
 

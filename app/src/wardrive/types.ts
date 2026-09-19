@@ -50,3 +50,19 @@ export type WardriveStatus = {
 export type WardriveEventPayload =
   | { type: "status"; status: WardriveStatus }
   | { type: "target-update"; bssid: string; status: WardriveTargetStatus; method: string; error: string };
+
+// Client-device view for the Deauth tab (wardrive/discovery.ts). One
+// entry per distinct client MAC the WIFIRADAR capture has seen talking.
+export type WardriveDeviceView = {
+  mac: string; // full MAC — this view is only ever served behind the session cookie
+  vendor: string;
+  rssi: number;
+  associatedBssid: string | null;
+  associatedSsid: string | null;
+  clientAuthorized: boolean; // this client's MAC is in the deauth allowlist
+  apAuthorized: boolean; // its associated AP is in the attack allowlist
+  deauthAuthorized: boolean; // deauth may target this client at all
+  deauthing: boolean; // deauth currently being sent to this client
+  frames: number;
+  lastSeen: number;
+};

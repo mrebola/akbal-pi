@@ -7,12 +7,13 @@ import { detectAr9271 } from "../wifiradar/ar9271";
 import { enterMonitorMode, exitMonitorMode } from "./monitor";
 import { setChannel } from "./rf";
 import { PmkidRunner, DeauthRunner } from "./attack";
-import { WardriveSession } from "./session";
+import { WardriveSession, SESSIONS_ROOT } from "./session";
 import { discoverTargets } from "./discovery";
 import {
   WardriveStatus,
   WardriveMode,
   WardriveTargetStatus,
+  WardriveDeviceView,
 } from "./types";
 import { registerShutdownHook } from "../device/display";
 import { unloadModel } from "../cloud-api/local/ollama-llm";
@@ -70,6 +71,13 @@ export class WardriveService extends EventEmitter {
   private pmkidRunner: PmkidRunner | null = null;
   private deauthRunner: DeauthRunner | null = null;
   private timers: ReturnType<typeof setTimeout>[] = [];
+  // Standalone deauth attacks (Deauth tab) — separate from the handshake
+  // attack loop's own DeauthRunner so a deauth test and a capture session
+  // don't share one runner object. Authorization is a dedicated MAC
+  // allowlist (deauthAllowlist); while a deauth is in flight its MAC is
+  // here so the UI can show "deauthing" and duplicate requests are ignored.
+  private deauthAllowlist = new Set<string>();
+  private deauthRunnerByMac = new Map<string, DeauthRunner>();
 
   getStatus(): WardriveStatus {
     const discovered =
@@ -153,6 +161,146 @@ export class WardriveService extends EventEmitter {
   clearAllowlist(): void {
     this.allowlist.clear();
     this.broadcastStatus();
+  }
+
+  // ─── Deauth tab (client-targeted, own allowlist) ────────────────────────
+
+  // Devices in the air, annotated with deauth authorization. Served even
+  // with wardriving inactive (read-only view of the live WIFIRADAR
+  // capture) — only the *attack* is mode-gated.
+  listDevices(): WardriveDeviceView[] {
+    const snapshot = getWifiRadarSnapshot(true);
+    const ssidByBssid = new Map(
+      snapshot.accessPoints.map((ap) => [ap.bssidFull.toUpperCase(), ap.ssid]),
+    );
+    return snapshot.devices
+      .map((d) => {
+        const mac = d.macFull.toUpperCase();
+        const apBssid = d.associatedBssid ? d.associatedBssid.toUpperCase() : null;
+        const apAuthorized = apBssid ? this.allowlist.has(apBssid) : false;
+        const clientAuthorized = this.deauthAllowlist.has(mac);
+        return {
+          mac,
+          vendor: d.vendor,
+          rssi: d.rssi,
+          associatedBssid: apBssid,
+          associatedSsid: apBssid ? ssidByBssid.get(apBssid) || null : null,
+          clientAuthorized,
+          apAuthorized,
+          // Deauth policy: the client's own MAC must be explicitly
+          // authorized in the deauth allowlist (one click per device — no
+          // "deauth everyone" path). The associated AP being in the
+          // attack allowlist is displayed as context, not required.
+          deauthAuthorized: clientAuthorized,
+          deauthing: this.deauthRunnerByMac.has(mac),
+          frames: d.frames,
+          lastSeen: d.lastSeen,
+        };
+      })
+      .sort((a, b) => b.rssi - a.rssi);
+  }
+
+  // Client MACs are user-supplied strings — same strict regex as BSSIDs.
+  private static cleanMac(raw: string): string {
+    const mac = String(raw || "").trim().toUpperCase();
+    return /^([0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(mac) ? mac : "";
+  }
+
+  authorizeDeauth(rawMac: string): boolean {
+    const mac = WardriveService.cleanMac(rawMac);
+    if (!mac) return false;
+    this.deauthAllowlist.add(mac);
+    this.broadcastStatus();
+    return true;
+  }
+
+  deauthorizeDeauth(rawMac: string): boolean {
+    const mac = WardriveService.cleanMac(rawMac);
+    if (!mac) return false;
+    this.stopDeauth(mac);
+    const removed = this.deauthAllowlist.delete(mac);
+    if (removed) this.broadcastStatus();
+    return removed;
+  }
+
+  // Sends DEAUTH_BURST directed deauths to ONE client and keeps the radio
+  // on its associated AP's channel for a few seconds so the device actually
+  // drops. Refuses: non-allowlisted clients, and clients whose associated AP
+  // is itself an active handshake target (two writers on one channel).
+  async deauthDevice(rawMac: string, seconds = 10): Promise<{ ok: boolean; error?: string }> {
+    const mac = WardriveService.cleanMac(rawMac);
+    if (!mac) return { ok: false, error: "MAC inválida" };
+    if (!this.deauthAllowlist.has(mac)) {
+      return { ok: false, error: "Cliente no autorizado — autorizalo primero (botón Autorizar)" };
+    }
+    if (this.mode !== "ready" && this.mode !== "scanning") {
+      return {
+        ok: false,
+        error: this.mode === "attacking" ? "Hay una captura en curso — cancelala primero" : "Activá el modo wardriving para usar deauth",
+      };
+    }
+    const snapshot = getWifiRadarSnapshot(true);
+    const device = snapshot.devices.find((d) => d.macFull.toUpperCase() === mac);
+    if (!device) return { ok: false, error: "El dispositivo no está visible en el aire ahora" };
+    const apBssid = device.associatedBssid ? device.associatedBssid.toUpperCase() : null;
+    if (!apBssid) {
+      return { ok: false, error: "El dispositivo no está asociado a ninguna red — deauth no aplica" };
+    }
+    if (this.currentBssid === apBssid) {
+      return { ok: false, error: "Ese AP está siendo atacado por la sesión de captura ahora mismo" };
+    }
+    const ap = snapshot.accessPoints.find((a) => a.bssidFull.toUpperCase() === apBssid);
+    if (!ap) return { ok: false, error: "No se ve el AP del dispositivo" };
+
+    this.mode = "attacking";
+    this.currentBssid = apBssid;
+    this.broadcastStatus();
+    try {
+      await setChannel(this.iface!, ap.channel);
+    } catch (err: any) {
+      this.mode = "ready";
+      this.currentBssid = null;
+      this.broadcastStatus();
+      return { ok: false, error: `setChannel: ${err?.message || err}` };
+    }
+
+    const runner = new DeauthRunner(this.iface!, apBssid, mac, DEAUTH_BURST * 2, ap.channel);
+    this.deauthRunnerByMac.set(mac, runner);
+    runner.on("log", (line: string) => {
+      console.log(`[wardrive] deauth ${mac}: ${line}`);
+    });
+    const exited = new Promise<void>((resolve) => runner.on("exit", () => resolve()));
+    runner.start();
+    // Bursts repeat while `seconds` elapses so the device stays offline for
+    // the requested window, then everything stops.
+    const deadline = Date.now() + Math.max(2, Math.min(60, seconds)) * 1000;
+    while (Date.now() < deadline) {
+      await Promise.race([exited, sleep(700)]);
+      if (Date.now() >= deadline) break;
+      // Re-arm one burst per loop until the window closes (the runner
+      // exits after its own count; a fresh burst keeps pressure on).
+      if (!this.deauthRunnerByMac.has(mac)) break;
+    }
+    runner.stop();
+    this.deauthRunnerByMac.delete(mac);
+    if (this.mode === "attacking") this.mode = "ready";
+    this.currentBssid = null;
+    this.broadcastStatus();
+    return { ok: true };
+  }
+
+  stopDeauth(rawMac: string): { ok: boolean } {
+    const mac = WardriveService.cleanMac(rawMac);
+    const runner = this.deauthRunnerByMac.get(mac);
+    if (runner) {
+      runner.stop();
+      this.deauthRunnerByMac.delete(mac);
+    }
+    if (this.deauthRunnerByMac.size === 0 && this.mode === "attacking" && !this.currentBssid) {
+      this.mode = "ready";
+    }
+    this.broadcastStatus();
+    return { ok: true };
   }
 
   // ─── Enter / exit wardriving mode ──────────────────────────────────────
@@ -496,6 +644,10 @@ export class WardriveService extends EventEmitter {
     this.pmkidRunner = null;
     this.deauthRunner?.stop();
     this.deauthRunner = null;
+    for (const [, runner] of this.deauthRunnerByMac) {
+      runner.stop();
+    }
+    this.deauthRunnerByMac.clear();
   }
 
   private clearTimers(): void {
@@ -505,6 +657,30 @@ export class WardriveService extends EventEmitter {
 
   private broadcastStatus(): void {
     this.emit("status", { type: "status" as const, status: this.getStatus() });
+  }
+
+  // File-browser path resolution: every filesystem access from the web UI
+  // goes through here. Returns an absolute path only if the requested
+  // relative path stays inside the sessions root — no "..", no symlink
+  // escapes (both roots are realpath'd). null = refuse.
+  resolveSessionPath(relativePath: string): string | null {
+    const sessionsRoot = SESSIONS_ROOT;
+    if (!fs.existsSync(sessionsRoot)) {
+      try {
+        fs.mkdirSync(sessionsRoot, { recursive: true });
+      } catch {
+        return null;
+      }
+    }
+    const rootReal = fs.realpathSync(sessionsRoot);
+    const cleaned = String(relativePath || "").replace(/^\/+/, "");
+    if (cleaned.includes("\0")) return null;
+    const candidate = path.resolve(rootReal, cleaned);
+    const candidateReal = fs.existsSync(candidate) ? fs.realpathSync(candidate) : candidate;
+    if (candidateReal !== rootReal && !candidateReal.startsWith(rootReal + path.sep)) {
+      return null;
+    }
+    return candidate;
   }
 
   registerShutdown(): void {

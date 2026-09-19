@@ -459,6 +459,139 @@ export class WebAdminServer {
       ctx.body = wardrive.cancelAttacks();
     });
 
+    // ── WARDRIVE deauth tab ──
+    // Client-directed deauth with its own authorization list. listDevices
+    // is a read-only view (works even with wardriving off); any attack
+    // route requires wardrive mode + per-device authorization.
+    router.get("/api/wardrive/devices", (ctx) => {
+      ctx.body = wardrive.listDevices();
+    });
+
+    router.post("/api/wardrive/deauth/authorize", (ctx) => {
+      const { mac } = (ctx.request.body as any) || {};
+      const ok = wardrive.authorizeDeauth(String(mac || ""));
+      if (!ok) {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "mac inválida" };
+        return;
+      }
+      ctx.body = { ok: true };
+    });
+
+    router.post("/api/wardrive/deauth/deauthorize", (ctx) => {
+      const { mac } = (ctx.request.body as any) || {};
+      const ok = wardrive.deauthorizeDeauth(String(mac || ""));
+      if (!ok) {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "mac inválida" };
+        return;
+      }
+      ctx.body = { ok: true };
+    });
+
+    router.post("/api/wardrive/deauth/attack", async (ctx) => {
+      const { mac, seconds } = (ctx.request.body as any) || {};
+      ctx.body = await wardrive.deauthDevice(String(mac || ""), Number(seconds) || 10);
+    });
+
+    router.post("/api/wardrive/deauth/stop", (ctx) => {
+      const { mac } = (ctx.request.body as any) || {};
+      ctx.body = wardrive.stopDeauth(String(mac || ""));
+    });
+
+    // ── WARDRIVE file browser ──
+    // Read/list/download/delete over ~/wardrive-sessions/ only. Path
+    // traversal is blocked by keeping every path relative to that root
+    // (realpath check); downloads stream a single file, never a directory.
+    router.get("/api/wardrive/files", (ctx) => {
+      const relativePath = String(ctx.query.path || "");
+      const resolved = wardrive.resolveSessionPath(relativePath);
+      if (!resolved) {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "Ruta inválida" };
+        return;
+      }
+      let entries;
+      try {
+        entries = fs.readdirSync(resolved, { withFileTypes: true });
+      } catch {
+        ctx.status = 404;
+        ctx.body = { ok: false, error: "No encontrado" };
+        return;
+      }
+      const items = entries
+        .filter((e) => e.isFile() || e.isDirectory())
+        .map((e) => {
+          const itemPath = path.join(resolved, e.name);
+          let size = 0;
+          try {
+            size = e.isDirectory() ? 0 : fs.statSync(itemPath).size;
+          } catch {
+            // vanished mid-listing — report 0, it'll be gone next refresh
+          }
+          return {
+            name: e.name,
+            type: e.isDirectory() ? "dir" : "file",
+            size,
+            path: path.posix.join(relativePath.replace(/\\/g, "/"), e.name),
+          };
+        })
+        .sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === "dir" ? -1 : 1));
+      ctx.body = { ok: true, path: relativePath, items };
+    });
+
+    router.get("/api/wardrive/files/download", (ctx) => {
+      const relativePath = String(ctx.query.path || "");
+      const resolved = wardrive.resolveSessionPath(relativePath);
+      if (!resolved) {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "Ruta inválida" };
+        return;
+      }
+      let stat;
+      try {
+        stat = fs.statSync(resolved);
+      } catch {
+        ctx.status = 404;
+        ctx.body = { ok: false, error: "Archivo no encontrado" };
+        return;
+      }
+      if (!stat.isFile()) {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "No es un archivo" };
+        return;
+      }
+      ctx.set("Content-Length", String(stat.size));
+      ctx.set("Content-Disposition", `attachment; filename="${path.basename(resolved)}"`);
+      ctx.type = "application/octet-stream";
+      ctx.body = fs.createReadStream(resolved);
+    });
+
+    router.post("/api/wardrive/files/delete", (ctx) => {
+      const { path: relativePath } = (ctx.request.body as any) || {};
+      const resolved = wardrive.resolveSessionPath(String(relativePath || ""));
+      if (!resolved) {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "Ruta inválida" };
+        return;
+      }
+      try {
+        const stat = fs.statSync(resolved);
+        if (stat.isDirectory()) {
+          // Sessions themselves (top-level dirs) and their subfolders —
+          // rm -rf, but only ever under the sessions root (resolveSessionPath
+          // already guarantees containment).
+          fs.rmSync(resolved, { recursive: true, force: true });
+        } else {
+          fs.unlinkSync(resolved);
+        }
+        ctx.body = { ok: true };
+      } catch (err: any) {
+        ctx.status = 500;
+        ctx.body = { ok: false, error: err?.message || String(err) };
+      }
+    });
+
     router.get("/api/usb/devices", async (ctx) => {
       ctx.body = await listUsbDevices();
     });

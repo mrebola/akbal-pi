@@ -1092,3 +1092,168 @@ for (const btn of document.querySelectorAll(".tab-btn")) {
 
 // Boot into a live state if the user lands directly on #wardrive.
 if (window.location.hash === "#wardrive") void wdRefresh();
+
+// ---- Wardriving sub-tabs (Objetivos / Deauth / Archivos) ----
+
+for (const sub of document.querySelectorAll(".wd-subtab")) {
+  sub.addEventListener("click", () => {
+    for (const s of document.querySelectorAll(".wd-subtab")) s.classList.remove("active");
+    for (const p of document.querySelectorAll(".wd-subpanel")) p.classList.add("hidden");
+    sub.classList.add("active");
+    document.getElementById(`wd-subtab-${sub.dataset.wdSubtab}`).classList.remove("hidden");
+    if (sub.dataset.wdSubtab === "deauth") void wdLoadDevices();
+    if (sub.dataset.wdSubtab === "files") void wdLoadFiles();
+  });
+}
+
+// ── Deauth sub-tab ──
+
+const wdDevicesScanBtn = document.getElementById("wd-devices-scan-btn");
+const wdDevicesStatus = document.getElementById("wd-devices-status");
+const wdDevicesBody = document.getElementById("wd-devices-body");
+
+let wdDevices = [];
+
+async function wdLoadDevices() {
+  const res = await fetch("/api/wardrive/devices");
+  if (res.ok) {
+    wdDevices = await res.json();
+    wdRenderDevices();
+  }
+}
+
+wdDevicesScanBtn.addEventListener("click", () => void wdLoadDevices());
+
+function wdRenderDevices() {
+  wdDevicesStatus.textContent = wdDevices.length ? `${wdDevices.length} dispositivo(s) vistos` : "";
+  wdDevicesBody.innerHTML = "";
+  if (wdDevices.length === 0) {
+    wdDevicesBody.innerHTML = '<tr><td colspan="6" class="muted">Sin dispositivos visibles (activá modo wardriving para ver el aire)</td></tr>';
+    return;
+  }
+  for (const d of wdDevices) {
+    const tr = document.createElement("tr");
+    const state = d.deauthing
+      ? '<span class="wd-status-badge wd-status-running">deauth</span>'
+      : d.deauthAuthorized
+        ? '<span class="wd-status-badge wd-status-captured">autorizado</span>'
+        : '<span class="wd-status-badge">—</span>';
+    const net = d.associatedSsid
+      ? `${escapeHtml(d.associatedSsid)}`
+      : d.associatedBssid
+        ? d.associatedBssid
+        : '<span class="muted">sin asociar</span>';
+    const actions = d.deauthing
+      ? `<button data-act="deauth-stop" data-mac="${d.mac}">Detener</button>`
+      : (d.deauthAuthorized && !d.deauthing
+          ? `<button data-act="deauth" data-mac="${d.mac}">Deauth</button>` +
+            `<button data-act="deauth-disallow" data-mac="${d.mac}" class="secondary">Quitar</button>`
+          : `<button data-act="deauth-allow" data-mac="${d.mac}">Autorizar</button>`);
+    tr.innerHTML =
+      `<td class="wd-bssid">${d.mac}</td>` +
+      `<td class="wd-ssid">${net}</td>` +
+      `<td class="${wdDbmClass(d.rssi)}">${d.rssi}</td>` +
+      `<td>${escapeHtml(d.vendor || "")}</td>` +
+      `<td>${state}</td>` +
+      `<td>${actions}</td>`;
+    wdDevicesBody.appendChild(tr);
+  }
+}
+
+wdDevicesBody.addEventListener("click", async (ev) => {
+  const btn = ev.target.closest("button[data-act]");
+  if (!btn) return;
+  const mac = btn.dataset.mac;
+  const act = btn.dataset.act;
+  wdError.textContent = "";
+  if (act === "deauth-allow") {
+    await wdApi("deauth/authorize", { mac });
+    void wdLoadDevices();
+  } else if (act === "deauth-disallow") {
+    await wdApi("deauth/deauthorize", { mac });
+    void wdLoadDevices();
+  } else if (act === "deauth") {
+    const res = await wdApi("deauth/attack", { mac, seconds: 10 });
+    if (res?.error) {
+      wdError.textContent = res.error;
+    }
+    void wdLoadDevices();
+  } else if (act === "deauth-stop") {
+    await wdApi("deauth/stop", { mac });
+    void wdLoadDevices();
+  }
+});
+
+// ── Files sub-tab ──
+
+const wdFilesUpBtn = document.getElementById("wd-files-up-btn");
+const wdFilesPath = document.getElementById("wd-files-path");
+const wdFilesRefreshBtn = document.getElementById("wd-files-refresh-btn");
+const wdFilesBody = document.getElementById("wd-files-body");
+
+let wdFilesCwd = "";
+
+function wdFormatSize(bytes) {
+  if (!bytes) return "—";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+async function wdLoadFiles() {
+  const res = await fetch(`/api/wardrive/files?path=${encodeURIComponent(wdFilesCwd)}`);
+  if (!res.ok) {
+    wdFilesBody.innerHTML = '<tr><td colspan="3" class="muted">No se pudo listar la carpeta</td></tr>';
+    return;
+  }
+  const data = await res.json();
+  wdFilesPath.textContent = "/" + (data.path || "");
+  wdFilesUpBtn.classList.toggle("hidden", !data.path);
+  wdFilesBody.innerHTML = "";
+  if (data.items.length === 0) {
+    wdFilesBody.innerHTML = '<tr><td colspan="3" class="muted">Carpeta vacía (creá una sesión primero)</td></tr>';
+    return;
+  }
+  for (const item of data.items) {
+    const tr = document.createElement("tr");
+    const nameCell = item.type === "dir"
+      ? `<a href="#" class="wd-ssid" data-open="${item.path}">${escapeHtml(item.name)}/</a>`
+      : `<span>${escapeHtml(item.name)}</span>`;
+    const actions = item.type === "dir"
+      ? `<button data-act="del" data-path="${item.path}" class="secondary">Borrar</button>`
+      : `<a href="/api/wardrive/files/download?path=${encodeURIComponent(item.path)}"><button>Descargar</button></a>` +
+        `<button data-act="del" data-path="${item.path}" class="secondary">Borrar</button>`;
+    tr.innerHTML =
+      `<td>${nameCell}</td>` +
+      `<td class="wd-bssid">${item.type === "dir" ? "carpeta" : wdFormatSize(item.size)}</td>` +
+      `<td>${actions}</td>`;
+    wdFilesBody.appendChild(tr);
+  }
+}
+
+wdFilesBody.addEventListener("click", async (ev) => {
+  const open = ev.target.closest("a[data-open]");
+  if (open) {
+    ev.preventDefault();
+    wdFilesCwd = open.dataset.open;
+    void wdLoadFiles();
+    return;
+  }
+  const btn = ev.target.closest("button[data-act]");
+  if (!btn) return;
+  if (btn.dataset.act === "del") {
+    if (!confirm(`¿Borrar ${btn.dataset.path}? (permanente)`)) return;
+    const res = await wdApi("files/delete", { path: btn.dataset.path });
+    if (res?.error) wdError.textContent = res.error;
+    void wdLoadFiles();
+  }
+});
+
+wdFilesUpBtn.addEventListener("click", () => {
+  const parts = wdFilesCwd.split("/").filter(Boolean);
+  parts.pop();
+  wdFilesCwd = parts.join("/");
+  void wdLoadFiles();
+});
+
+wdFilesRefreshBtn.addEventListener("click", () => void wdLoadFiles());

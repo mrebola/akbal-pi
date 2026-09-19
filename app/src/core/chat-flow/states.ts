@@ -59,30 +59,101 @@ import {
 } from "./mode-select-mode";
 import {
   enterHelpMode,
-  handleHelpClick,
   handleHelpDoubleClick,
+  handleHelpPress,
+  handleHelpRelease,
   onHelpExit,
 } from "./help-mode";
+import {
+  enterQuickMenuMode,
+  handleQuickMenuCancel,
+  handleQuickMenuPress,
+  handleQuickMenuRelease,
+  onQuickMenuCancel,
+  onQuickMenuConfirm,
+  onQuickMenuTimeout,
+} from "./quick-menu-mode";
 import { isAgentMode, setDeviceMode } from "../../config/device-mode";
 import {
   DEFAULT_OLLAMA_MODEL,
   getCurrentModel,
   listOllamaModels,
-  switchModelWithProgress,
+  switchModel,
 } from "../../cloud-api/local/ollama-llm";
 import { isMusicPlaying, getCurrentTrackTitle, stopMusicPlayback, startPendingMusicPlayback, onMusicTrackChange, onMusicPlaybackEnd } from "../../device/music-player";
 import { autoSaveExchange, prepareMemoryPrompt } from "../../config/local-memory";
 
+// Shared "is this a click or a hold" threshold — used both for the sleep ->
+// quick-menu/push-to-talk split below and for the speaking-state controls
+// (registerSpeakingButtonControls), so the whole device has one consistent
+// press/hold feel instead of a different number per screen.
+const CLICK_MAX_MS = 400;
+
+// "click → detener voz, mantener → interrumpir y hablar" while Akbal is
+// thinking or speaking — shared by the local flow (runLocalAnswer, in
+// "answer") and the external one ("external_answer"). A short click just
+// silences whatever's playing/being awaited and returns to idle; holding
+// past CLICK_MAX_MS interrupts and immediately starts push-to-talk (the
+// button is still down when we hand off to "listening", same as the hold
+// path out of "sleep").
+function registerSpeakingButtonControls(
+  ctx: ChatFlowContext,
+  stop: () => void,
+): void {
+  let pressTimer: ReturnType<typeof setTimeout> | null = null;
+  let interrupted = false;
+  onButtonDoubleClick(null);
+  onButtonPressed(() => {
+    interrupted = false;
+    pressTimer = setTimeout(() => {
+      pressTimer = null;
+      interrupted = true;
+      stop();
+      clearPendingCapturedImgForChat();
+      display({ image_icon_visible: false });
+      ctx.transitionTo("listening");
+    }, CLICK_MAX_MS);
+  });
+  onButtonReleased(() => {
+    if (pressTimer) {
+      clearTimeout(pressTimer);
+      pressTimer = null;
+    }
+    if (interrupted) return; // already handed off to "listening" above
+    stop();
+    clearPendingCapturedImgForChat();
+    display({ image_icon_visible: false });
+    ctx.transitionTo("sleep");
+  });
+}
+
 export const flowStates: Record<FlowName, FlowStateHandler> = {
   sleep: (ctx: ChatFlowContext) => {
-    onButtonPressed(() => {
-      resetCameraModeControl();
-      // Stop any playing music when waking up
-      stopMusicPlayback();
-      ctx.transitionTo("listening");
-    });
-    onButtonReleased(noop);
+    resetCameraModeControl();
     onCameraModeExit(null);
+    onButtonDoubleClick(null);
+    // "click corto → menú rápido, mantener → push-to-talk": don't know
+    // which one this press is until either it's released early (click) or
+    // CLICK_MAX_MS passes while still held (hold) — see docs/display-ui.md.
+    let heldPastThreshold = false;
+    let pushToTalkTimer: ReturnType<typeof setTimeout> | null = null;
+    onButtonPressed(() => {
+      stopMusicPlayback();
+      heldPastThreshold = false;
+      pushToTalkTimer = setTimeout(() => {
+        pushToTalkTimer = null;
+        heldPastThreshold = true;
+        ctx.transitionTo("listening");
+      }, CLICK_MAX_MS);
+    });
+    onButtonReleased(() => {
+      if (pushToTalkTimer) {
+        clearTimeout(pushToTalkTimer);
+        pushToTalkTimer = null;
+      }
+      if (heldPastThreshold) return; // already handed off to "listening" above
+      ctx.transitionTo("quick_menu");
+    });
     onTextInput((text: string) => {
       if (ctx.currentFlowName !== "sleep") return;
       ctx.answerId += 1;
@@ -90,33 +161,53 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       display({ status: "recognizing", text, text_input_enabled: false });
       ctx.transitionTo("answer");
     });
-    if (ctx.enableCamera) {
-      const captureImgPath = `${cameraDir}/capture-${moment().format(
-        "YYYYMMDD-HHmmss",
-      )}.jpg`;
-      onButtonDoubleClick(() => {
-        enterCameraMode(captureImgPath);
-        ctx.transitionTo("camera");
-      });
-    }
     display({
       status: "idle",
       emoji: "😴",
       RGB: "#000055",
       rag_icon_visible: false,
-      // Always clear the model-select/loading overlay here, since "sleep" is
-      // the common return point from every flow — including the idle timeout
-      // in "model_select", which has no other cleanup step.
+      // Always clear the menu-carousel/help overlay here, since "sleep" is
+      // the common return point from every flow — including the idle
+      // timeouts, which have no other cleanup step.
       model_ui: "",
       model_ui_percent: 0,
       help_ui: "",
+      top_bar_mode: isAgentMode() ? "agent" : "local",
       ...(getCurrentStatus().text.endsWith("Escuchando...") || !getCurrentStatus().text
-        ? {
-          text: `Mantén presionado el botón para hablar${ctx.enableCamera ? ",\ndoble clic para abrir la cámara" : ""
-            }.`,
-        }
+        ? { text: "Click: menú · Mantén: hablar" }
         : {}),
     });
+  },
+  quick_menu: (ctx: ChatFlowContext) => {
+    onQuickMenuConfirm((key) => {
+      if (key === "model") {
+        ctx.transitionTo("model_select");
+        return;
+      }
+      if (key === "mode") {
+        ctx.transitionTo("mode_select");
+        return;
+      }
+      if (key === "help") {
+        ctx.transitionTo("help");
+        return;
+      }
+      const captureImgPath = `${cameraDir}/capture-${moment().format(
+        "YYYYMMDD-HHmmss",
+      )}.jpg`;
+      enterCameraMode(captureImgPath);
+      ctx.transitionTo("camera");
+    });
+    onQuickMenuTimeout(() => {
+      if (ctx.currentFlowName === "quick_menu") ctx.transitionTo("sleep");
+    });
+    onQuickMenuCancel(() => {
+      if (ctx.currentFlowName === "quick_menu") ctx.transitionTo("sleep");
+    });
+    onButtonDoubleClick(() => handleQuickMenuCancel());
+    onButtonPressed(() => handleQuickMenuPress());
+    onButtonReleased(() => handleQuickMenuRelease());
+    enterQuickMenuMode(ctx.enableCamera);
   },
   camera: (ctx: ChatFlowContext) => {
     onButtonDoubleClick(null);
@@ -365,25 +456,27 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     ctx.musicDisplayText = "";
     ctx.resetToolCallDisplay();
     ctx.answerDisplayText = "";
-    display({
-      status: "answering...",
-      RGB: "#00c8a3",
-    });
+    // "Pensando" (local) and "Agente" (waiting on OpenClaw) look and sound
+    // the same as each other today — different caption + accent so it's
+    // clear at a glance which one's actually answering (see states.ts
+    // fallbackToLocal for when this can silently change mid-turn).
+    display(
+      isAgentMode()
+        ? { status: "agente...", emoji: "🌐", RGB: "#7a5cff", text: "Agente pensando..." }
+        : { status: "answering...", emoji: DEFAULT_EMOJI, RGB: "#00c8a3", text: "Pensando..." },
+    );
     const currentAnswerId = ctx.answerId;
 
     // Local model turn — used directly in "modo local", and as the fallback
     // when "modo agente" doesn't hear back from OpenClaw in time (see below).
     const runLocalAnswer = (): void => {
-      onButtonPressed(() => {
-        ctx.transitionTo("listening");
-      });
-      onButtonReleased(noop);
       const {
         partial,
         endPartial,
         getPlayEndPromise,
         stop: stopPlaying,
       } = ctx.streamResponser;
+      registerSpeakingButtonControls(ctx, stopPlaying);
       let llmResponseText = "";
       const isCurrentAnswer = (): boolean =>
         currentAnswerId === ctx.answerId && ctx.currentFlowName === "answer";
@@ -543,13 +636,6 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
           }
         }
       });
-      onButtonPressed(() => {
-        stopPlaying();
-        clearPendingCapturedImgForChat();
-        display({ image_icon_visible: false });
-        ctx.transitionTo("listening");
-      });
-      onButtonReleased(noop);
     };
 
     if (isAgentMode()) {
@@ -580,7 +666,7 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
         const ensureBestModel =
           getCurrentModel().toLowerCase() === DEFAULT_OLLAMA_MODEL.toLowerCase()
             ? Promise.resolve()
-            : switchModelWithProgress(DEFAULT_OLLAMA_MODEL, noop).catch((err) => {
+            : switchModel(DEFAULT_OLLAMA_MODEL).catch((err) => {
               console.error(
                 "[answer] Failed to switch to the default local model for fallback:",
                 err,
@@ -591,10 +677,7 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
           runLocalAnswer();
         });
       };
-      onButtonPressed(() => {
-        ctx.transitionTo("listening");
-      });
-      onButtonReleased(noop);
+      registerSpeakingButtonControls(ctx, () => ctx.streamResponser.stop());
       setTimeout(() => fallbackToLocal("OpenClaw did not reply in time"), timeoutMs);
       sendWhisplayIMMessage(prompt)
         .then((ok) => {
@@ -692,15 +775,13 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     ctx.answerDisplayText = "";
     display({
       status: "answering...",
-      RGB: "#00c8a3",
-      ...(ctx.pendingExternalEmoji ? { emoji: ctx.pendingExternalEmoji } : {}),
+      emoji: ctx.pendingExternalEmoji || "🌐",
+      RGB: "#7a5cff",
     });
-    onButtonPressed(() => {
+    registerSpeakingButtonControls(ctx, () => {
       ctx.streamResponser.stop();
       display({ image: "" });
-      ctx.transitionTo("listening");
     });
-    onButtonReleased(noop);
     const replyText = ctx.pendingExternalReply;
     const replyEmoji = ctx.pendingExternalEmoji;
     const replyImageUrl = ctx.pendingExternalImageUrl;
@@ -758,7 +839,7 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     onButtonDoubleClick(() => handleModelSelectCancel());
     onButtonPressed(() => handleModelSelectPress());
     onButtonReleased(() => handleModelSelectRelease());
-    enterModelSelectMode();
+    void enterModelSelectMode();
   },
   model_loading: (ctx: ChatFlowContext) => {
     onButtonDoubleClick(null);
@@ -773,7 +854,6 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       display({
         status: "idle",
         model_ui: "",
-        model_ui_percent: 0,
         text,
       });
       setTimeout(() => {
@@ -786,13 +866,13 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     display({
       status: "model_loading",
       model_ui: "loading",
+      model_ui_title: "MODELO",
       model_ui_label: label,
-      model_ui_percent: 0,
-      // A single line, no "\n" — the bottom-text renderer (see
-      // chatbot-ui.py render_bottom_text) wraps by character width only and
-      // doesn't understand embedded newlines, so a literal "\n" here breaks
-      // its line-height math instead of producing a clean second line.
-      text: `Cargando modelo: ${label}`,
+      model_ui_description: "",
+      // No percent — Ollama has no real progress API for loading an
+      // already-downloaded model into memory, so the screen shows an
+      // indeterminate spinner instead (see chatbot-ui.py render_model_ui_screen).
+      text: "Preparando modelo...",
     });
 
     listOllamaModels()
@@ -803,10 +883,7 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
           finish(`Ese modelo ya no está instalado.`);
           return;
         }
-        switchModelWithProgress(tag, (percent) => {
-          if (ctx.currentFlowName !== "model_loading") return;
-          display({ model_ui_percent: percent });
-        })
+        switchModel(tag)
           .then(() => {
             if (ctx.currentFlowName !== "model_loading") return;
             finish(`Modelo "${label}" listo para contestar.`);
@@ -845,15 +922,15 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     onButtonReleased(noop);
     const target = ctx.pendingDeviceModeSwitch || "local";
     ctx.pendingDeviceModeSwitch = "";
-    const label =
-      target === "agent" ? "Modo agente (OpenClaw)" : "Modo local (modelos locales)";
+    const label = target === "agent" ? "Modo agente" : "Modo local";
 
     display({
       status: "mode_loading",
       model_ui: "loading",
+      model_ui_title: "MODO",
       model_ui_label: label,
-      model_ui_percent: 50,
-      text: `Cambiando a: ${label}`,
+      model_ui_description: "",
+      text: "Preparando...",
     });
 
     // No real warm-up step here (unlike an Ollama model load) — starting the
@@ -868,7 +945,7 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     display({
       status: "idle",
       model_ui: "",
-      model_ui_percent: 0,
+      top_bar_mode: target,
       text: `${label} activado.`,
     });
     setTimeout(() => {
@@ -884,8 +961,8 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       }
     });
     onButtonDoubleClick(() => handleHelpDoubleClick());
-    onButtonPressed(noop);
-    onButtonReleased(() => handleHelpClick());
+    onButtonPressed(() => handleHelpPress());
+    onButtonReleased(() => handleHelpRelease());
     enterHelpMode();
   },
 };

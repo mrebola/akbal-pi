@@ -1,5 +1,29 @@
 # Comandos de voz (volumen, modelo, modo y ayuda)
 
+## El botón único: un solo gesto por pantalla
+
+Todo el dispositivo usa la misma gramática de botón, sin importar en qué
+pantalla estés — nunca triple clic, nunca combinaciones raras:
+
+| Dónde | Click corto | Mantener (~0.4-0.9s) | Doble clic |
+|---|---|---|---|
+| **Reposo** | Abre el [menú rápido](#menú-rápido) | Push-to-talk (empieza a grabar) | — |
+| **Menús** (modelo, modo, menú rápido, ayuda) | Pasa a la siguiente opción/página | Confirma lo resaltado (~0.9s) | Cancela, vuelve a reposo |
+| **Akbal pensando/hablando** | Corta la voz, vuelve a reposo | Interrumpe y empieza a hablar (push-to-talk) | — |
+
+En reposo, si soltás el botón antes de ~0.4s es un click (menú rápido); si lo
+mantenés más de eso ya cuenta como "mantener" y arranca a grabar — no hace
+falta esperar a soltar. Mismo mecanismo, invertido, para pasar de página a
+confirmar en los menús.
+
+## Menú rápido
+
+Click corto en reposo abre un carrusel con **Modelo → Modo → Ayuda → Cámara**
+(cámara solo si `ENABLE_CAMERA=true`). Click pasa entre opciones, mantener
+~0.9s confirma la resaltada y entra a esa pantalla — mismo mecanismo que el
+selector de modelo/modo de abajo. Reemplaza al doble clic que antes abría la
+cámara directo desde reposo; ahora todo pasa por acá.
+
 ## Lista rápida
 
 Todo lo que se puede pedir por voz, de un vistazo (detalle y más ejemplos en
@@ -87,17 +111,21 @@ para elegir a propósito.
 
 ### Menú visual (botón del Whisplay HAT)
 
-Con la pantalla en modo selección (fondo negro, texto verde estilo terminal):
+La tarjeta muestra el nombre corto del modelo, una descripción de una línea,
+una pastilla **"● Activo"** si es el que está corriendo, y la posición
+("2 de 4") — solo modelos que `ollama list` confirma instalados en ese
+momento (ver más abajo).
 
-- **Click corto**: pasa al siguiente modelo del carrusel (se ve el nombre,
-  `[ACTIVO]` si es el que está corriendo, y puntitos de paginación `●○○○○○`).
-- **Mantener presionado**: aparece una barra de progreso llenándose. Si
-  soltás antes de 3 segundos, se cancela y te quedás viendo el mismo modelo
-  — nada cambia.
-- **Mantener 3 segundos**: confirma. La pantalla pasa a "CARGANDO MODELO" con
-  una barra y el porcentaje de carga, y el nombre del modelo abajo. Cuando
-  termina, vuelve el personaje animado con el texto `Modelo "..." listo para
-  contestar.` y el flujo normal sigue (botón para hablar).
+- **Click corto**: pasa al siguiente modelo del carrusel.
+- **Mantener presionado**: aparece un anillo de progreso real llenándose. Si
+  soltás antes de ~0.9 segundos, se cancela y te quedás viendo el mismo
+  modelo — nada cambia.
+- **Mantener ~0.9 segundos**: confirma. La pantalla pasa a "Preparando
+  modelo..." con un spinner indeterminado (Ollama no expone un % real para
+  cargar un modelo ya descargado a memoria, así que no se inventa uno) y el
+  nombre del modelo abajo. Cuando termina, vuelve el personaje animado con
+  el texto `Modelo "..." listo para contestar.` y el flujo normal sigue
+  (botón para hablar).
 - **Doble clic**: cancela y vuelve directo al reposo sin cambiar nada — la
   forma explícita de salir del menú.
 - Si no se toca el botón por 20 segundos, el menú también se cierra solo y
@@ -107,10 +135,15 @@ El cambio de modelo (por voz directo o por el menú):
 - Actualiza el modelo en memoria del proceso ya corriendo (no hace falta
   reiniciar `chatbot.service`).
 - Se guarda en `OLLAMA_MODEL` dentro de `.env`, así sobrevive a un reinicio.
-- Dispara un nuevo "keep-alive" para precargar el modelo elegido en Ollama;
-  la pantalla de carga simula el progreso (Ollama no expone un % real para
-  cargar un modelo ya descargado a memoria, solo para descargas) pero nunca
-  llega a 100% hasta que Ollama confirma que el modelo respondió.
+- Dispara un nuevo "keep-alive" para precargar el modelo elegido en Ollama.
+
+**Solo modelos instalados:** al abrir el menú, `model-select-mode.ts` le
+pregunta a Ollama (`ollama list`, vía `listOllamaModels()`) cuáles de
+`MODEL_ALIASES` están realmente instalados y solo esos entran al carrusel —
+si borraste un modelo con `ollama rm`, ya no aparece como opción (antes
+había que acordarse de sacarlo de `MODEL_ALIASES` a mano). Si Ollama no
+responde, se usa la lista completa como respaldo en vez de dejar el menú
+vacío.
 
 ## Cambiar de modo (agente / local)
 
@@ -130,16 +163,19 @@ activo.
 
 **A diferencia del modelo, no hay atajo de voz directo** — decir "modo
 agente" nunca cambia el modo por sí solo, siempre pasa por el mismo menú
-visual de abajo con el mantené-presionado-3-segundos. Cambiar a modo agente
+visual de abajo con el mantené-presionado-para-confirmar. Cambiar a modo agente
 significa que todo lo que se dice sale del dispositivo hacia un proceso
 externo; vale la confirmación explícita con el botón.
 
 ### Menú visual
 
-Mismo mecanismo que el selector de modelo (ver arriba): click corto pasa
-entre "Modo agente (OpenClaw)" / "Modo local", mantener 3 segundos confirma
-(con `[ACTIVO]` en el que está corriendo), doble clic cancela, 20 segundos
-sin tocar el botón cierra el menú solo.
+Mismo mecanismo y misma tarjeta que el selector de modelo (ver arriba):
+click corto pasa entre "Modo agente" / "Modo local" (cada uno con su
+descripción de una línea), mantener ~0.9 segundos confirma (con
+"● Activo" en el que está corriendo), doble clic cancela, 20 segundos sin
+tocar el botón cierra el menú solo. El título de la tarjeta dice "MODO" en
+vez de "MODELO" — es la principal seña visual de que estás en un menú
+distinto (ver [`display-ui.md`](./display-ui.md)).
 
 El cambio se guarda en `DEVICE_MODE` dentro de `.env`, así sobrevive a un
 reinicio — igual que el cambio de modelo se guarda en `OLLAMA_MODEL`.
@@ -147,23 +183,25 @@ reinicio — igual que el cambio de modelo se guarda en `OLLAMA_MODEL`.
 ## Pantalla de ayuda
 
 Decir **"ayuda"** (manteniendo presionado el botón, como cualquier otro
-comando de voz) abre una pantalla estilo terminal con un resumen de todos
-los comandos de esta página, para consultarla sin tener que acordarse de la
-frase exacta.
+comando de voz) o elegir "Ayuda" en el [menú rápido](#menú-rápido) abre un
+resumen de comandos de a lo sumo **2 pantallas** — etiqueta + frase por
+comando, en dos tonos (etiqueta clara, frase apagada).
 
-- **Click corto**: pasa a la siguiente página de comandos.
-- **Al llegar a la última página**, el botón cambia de función: se muestra
-  un recuadro **"SALIR"** seleccionado, y un click corto ahí vuelve a la
-  pantalla normal de Akbal (sin mantener presionado, a diferencia del menú
-  de modelo/modo).
-- **Doble clic**: sale directo en cualquier momento, sin tener que llegar al
-  final.
+- **Click corto**: pasa a la otra página (son solo 2, así que alterna entre
+  ambas).
+- **Mantener ~0.9 segundos**: sale y vuelve a la pantalla normal de Akbal —
+  no hay una pantalla "SALIR" separada, mantener el botón *es* la salida,
+  igual que confirmar en cualquier otro menú.
+- **Doble clic**: sale directo en cualquier momento.
 - Si no se toca el botón por 20 segundos, la ayuda se cierra sola (mismo
   mecanismo que el resto de los menús).
 
 El contenido se define en el array `HELP_ENTRIES` de
-`app/src/core/chat-flow/help-mode.ts` — para agregar o cambiar una línea,
-editarlo ahí, recompilar (`npm run build`) y reiniciar `chatbot.service`.
+`app/src/core/chat-flow/help-mode.ts` — a lo sumo `ENTRIES_PER_PAGE * 2`
+entradas (hoy 3×2=6) para no pasarse de las 2 pantallas; para agregar o
+cambiar una línea, editarlo ahí (hay una nota sobre cuánto puede medir cada
+línea sin desbordar la pantalla), recompilar (`npm run build`) y reiniciar
+`chatbot.service`.
 
 ## Si se agrega o se borra un modelo con `ollama pull` / `ollama rm`
 

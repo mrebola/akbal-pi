@@ -1,28 +1,28 @@
 import { display } from "../../device/display";
 
-// Button-driven voice-command cheat sheet, entered when the user says
-// "ayuda" while holding the button (see voice-commands.ts / states.ts). A
-// single click pages through short command examples; once the last page is
-// shown, the button's meaning flips to "Salir" and a click there exits back
-// to the idle screen. Double click and the idle timeout are the same
-// escape-hatch pattern as model-select-mode.ts / mode-select-mode.ts, minus
-// the hold-to-confirm step — there's nothing to confirm here, just pages to
-// read and a way out.
+// Voice-command cheat sheet, entered when the user says "ayuda" while
+// holding the button, or picks "Ayuda" from the quick menu (see
+// voice-commands.ts / quick-menu-mode.ts / states.ts). Same grammar as
+// every other menu now: click pages through the (at most two) screens,
+// holding the button ~0.9s exits, and so does a double click — no dedicated
+// "SALIR" screen to click through first.
 const IDLE_TIMEOUT_MS = 20000;
-const ENTRIES_PER_PAGE = 2;
+const CONFIRM_HOLD_MS = 900;
+const HOLD_TICK_MS = 60;
+const ENTRIES_PER_PAGE = 3;
 
 // Each entry renders as two short lines (label, then the phrase to say) —
 // measured against the real device font (NotoSansSC-Bold.ttf) to fit the
-// 240px-wide video area at a readable size without wrapping. Keep new
-// entries within roughly the same length as these, or they'll wrap and
-// crowd the small screen — see docs/voice-commands.md.
+// safe area at a readable size without wrapping. Capped at two pages
+// (ENTRIES_PER_PAGE * 2) on purpose — this is a reminder, not the full
+// reference (that's docs/voice-commands.md). Keep new entries within
+// roughly the same length as these, or they'll wrap and crowd the screen.
 const HELP_ENTRIES: [label: string, example: string][] = [
   ["Volumen", '"sube/baja el volumen"'],
   ["Volumen exacto", '"pon volumen en 40"'],
-  ["Menu de modelo", '"cambia modelo"'],
   ["Cambiar modelo", '"modelo 3"'],
   ["Que modelo uso", '"que modelo usas"'],
-  ["Modo agente/local", '"cambiar modo"'],
+  ["Cambiar modo", '"cambiar modo"'],
   ["Esta ayuda", '"ayuda"'],
 ];
 
@@ -36,9 +36,23 @@ function chunk<T>(items: T[], size: number): T[][] {
 
 const PAGES = chunk(HELP_ENTRIES, ENTRIES_PER_PAGE);
 
-let pageIndex = 0; // 0..PAGES.length-1 = content pages; PAGES.length = exit page
+let pageIndex = 0;
+let pressStartedAt = 0;
+let holdTicker: ReturnType<typeof setInterval> | null = null;
+let confirmTimer: ReturnType<typeof setTimeout> | null = null;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let onExitCallback: () => void = () => {};
+
+function clearHoldTimers(): void {
+  if (holdTicker) {
+    clearInterval(holdTicker);
+    holdTicker = null;
+  }
+  if (confirmTimer) {
+    clearTimeout(confirmTimer);
+    confirmTimer = null;
+  }
+}
 
 function clearIdleTimer(): void {
   if (idleTimer) {
@@ -52,31 +66,18 @@ function armIdleTimer(): void {
   idleTimer = setTimeout(() => onExitCallback(), IDLE_TIMEOUT_MS);
 }
 
-function isOnExitStep(): boolean {
-  return pageIndex >= PAGES.length;
-}
-
 // Flattened "label\nexample\nlabel\nexample..." — chatbot-ui.py renders even
-// lines (0, 2, 4...) as the bright label and odd lines as the dim example,
-// so the two stay visually paired without needing a richer payload shape.
+// lines (0, 2, 4...) as the primary label and odd lines as the secondary
+// example, so the two stay visually paired without needing a richer
+// payload shape.
 function renderScreen(): void {
-  if (isOnExitStep()) {
-    display({
-      help_ui: "exit",
-      help_ui_body: "",
-      help_ui_page: PAGES.length + 1,
-      help_ui_total: PAGES.length,
-      text: "Click: salir",
-    });
-    return;
-  }
   const body = PAGES[pageIndex].flatMap(([label, example]) => [label, example]).join("\n");
   display({
     help_ui: "view",
     help_ui_body: body,
     help_ui_page: pageIndex + 1,
     help_ui_total: PAGES.length,
-    text: "Click: siguiente",
+    text: "Click: siguiente · Mantén: salir",
   });
 }
 
@@ -85,24 +86,51 @@ export function onHelpExit(callback: () => void): void {
 }
 
 export function resetHelpControl(): void {
+  clearHoldTimers();
   clearIdleTimer();
+  pressStartedAt = 0;
 }
 
 export function enterHelpMode(): void {
+  resetHelpControl();
   pageIndex = 0;
   renderScreen();
   armIdleTimer();
 }
 
-// Plain click (no hold to distinguish) — advances a page, or on the last
-// page activates "Salir".
-export function handleHelpClick(): void {
+export function handleHelpPress(): void {
   clearIdleTimer();
-  if (isOnExitStep()) {
+  pressStartedAt = Date.now();
+  holdTicker = setInterval(() => {
+    const elapsed = Date.now() - pressStartedAt;
+    const percent = Math.min(100, Math.round((elapsed / CONFIRM_HOLD_MS) * 100));
+    display({
+      help_ui: "view",
+      model_ui: "confirm",
+      model_ui_title: "AYUDA",
+      model_ui_label: "Salir",
+      model_ui_description: "",
+      model_ui_percent: percent,
+      text: "Manteniendo presionado...",
+    });
+  }, HOLD_TICK_MS);
+  confirmTimer = setTimeout(() => {
+    clearHoldTimers();
     onExitCallback();
-    return;
-  }
-  pageIndex += 1;
+  }, CONFIRM_HOLD_MS);
+}
+
+export function handleHelpRelease(): void {
+  // Unlike model/mode-select, there's no "in-between" dead zone here — with
+  // only two possible outcomes (advance or exit) and exit already owned by
+  // the confirmTimer, any release before that fires should advance, however
+  // long the press was. wasHolding is false only if release fires without a
+  // matching press (shouldn't happen, but cheap to guard).
+  const wasHolding = holdTicker !== null || confirmTimer !== null;
+  clearHoldTimers();
+  pressStartedAt = 0;
+  if (!wasHolding) return;
+  pageIndex = (pageIndex + 1) % PAGES.length;
   renderScreen();
   armIdleTimer();
 }

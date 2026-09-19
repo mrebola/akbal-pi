@@ -7,6 +7,7 @@ import sys
 import threading
 import signal
 import re
+import math
 
 from camera import CameraThread
 from utils import ColorUtils, ImageUtils, TextUtils
@@ -22,11 +23,10 @@ from wifi_icon import WifiStatusIcon
 IMG_DIR = os.path.join(os.path.dirname(__file__), "img")
 
 # ==================== Minimalist idle/talking video UI ====================
-# A thin top bar shows the wifi and battery icons. Below it, the screen shows
-# a looping GIF (character standing idle, or talking while the assistant is
-# answering), and the bottom is a fixed black band with up to two lines of
-# green terminal-style text for the current response. No header text, no
-# emoji.
+# A thin top bar shows the wifi/battery icons and a small LOCAL/AGENTE tag.
+# Below it, the screen shows a looping GIF (character standing idle, or
+# talking while the assistant is answering), and the bottom is a fixed black
+# band with up to two lines of text for the current response.
 TOP_BAR_HEIGHT = 20
 VIDEO_WIDTH = 240
 VIDEO_HEIGHT = 196
@@ -35,26 +35,25 @@ BOTTOM_TEXT_MAX_LINES = 2
 BOTTOM_TEXT_FONT_SIZE = 16
 BOTTOM_TEXT_MARGIN_X = 10
 TOP_BAR_MARGIN_X = 14
-# The right ~10% of the panel is hidden behind the case bezel, so the
-# wifi/battery icon cluster is shifted left by that much to stay fully visible.
-TOP_BAR_RIGHT_INSET_PCT = 0.10
+# The right ~10% of the panel is hidden behind the case bezel. This is the
+# one global safe-area value every screen's content (top bar, model/mode/
+# quick-menu cards, help) is inset by on the right, so nothing ever drifts
+# behind it — see docs/display-ui.md.
+SAFE_AREA_RIGHT_INSET_PCT = 0.10
+SAFE_AREA_RIGHT_INSET = int(VIDEO_WIDTH * SAFE_AREA_RIGHT_INSET_PCT)
 GIF_FPS = 10
-TERMINAL_FG = (80, 255, 120, 255)
-TERMINAL_DIM = (30, 90, 55, 255)
-# Near-white gray for the help screen's example line (chat-flow/help-mode.ts)
-# — the dark terminal green (TERMINAL_DIM) used for the model-select dots
-# was too hard to read there.
-HELP_EXAMPLE_FG = (225, 225, 225, 255)
-TOOL_PLACEHOLDER_RE = re.compile(r"\{tool:([A-Za-z0-9_-]+)\}")
 
-# Model select/switch overlay (see chat-flow/model-select-mode.ts). Replaces
-# the character GIF with a hacker-style screen while browsing models,
-# confirming a hold-to-select, or loading the chosen model.
-MODEL_UI_TITLES = {
-    "select": "ELEGIR MODELO",
-    "confirm": "CONFIRMANDO",
-    "loading": "CARGANDO MODELO",
-}
+# ---- Color palette --------------------------------------------------------
+# Dark background throughout; green is an *accent* (active state, the
+# confirm/select progress, the "agente" tag), never the default text color —
+# see docs/display-ui.md for the reasoning (this used to be all-green
+# terminal-style text, which read as a hacker screen rather than a voice
+# device).
+TEXT_PRIMARY = (235, 235, 235, 255)    # main content: names, labels, replies
+TEXT_SECONDARY = (150, 155, 160, 255)  # muted: eyebrow headers, hints, examples
+ACCENT_GREEN = (80, 255, 120, 255)     # active/selected/confirm accents only
+ACCENT_DIM = (35, 60, 45, 255)         # inactive position dots/ticks
+TOOL_PLACEHOLDER_RE = re.compile(r"\{tool:([A-Za-z0-9_-]+)\}")
 
 
 def apply_tool_placeholders(text):
@@ -114,7 +113,9 @@ current_music_progress = None
 current_music_duration_ms = None
 current_approval_mode = False
 current_model_ui = ""
+current_model_ui_title = ""
 current_model_ui_label = ""
+current_model_ui_description = ""
 current_model_ui_percent = 0
 current_model_ui_index = 0
 current_model_ui_total = 0
@@ -123,6 +124,7 @@ current_help_ui = ""
 current_help_ui_body = ""
 current_help_ui_page = 0
 current_help_ui_total = 0
+current_top_bar_mode = ""
 camera_mode = False
 camera_capture_image_path = ""
 camera_thread = None
@@ -157,17 +159,16 @@ class RenderThread(threading.Thread):
         self.top_bar_cache_key = None
         self.pending_auto_scroll_after_hold = False
         self.render_event = threading.Event()
-        self.model_ui_title_font = ImageFont.truetype(self.font_path, 13)
+        self.model_ui_title_font = ImageFont.truetype(self.font_path, 12)
         self.model_ui_label_font = ImageFont.truetype(self.font_path, 19)
-        self.model_ui_pct_font = ImageFont.truetype(self.font_path, 24)
         self.model_ui_hint_font = ImageFont.truetype(self.font_path, 13)
         self.model_ui_cache_key = None
-        self.help_ui_title_font = ImageFont.truetype(self.font_path, 13)
+        self.help_ui_title_font = ImageFont.truetype(self.font_path, 12)
         self.help_ui_label_font = ImageFont.truetype(self.font_path, 15)
         self.help_ui_example_font = ImageFont.truetype(self.font_path, 13)
         self.help_ui_hint_font = ImageFont.truetype(self.font_path, 12)
-        self.help_ui_exit_font = ImageFont.truetype(self.font_path, 20)
         self.help_ui_cache_key = None
+        self.top_bar_mode_font = ImageFont.truetype(self.font_path, 11)
 
     def render_init_screen(self):
         # Display logo on startup
@@ -229,136 +230,129 @@ class RenderThread(threading.Thread):
             return self.render_idle_screen(status, apply_tool_placeholders(text))
 
     def render_model_ui_screen(self, text):
-        """Hacker-style green-on-black screen shown instead of the character
-        GIF while browsing the model menu, holding to confirm, or loading the
-        chosen model (see chat-flow/model-select-mode.ts)."""
+        """Generic "card" screen shown instead of the character GIF for all
+        three button-driven carousels — model (model-select-mode.ts), mode
+        (mode-select-mode.ts) and the quick menu (quick-menu-mode.ts) — plus
+        the model/mode loading wait. model_ui_title is the only thing that
+        visually tells them apart ("MODELO" / "MODO" / "MENÚ"); everything
+        else (layout, colors, timing) is shared on purpose so the device has
+        one consistent menu feel instead of three bespoke ones.
+
+        "loading" is the one indeterminate case — Ollama has no real
+        progress API for loading an already-downloaded model into memory —
+        so it animates a spinner from wall-clock time instead of showing a
+        invented percentage."""
         self.render_top_bar()
 
         mode = current_model_ui
-        label = (current_model_ui_label or "").upper()
+        title = current_model_ui_title or "MENÚ"
+        label = current_model_ui_label or ""
+        description = current_model_ui_description or ""
         percent = max(0, min(100, current_model_ui_percent or 0))
         index = current_model_ui_index or 0
         total = max(current_model_ui_total or 0, 0)
+        content_width = VIDEO_WIDTH - SAFE_AREA_RIGHT_INSET - 14
+        center_x = (VIDEO_WIDTH - SAFE_AREA_RIGHT_INSET) // 2
 
-        cache_key = (mode, label, percent, index, total, current_model_ui_active)
+        # "loading" redraws every tick (spinner animation); everything else
+        # only redraws when its content actually changes.
+        spinner_frame = int(time.time() * 4) % 12 if mode == "loading" else 0
+        cache_key = (mode, title, label, description, percent, index, total, current_model_ui_active, spinner_frame)
         if cache_key != self.model_ui_cache_key:
             self.model_ui_cache_key = cache_key
             frame = Image.new("RGBA", (VIDEO_WIDTH, VIDEO_HEIGHT), (0, 0, 0, 255))
             draw = ImageDraw.Draw(frame)
 
-            title = MODEL_UI_TITLES.get(mode, "MODELO")
-            draw.text((14, 10), f">_ {title}", font=self.model_ui_title_font, fill=TERMINAL_FG)
+            draw.text((14, 8), title, font=self.model_ui_title_font, fill=TEXT_SECONDARY)
 
-            max_label_width = VIDEO_WIDTH - 28
-            label_lines = [
-                line for line in TextUtils.wrap_text(draw, label, self.model_ui_label_font, max_label_width)
+            name_lines = [
+                line for line in TextUtils.wrap_text(draw, label, self.model_ui_label_font, content_width)
                 if line
-            ][:2]
+            ][:2] or [""]
             ascent, descent = self.model_ui_label_font.getmetrics()
             line_height = ascent + descent
-            label_y = 44
-            for line in label_lines:
+            name_y = 40
+            for line in name_lines:
                 bbox = draw.textbbox((0, 0), line, font=self.model_ui_label_font)
                 line_w = bbox[2] - bbox[0]
-                draw.text(((VIDEO_WIDTH - line_w) // 2, label_y), line, font=self.model_ui_label_font, fill=TERMINAL_FG)
-                label_y += line_height
+                draw.text((center_x - line_w // 2, name_y), line, font=self.model_ui_label_font, fill=TEXT_PRIMARY)
+                name_y += line_height
+
+            if description:
+                self._draw_centered(draw, description, self.model_ui_hint_font, name_y + 4, center_x, TEXT_SECONDARY)
+                name_y += 20
 
             if mode == "select":
                 if current_model_ui_active:
-                    self._draw_centered(draw, "[ ACTIVO ]", self.model_ui_hint_font, label_y + 6)
-                total_dots = max(total, 1)
-                dot_r = 3
-                spacing = 16
-                start_x = VIDEO_WIDTH / 2 - (total_dots - 1) * spacing / 2
-                dot_y = VIDEO_HEIGHT - 44
-                for i in range(total_dots):
-                    x = start_x + i * spacing
-                    if i == index - 1:
-                        draw.ellipse((x - dot_r - 2, dot_y - dot_r - 2, x + dot_r + 2, dot_y + dot_r + 2), outline=TERMINAL_FG)
-                        draw.ellipse((x - dot_r, dot_y - dot_r, x + dot_r, dot_y + dot_r), fill=TERMINAL_FG)
-                    else:
-                        draw.ellipse((x - dot_r, dot_y - dot_r, x + dot_r, dot_y + dot_r), outline=TERMINAL_DIM)
-                self._draw_centered(draw, f"[{index}/{total_dots}]", self.model_ui_hint_font, VIDEO_HEIGHT - 26)
-            else:
-                # "confirm" (holding the button) and "loading" (real model
-                # load) both use the same bracket progress bar, just with a
-                # different title above.
-                pct_text = f"{int(percent)}%"
-                self._draw_centered(draw, pct_text, self.model_ui_pct_font, VIDEO_HEIGHT - 84)
-                bar_w, bar_h = VIDEO_WIDTH - 40, 16
-                bar_x, bar_y = 20, VIDEO_HEIGHT - 54
-                draw.rectangle((bar_x, bar_y, bar_x + bar_w, bar_y + bar_h), outline=TERMINAL_FG, width=2)
-                fill_w = int((bar_w - 4) * percent / 100)
-                if fill_w > 0:
-                    draw.rectangle((bar_x + 2, bar_y + 2, bar_x + 2 + fill_w, bar_y + bar_h - 2), fill=TERMINAL_FG)
+                    self._draw_centered(draw, "● Activo", self.model_ui_hint_font, name_y + 8, center_x, ACCENT_GREEN)
+                if total:
+                    self._draw_centered(draw, f"{index} de {total}", self.model_ui_hint_font, VIDEO_HEIGHT - 24, center_x, TEXT_SECONDARY)
+            elif mode == "confirm":
+                # Real, measured progress (elapsed hold time / hold threshold)
+                # — not the same thing as the "loading" spinner below.
+                self._draw_ring(draw, center_x, VIDEO_HEIGHT - 46, 22, percent / 100.0, ACCENT_GREEN)
+                self._draw_centered(draw, f"{int(percent)}%", self.model_ui_hint_font, VIDEO_HEIGHT - 54, center_x, ACCENT_GREEN)
+            elif mode == "loading":
+                self._draw_spinner(draw, center_x, VIDEO_HEIGHT - 46, 16, spinner_frame, ACCENT_GREEN)
 
             rgb565_data = ImageUtils.image_to_rgb565(frame, VIDEO_WIDTH, VIDEO_HEIGHT)
             self.whisplay.draw_image(0, TOP_BAR_HEIGHT, VIDEO_WIDTH, VIDEO_HEIGHT, rgb565_data)
 
         self.render_bottom_text(text)
-        return False  # event-driven: Node pushes a new frame on every change
+        return mode == "loading"  # only the spinner needs continuous frames
 
     def render_help_screen(self, text):
-        """Terminal-style voice-command cheat sheet (chat-flow/help-mode.ts),
-        opened by saying "ayuda" while holding the button. Click pages
-        through short command examples; the last page highlights "Salir".
+        """Voice-command cheat sheet (chat-flow/help-mode.ts), opened by
+        saying "ayuda" while holding the button, or from the quick menu.
+        Click pages through at most two screens; holding the button or a
+        double click exits — no dedicated "SALIR" screen (see help-mode.ts).
 
         help_ui_body is "label\\nexample\\nlabel\\nexample..." — one pair per
-        command, always emitted in that order by help-mode.ts. Even lines
-        (the label) render in the bright terminal green and slightly larger;
-        odd lines (the phrase to say) render smaller in near-white gray
-        (HELP_EXAMPLE_FG — the dark terminal green was hard to read here),
-        so each pair reads as one grouped item instead of a wall of
-        equal-weight text."""
+        command, always emitted in that order. Even lines (the label) render
+        as primary text and slightly larger; odd lines (the phrase to say)
+        render smaller and muted, so each pair reads as one grouped item."""
         self.render_top_bar()
 
-        mode = current_help_ui
         body = current_help_ui_body or ""
         page = current_help_ui_page or 0
         total = max(current_help_ui_total or 0, 0)
+        content_width = VIDEO_WIDTH - SAFE_AREA_RIGHT_INSET - 14
 
-        cache_key = (mode, body, page, total)
+        cache_key = (body, page, total)
         if cache_key != self.help_ui_cache_key:
             self.help_ui_cache_key = cache_key
             frame = Image.new("RGBA", (VIDEO_WIDTH, VIDEO_HEIGHT), (0, 0, 0, 255))
             draw = ImageDraw.Draw(frame)
 
-            draw.text((14, 10), ">_ AYUDA", font=self.help_ui_title_font, fill=TERMINAL_FG)
+            draw.text((14, 8), "AYUDA", font=self.help_ui_title_font, fill=TEXT_SECONDARY)
 
-            if mode == "exit":
-                box_w, box_h = 150, 54
-                box_x = (VIDEO_WIDTH - box_w) // 2
-                box_y = (VIDEO_HEIGHT - box_h) // 2
-                draw.rectangle((box_x, box_y, box_x + box_w, box_y + box_h), outline=TERMINAL_FG, width=2)
-                self._draw_centered(draw, "SALIR", self.help_ui_exit_font, box_y + 14)
-            else:
-                content_width = VIDEO_WIDTH - 28
-                label_ascent, label_descent = self.help_ui_label_font.getmetrics()
-                example_ascent, example_descent = self.help_ui_example_font.getmetrics()
-                label_line_height = label_ascent + label_descent + 2
-                example_line_height = example_ascent + example_descent
-                pair_gap = 10
+            label_ascent, label_descent = self.help_ui_label_font.getmetrics()
+            example_ascent, example_descent = self.help_ui_example_font.getmetrics()
+            label_line_height = label_ascent + label_descent + 2
+            example_line_height = example_ascent + example_descent
+            pair_gap = 10
 
-                y = 36
-                raw_lines = body.split("\n")
-                for i, raw_line in enumerate(raw_lines):
-                    is_label = (i % 2) == 0
-                    font = self.help_ui_label_font if is_label else self.help_ui_example_font
-                    color = TERMINAL_FG if is_label else HELP_EXAMPLE_FG
-                    # Defensive wrap in case a future entry runs long — normal
-                    # entries fit on one line at this width/size.
-                    wrapped = [
-                        line for line in TextUtils.wrap_text(draw, raw_line, font, content_width)
-                        if line != ""
-                    ] or [""]
-                    for line in wrapped:
-                        draw.text((14, y), line, font=font, fill=color)
-                        y += label_line_height if is_label else example_line_height
-                    if not is_label:
-                        y += pair_gap
+            y = 34
+            raw_lines = body.split("\n")
+            for i, raw_line in enumerate(raw_lines):
+                is_label = (i % 2) == 0
+                font = self.help_ui_label_font if is_label else self.help_ui_example_font
+                color = TEXT_PRIMARY if is_label else TEXT_SECONDARY
+                # Defensive wrap in case a future entry runs long — normal
+                # entries fit on one line at this width/size.
+                wrapped = [
+                    line for line in TextUtils.wrap_text(draw, raw_line, font, content_width)
+                    if line != ""
+                ] or [""]
+                for line in wrapped:
+                    draw.text((14, y), line, font=font, fill=color)
+                    y += label_line_height if is_label else example_line_height
+                if not is_label:
+                    y += pair_gap
 
-                if total:
-                    self._draw_centered(draw, f"[{page}/{total}]", self.help_ui_hint_font, VIDEO_HEIGHT - 20)
+            if total:
+                center_x = (VIDEO_WIDTH - SAFE_AREA_RIGHT_INSET) // 2
+                self._draw_centered(draw, f"{page} de {total}", self.help_ui_hint_font, VIDEO_HEIGHT - 20, center_x, TEXT_SECONDARY)
 
             rgb565_data = ImageUtils.image_to_rgb565(frame, VIDEO_WIDTH, VIDEO_HEIGHT)
             self.whisplay.draw_image(0, TOP_BAR_HEIGHT, VIDEO_WIDTH, VIDEO_HEIGHT, rgb565_data)
@@ -366,15 +360,43 @@ class RenderThread(threading.Thread):
         self.render_bottom_text(text)
         return False  # event-driven: Node pushes a new frame on every change
 
-    def _draw_centered(self, draw, text, font, y):
+    def _draw_centered(self, draw, text, font, y, center_x=None, fill=TEXT_PRIMARY):
+        cx = center_x if center_x is not None else VIDEO_WIDTH // 2
         bbox = draw.textbbox((0, 0), text, font=font)
         w = bbox[2] - bbox[0]
-        draw.text(((VIDEO_WIDTH - w) // 2, y), text, font=font, fill=TERMINAL_FG)
+        draw.text((cx - w // 2, y), text, font=font, fill=fill)
+
+    def _draw_spinner(self, draw, cx, cy, radius, frame_index, color, dot_count=12):
+        """Indeterminate loading spinner — a ring of dots fading out behind a
+        lit "head", rotating one step per frame_index. Used instead of a
+        percentage while there's nothing real to measure (see
+        render_model_ui_screen's "loading" mode)."""
+        for i in range(dot_count):
+            angle = (2 * math.pi * i / dot_count) - (math.pi / 2)
+            x = cx + radius * math.cos(angle)
+            y = cy + radius * math.sin(angle)
+            distance_behind = (i - frame_index) % dot_count
+            if distance_behind == 0:
+                dot_r, dot_fill = 4, color
+            elif distance_behind <= 3:
+                dot_r, dot_fill = 3, ACCENT_DIM
+            else:
+                dot_r, dot_fill = 2, ACCENT_DIM
+            draw.ellipse((x - dot_r, y - dot_r, x + dot_r, y + dot_r), fill=dot_fill)
+
+    def _draw_ring(self, draw, cx, cy, radius, fraction, color):
+        """Real progress ring (0-1) for the hold-to-confirm gesture — a
+        measured elapsed/threshold ratio, unlike the loading spinner above."""
+        draw.ellipse((cx - radius, cy - radius, cx + radius, cy + radius), outline=ACCENT_DIM, width=3)
+        if fraction > 0:
+            start = -90
+            end = start + 360 * min(1.0, fraction)
+            draw.arc((cx - radius, cy - radius, cx + radius, cy + radius), start=start, end=end, fill=color, width=3)
 
     def render_idle_screen(self, status, text):
-        """Thin wifi/battery bar on top, full-width looping GIF (standing /
-        talking) in the middle, and a two-line green terminal-style caption
-        band at the bottom."""
+        """Thin top bar (wifi/battery + LOCAL/AGENTE tag), full-width
+        looping GIF (standing / talking) in the middle, and a two-line
+        caption band at the bottom."""
         self.render_top_bar()
 
         gif_key = "talking" if is_answering_status(status) else "standing"
@@ -395,7 +417,7 @@ class RenderThread(threading.Thread):
         return True  # keep looping so the animation keeps playing
 
     def render_top_bar(self):
-        cache_key = (current_wifi_signal_level, current_battery_level, current_battery_color)
+        cache_key = (current_wifi_signal_level, current_battery_level, current_battery_color, current_top_bar_mode)
         if cache_key == self.top_bar_cache_key:
             return
         self.top_bar_cache_key = cache_key
@@ -411,7 +433,7 @@ class RenderThread(threading.Thread):
         if current_battery_level is not None:
             icons.append(BatteryStatusIcon(current_battery_level, current_battery_color, self.battery_font, self.top_bar_font_size))
 
-        right_inset = int(self.whisplay.LCD_WIDTH * TOP_BAR_RIGHT_INSET_PCT)
+        right_inset = int(self.whisplay.LCD_WIDTH * SAFE_AREA_RIGHT_INSET_PCT)
         cursor_x = self.whisplay.LCD_WIDTH - TOP_BAR_MARGIN_X - right_inset
         for icon in icons:
             icon_width, icon_height = icon.measure()
@@ -419,6 +441,20 @@ class RenderThread(threading.Thread):
             icon_y = (TOP_BAR_HEIGHT - icon_height) // 2
             icon.render(draw, icon_x, icon_y)
             cursor_x = icon_x - TOP_BAR_MARGIN_X
+
+        # Small, discreet LOCAL/AGENTE tag on the left — see
+        # chat-flow/states.ts (top_bar_mode) and docs/agent-mode.md. Green
+        # only when it's the accent-worthy state (agente); local stays muted.
+        if current_top_bar_mode == "agent":
+            mode_label, mode_color = "AGENTE", ACCENT_GREEN
+        elif current_top_bar_mode == "local":
+            mode_label, mode_color = "LOCAL", TEXT_SECONDARY
+        else:
+            mode_label, mode_color = None, None
+        if mode_label:
+            bbox = draw.textbbox((0, 0), mode_label, font=self.top_bar_mode_font)
+            text_h = bbox[3] - bbox[1]
+            draw.text((TOP_BAR_MARGIN_X, (TOP_BAR_HEIGHT - text_h) // 2 - bbox[1]), mode_label, font=self.top_bar_mode_font, fill=mode_color)
 
         rgb565_data = ImageUtils.image_to_rgb565(bar, self.whisplay.LCD_WIDTH, TOP_BAR_HEIGHT)
         self.whisplay.draw_image(0, 0, self.whisplay.LCD_WIDTH, TOP_BAR_HEIGHT, rgb565_data)
@@ -431,14 +467,15 @@ class RenderThread(threading.Thread):
         draw = ImageDraw.Draw(band)
         if text:
             font = self.bottom_text_font
-            max_width = self.whisplay.LCD_WIDTH - 2 * BOTTOM_TEXT_MARGIN_X
+            right_inset = int(self.whisplay.LCD_WIDTH * SAFE_AREA_RIGHT_INSET_PCT)
+            max_width = self.whisplay.LCD_WIDTH - BOTTOM_TEXT_MARGIN_X - right_inset
             lines = [line for line in TextUtils.wrap_text(draw, text, font, max_width) if line != ""]
             lines = lines[-BOTTOM_TEXT_MAX_LINES:]
             line_height = self.bottom_text_line_height
             block_height = line_height * len(lines)
             y = max(0, (TEXT_BAND_HEIGHT - block_height) // 2)
             for line in lines:
-                draw.text((BOTTOM_TEXT_MARGIN_X, y), line, font=font, fill=TERMINAL_FG)
+                draw.text((BOTTOM_TEXT_MARGIN_X, y), line, font=font, fill=TEXT_PRIMARY)
                 y += line_height
         rgb565_data = ImageUtils.image_to_rgb565(band, self.whisplay.LCD_WIDTH, TEXT_BAND_HEIGHT)
         self.whisplay.draw_image(0, TOP_BAR_HEIGHT + VIDEO_HEIGHT, self.whisplay.LCD_WIDTH, TEXT_BAND_HEIGHT, rgb565_data)
@@ -471,9 +508,10 @@ def update_display_data(status=None, emoji=None, text=None,
                   network_connected=None, vpn_connected=None, rag_icon_visible=None, image_icon_visible=None, transaction_id=None,
                   wifi_signal_level=None, tool_placeholders=None,
                   music_progress=None, music_duration_ms=None, approval_mode=None, terminal_text=None,
-                  model_ui=None, model_ui_label=None, model_ui_percent=None,
+                  model_ui=None, model_ui_title=None, model_ui_label=None, model_ui_description=None, model_ui_percent=None,
                   model_ui_index=None, model_ui_total=None, model_ui_active=None,
-                  help_ui=None, help_ui_body=None, help_ui_page=None, help_ui_total=None):
+                  help_ui=None, help_ui_body=None, help_ui_page=None, help_ui_total=None,
+                  top_bar_mode=None):
     global current_status, current_emoji, current_text, current_battery_level
     global current_terminal_text
     global current_tool_placeholders
@@ -485,9 +523,10 @@ def update_display_data(status=None, emoji=None, text=None,
     global current_wifi_signal_level
     global current_music_progress, current_music_duration_ms
     global current_approval_mode
-    global current_model_ui, current_model_ui_label, current_model_ui_percent
+    global current_model_ui, current_model_ui_title, current_model_ui_label, current_model_ui_description, current_model_ui_percent
     global current_model_ui_index, current_model_ui_total, current_model_ui_active
     global current_help_ui, current_help_ui_body, current_help_ui_page, current_help_ui_total
+    global current_top_bar_mode
     global render_thread
 
     next_text = text
@@ -586,8 +625,12 @@ def update_display_data(status=None, emoji=None, text=None,
         current_approval_mode = bool(approval_mode)
     if model_ui is not None:
         current_model_ui = model_ui
+    if model_ui_title is not None:
+        current_model_ui_title = model_ui_title
     if model_ui_label is not None:
         current_model_ui_label = model_ui_label
+    if model_ui_description is not None:
+        current_model_ui_description = model_ui_description
     if model_ui_percent is not None:
         try:
             current_model_ui_percent = int(model_ui_percent)
@@ -613,6 +656,8 @@ def update_display_data(status=None, emoji=None, text=None,
             current_help_ui_total = int(help_ui_total)
         except (TypeError, ValueError):
             print(f"[Display] Invalid help_ui_total payload: {help_ui_total}")
+    if top_bar_mode is not None:
+        current_top_bar_mode = top_bar_mode
     if render_thread is not None:
         render_thread.request_render()
 
@@ -725,7 +770,9 @@ def handle_client(client_socket, addr, whisplay):
                     # boolean to enable camera mode
                     set_camera_mode = content.get("camera_mode", None)
                     model_ui = content.get("model_ui", None)
+                    model_ui_title = content.get("model_ui_title", None)
                     model_ui_label = content.get("model_ui_label", None)
+                    model_ui_description = content.get("model_ui_description", None)
                     model_ui_percent = content.get("model_ui_percent", None)
                     model_ui_index = content.get("model_ui_index", None)
                     model_ui_total = content.get("model_ui_total", None)
@@ -734,6 +781,7 @@ def handle_client(client_socket, addr, whisplay):
                     help_ui_body = content.get("help_ui_body", None)
                     help_ui_page = content.get("help_ui_page", None)
                     help_ui_total = content.get("help_ui_total", None)
+                    top_bar_mode = content.get("top_bar_mode", None)
 
                     if rgbled:
                         rgb255_tuple = ColorUtils.get_rgb255_from_any(rgbled)
@@ -781,10 +829,11 @@ def handle_client(client_socket, addr, whisplay):
                             (tool_placeholders is not None) or \
                             (music_progress is not None) or (music_duration_ms is not None) or (approval_mode is not None) or \
                             (terminal_text is not None) or \
-                            (model_ui is not None) or (model_ui_label is not None) or (model_ui_percent is not None) or \
+                            (model_ui is not None) or (model_ui_title is not None) or (model_ui_label is not None) or \
+                            (model_ui_description is not None) or (model_ui_percent is not None) or \
                             (model_ui_index is not None) or (model_ui_total is not None) or (model_ui_active is not None) or \
                             (help_ui is not None) or (help_ui_body is not None) or \
-                            (help_ui_page is not None) or (help_ui_total is not None):
+                            (help_ui_page is not None) or (help_ui_total is not None) or (top_bar_mode is not None):
                         update_display_data(status=status, emoji=emoji,
                                      text=text, text_delta=text_delta, scroll_speed=scroll_speed, scroll_sync=scroll_sync,
                                      battery_level=battery_level, battery_color=battery_tuple,
@@ -800,7 +849,9 @@ def handle_client(client_socket, addr, whisplay):
                                                  approval_mode=approval_mode,
                                                  terminal_text=terminal_text,
                                                  model_ui=model_ui,
+                                                 model_ui_title=model_ui_title,
                                                  model_ui_label=model_ui_label,
+                                                 model_ui_description=model_ui_description,
                                                  model_ui_percent=model_ui_percent,
                                                  model_ui_index=model_ui_index,
                                                  model_ui_total=model_ui_total,
@@ -808,7 +859,8 @@ def handle_client(client_socket, addr, whisplay):
                                                  help_ui=help_ui,
                                                  help_ui_body=help_ui_body,
                                                  help_ui_page=help_ui_page,
-                                                 help_ui_total=help_ui_total)
+                                                 help_ui_total=help_ui_total,
+                                                 top_bar_mode=top_bar_mode)
 
                     client_socket.send(b"OK\n")
                     if response_to_client:

@@ -227,11 +227,11 @@ la interfaz de pantalla minimalista (personaje animado + texto), y
 [`docs/voice-commands.md`](docs/voice-commands.md) para el control de
 volumen y modelo de LLM por voz — incluye el menú visual en pantalla para
 elegir modelo con el botón del Whisplay HAT (click para recorrer opciones,
-mantener 3 segundos para confirmar, doble clic para cancelar), la pantalla
-de carga con el progreso mientras Ollama carga el modelo elegido, y una
-pantalla de ayuda (decir "ayuda" con el botón presionado) que resume todos
-los comandos de voz disponibles, paginada con el mismo botón y con un
-"SALIR" seleccionable al final para volver a la pantalla normal.
+mantener ~0.9 segundos para confirmar, doble clic para cancelar), la
+pantalla de carga con spinner indeterminado mientras Ollama carga el modelo
+elegido, un menú rápido (click corto en reposo: Modelo/Modo/Ayuda/Cámara) y
+una pantalla de ayuda (decir "ayuda" con el botón presionado, o elegirla del
+menú rápido) que resume los comandos de voz en a lo sumo 2 pantallas.
 [`docs/llm-model-selection.md`](docs/llm-model-selection.md) documenta cómo
 se eligió el modelo por defecto y por qué el menú de voz ya no cambia de
 modelo a ciegas ante un comando mal reconocido (causó una regresión real:

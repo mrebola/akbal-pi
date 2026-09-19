@@ -34,11 +34,10 @@ dos líneas de texto abajo.
   chatbot por el socket) empieza con "answer" (cubre `"answering"`,
   `"answering..."`, etc.); `standing.gif` en cualquier otro estado (sleep,
   listening, recognizing, thinking, tool calling...).
-- **Texto (64px)**: verde estilo terminal (`#50FF78`, el mismo verde que ya
-  usaba la interfaz para salida de comandos), sin fondo blanco ni subrayado —
-  se decidió así porque texto negro sobre fondo negro (lo pedido
-  originalmente) sería invisible. Solo se muestran las últimas 2 líneas del
-  texto actual (se recorta desde arriba, no hace scroll).
+- **Texto (64px)**: blanco/gris claro (`TEXT_PRIMARY`, ver rediseño más abajo),
+  sin fondo blanco ni subrayado — se decidió así porque texto negro sobre
+  fondo negro (lo pedido originalmente) sería invisible. Solo se muestran las
+  últimas 2 líneas del texto actual (se recorta desde arriba, no hace scroll).
 
 ## Cómo se generaron los GIFs (recorte cara en primer plano)
 
@@ -94,15 +93,23 @@ está centrado horizontalmente.
   recibiendo pero ya no se dibuja en pantalla. Los modos de cámara
   (`camera_mode`) e imagen generada (`image_path`, para el tool de generación
   de imágenes) siguen funcionando igual que antes, sin tocar.
-- **Overlay de selección/carga de modelo**: cuando `model_ui` viene en
-  `"select"`, `"confirm"` o `"loading"` (ver
-  [`voice-commands.md`](./voice-commands.md)), `render_model_ui_screen()`
-  reemplaza el GIF del personaje por una pantalla verde-sobre-negro estilo
-  terminal — nombre del modelo, puntos de paginación o barra de progreso
-  según el modo (`model_ui_percent`, `model_ui_index`/`model_ui_total`,
-  `model_ui_active`). `model_ui: ""` (cadena vacía, no `null` — mismo criterio
-  que `image: ""`, porque Python no puede distinguir "campo ausente" de
-  "campo en null" en el JSON) vuelve a mostrar el GIF normal.
+- **Overlay de menú (modelo / modo / menú rápido)**: cuando `model_ui` viene
+  en `"select"`, `"confirm"` o `"loading"`, `render_model_ui_screen()`
+  reemplaza el GIF del personaje por una tarjeta genérica — la misma función
+  sirve a los tres selectores (`chat-flow/model-select-mode.ts`,
+  `mode-select-mode.ts`, `quick-menu-mode.ts`), diferenciados solo por
+  `model_ui_title` ("MODELO" / "MODO" / "MENÚ"). Campos: `model_ui_label`
+  (nombre corto), `model_ui_description` (una línea), `model_ui_active`
+  (pastilla "● Activo"), `model_ui_index`/`model_ui_total` (texto "N de M",
+  ya no puntitos). En `"confirm"` (manteniendo presionado) se dibuja un
+  anillo de progreso real con `model_ui_percent`; en `"loading"` no se manda
+  percent — Ollama no tiene API de progreso real para cargar un modelo ya
+  descargado a memoria, así que se anima un spinner indeterminado a partir
+  del reloj (`_draw_spinner`), no un número inventado. `model_ui: ""` (cadena
+  vacía, no `null` — mismo criterio que `image: ""`, porque Python no puede
+  distinguir "campo ausente" de "campo en null" en el JSON) vuelve a mostrar
+  el GIF normal. Ver [`voice-commands.md`](./voice-commands.md) para el
+  detalle de gestos (click/mantener/doble clic) de cada menú.
 - Se eliminó el código que ya no se usa: header con texto de estado,
   pastillas de herramientas, barra de progreso de música, scroll de texto, y
   el modo de aprobación del puente de Whisplay IM (no lo usamos en este
@@ -137,5 +144,33 @@ Dos bugs encontrados al verificar los íconos en el hardware real:
 - **El bisel de la carcasa tapa el borde derecho del panel** (~10% del ancho).
   Aunque los íconos se dibujen sin recorte dentro de la imagen renderizada,
   quedaban parcialmente ocultos físicamente. Se agregó
-  `TOP_BAR_RIGHT_INSET_PCT = 0.10` en `chatbot-ui.py`, que corre todo el
-  clúster de íconos ese porcentaje del ancho de pantalla hacia la izquierda.
+  `SAFE_AREA_RIGHT_INSET_PCT = 0.10` en `chatbot-ui.py` — ya no es solo para
+  la barra de íconos, es el inset global que respeta cualquier contenido que
+  se dibuje cerca del borde derecho (barra superior, tarjetas de menú, texto
+  inferior), para que nada quede detrás del bisel en ninguna pantalla.
+
+## Rediseño: paleta oscura con verde como acento, no como color base
+
+La interfaz original pintaba prácticamente todo el texto en verde terminal
+(`#50FF78` en todas partes: texto de respuesta, títulos de menú, nombres de
+modelo, puntos de paginación) — se sentía más a terminal de hacker que a un
+dispositivo de voz. Se separaron los roles en `chatbot-ui.py`:
+
+| Constante | Uso |
+|---|---|
+| `TEXT_PRIMARY` (blanco/gris claro) | Texto principal: respuestas, nombres de modelo/modo, encabezados de tarjeta |
+| `TEXT_SECONDARY` (gris apagado) | Texto secundario: descripciones, pistas de botón, posición ("2 de 4") |
+| `ACCENT_GREEN` | Solo acentos: pastilla "Activo", anillo/spinner de progreso, la etiqueta "AGENTE" en la barra superior |
+| `ACCENT_DIM` | Fondo apagado de los indicadores de progreso (el anillo/spinner sin llenar) |
+
+También se sacó el prefijo `>_` de los títulos de menú (venía del estilo
+terminal original) y se dejó de forzar el nombre del modelo a mayúsculas.
+
+## Indicador de modo en la barra superior
+
+La barra superior (wifi/batería) ahora también muestra, a la izquierda, una
+etiqueta chica **LOCAL** (gris) o **AGENTE** (verde acento) según
+`isAgentMode()` — ver `top_bar_mode` en `Status` (`app/src/device/display.ts`)
+y `render_top_bar()`. Se actualiza al entrar a "sleep" y al confirmar un
+cambio de modo (`mode_loading` en `states.ts`), así siempre refleja el modo
+real sin tener que abrir el menú de modo para saberlo.

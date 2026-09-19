@@ -3,20 +3,21 @@ import { isAgentMode, DeviceMode } from "../../config/device-mode";
 
 // Button-driven agent/local mode picker, entered when the user says "activa
 // modo agente" / "modo local" / "cambiar modo" (see states.ts and
-// voice-commands.ts). Deliberately mirrors model-select-mode.ts's
-// press/hold/confirm timing so the on-device UX is consistent, and for the
-// same reason: a misheard voice command should never silently flip how the
-// device answers (local model vs external OpenClaw agent) — see
-// docs/agent-mode.md.
-export type DeviceModeOption = { key: DeviceMode; label: string };
+// voice-commands.ts), or from the quick menu. Deliberately mirrors
+// model-select-mode.ts's press/hold/confirm timing so the on-device UX is
+// consistent, and for the same reason: a misheard voice command should
+// never silently flip how the device answers (local model vs external
+// OpenClaw agent) — see docs/agent-mode.md.
+export type DeviceModeOption = { key: DeviceMode; label: string; description: string };
 
 export const DEVICE_MODE_OPTIONS: DeviceModeOption[] = [
-  { key: "agent", label: "Modo agente (OpenClaw)" },
-  { key: "local", label: "Modo local (modelos locales)" },
+  { key: "agent", label: "Modo agente", description: "Conversa vía OpenClaw" },
+  { key: "local", label: "Modo local", description: "Modelo en este dispositivo" },
 ];
 
 const SHORT_PRESS_MAX_MS = 400;
-const CONFIRM_HOLD_MS = 3000;
+// Matches model-select-mode.ts / quick-menu-mode.ts.
+const CONFIRM_HOLD_MS = 900;
 const HOLD_TICK_MS = 60;
 const IDLE_TIMEOUT_MS = 20000;
 
@@ -62,11 +63,16 @@ function renderSelectScreen(): void {
   display({
     status: "mode_select",
     model_ui: "select",
+    // Distinct title from the model picker's "MODELO" — the main visual cue
+    // that these are two different menus, not just two ways into the same
+    // one (see docs/display-ui.md).
+    model_ui_title: "MODO",
     model_ui_label: option.label,
+    model_ui_description: option.description,
     model_ui_index: selectedIndex + 1,
     model_ui_total: DEVICE_MODE_OPTIONS.length,
     model_ui_active: isActive,
-    text: "Click: siguiente · Doble clic: cancelar",
+    text: "Click: siguiente · Mantén: elegir",
   });
 }
 
@@ -100,8 +106,8 @@ export function handleModeSelectCancel(): void {
 
 // initialTarget pre-positions the carousel on the mode the voice command
 // actually named ("activa modo agente" starts on "agent"), so a single
-// 3-second hold confirms it. A generic "cambiar modo" (no target named)
-// starts on whichever mode is currently active.
+// hold confirms it. A generic "cambiar modo" (no target named) starts on
+// whichever mode is currently active.
 export function enterModeSelectMode(initialTarget?: DeviceMode): void {
   resetModeSelectControl();
   const activeKey: DeviceMode = isAgentMode() ? "agent" : "local";
@@ -121,7 +127,9 @@ export function handleModeSelectPress(): void {
     display({
       status: "mode_select",
       model_ui: "confirm",
+      model_ui_title: "MODO",
       model_ui_label: currentOption().label,
+      model_ui_description: currentOption().description,
       model_ui_percent: percent,
       text: "Manteniendo presionado...",
     });

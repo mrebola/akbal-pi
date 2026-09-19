@@ -85,7 +85,8 @@ Raspberry Pi OS 64-bit (Debian Trixie), conectando por SSH al hostname Tailscale
     del bitmap ya escalado. Además, el borde derecho del panel físico queda
     tapado por el bisel de la carcasa (~10% del ancho), así que el clúster de
     íconos se corrió esa misma proporción hacia la izquierda
-    (`TOP_BAR_RIGHT_INSET_PCT` en `chatbot-ui.py`) para que se vean completos.
+    (`SAFE_AREA_RIGHT_INSET_PCT` en `chatbot-ui.py`, luego generalizado a
+    safe-area global de toda la interfaz) para que se vean completos.
 16. **Cambio de modelo LLM**: se probó `hf.co/mradermacher/Qwen3.5-4B-Uncensored-GGUF:Q4_K_M`
     y se descartó (muy lento y no cortaba la generación); se adoptó
     `huihui_ai/qwen3.5-abliterated:2B` en su lugar. Detalle completo,

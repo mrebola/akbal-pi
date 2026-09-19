@@ -39,23 +39,35 @@ export interface Status {
   music_progress: number | undefined;
   music_duration_ms: number | undefined;
   approval_mode: boolean;
-  // Model select/switch overlay (see chat-flow/model-select-mode.ts and
-  // cloud-api/local/ollama-llm.ts). Replaces the character GIF with a
-  // hacker-style screen while browsing models or loading one.
+  // Generic button-driven carousel overlay, shared by the model picker
+  // (model-select-mode.ts), the agent/local picker (mode-select-mode.ts) and
+  // the quick menu (quick-menu-mode.ts) — replaces the character GIF with a
+  // consistent "card" screen (title, name, description, active badge,
+  // position) while browsing or confirming an option, or loading one.
+  // model_ui_title distinguishes which of the three is showing ("MODELO" /
+  // "MODO" / "MENÚ") — see docs/display-ui.md.
   model_ui: "" | "select" | "confirm" | "loading";
+  model_ui_title: string;
   model_ui_label: string;
+  model_ui_description: string;
+  // Real elapsed-hold percent while confirming (0-100). Ignored while
+  // model_ui === "loading" — that's an indeterminate wait (see
+  // docs/display-ui.md), not a measurable percentage.
   model_ui_percent: number;
   model_ui_index: number;
   model_ui_total: number;
   model_ui_active: boolean;
-  // Voice-command cheat sheet overlay ("ayuda" — see
-  // chat-flow/help-mode.ts). Same "replace the character GIF with a
-  // hacker-style screen" pattern as model_ui, but paging through static
-  // help text instead of a model carousel.
-  help_ui: "" | "view" | "exit";
+  // Voice-command cheat sheet overlay ("ayuda" — see chat-flow/help-mode.ts).
+  // Same card look as model_ui, paging through short command pairs; exits
+  // via hold/double-click like the other menus, not a dedicated screen.
+  help_ui: "" | "view";
   help_ui_body: string;
   help_ui_page: number;
   help_ui_total: number;
+  // Small always-on indicator in the top bar (see render_top_bar in
+  // chatbot-ui.py) showing whether the device is answering via OpenClaw or
+  // the local model — see docs/agent-mode.md.
+  top_bar_mode: "local" | "agent" | "";
 }
 
 export class WhisplayDisplay {
@@ -83,7 +95,9 @@ export class WhisplayDisplay {
     music_duration_ms: undefined,
     approval_mode: false,
     model_ui: "",
+    model_ui_title: "",
     model_ui_label: "",
+    model_ui_description: "",
     model_ui_percent: 0,
     model_ui_index: 0,
     model_ui_total: 0,
@@ -92,6 +106,7 @@ export class WhisplayDisplay {
     help_ui_body: "",
     help_ui_page: 0,
     help_ui_total: 0,
+    top_bar_mode: "",
   };
 
   private client = null as Socket | null;
@@ -443,7 +458,9 @@ export class WhisplayDisplay {
       music_duration_ms,
       approval_mode,
       model_ui,
+      model_ui_title,
       model_ui_label,
+      model_ui_description,
       model_ui_percent,
       model_ui_index,
       model_ui_total,
@@ -452,6 +469,7 @@ export class WhisplayDisplay {
       help_ui_body,
       help_ui_page,
       help_ui_total,
+      top_bar_mode,
     } = {
       ...this.currentStatus,
       ...normalizedStatus,
@@ -485,7 +503,9 @@ export class WhisplayDisplay {
     this.currentStatus.music_duration_ms = music_duration_ms;
     this.currentStatus.approval_mode = approval_mode;
     this.currentStatus.model_ui = model_ui;
+    this.currentStatus.model_ui_title = model_ui_title;
     this.currentStatus.model_ui_label = model_ui_label;
+    this.currentStatus.model_ui_description = model_ui_description;
     this.currentStatus.model_ui_percent = model_ui_percent;
     this.currentStatus.model_ui_index = model_ui_index;
     this.currentStatus.model_ui_total = model_ui_total;
@@ -494,6 +514,7 @@ export class WhisplayDisplay {
     this.currentStatus.help_ui_body = help_ui_body;
     this.currentStatus.help_ui_page = help_ui_page;
     this.currentStatus.help_ui_total = help_ui_total;
+    this.currentStatus.top_bar_mode = top_bar_mode;
 
     const changedValuesObj = Object.fromEntries(changedValues);
     changedValuesObj.brightness = 100;

@@ -37,7 +37,7 @@ switcheable en caliente:
   esté activo. Ver `docs/voice-commands.md`.
 - **Nunca cambia directo por voz** — a diferencia del cambio de modelo
   (que sí tiene un atajo de voz directo), el modo siempre pasa por el menú
-  visual con el mismo mantené-presionado-3-segundos que el selector de
+  visual con el mismo mantené-presionado-para-confirmar (~0.9s) que el selector de
   modelo (`app/src/core/chat-flow/mode-select-mode.ts`, copia deliberada de
   `model-select-mode.ts`). Cambiar de modo implica que el dispositivo
   empieza a mandar todo lo que se dice a un proceso externo (con ejecución

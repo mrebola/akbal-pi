@@ -1,18 +1,22 @@
 import { display } from "../../device/display";
-import { getCurrentModel } from "../../cloud-api/local/ollama-llm";
+import { getCurrentModel, listOllamaModels } from "../../cloud-api/local/ollama-llm";
 import { MODEL_ALIASES, ModelAlias } from "./voice-commands";
 
 // Button-driven model picker, entered when the user says "cambia modelo" /
-// "cambiar modelo" (see states.ts). A single click cycles to the next model;
-// holding the button for CONFIRM_HOLD_MS on a model selects it. Releasing
-// before that cancels the hold and stays on the same model — nothing changes
-// until the user commits to the full hold, so a misheard voice command can no
-// longer silently switch models (see docs/llm-model-selection.md history).
+// "cambiar modelo" (see states.ts), or from the quick menu. A single click
+// cycles to the next model; holding the button for CONFIRM_HOLD_MS on a
+// model selects it. Releasing before that cancels the hold and stays on the
+// same model — nothing changes until the user commits to the full hold, so
+// a misheard voice command can no longer silently switch models (see
+// docs/llm-model-selection.md history).
 const SHORT_PRESS_MAX_MS = 400;
-const CONFIRM_HOLD_MS = 3000;
+// Matches the other menus (mode-select-mode.ts, quick-menu-mode.ts) — see
+// docs/display-ui.md for why this moved from 3s to ~0.9s.
+const CONFIRM_HOLD_MS = 900;
 const HOLD_TICK_MS = 60;
 const IDLE_TIMEOUT_MS = 20000;
 
+let options: ModelAlias[] = MODEL_ALIASES;
 let selectedIndex = 0;
 let pressStartedAt = 0;
 let holdTicker: ReturnType<typeof setInterval> | null = null;
@@ -46,7 +50,7 @@ function armIdleTimer(): void {
 }
 
 function currentAlias(): ModelAlias {
-  return MODEL_ALIASES[selectedIndex];
+  return options[selectedIndex];
 }
 
 function renderSelectScreen(): void {
@@ -55,13 +59,13 @@ function renderSelectScreen(): void {
   display({
     status: "model_select",
     model_ui: "select",
-    model_ui_label: alias.label,
+    model_ui_title: "MODELO",
+    model_ui_label: alias.shortName,
+    model_ui_description: alias.description,
     model_ui_index: selectedIndex + 1,
-    model_ui_total: MODEL_ALIASES.length,
+    model_ui_total: options.length,
     model_ui_active: isActive,
-    // One line, no "\n" — see the comment on the "model_loading" screen's
-    // text in states.ts for why an embedded newline breaks the bottom band.
-    text: "Click: siguiente · Doble clic: cancelar",
+    text: "Click: siguiente · Mantén: elegir",
   });
 }
 
@@ -93,10 +97,30 @@ export function handleModelSelectCancel(): void {
   onCancelCallback();
 }
 
-export function enterModelSelectMode(): void {
+// Only offers models `ollama list` actually reports installed — showing an
+// alias for a model that isn't there any more used to just fail later, in
+// model_loading. Falls back to the full curated list if Ollama can't be
+// reached at all (better a possibly-stale menu than a broken one), and
+// never returns an empty menu even if nothing matched.
+async function resolveInstalledOptions(): Promise<ModelAlias[]> {
+  try {
+    const installed = await listOllamaModels();
+    const installedSet = new Set(installed.map((m) => m.toLowerCase()));
+    const filtered = MODEL_ALIASES.filter((alias) =>
+      installedSet.has(alias.tag.toLowerCase()),
+    );
+    return filtered.length > 0 ? filtered : MODEL_ALIASES;
+  } catch (err) {
+    console.warn("[model-select] Failed to list installed models, showing full list:", err);
+    return MODEL_ALIASES;
+  }
+}
+
+export async function enterModelSelectMode(): Promise<void> {
   resetModelSelectControl();
+  options = await resolveInstalledOptions();
   const activeTag = getCurrentModel().toLowerCase();
-  const activeIndex = MODEL_ALIASES.findIndex(
+  const activeIndex = options.findIndex(
     (a) => a.tag.toLowerCase() === activeTag,
   );
   selectedIndex = activeIndex >= 0 ? activeIndex : 0;
@@ -113,7 +137,9 @@ export function handleModelSelectPress(): void {
     display({
       status: "model_select",
       model_ui: "confirm",
-      model_ui_label: currentAlias().label,
+      model_ui_title: "MODELO",
+      model_ui_label: currentAlias().shortName,
+      model_ui_description: currentAlias().description,
       model_ui_percent: percent,
       text: "Manteniendo presionado...",
     });
@@ -133,7 +159,7 @@ export function handleModelSelectRelease(): void {
   clearHoldTimers();
   pressStartedAt = 0;
   if (duration > 0 && duration <= SHORT_PRESS_MAX_MS) {
-    selectedIndex = (selectedIndex + 1) % MODEL_ALIASES.length;
+    selectedIndex = (selectedIndex + 1) % options.length;
   }
   renderSelectScreen();
   armIdleTimer();

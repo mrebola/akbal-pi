@@ -147,59 +147,20 @@ if (llmServer.trim().toLowerCase() === "ollama") {
 // docs/llm-model-selection.md).
 export const getCurrentModel = (): string => currentOllamaModel;
 
-// Rough bytes/ms throughput used only to *pace* the loading-screen progress
-// bar (see chat-flow/model-select-mode.ts) while Ollama loads the model into
-// memory — it has no real progress API for that (only for pulls/downloads).
-// The bar is capped at 90% until the warm-up call actually resolves, so a
-// wrong estimate only makes the bar move at the wrong speed, never lie about
-// completion.
-const ASSUMED_LOAD_BYTES_PER_MS = (90 * 1024 * 1024) / 1000;
-const MIN_ESTIMATED_LOAD_MS = 2000;
-const MAX_ESTIMATED_LOAD_MS = 30000;
-const FALLBACK_ESTIMATED_LOAD_MS = 8000;
-
-const estimateLoadMs = async (model: string): Promise<number> => {
-  try {
-    const installed = await listOllamaModelsWithSize();
-    const found = installed.find(
-      (m) => m.name.toLowerCase() === model.toLowerCase(),
-    );
-    if (!found?.size) return FALLBACK_ESTIMATED_LOAD_MS;
-    const ms = found.size / ASSUMED_LOAD_BYTES_PER_MS;
-    return Math.min(MAX_ESTIMATED_LOAD_MS, Math.max(MIN_ESTIMATED_LOAD_MS, ms));
-  } catch {
-    return FALLBACK_ESTIMATED_LOAD_MS;
-  }
-};
-
-// Switches the active model and reports simulated progress (0-90%) while it
-// loads, resolving at 100% once Ollama confirms it's actually ready to
-// answer. Used by both direct voice-alias switches and the button-driven
-// model menu (see chat-flow/model-select-mode.ts) so any model change shows
-// the same loading screen instead of switching silently.
-export const switchModelWithProgress = async (
-  model: string,
-  onProgress: (percent: number) => void,
-): Promise<void> => {
+// Switches the active model and waits for Ollama to actually load it into
+// memory. Ollama has no real progress API for this (only for pulls/
+// downloads), so the caller shows an indeterminate "Preparando modelo"
+// instead of a fake percentage — see chat-flow/model-select-mode.ts and
+// docs/display-ui.md. Used by both direct voice-alias switches and the
+// button-driven model menu, so any model change goes through the same wait.
+export const switchModel = async (model: string): Promise<void> => {
   if (model !== currentOllamaModel) {
     console.log(`[Ollama] Switching model: ${currentOllamaModel} -> ${model}`);
     currentOllamaModel = model;
     ollamaContextWindowCache = undefined;
     persistEnvVar("OLLAMA_MODEL", model);
   }
-  onProgress(0);
-  const estimatedMs = await estimateLoadMs(model);
-  const startedAt = Date.now();
-  const ticker = setInterval(() => {
-    const elapsed = Date.now() - startedAt;
-    onProgress(Math.min(90, Math.round((elapsed / estimatedMs) * 90)));
-  }, 120);
-  try {
-    await warmUpModel(model);
-  } finally {
-    clearInterval(ticker);
-  }
-  onProgress(100);
+  await warmUpModel(model);
 };
 
 export const listOllamaModelsWithSize = async (): Promise<

@@ -17,41 +17,63 @@ import type { DeviceMode } from "../../config/device-mode";
 export type ModelAlias = {
   key: string;
   tag: string;
+  // Spoken form used in TTS confirmations ("Estoy usando el {label}",
+  // "Modelo '{label}' listo para contestar") — unaffected by the on-screen
+  // redesign below, so voice replies keep sounding the same.
   label: string;
+  // Short name + one-line description used only by the redesigned
+  // model-select screen (chat-flow/model-select-mode.ts). Kept short —
+  // measured against the real device font so neither wraps or overflows the
+  // safe area, see docs/voice-commands.md.
+  shortName: string;
+  description: string;
   synonyms: string[];
 };
 
 // Short, spoken-friendly names for the models actually installed on this Pi
-// (checked with `ollama list` — see docs/llm-model-selection.md).
+// (checked with `ollama list` — see docs/llm-model-selection.md). The
+// model-select screen filters this down to whatever's actually installed
+// (see filterInstalledAliases in model-select-mode.ts) instead of trusting
+// this list to always be in sync.
 export const MODEL_ALIASES: ModelAlias[] = [
   {
     key: "1",
     tag: "deepseek-r1:1.5b",
     label: "modelo 1, deepseek",
+    shortName: "DeepSeek R1",
+    description: "Razonamiento, 1.5B",
     synonyms: ["1", "uno", "one", "deepseek"],
   },
   {
     key: "2",
     tag: "llama3.2:3b",
     label: "modelo 2, llama 3",
+    shortName: "Llama 3.2",
+    description: "Balanceado, 3B",
     synonyms: ["2", "dos", "two", "llama3", "llama 3", "ollama3", "ollama 3", "llama"],
   },
   {
     key: "3",
     tag: "qwen3.5:2B",
     label: "modelo 3, qwen 3.5",
+    shortName: "Qwen 3.5",
+    description: "Equilibrado, 2B",
     synonyms: ["3", "tres", "three", "qwen3.5", "qwen 3.5", "qwen3 5"],
   },
   {
     key: "4",
     tag: "huihui_ai/qwen3-abliterated:1.7b",
     label: "modelo 4, qwen sin censura",
+    shortName: "Qwen sin censura",
+    description: "Puede repetir el prompt",
     synonyms: ["4", "cuatro", "four", "qwen sin censura"],
   },
   {
     key: "5",
     tag: "huihui_ai/qwen3.5-abliterated:2B",
     label: "modelo 5, qwen sin censura 2",
+    shortName: "Qwen sin censura 2",
+    description: "Default, mejor balance",
     synonyms: [
       "5",
       "cinco",
@@ -64,6 +86,8 @@ export const MODEL_ALIASES: ModelAlias[] = [
     key: "6",
     tag: "qwen3:1.7b",
     label: "modelo 6, qwen 3, el más estable",
+    shortName: "Qwen 3",
+    description: "Más rápido y estable",
     synonyms: ["6", "seis", "six", "qwen3", "qwen 3"],
   },
 ];

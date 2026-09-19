@@ -904,6 +904,7 @@ const wdEnterBtn = document.getElementById("wd-enter-btn");
 const wdExitBtn = document.getElementById("wd-exit-btn");
 const wdError = document.getElementById("wd-error");
 const wdScanBtn = document.getElementById("wd-scan-btn");
+const wdPauseBtn = document.getElementById("wd-pause-btn");
 const wdAttackAllBtn = document.getElementById("wd-attack-all-btn");
 const wdCancelBtn = document.getElementById("wd-cancel-btn");
 const wdAttackStatus = document.getElementById("wd-attack-status");
@@ -913,6 +914,11 @@ const wdSessionList = document.getElementById("wd-session-list");
 
 let wdStatus = null;
 let wdTimer = null;
+// Pausa de escaneo: congela la tabla (deja de pedir /status a 2Hz) para que
+// las filas no se re-ordenen/muevan mientras elegís la red a auditar. El
+// estado real (ataques, sesión) sigue alcanzable: un refresh manual refresca
+// una vez sin retomar el polling.
+let wdPaused = false;
 
 async function wdApi(path, body) {
   const res = await apiFetch(`/api/wardrive/${path}`, {
@@ -936,11 +942,14 @@ function wdRender() {
   wdBannerTitle.classList.toggle("on", on);
   wdIface.textContent = wdStatus.iface ? `· ${wdStatus.iface.toUpperCase()}` : "";
   wdBannerStatus.textContent = on
-    ? `Activo — LLM ${wdStatus.modelsUnloaded ? "descargado de RAM" : "en RAM"} · ${wdStatus.allowlist.length} objetivo(s) autorizado(s)`
+    ? `Activo — LLM ${wdStatus.modelsUnloaded ? "descargado de RAM" : "en RAM"} · ${wdStatus.allowlist.length} objetivo(s) autorizado(s)` + (wdPaused ? " · ESCANEO EN PAUSA" : "")
     : "Inactivo — la Pi funciona como Akbal normal";
   wdEnterBtn.classList.toggle("hidden", on);
   wdExitBtn.classList.toggle("hidden", !on);
   wdScanBtn.classList.toggle("hidden", !on);
+  wdPauseBtn.classList.toggle("hidden", !on);
+  wdPauseBtn.textContent = wdPaused ? "Reanudar escaneo" : "Pausar escaneo";
+  wdPauseBtn.classList.toggle("wd-paused", wdPaused);
   wdAttackAllBtn.classList.toggle("hidden", !on || attacking);
   wdCancelBtn.classList.toggle("hidden", !attacking);
   wdAttackStatus.textContent = attacking
@@ -967,23 +976,34 @@ function wdRender() {
     }
   }
 
-  // Air targets table
+  // Air targets table — authorized targets pinned at the top (fixed
+  // ordering by BSSID among themselves so re-scan doesn't shuffle them),
+  // then the rest by signal strength.
   wdTableBody.innerHTML = "";
   if (!on) {
     wdTableBody.innerHTML = '<tr><td colspan="7" class="muted">Modo inactivo — entra al modo wardriving para escanear</td></tr>';
     return;
   }
-  if ((wdStatus.targets || []).length === 0) {
+  const allTargets = [...(wdStatus.targets || [])];
+  const pinned = allTargets
+    .filter((t) => t.inAllowlist)
+    .sort((a, b) => a.bssid.localeCompare(b.bssid));
+  const rest = allTargets
+    .filter((t) => !t.inAllowlist)
+    .sort((a, b) => b.rssi - a.rssi);
+  const ordered = [...pinned, ...rest];
+  if (ordered.length === 0) {
     wdTableBody.innerHTML = '<tr><td colspan="7" class="muted">Escaneando el aire...</td></tr>';
     return;
   }
-  for (const t of wdStatus.targets) {
+  for (const t of ordered) {
     const tr = document.createElement("tr");
     const sessTarget = wdStatus.session?.targets.find((s) => s.bssid === t.bssid);
     const badge = sessTarget
       ? `<span class="wd-status-badge wd-status-${sessTarget.status}">${sessTarget.status}${sessTarget.method ? "·" + sessTarget.method : ""}</span>`
       : '<span class="wd-status-badge">—</span>';
     const auth = t.inAllowlist;
+    const pin = auth ? '<span class="wd-pin" title="Autorizado — fijo arriba">📌</span> ' : "";
     const actions = auth
       ? (attacking
           ? "—"
@@ -991,7 +1011,7 @@ function wdRender() {
             `<button data-act="disallow" data-bssid="${t.bssid}" class="secondary">Quitar</button>`)
       : `<button data-act="allow" data-bssid="${t.bssid}">Autorizar</button>`;
     tr.innerHTML =
-      `<td class="wd-ssid">${escapeHtml(t.ssid || "(oculta)")}</td>` +
+      `<td class="wd-ssid">${pin}${escapeHtml(t.ssid || "(oculta)")}</td>` +
       `<td class="wd-bssid">${t.bssid}</td>` +
       `<td>${t.channel}</td>` +
       `<td class="${wdDbmClass(t.rssi)}">${t.rssi}</td>` +
@@ -1045,6 +1065,14 @@ wdExitBtn.addEventListener("click", async () => {
 
 wdScanBtn.addEventListener("click", () => void wdRefresh(true));
 
+// Pausa de escaneo: congela el polling para que la tabla no cambie mientras
+// elegís la red a auditar. El modo/ataques siguen funcionando igual.
+wdPauseBtn.addEventListener("click", () => {
+  wdPaused = !wdPaused;
+  wdRender();
+  void wdRefreshOnce();
+});
+
 wdAttackAllBtn.addEventListener("click", async () => {
   wdError.textContent = "";
   const bssids = (wdStatus.targets || [])
@@ -1077,12 +1105,24 @@ async function wdRefresh(forceScan = false) {
   }
 }
 
+// One-shot refresh that ignores the pause flag (used by the pause button
+// itself and by action buttons: even paused, attacks/captures should
+// reflect immediately).
+async function wdRefreshOnce() {
+  const res = await fetch("/api/wardrive/status");
+  if (res.ok) {
+    wdStatus = await res.json();
+    wdRender();
+  }
+}
+
 // The wardrive tab polls; other tabs leave it alone (cheap GET only).
 for (const btn of document.querySelectorAll(".tab-btn")) {
   if (btn.dataset.tab === "wardrive") {
     btn.addEventListener("click", () => {
       void wdRefresh();
       if (!wdTimer) wdTimer = setInterval(() => {
+        if (wdPaused) return; // pausa de escaneo: no re-ordenar la tabla
         const active = document.getElementById("tab-wardrive")?.classList.contains("active");
         if (active) void wdRefresh();
       }, 2000);

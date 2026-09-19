@@ -696,6 +696,13 @@ button.secondary {
 
 .wd-danger:hover { background: rgba(255, 107, 107, 0.12); }
 
+.wd-paused {
+  color: #ffd166;
+  border-color: #ffd166;
+}
+
+.wd-pin { margin-right: 4px; }
+
 .wd-list-wrap { overflow-x: auto; }
 
 .wd-table {

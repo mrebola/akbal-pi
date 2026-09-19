@@ -1004,6 +1004,11 @@ def handle_client(client_socket, addr, whisplay):
                     radar_ui_points = content.get("radar_ui_points", None)
                     radar_ui_count = content.get("radar_ui_count", None)
                     radar_ui_channel = content.get("radar_ui_channel", None)
+                    wardrive_ui = content.get("wardrive_ui", None)
+                    wardrive_label = content.get("wardrive_label", None)
+                    wardrive_status_text = content.get("wardrive_status_text", None)
+                    wardrive_captured = content.get("wardrive_captured", None)
+                    wardrive_total = content.get("wardrive_total", None)
                     top_bar_mode = content.get("top_bar_mode", None)
 
                     if rgbled:
@@ -1060,6 +1065,9 @@ def handle_client(client_socket, addr, whisplay):
                             (help_ui_page is not None) or (help_ui_total is not None) or \
                             (radar_ui is not None) or (radar_ui_points is not None) or \
                             (radar_ui_count is not None) or (radar_ui_channel is not None) or \
+                            (wardrive_ui is not None) or (wardrive_label is not None) or \
+                            (wardrive_status_text is not None) or \
+                            (wardrive_captured is not None) or (wardrive_total is not None) or \
                             (top_bar_mode is not None):
                         update_display_data(status=status, emoji=emoji,
                                      text=text, text_delta=text_delta, scroll_speed=scroll_speed, scroll_sync=scroll_sync,
@@ -1092,6 +1100,11 @@ def handle_client(client_socket, addr, whisplay):
                                                  radar_ui_points=radar_ui_points,
                                                  radar_ui_count=radar_ui_count,
                                                  radar_ui_channel=radar_ui_channel,
+                                                 wardrive_ui=wardrive_ui,
+                                                 wardrive_label=wardrive_label,
+                                                 wardrive_status_text=wardrive_status_text,
+                                                 wardrive_captured=wardrive_captured,
+                                                 wardrive_total=wardrive_total,
                                                  top_bar_mode=top_bar_mode)
 
                     client_socket.send(b"OK\n")

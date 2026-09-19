@@ -1510,3 +1510,8 @@ body { font-family: var(--font-sans); }
 .chat-empty-title { font-weight: 800; letter-spacing: 0.14em; font-size: 20px; color: var(--text-primary); }
 .chat-empty-sub { font-size: 15px; margin-bottom: 12px; }
 .chat-empty-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+
+/* ---- Dispositivos: grilla de cards ---- */
+.dev-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.dev-grid .usb-devices-list li:only-child.muted,
+.usb-devices-list li.muted { color: var(--text-secondary); background: transparent; border: 1px dashed var(--border); }

@@ -134,35 +134,29 @@
 
     <section id="tab-usb" class="tab-panel">
       <div class="usb-toolbar">
-        <button id="usb-scan-btn">Buscar dispositivos</button>
+        <button id="usb-scan-btn" class="btn btn-secondary">Buscar dispositivos</button>
         <span id="usb-scan-status" class="muted"></span>
       </div>
 
-      <div class="usb-block">
-        <div class="usb-block-title">Dispositivos conectados</div>
-        <ul id="usb-devices-list" class="usb-devices-list"></ul>
-      </div>
-
-      <div class="usb-block">
-        <div class="usb-block-title">Adaptadores WiFi USB</div>
-        <ul id="usb-wifi-list" class="usb-devices-list"></ul>
-      </div>
-
-      <div class="usb-block">
-        <div class="usb-block-title">Almacenamiento USB</div>
-        <ul id="usb-volumes-list" class="usb-devices-list"></ul>
-      </div>
-
-      <div id="usb-browser" class="usb-browser hidden">
-        <div class="usb-browser-toolbar">
-          <button id="usb-browser-close" class="secondary">Cerrar</button>
-          <div id="usb-breadcrumb" class="usb-breadcrumb"></div>
+      <div class="dev-grid">
+        <div class="card">
+          <div class="usb-block-title">USB</div>
+          <ul id="usb-devices-list" class="usb-devices-list"></ul>
         </div>
-        <ul id="usb-file-list" class="usb-file-list"></ul>
+
+        <div class="card">
+          <div class="usb-block-title">Adaptadores Wi-Fi</div>
+          <ul id="usb-wifi-list" class="usb-devices-list"></ul>
+        </div>
+
+        <div class="card">
+          <div class="usb-block-title">Almacenamiento</div>
+          <ul id="usb-volumes-list" class="usb-devices-list"></ul>
+        </div>
       </div>
 
-      <div class="usb-block">
-        <div class="usb-block-title">Explorador de archivos (interno y USB)</div>
+      <div class="card" style="margin-top:16px;">
+        <div class="usb-block-title">Explorador de archivos</div>
         <div id="fm-usb" class="filemgr"></div>
       </div>
     </section>

@@ -1110,13 +1110,12 @@ async function openUsbVolume(volumeName) {
   });
   const mountData = await mountRes.json();
   if (!mountData.ok) {
-    alert(mountData.error || "No se pudo montar el volumen.");
+    toast(mountData.error || "No se pudo montar el volumen.", "error");
     return;
   }
-  browsingVolume = volumeName;
-  browsingPath = "";
-  usbBrowser.classList.remove("hidden");
-  void loadUsbFiles();
+  // Open the single, shared file explorer at this USB volume.
+  ensureUsbFileManager();
+  await fmUsbInstance?.openRoot(`usb:${volumeName}`);
 }
 
 function renderBreadcrumb() {
@@ -1193,8 +1192,10 @@ async function loadUsbFiles() {
   }
 }
 
-usbBrowserClose.addEventListener("click", () => {
-  usbBrowser.classList.add("hidden");
+// Legacy inline USB browser removed in favor of the single shared FileExplorer;
+// guard in case the element is absent.
+usbBrowserClose?.addEventListener("click", () => {
+  usbBrowser?.classList.add("hidden");
   browsingVolume = null;
   browsingPath = "";
 });
@@ -2282,13 +2283,30 @@ function createFileManager(container) {
     await loadRoots();
     await load();
   })();
+
+  // Small API so other UI (e.g. the "Abrir" button on a USB volume) can drive
+  // this single, shared explorer instead of a second implementation.
+  return {
+    async openRoot(key) {
+      await loadRoots();
+      if ([...rootSel.options].some((o) => o.value === key)) {
+        rootSel.value = key;
+        root = key;
+      }
+      cwd = "";
+      await load();
+      container.scrollIntoView({ behavior: "smooth", block: "start" });
+    },
+  };
 }
 
+let fmUsbInstance = null;
+let fmSettingsInstance = null;
 function ensureUsbFileManager() {
-  createFileManager(document.getElementById("fm-usb"));
+  if (!fmUsbInstance) fmUsbInstance = createFileManager(document.getElementById("fm-usb"));
 }
 function ensureSettingsFileManager() {
-  createFileManager(document.getElementById("fm-settings"));
+  if (!fmSettingsInstance) fmSettingsInstance = createFileManager(document.getElementById("fm-settings"));
 }
 
 // ================= WiFi directo (AP / hotspot) =================

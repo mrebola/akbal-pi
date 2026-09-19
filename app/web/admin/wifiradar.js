@@ -643,18 +643,51 @@ const tmpVec = new THREE.Vector3();
 const dummy = new THREE.Object3D();
 
 function updateLabels() {
-  for (const node of apNodes.values()) {
+  // Declutter: only show labels that don't collide. Priority order is the
+  // selected AP first, then strongest signal. Non-selected labels show just the
+  // SSID (short); the selected one shows full detail (dBm · ch) and is
+  // highlighted — full details for any AP are in the side panel on click.
+  const placed = [];
+  const H = 18;
+  const nodes = [...apNodes.values()].sort((a, b) => {
+    if (a.data.id === selectedId) return -1;
+    if (b.data.id === selectedId) return 1;
+    return (b.data.rssi ?? -999) - (a.data.rssi ?? -999);
+  });
+  for (const node of nodes) {
     tmpVec.copy(node.mesh.position).project(camera);
     if (tmpVec.z > 1) {
       node.labelEl.style.display = "none";
       continue;
     }
-    node.labelEl.style.display = "block";
     const x = (tmpVec.x * 0.5 + 0.5) * window.innerWidth;
     const y = (-tmpVec.y * 0.5 + 0.5) * window.innerHeight;
+    const isSelected = node.data.id === selectedId;
+    const ssid = node.data.ssid || "(oculta)";
+    const text = isSelected ? `${ssid} · ${node.data.rssi}dBm · ch${node.data.channel}` : ssid;
+    const w = Math.max(28, text.length * 7 + 12);
+    const rect = { l: x - w / 2, r: x + w / 2, t: y - H - 8, b: y - 8 };
+    let overlap = false;
+    if (!isSelected) {
+      for (const p of placed) {
+        if (rect.l < p.r && rect.r > p.l && rect.t < p.b && rect.b > p.t) {
+          overlap = true;
+          break;
+        }
+      }
+    }
+    if (overlap) {
+      node.labelEl.style.display = "none";
+      continue;
+    }
+    placed.push(rect);
+    node.labelEl.style.display = "block";
     node.labelEl.style.left = `${x}px`;
     node.labelEl.style.top = `${y}px`;
-    node.labelEl.textContent = `${node.data.ssid || "(oculta)"} · ${node.data.rssi}dBm · ch${node.data.channel}`;
+    node.labelEl.textContent = text;
+    node.labelEl.style.borderColor = isSelected ? "rgba(80,255,120,0.85)" : "rgba(56,224,255,0.25)";
+    node.labelEl.style.color = isSelected ? "#eafff0" : "#d7f6ff";
+    node.labelEl.style.zIndex = isSelected ? "14" : "12";
   }
 }
 

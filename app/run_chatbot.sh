@@ -139,16 +139,20 @@ fi
 if [ -n "$card_name" ]; then
   export SOUND_CARD_NAME="$card_name"
   export SOUND_CARD_INDEX="$card_index"
+  # The microphone is always the Whisplay HAT's onboard mic — pin the capture
+  # device to it so a connected Bluetooth speaker (its HFP/HSP headset mic)
+  # can't hijack it.
   export ALSA_INPUT_DEVICE="${ALSA_INPUT_DEVICE:-hw:${card_name},0}"
-  if [ -z "$ALSA_OUTPUT_DEVICE" ]; then
-    if [ "$card_name" = "whisplaysound" ]; then
-      export ALSA_OUTPUT_DEVICE="playback"
-    else
-      export ALSA_OUTPUT_DEVICE="plughw:${card_name},0"
-    fi
-  fi
+  # Do NOT auto-set ALSA_OUTPUT_DEVICE. In src/device/audio.ts a set
+  # ALSA_OUTPUT_DEVICE is an explicit escape hatch that overrides the runtime
+  # HAT/Bluetooth speaker toggle (on-screen quick menu + web admin). Forcing a
+  # default here pinned output to the HAT ("playback") and silently defeated
+  # the toggle, so picking the Bluetooth speaker did nothing. Left unset, the
+  # app resolves output live: the HAT ("playback" / "plughw:<card>,0") or the
+  # paired Bluetooth speaker ("pulse") based on the current selection. It is
+  # only ever exported (above, from .env) when the user hard-pins a device.
   echo "ALSA input device: $ALSA_INPUT_DEVICE"
-  echo "ALSA output device: $ALSA_OUTPUT_DEVICE"
+  echo "ALSA output device: ${ALSA_OUTPUT_DEVICE:-<runtime HAT/Bluetooth toggle>}"
 fi
 
 if [ "$serve_ollama" = true ]; then

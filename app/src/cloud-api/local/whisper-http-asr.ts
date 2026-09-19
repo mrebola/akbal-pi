@@ -94,7 +94,16 @@ export const recognizeAudio = async (
 function cleanup() {
   if (pyProcess && !pyProcess.killed) {
     console.log("Killing python server...");
-    process.kill(-pyProcess.pid!, "SIGTERM");
+    // pyProcess.killed doesn't get set by the process-*group* kill form
+    // below, so a second SIGINT/SIGTERM/exit (this process can see more
+    // than one under systemd's KillMode=control-group) retries killing an
+    // already-gone group — ESRCH, uncaught, crashes the whole app if not
+    // guarded here.
+    try {
+      process.kill(-pyProcess.pid!, "SIGTERM");
+    } catch (err: any) {
+      if (err?.code !== "ESRCH") console.warn("Failed to kill python server:", err);
+    }
   }
 }
 

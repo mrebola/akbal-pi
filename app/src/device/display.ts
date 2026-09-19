@@ -708,13 +708,20 @@ function shutdown(exitCode: number): Promise<void> {
   return shutdownPromise;
 }
 
-// kill the Python process on exit signals
+// Last-resort safety net for any exit path that skips shutdown() above
+// (which already calls these once, before its own process.exit()) — a
+// plain 'exit' listener can't do async work, the event loop is already
+// stopping. Wrapped defensively: an exception thrown inside an 'exit'
+// listener can never be caught by anything (confirmed the hard way — an
+// ESRCH from a redundant kill on an already-gone process crashed the app
+// hard right here, with no way for the outer signal handlers to recover).
 process.on("exit", () => {
-  // Best-effort only — 'exit' listeners can't do async work, the event
-  // loop is already stopping. shutdown() above is what actually waits for
-  // shutdownHooks to finish.
-  displayInstance.killPythonProcess();
-  displayInstance.stopWebDisplay();
+  try {
+    displayInstance.killPythonProcess();
+    displayInstance.stopWebDisplay();
+  } catch (err) {
+    console.warn("[Shutdown] exit handler failed:", err);
+  }
 });
 ["SIGINT", "SIGTERM"].forEach((signal) => {
   process.on(signal, () => {

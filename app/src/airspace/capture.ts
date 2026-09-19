@@ -192,6 +192,13 @@ export class Ar9271Capture extends EventEmitter {
       this.emit("exit", { code, signal });
     });
     this.proc.on("error", (err) => {
+      // Same guard as "exit" above: stop() already sets running=false
+      // before killing the process, and the kill itself can trigger a
+      // late "error" here (e.g. EPIPE on its now-dead stdout) — nothing
+      // is listening for an "error" this deep into an intentional
+      // shutdown, and Node throws *uncaught* if "error" is emitted with
+      // zero listeners, so this must not forward it in that case.
+      if (!this.running) return;
       this.running = false;
       this.emit("error", err);
     });
@@ -226,10 +233,20 @@ export class Ar9271Capture extends EventEmitter {
       // true above) reaches dumpcap and tshark directly too — belt and
       // suspenders against a root-owned dumpcap lingering and holding the
       // monitor interface open.
+      // Both attempts can legitimately fail with ESRCH — the process (or
+      // whole group) may have already exited on its own by the time
+      // stop() runs (e.g. during shutdown, racing the process's own
+      // natural exit) — and ChildProcess#kill() can throw synchronously
+      // for that, not just process.kill(). An uncaught ESRCH here crashed
+      // the whole app during testing, so both are guarded.
       try {
         process.kill(-this.proc.pid!, "SIGTERM");
       } catch {
-        this.proc.kill("SIGTERM");
+        try {
+          this.proc.kill("SIGTERM");
+        } catch {
+          // Already gone — nothing left to kill.
+        }
       }
       this.proc = null;
     }

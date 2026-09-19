@@ -91,7 +91,14 @@ export class AirspaceService extends EventEmitter {
   private async teardownRealCapture(): Promise<void> {
     this.hopper?.stop();
     this.hopper = null;
-    this.capture?.removeAllListeners();
+    // NOT removeAllListeners() before stop(): killing the process can
+    // still emit an "error" event on it afterward (e.g. EPIPE from its
+    // now-dead stdout), which capture.ts forwards as "error" on this
+    // EventEmitter — and Node throws an *uncaught* exception if "error"
+    // fires with zero listeners. Confirmed the hard way: this crashed the
+    // whole app during shutdown. capture.stop() itself sets running=false
+    // first, and capture.ts's own handlers already check that flag before
+    // forwarding anything post-stop — no need to strip listeners here too.
     this.capture?.stop();
     this.capture = null;
     if (this.monitorIface) {

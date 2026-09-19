@@ -1,0 +1,6 @@
+# Regla sudoers para el admin web / menú de wifi (nmcli via sudo -n).
+# Instalar en la Pi con:
+#   sudo install -m 0440 -o root -g root akbal-nmcli-sudoers /etc/sudoers.d/akbal-nmcli
+#   sudo visudo -c -f /etc/sudoers.d/akbal-nmcli
+# Ver docs/wifi.md ("Por qué necesita sudo para nmcli").
+akbal ALL=(root) NOPASSWD: /usr/bin/nmcli

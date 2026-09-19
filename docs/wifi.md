@@ -64,9 +64,13 @@ va a llegar). Dos formas de que eso funcione:
    akbal ALL=(root) NOPASSWD: /usr/bin/nmcli
    ```
 
-   Este archivo no se instala solo — hay que crearlo a mano en el
-   dispositivo, validarlo con `visudo -c -f <archivo>` antes de copiarlo a
-   `/etc/sudoers.d/`, y darle permisos `0440`.
+   Este archivo no se instala solo: hay una copia lista en
+   [`setup/akbal-nmcli-sudoers`](../setup/akbal-nmcli-sudoers). En la Pi:
+
+   ```bash
+   sudo install -m 0440 -o root -g root setup/akbal-nmcli-sudoers /etc/sudoers.d/akbal-nmcli
+   sudo visudo -c -f /etc/sudoers.d/akbal-nmcli
+   ```
 
 ## Qué hace cada cosa en `app/src/utils/wifi.ts`
 

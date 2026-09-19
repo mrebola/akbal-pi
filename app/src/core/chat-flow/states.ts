@@ -80,6 +80,14 @@ import {
   handleVolumeAdjustRelease,
   onVolumeAdjustExit,
 } from "./volume-adjust-mode";
+import {
+  enterWifiManagerMode,
+  exitWifiManagerMode,
+  handleWifiManagerCancel,
+  handleWifiManagerPress,
+  handleWifiManagerRelease,
+  onWifiManagerDone,
+} from "./wifi-manager-mode";
 import { isAgentMode, setDeviceMode } from "../../config/device-mode";
 import {
   DEFAULT_OLLAMA_MODEL,
@@ -201,6 +209,10 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       }
       if (key === "volume") {
         ctx.transitionTo("volume_adjust");
+        return;
+      }
+      if (key === "wifi") {
+        ctx.transitionTo("wifi_manager");
         return;
       }
       const captureImgPath = `${cameraDir}/capture-${moment().format(
@@ -996,5 +1008,17 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     onButtonPressed(() => handleVolumeAdjustPress());
     onButtonReleased(() => handleVolumeAdjustRelease());
     enterVolumeAdjustMode();
+  },
+  wifi_manager: (ctx: ChatFlowContext) => {
+    onWifiManagerDone(() => {
+      exitWifiManagerMode();
+      if (ctx.currentFlowName === "wifi_manager") {
+        ctx.transitionTo("sleep");
+      }
+    });
+    onButtonDoubleClick(() => handleWifiManagerCancel());
+    onButtonPressed(() => handleWifiManagerPress());
+    onButtonReleased(() => handleWifiManagerRelease());
+    void enterWifiManagerMode();
   },
 };

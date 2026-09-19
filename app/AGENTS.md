@@ -76,6 +76,7 @@ whisplay-ai-chatbot/
 │   │   ├── battery.ts            # Battery monitoring
 │   │   ├── wakeword.ts           # Wake word detection
 │   │   ├── web-display.ts        # Web-based display sim
+│   │   ├── web-admin-server.ts   # LAN chat + wifi admin UI (docs/web-ui.md)
 │   │   └── ...
 │   ├── plugin/                   # Plugin system
 │   │   ├── types.ts              # Plugin interface definitions
@@ -86,7 +87,7 @@ whisplay-ai-chatbot/
 │   │   ├── llm-config.ts         # LLM configuration
 │   │   ├── llm-tools.ts          # Tool definitions
 │   │   └── custom-tools/         # Custom tool templates
-│   ├── utils/                    # Utility functions
+│   ├── utils/                    # Utility functions (incl. wifi.ts — nmcli wrapper, docs/wifi.md)
 │   └── type/                     # Global TypeScript types
 ├── python/                       # Python hardware interface
 │   ├── whisplay.py               # Hardware board abstraction (GPIO, SPI, LCD)
@@ -98,6 +99,9 @@ whisplay-ai-chatbot/
 │   ├── speech-service/           # Speech recognition hosts
 │   ├── status-bar-icon/          # UI icon renderers
 │   └── test/                     # Hardware test scripts
+├── web/                          # Static frontends (no build step)
+│   ├── whisplay-display/         # Mirrors the physical screen for dev (WHISPLAY_WEB_ENABLED)
+│   └── admin/                    # LAN chat + wifi admin UI (web-admin-server.ts, docs/web-ui.md)
 ├── cli/                          # Bash CLI implementation
 │   ├── commands.sh               # Main command dispatcher
 │   ├── plugin.sh                 # Plugin management
@@ -312,8 +316,9 @@ The chat flow uses a finite state machine (`src/core/chat-flow/stateMachine.ts`)
 | `mode_select` | On-screen menu to switch between "modo agente" (OpenClaw via the `whisplay-im` bridge) and "modo local" (see `docs/agent-mode.md`) |
 | `mode_loading` | Confirms the agent/local mode switch and persists it to `.env` (`DEVICE_MODE`) |
 | `help` | Voice-command cheat sheet, opened by saying "ayuda" while holding the button, or from the quick menu (see `docs/voice-commands.md`) |
-| `quick_menu` | Short click from "sleep" — carousel of Modelo/Modo/Ayuda/Cámara/Volumen (see `chat-flow/quick-menu-mode.ts`) |
+| `quick_menu` | Short click from "sleep" — carousel of Modelo/Modo/Ayuda/Cámara/Volumen/Internet emergencia (see `chat-flow/quick-menu-mode.ts`) |
 | `volume_adjust` | Physical volume control from the quick menu — click bumps +10% live, hold/double-click exits (see `chat-flow/volume-adjust-mode.ts`) |
+| `wifi_manager` | Wifi status/scan/connect from the quick menu's "Internet emergencia" (see `chat-flow/wifi-manager-mode.ts`, `docs/wifi.md`) |
 
 State transitions are triggered by button events, wake word detection, or completion of async operations.
 

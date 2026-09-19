@@ -29,6 +29,7 @@ Raspberry Pi OS 64-bit, basado en Debian Trixie.
 | Orquestación | [whisplay-ai-chatbot](https://github.com/PiSugar/whisplay-ai-chatbot) |
 | Pantalla | UI propia minimalista: íconos de wifi/batería arriba, personaje animado (cara en primer plano) al medio, texto verde terminal abajo ([`docs/display-ui.md`](docs/display-ui.md)); pantalla dedicada estilo terminal para elegir/cargar modelo de LLM ([`docs/voice-commands.md`](docs/voice-commands.md)) |
 | Comandos de voz | Volumen, cambio/consulta de modelo de LLM y modo agente/local, resueltos por expresiones regulares antes de llegar al LLM — instantáneo, sin gastar un turno. Decir "ayuda" con el botón presionado muestra un resumen de todos estos comandos en pantalla ([`docs/voice-commands.md`](docs/voice-commands.md)) |
+| Wifi | Menú físico "Internet emergencia" (ver/escanear/conectar, sin poder tipear contraseñas nuevas) ([`docs/wifi.md`](docs/wifi.md)) + interfaz web con chat a los modelos locales y wifi completo (buscar, conectar con contraseña, olvidar redes) en `http://<ip-del-dispositivo>:8090` ([`docs/web-ui.md`](docs/web-ui.md)) |
 
 Detalle completo del setup en [`docs/SETUP.md`](docs/SETUP.md).
 
@@ -230,7 +231,8 @@ elegir modelo con el botón del Whisplay HAT (click para recorrer opciones,
 mantener ~0.9 segundos para confirmar, doble clic para cancelar), la
 pantalla de carga con spinner indeterminado mientras Ollama carga el modelo
 elegido, un menú rápido (click corto en reposo: Modelo/Modo/Ayuda/Cámara/
-Volumen) y
+Volumen/Internet emergencia — este último es un administrador de wifi
+básico, ver [`docs/wifi.md`](docs/wifi.md)) y
 una pantalla de ayuda (decir "ayuda" con el botón presionado, o elegirla del
 menú rápido) que resume los comandos de voz en a lo sumo 2 pantallas.
 [`docs/llm-model-selection.md`](docs/llm-model-selection.md) documenta cómo

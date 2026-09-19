@@ -19,7 +19,8 @@ export type FlowName =
   | "mode_loading"
   | "help"
   | "quick_menu"
-  | "volume_adjust";
+  | "volume_adjust"
+  | "wifi_manager";
 
 export type FlowStateHandler = (ctx: ChatFlowContext) => void;
 

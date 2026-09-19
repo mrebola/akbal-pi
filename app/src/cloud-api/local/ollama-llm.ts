@@ -33,7 +33,10 @@ import { persistEnvVar } from "../../utils/env-file";
 dotenv.config();
 
 // Ollama LLM configuration
-const ollamaEndpoint =
+// Exported so the web admin UI's chat proxy (device/web-admin-server.ts)
+// can call Ollama directly for streaming — everything else here still goes
+// through the functions below.
+export const ollamaEndpoint =
   process.env.OLLAMA_ENDPOINT || `http://localhost:${defaultPortMap.ollama}`;
 // The documented best-performing local model (see
 // docs/llm-model-selection.md) — used as the .env fallback below, and also

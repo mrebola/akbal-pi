@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Akbal</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">AKBAL</div>
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="chat">Chat</button>
+      <button class="tab-btn" data-tab="wifi">Wifi</button>
+    </nav>
+    <div class="status" id="status-pill">—</div>
+  </header>
+
+  <main>
+    <section id="tab-chat" class="tab-panel active">
+      <div class="chat-toolbar">
+        <label for="model-select">Modelo</label>
+        <select id="model-select"></select>
+      </div>
+      <div id="chat-log" class="chat-log"></div>
+      <form id="chat-form" class="chat-form">
+        <textarea id="chat-input" placeholder="Escribí un mensaje..." rows="1"></textarea>
+        <button type="submit" id="chat-send">Enviar</button>
+      </form>
+    </section>
+
+    <section id="tab-wifi" class="tab-panel">
+      <div class="wifi-current">
+        <div class="wifi-current-label">Conexión actual</div>
+        <div id="wifi-current-ssid" class="wifi-current-ssid">—</div>
+      </div>
+      <div class="wifi-toolbar">
+        <button id="wifi-scan-btn">Buscar redes</button>
+        <span id="wifi-scan-status" class="muted"></span>
+      </div>
+      <ul id="wifi-list" class="wifi-list"></ul>
+      <div class="wifi-toolbar">
+        <span class="muted">Redes guardadas</span>
+      </div>
+      <ul id="wifi-saved-list" class="wifi-list"></ul>
+    </section>
+  </main>
+
+  <div id="wifi-connect-modal" class="modal hidden">
+    <div class="modal-card">
+      <h3 id="wifi-connect-title">Conectar</h3>
+      <input id="wifi-connect-password" type="password" placeholder="Contraseña (si hace falta)" autocomplete="off" />
+      <div class="modal-actions">
+        <button id="wifi-connect-cancel" class="secondary">Cancelar</button>
+        <button id="wifi-connect-confirm">Conectar</button>
+      </div>
+      <div id="wifi-connect-error" class="error"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

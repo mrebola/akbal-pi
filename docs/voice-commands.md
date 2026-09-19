@@ -19,10 +19,12 @@ confirmar en los menús.
 ## Menú rápido
 
 Click corto en reposo abre un carrusel con **Modelo → Modo → Ayuda → Cámara →
-Volumen** (cámara solo si `ENABLE_CAMERA=true`). Click pasa entre opciones,
-mantener ~0.9s confirma la resaltada y entra a esa pantalla — mismo
-mecanismo que el selector de modelo/modo de abajo. Reemplaza al doble clic
-que antes abría la cámara directo desde reposo; ahora todo pasa por acá.
+Volumen → Internet emergencia** (cámara solo si `ENABLE_CAMERA=true`). Click
+pasa entre opciones, mantener ~0.9s confirma la resaltada y entra a esa
+pantalla — mismo mecanismo que el selector de modelo/modo de abajo.
+Reemplaza al doble clic que antes abría la cámara directo desde reposo;
+ahora todo pasa por acá. "Internet emergencia" abre un administrador de
+wifi básico — ver [`wifi.md`](./wifi.md).
 
 ### Volumen desde el menú rápido
 

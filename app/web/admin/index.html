@@ -12,13 +12,19 @@
     <nav class="tabs">
       <button class="tab-btn active" data-tab="chat">Chat</button>
       <button class="tab-btn" data-tab="wifi">Wifi</button>
+      <button class="tab-btn" data-tab="usb">USB</button>
     </nav>
     <div class="status" id="status-pill">—</div>
+    <div class="battery-indicator" id="battery-indicator" title="Batería">
+      <span id="battery-icon">🔋</span>
+      <span id="battery-pct">—</span>
+    </div>
   </header>
 
   <main>
     <section id="tab-chat" class="tab-panel active">
       <div class="chat-toolbar">
+        <img id="avatar" class="avatar" src="/avatar/standing.gif" alt="Akbal" />
         <label for="model-select">Modelo</label>
         <select id="model-select"></select>
       </div>
@@ -45,6 +51,26 @@
       </div>
       <ul id="wifi-saved-list" class="wifi-list"></ul>
     </section>
+
+    <section id="tab-usb" class="tab-panel">
+      <div class="usb-block">
+        <div class="usb-block-title">Dispositivos conectados</div>
+        <ul id="usb-devices-list" class="usb-devices-list"></ul>
+      </div>
+
+      <div class="usb-block">
+        <div class="usb-block-title">Almacenamiento USB</div>
+        <ul id="usb-volumes-list" class="usb-devices-list"></ul>
+      </div>
+
+      <div id="usb-browser" class="usb-browser hidden">
+        <div class="usb-browser-toolbar">
+          <button id="usb-browser-close" class="secondary">Cerrar</button>
+          <div id="usb-breadcrumb" class="usb-breadcrumb"></div>
+        </div>
+        <ul id="usb-file-list" class="usb-file-list"></ul>
+      </div>
+    </section>
   </main>
 
   <div id="wifi-connect-modal" class="modal hidden">
@@ -56,6 +82,15 @@
         <button id="wifi-connect-confirm">Conectar</button>
       </div>
       <div id="wifi-connect-error" class="error"></div>
+    </div>
+  </div>
+
+  <div id="image-preview-modal" class="modal hidden">
+    <div class="modal-card image-preview-card">
+      <img id="image-preview-img" src="" alt="preview" />
+      <div class="modal-actions">
+        <button id="image-preview-close" class="secondary">Cerrar</button>
+      </div>
     </div>
   </div>
 

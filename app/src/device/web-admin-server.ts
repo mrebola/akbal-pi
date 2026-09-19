@@ -14,12 +14,23 @@ import {
   switchModel,
 } from "../cloud-api/local/ollama-llm";
 import { isAgentMode } from "../config/device-mode";
+import { getBatteryReading } from "../status/battery-status";
 import {
+  connectToEmergencyWifi,
   connectToWifi,
   forgetWifi,
   getWifiStatus,
+  hasEmergencyWifiConfigured,
   scanWifiNetworks,
 } from "../utils/wifi";
+import {
+  ensureMounted,
+  findVolume,
+  listFiles,
+  listUsbDevices,
+  listUsbVolumes,
+  resolveFilePath,
+} from "../utils/usb";
 
 // Small local admin UI, reachable from any device on the LAN — a chat page
 // for the local Ollama models (like a mini OpenWebUI) and a wifi settings
@@ -76,12 +87,32 @@ export class WebAdminServer {
       ctx.body = fs.createReadStream(path.resolve(__dirname, "../..", "web", "admin", "index.html"));
     });
 
+    // Same two GIFs the physical screen animates between (standing = idle,
+    // talking = answering) — see docs/display-ui.md. Served from
+    // python/img/ directly instead of duplicating the files under web/admin/.
+    router.get("/avatar/:name", (ctx) => {
+      const name = ctx.params.name;
+      if (name !== "standing.gif" && name !== "talking.gif") {
+        ctx.status = 404;
+        return;
+      }
+      const filePath = path.resolve(__dirname, "../..", "python", "img", name);
+      if (!fs.existsSync(filePath)) {
+        ctx.status = 404;
+        return;
+      }
+      ctx.set("Cache-Control", "public, max-age=86400");
+      ctx.type = "image/gif";
+      ctx.body = fs.createReadStream(filePath);
+    });
+
     router.get("/api/status", async (ctx) => {
       const wifi = await getWifiStatus();
       ctx.body = {
         model: getCurrentModel(),
         deviceMode: isAgentMode() ? "agent" : "local",
         wifi,
+        battery: getBatteryReading(),
       };
     });
 
@@ -193,7 +224,14 @@ export class WebAdminServer {
     });
 
     router.get("/api/wifi/scan", async (ctx) => {
-      ctx.body = await scanWifiNetworks();
+      const networks = await scanWifiNetworks();
+      const emergencySsid = process.env.EMERGENCY_WIFI_SSID;
+      ctx.body = networks.map((n) => ({
+        ...n,
+        // Flags the pre-configured emergency network (see docs/wifi.md) so
+        // the UI can tag it and skip asking for a password it already has.
+        isEmergency: Boolean(emergencySsid) && n.ssid === emergencySsid,
+      }));
     });
 
     router.post("/api/wifi/connect", async (ctx) => {
@@ -206,6 +244,15 @@ export class WebAdminServer {
       ctx.body = await connectToWifi(ssid, typeof password === "string" ? password : undefined);
     });
 
+    router.post("/api/wifi/connect-emergency", async (ctx) => {
+      if (!hasEmergencyWifiConfigured()) {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "No hay red de emergencia configurada" };
+        return;
+      }
+      ctx.body = await connectToEmergencyWifi();
+    });
+
     router.post("/api/wifi/forget", async (ctx) => {
       const { ssid } = (ctx.request.body as any) || {};
       if (!ssid || typeof ssid !== "string") {
@@ -214,6 +261,90 @@ export class WebAdminServer {
         return;
       }
       ctx.body = await forgetWifi(ssid);
+    });
+
+    router.get("/api/usb/devices", async (ctx) => {
+      ctx.body = await listUsbDevices();
+    });
+
+    router.get("/api/usb/volumes", async (ctx) => {
+      ctx.body = await listUsbVolumes();
+    });
+
+    router.post("/api/usb/mount", async (ctx) => {
+      const { volume } = (ctx.request.body as any) || {};
+      if (!volume || typeof volume !== "string") {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "volume requerido" };
+        return;
+      }
+      ctx.body = await ensureMounted(volume);
+    });
+
+    router.get("/api/usb/files", async (ctx) => {
+      const volumeName = String(ctx.query.volume || "");
+      const relativePath = String(ctx.query.path || "");
+      const volume = await findVolume(volumeName);
+      if (!volume) {
+        ctx.status = 404;
+        ctx.body = { ok: false, error: "Volumen no encontrado" };
+        return;
+      }
+      if (!volume.mounted) {
+        ctx.status = 409;
+        ctx.body = { ok: false, error: "Volumen no montado" };
+        return;
+      }
+      ctx.body = await listFiles(volume.mountPath, relativePath);
+    });
+
+    const IMAGE_TYPES: Record<string, string> = {
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".png": "image/png",
+      ".gif": "image/gif",
+      ".webp": "image/webp",
+      ".bmp": "image/bmp",
+    };
+
+    router.get("/api/usb/file", async (ctx) => {
+      const volumeName = String(ctx.query.volume || "");
+      const relativePath = String(ctx.query.path || "");
+      const volume = await findVolume(volumeName);
+      if (!volume || !volume.mounted) {
+        ctx.status = 404;
+        ctx.body = { ok: false, error: "Volumen no encontrado o no montado" };
+        return;
+      }
+      const filePath = resolveFilePath(volume.mountPath, relativePath);
+      if (!filePath) {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "Ruta inválida" };
+        return;
+      }
+      let stat;
+      try {
+        stat = fs.statSync(filePath);
+      } catch {
+        ctx.status = 404;
+        ctx.body = { ok: false, error: "Archivo no encontrado" };
+        return;
+      }
+      if (!stat.isFile()) {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "No es un archivo" };
+        return;
+      }
+      const ext = path.extname(filePath).toLowerCase();
+      const imageType = IMAGE_TYPES[ext];
+      ctx.set("Content-Length", String(stat.size));
+      if (imageType) {
+        ctx.type = imageType;
+      } else {
+        ctx.type = "application/octet-stream";
+        ctx.set("Content-Disposition", `attachment; filename="${path.basename(filePath)}"`);
+      }
+      ctx.body = fs.createReadStream(filePath);
     });
   }
 

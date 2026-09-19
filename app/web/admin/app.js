@@ -9,15 +9,36 @@ const chatSend = document.getElementById("chat-send");
 const chatCancel = document.getElementById("chat-cancel");
 const modelSelect = document.getElementById("model-select");
 const statusPill = document.getElementById("status-pill");
+const avatar = document.getElementById("avatar");
+const batteryIndicator = document.getElementById("battery-indicator");
+const batteryIcon = document.getElementById("battery-icon");
+const batteryPct = document.getElementById("battery-pct");
 
 let history = [];
 let sending = false;
 let activeController = null;
 
+// Same still/talking GIFs the physical screen animates between — see
+// docs/display-ui.md. Toggling the <img> src (not just hiding/showing)
+// restarts the animation from frame 0 each time, which is what we want.
 function setSendingUi(isSending) {
   sending = isSending;
   chatSend.disabled = isSending;
   chatCancel.classList.toggle("hidden", !isSending);
+  avatar.src = isSending ? "/avatar/talking.gif" : "/avatar/standing.gif";
+}
+
+function updateBatteryIndicator(battery) {
+  if (!battery || !battery.connected) {
+    batteryPct.textContent = "—";
+    batteryIcon.textContent = "🔋";
+    batteryIndicator.classList.remove("low", "charging");
+    return;
+  }
+  batteryPct.textContent = `${battery.level}%`;
+  batteryIcon.textContent = battery.charging ? "⚡" : "🔋";
+  batteryIndicator.classList.toggle("low", battery.level <= 15 && !battery.charging);
+  batteryIndicator.classList.toggle("charging", Boolean(battery.charging));
 }
 
 function addMessage(role, text) {
@@ -36,6 +57,7 @@ async function loadStatus() {
     const modeLabel = data.deviceMode === "agent" ? "agente" : "local";
     const wifiLabel = data.wifi?.connected ? data.wifi.ssid : "sin wifi";
     statusPill.textContent = `${data.model} · modo ${modeLabel} · ${wifiLabel}`;
+    updateBatteryIndicator(data.battery);
   } catch {
     statusPill.textContent = "sin conexión con el dispositivo";
   }
@@ -243,12 +265,16 @@ function renderWifiItem(net, { saved }) {
   const left = document.createElement("div");
   const name = document.createElement("div");
   name.className = "wifi-item-name";
-  name.innerHTML = `${net.active ? '<span class="active-dot">●</span>' : ""}${net.ssid}`;
+  name.innerHTML = `${net.active ? '<span class="active-dot">●</span>' : ""}${net.ssid}${net.isEmergency ? '<span class="tag">wifi emergencia</span>' : ""}`;
   const meta = document.createElement("div");
   meta.className = "wifi-item-meta";
   meta.textContent = net.active
     ? "Conectada ahora"
-    : [net.secure ? "Con contraseña" : "Abierta", net.saved ? "guardada" : null, net.signal ? `${net.signal}%` : null]
+    : [
+        net.isEmergency ? "Ya tenés la contraseña" : net.secure ? "Con contraseña" : "Abierta",
+        net.saved ? "guardada" : null,
+        net.signal ? `${net.signal}%` : null,
+      ]
         .filter(Boolean)
         .join(" · ");
   left.appendChild(name);
@@ -260,6 +286,21 @@ function renderWifiItem(net, { saved }) {
     const connectBtn = document.createElement("button");
     connectBtn.textContent = "Conectar";
     connectBtn.addEventListener("click", () => {
+      // Emergency network already has its password on the device (see
+      // docs/wifi.md) — no modal, no typing it again.
+      if (net.isEmergency) {
+        void (async () => {
+          const res = await fetch("/api/wifi/connect-emergency", { method: "POST" });
+          const data = await res.json();
+          if (data.ok) {
+            void refreshWifi();
+            void loadStatus();
+          } else {
+            modalError.textContent = data.error || "No se pudo conectar a la red de emergencia.";
+          }
+        })();
+        return;
+      }
       if (net.saved || !net.secure) {
         void (async () => {
           const res = await fetch("/api/wifi/connect", {
@@ -338,7 +379,212 @@ async function refreshWifi() {
 
 wifiScanBtn.addEventListener("click", () => void refreshWifi());
 
+// ---- USB ----
+
+const usbDevicesList = document.getElementById("usb-devices-list");
+const usbVolumesList = document.getElementById("usb-volumes-list");
+const usbBrowser = document.getElementById("usb-browser");
+const usbBrowserClose = document.getElementById("usb-browser-close");
+const usbBreadcrumb = document.getElementById("usb-breadcrumb");
+const usbFileList = document.getElementById("usb-file-list");
+const imagePreviewModal = document.getElementById("image-preview-modal");
+const imagePreviewImg = document.getElementById("image-preview-img");
+const imagePreviewClose = document.getElementById("image-preview-close");
+
+let browsingVolume = null;
+let browsingPath = "";
+
+function formatBytes(bytes) {
+  if (!bytes && bytes !== 0) return "";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex++;
+  }
+  return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+const IMAGE_EXT_RE = /\.(jpe?g|png|gif|webp|bmp)$/i;
+
+async function loadUsbDevices() {
+  usbDevicesList.innerHTML = "";
+  try {
+    const res = await fetch("/api/usb/devices");
+    const devices = await res.json();
+    if (devices.length === 0) {
+      const li = document.createElement("li");
+      li.className = "muted";
+      li.textContent = "Nada conectado por USB ahora mismo.";
+      usbDevicesList.appendChild(li);
+      return;
+    }
+    for (const d of devices) {
+      const li = document.createElement("li");
+      const label = document.createElement("div");
+      label.textContent = d.description || d.id;
+      const meta = document.createElement("div");
+      meta.className = "usb-item-meta";
+      meta.textContent = `Bus ${d.bus} · ${d.id}`;
+      li.appendChild(label);
+      li.appendChild(meta);
+      usbDevicesList.appendChild(li);
+    }
+  } catch (err) {
+    usbDevicesList.innerHTML = `<li class="muted">Error: ${err.message}</li>`;
+  }
+}
+
+async function loadUsbVolumes() {
+  usbVolumesList.innerHTML = "";
+  try {
+    const res = await fetch("/api/usb/volumes");
+    const volumes = await res.json();
+    if (volumes.length === 0) {
+      const li = document.createElement("li");
+      li.className = "muted";
+      li.textContent = "No hay almacenamiento USB conectado.";
+      usbVolumesList.appendChild(li);
+      return;
+    }
+    for (const v of volumes) {
+      const li = document.createElement("li");
+      const label = document.createElement("div");
+      label.textContent = `${v.label} (${v.sizeLabel})`;
+      const meta = document.createElement("div");
+      meta.className = "usb-item-meta";
+      meta.textContent = v.mounted ? v.mountPath : "Sin montar";
+      const openBtn = document.createElement("button");
+      openBtn.textContent = "Abrir";
+      openBtn.addEventListener("click", () => void openUsbVolume(v.name));
+      const left = document.createElement("div");
+      left.appendChild(label);
+      left.appendChild(meta);
+      li.appendChild(left);
+      li.appendChild(openBtn);
+      usbVolumesList.appendChild(li);
+    }
+  } catch (err) {
+    usbVolumesList.innerHTML = `<li class="muted">Error: ${err.message}</li>`;
+  }
+}
+
+async function openUsbVolume(volumeName) {
+  const mountRes = await fetch("/api/usb/mount", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ volume: volumeName }),
+  });
+  const mountData = await mountRes.json();
+  if (!mountData.ok) {
+    alert(mountData.error || "No se pudo montar el volumen.");
+    return;
+  }
+  browsingVolume = volumeName;
+  browsingPath = "";
+  usbBrowser.classList.remove("hidden");
+  void loadUsbFiles();
+}
+
+function renderBreadcrumb() {
+  usbBreadcrumb.innerHTML = "";
+  const parts = browsingPath ? browsingPath.split("/").filter(Boolean) : [];
+  const rootCrumb = document.createElement("span");
+  rootCrumb.className = "crumb";
+  rootCrumb.textContent = "/";
+  rootCrumb.addEventListener("click", () => {
+    browsingPath = "";
+    void loadUsbFiles();
+  });
+  usbBreadcrumb.appendChild(rootCrumb);
+  let acc = "";
+  for (const part of parts) {
+    acc = acc ? `${acc}/${part}` : part;
+    const crumb = document.createElement("span");
+    crumb.className = "crumb";
+    crumb.textContent = part;
+    const target = acc;
+    crumb.addEventListener("click", () => {
+      browsingPath = target;
+      void loadUsbFiles();
+    });
+    usbBreadcrumb.appendChild(crumb);
+  }
+}
+
+async function loadUsbFiles() {
+  renderBreadcrumb();
+  usbFileList.innerHTML = "<li class=\"muted\">Cargando...</li>";
+  try {
+    const params = new URLSearchParams({ volume: browsingVolume, path: browsingPath });
+    const res = await fetch(`/api/usb/files?${params}`);
+    const data = await res.json();
+    usbFileList.innerHTML = "";
+    if (!data.ok) {
+      usbFileList.innerHTML = `<li class="muted">${data.error || "Error"}</li>`;
+      return;
+    }
+    if (data.entries.length === 0) {
+      usbFileList.innerHTML = "<li class=\"muted\">Carpeta vacía.</li>";
+      return;
+    }
+    for (const entry of data.entries) {
+      const li = document.createElement("li");
+      const nameEl = document.createElement("div");
+      nameEl.className = "usb-file-name";
+      nameEl.textContent = `${entry.isDir ? "📁" : "📄"} ${entry.name}`;
+      const sizeEl = document.createElement("div");
+      sizeEl.className = "usb-file-size";
+      sizeEl.textContent = entry.isDir ? "" : formatBytes(entry.size);
+      li.appendChild(nameEl);
+      li.appendChild(sizeEl);
+      li.addEventListener("click", () => {
+        const entryPath = browsingPath ? `${browsingPath}/${entry.name}` : entry.name;
+        if (entry.isDir) {
+          browsingPath = entryPath;
+          void loadUsbFiles();
+          return;
+        }
+        const fileUrl = `/api/usb/file?${new URLSearchParams({ volume: browsingVolume, path: entryPath })}`;
+        if (IMAGE_EXT_RE.test(entry.name)) {
+          imagePreviewImg.src = fileUrl;
+          imagePreviewModal.classList.remove("hidden");
+        } else {
+          window.location.href = fileUrl;
+        }
+      });
+      usbFileList.appendChild(li);
+    }
+  } catch (err) {
+    usbFileList.innerHTML = `<li class="muted">Error: ${err.message}</li>`;
+  }
+}
+
+usbBrowserClose.addEventListener("click", () => {
+  usbBrowser.classList.add("hidden");
+  browsingVolume = null;
+  browsingPath = "";
+});
+
+imagePreviewClose.addEventListener("click", () => {
+  imagePreviewModal.classList.add("hidden");
+  imagePreviewImg.src = "";
+});
+
+for (const btn of document.querySelectorAll(".tab-btn")) {
+  if (btn.dataset.tab === "usb") {
+    btn.addEventListener("click", () => {
+      void loadUsbDevices();
+      void loadUsbVolumes();
+    });
+  }
+}
+
 // ---- Boot ----
 
 void loadStatus();
 void loadModels();
+// Battery (and the rest of /api/status) refreshes on its own — no manual
+// reload needed to see the % move.
+setInterval(() => void loadStatus(), 60000);

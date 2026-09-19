@@ -4,6 +4,7 @@ import { EventEmitter } from "events";
 class PiSugarBattery extends EventEmitter {
   private client: Socket | null = null;
   private batteryLevel: number = 0;
+  private batteryCharging: boolean | null = null;
   private connected: boolean = false;
   private interval: NodeJS.Timeout | null = null;
 
@@ -19,6 +20,12 @@ class PiSugarBattery extends EventEmitter {
         this.interval = setInterval(() => {
           if (this.connected && this.client) {
             this.client.write("get battery\n");
+            // Same PiSugar daemon protocol, a second known command — used
+            // by the web admin UI's battery indicator (see
+            // device/web-admin-server.ts). Harmless if the daemon doesn't
+            // support it: the response just won't match either prefix
+            // below and gets ignored.
+            this.client.write("get battery_charging\n");
           }
         }, 5000);
         resolve();
@@ -30,6 +37,10 @@ class PiSugarBattery extends EventEmitter {
           const level = parseInt(message.split(":")[1], 10);
           this.batteryLevel = level;
           this.emit("batteryLevel", level);
+        } else if (message.startsWith("battery_charging:")) {
+          const charging = message.split(":")[1].trim() === "true";
+          this.batteryCharging = charging;
+          this.emit("batteryCharging", charging);
         }
       });
 
@@ -57,6 +68,12 @@ class PiSugarBattery extends EventEmitter {
 
   getBatteryLevel(): number {
     return this.batteryLevel;
+  }
+
+  // null until the daemon has answered at least one "get battery_charging"
+  // — some PiSugar firmware/daemon versions don't support it.
+  getBatteryCharging(): boolean | null {
+    return this.batteryCharging;
   }
 
   isConnected(): boolean {

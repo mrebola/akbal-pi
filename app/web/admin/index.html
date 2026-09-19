@@ -16,6 +16,7 @@
       <button class="tab-btn active" data-tab="chat">Chat</button>
       <button class="tab-btn" data-tab="wifi">Wifi</button>
       <button class="tab-btn" data-tab="usb">USB</button>
+      <a href="/airspace" class="tab-link" title="Visualización WiFi en 3D">AIRSPACE</a>
     </nav>
     <div class="status" id="status-pill">—</div>
     <div class="sys-stats" id="sys-stats" title="Recursos del sistema">
@@ -35,6 +36,8 @@
       <div class="chat-toolbar">
         <label for="model-select">Modelo</label>
         <select id="model-select"></select>
+        <span id="model-load-indicator" class="model-load-indicator" title="¿El modelo está cargado en RAM?">—</span>
+        <button type="button" id="unload-model-btn" class="secondary" title="Liberar el modelo de la memoria de la Pi">Unload model</button>
       </div>
       <div id="chat-log" class="chat-log"></div>
       <form id="chat-form" class="chat-form">

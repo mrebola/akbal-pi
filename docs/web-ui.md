@@ -1,17 +1,37 @@
-# Interfaz web (chat + wifi desde el navegador)
+# Interfaz web (chat + wifi + USB + AIRSPACE desde el navegador)
 
 `http://<ip-del-dispositivo>:8090` — accesible desde cualquier dispositivo
-en la misma red, protegida con autenticación básica HTTP (usuario/
-contraseña por defecto **akbal / akbal**, ver más abajo).
+en la misma red, protegida con una pantalla de login propia (sesión por
+cookie, usuario/contraseña por defecto **akbal / akbal**, ver más abajo).
+Ya no usa el diálogo nativo de autenticación básica del navegador —
+`/login` es una página propia con el mismo estilo del resto del panel.
 
 ## Qué tiene
 
 - **Chat**: conversa con los modelos locales de Ollama, con selector de
-  modelo — una versión chica de OpenWebUI, sin historial de conversaciones
-  múltiples ni nada más allá de una sesión de chat con streaming.
+  modelo (preseleccionado con el que esté activo, se actualiza al cambiar)
+  — una versión chica de OpenWebUI, sin historial de conversaciones
+  múltiples ni nada más allá de una sesión de chat con streaming. Botón
+  **Cancelar** corta la generación de verdad (ver el incidente más abajo),
+  y **Unload model** libera de la RAM del Pi todo lo que Ollama tenga
+  cargado — sin cambiar cuál modelo está "seleccionado"; elegir un modelo
+  de nuevo (acá, por voz, o desde el menú físico) lo vuelve a cargar
+  normalmente. El avatar de Akbal en la topbar solo "habla" mientras el
+  texto de la respuesta se está imprimiendo, no mientras espera el primer
+  token.
 - **Wifi**: ver la red actual, buscar redes, conectarse a una tipeando la
   contraseña (esto es lo que la pantalla física del dispositivo no puede
-  hacer — no tiene con qué escribir texto), y olvidar redes guardadas.
+  hacer — no tiene con qué escribir texto), olvidar redes guardadas, y un
+  panel de análisis de espectro RF (dBm estimado, BSSID, distancia
+  aproximada por modelo de path-loss, gráfico por canal — ver comentarios
+  en `app/web/admin/app.js`, sección "RF analysis panel").
+- **USB**: dispositivos conectados, adaptadores WiFi USB (con chipset),
+  almacenamiento USB con un visor de archivos (carpetas, preview de
+  imágenes, descarga de todo lo demás).
+- **AIRSPACE**: visualización 3D del espacio WiFi con Three.js — página
+  aparte, ver [`airspace.md`](./airspace.md).
+- Indicadores en la topbar: batería (%, carga), CPU/RAM/disco del Pi —
+  todos se refrescan solos cada 60s sin recargar la página.
 
 ## Cómo prenderla/apagarla y cambiar las credenciales
 
@@ -75,8 +95,13 @@ Archivos estáticos en `app/web/admin/` (HTML/CSS/JS planos, sin build step
 
 - Solo alcanzable dentro de la red local (no hay nada exponiéndolo a
   internet) — igual que el resto del dispositivo.
-- Autenticación básica HTTP en cada request, sin excepciones — no hay
-  rutas públicas.
-- No usa HTTPS (autenticación básica en texto plano sobre la red local) —
-  suficiente para el caso de uso (red doméstica de confianza), no para
-  exponerlo más allá de eso.
+- Sesión por cookie (token aleatorio de 192 bits, `httpOnly`, 30 días) en
+  vez de autenticación básica HTTP — `/login` y `POST /api/login` son las
+  únicas rutas públicas; todo lo demás (HTTP y el WebSocket de AIRSPACE)
+  exige la cookie de sesión. El secreto que firma nada — no hay firma: el
+  token en sí es el secreto, generado con `crypto.randomBytes`, guardado
+  en un `Set` en memoria del proceso — un reinicio del servicio invalida
+  todas las sesiones (hay que loguearse de nuevo, es lo esperado).
+- No usa HTTPS (la cookie de sesión viaja en texto plano sobre la red
+  local) — suficiente para el caso de uso (red doméstica de confianza), no
+  para exponerlo más allá de eso.

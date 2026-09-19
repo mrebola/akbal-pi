@@ -166,6 +166,43 @@ export const switchModel = async (model: string): Promise<void> => {
   await warmUpModel(model);
 };
 
+// Unloads every model Ollama currently has resident, not just
+// currentOllamaModel — normal requests use keep_alive:-1 (see warmUpModel
+// above) so each model a session ever touched stays loaded indefinitely,
+// and it's easy to end up with several stacked up in RAM at once (an
+// earlier local model plus whatever's "selected" now). This is exactly
+// what the web admin "Unload model" button (device/web-admin-server.ts) is
+// for: hand the Pi's RAM back for something else — "toda la carga" — none
+// of it changes which model is "selected". Picking a model again
+// afterward (voice, physical menu, or the web UI) goes through
+// switchModel -> warmUpModel like normal and reloads it.
+export const unloadModel = async (): Promise<void> => {
+  const response = await axios.get(`${ollamaEndpoint}/api/ps`);
+  const loaded: string[] = Array.isArray(response.data?.models)
+    ? response.data.models.map((m: any) => m?.name || m?.model).filter(Boolean)
+    : [];
+  const models = loaded.length > 0 ? loaded : [currentOllamaModel];
+  await Promise.all(
+    models.map((model) =>
+      axios.post(`${ollamaEndpoint}/api/chat`, { model, messages: [], keep_alive: 0 }),
+    ),
+  );
+};
+
+// Ollama's /api/ps lists whatever's actually resident in memory right now
+// — separate from currentOllamaModel, which is just "which model is
+// selected" and stays the same across an unload.
+export const isModelLoaded = async (): Promise<boolean> => {
+  try {
+    const response = await axios.get(`${ollamaEndpoint}/api/ps`);
+    const models = response.data?.models;
+    return Array.isArray(models) && models.some((m: any) => (m?.name || m?.model) === currentOllamaModel);
+  } catch (err) {
+    console.warn("[Ollama] isModelLoaded check failed:", err);
+    return false;
+  }
+};
+
 export const listOllamaModelsWithSize = async (): Promise<
   { name: string; size: number; contextLength: number | undefined }[]
 > => {

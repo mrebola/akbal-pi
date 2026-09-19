@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Akbal · AIRSPACE</title>
+  <link rel="stylesheet" href="airspace.css" />
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three.module.min.js" } }
+  </script>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <div id="boot-overlay" class="boot-overlay">
+    <div class="boot-text">AKBAL // AIRSPACE<span class="cursor"></span></div>
+    <div class="boot-sub" id="boot-sub">inicializando radar...</div>
+  </div>
+
+  <header class="as-toolbar">
+    <a href="/" class="as-back" title="Volver al panel">← AKBAL</a>
+    <div class="as-title">AIRSPACE</div>
+    <span id="demo-badge" class="demo-badge hidden">DEMO</span>
+
+    <div class="as-search">
+      <input id="search-input" type="text" placeholder="buscar SSID o BSSID..." autocomplete="off" />
+    </div>
+
+    <div class="as-controls">
+      <button id="live-pause-btn" class="as-btn active" title="Pausar/reanudar el stream">LIVE</button>
+      <button id="reset-view-btn" class="as-btn" title="Restablecer cámara">RESET VIEW</button>
+      <button id="dim-toggle-btn" class="as-btn" title="Alternar 2D/3D">3D</button>
+      <select id="quality-select" class="as-select" title="Calidad gráfica">
+        <option value="auto">AUTO</option>
+        <option value="low">LOW</option>
+        <option value="medium">MEDIUM</option>
+        <option value="high">HIGH</option>
+      </select>
+    </div>
+  </header>
+
+  <div class="hud-topleft" id="hud">
+    <div class="hud-row"><span class="hud-label">APs</span><span class="hud-value" id="hud-aps">0</span></div>
+    <div class="hud-row"><span class="hud-label">Devices</span><span class="hud-value" id="hud-devices">0</span></div>
+    <div class="hud-row"><span class="hud-label">Channel</span><span class="hud-value" id="hud-channel">—</span></div>
+    <div class="hud-row"><span class="hud-label">Frames/min</span><span class="hud-value" id="hud-fpm">0</span></div>
+    <div class="hud-row"><span class="hud-label">Alerts</span><span class="hud-value hud-alerts" id="hud-alerts">0</span></div>
+    <div class="hud-spectrum" id="hud-spectrum" title="Actividad observada por canal (no es un analizador RF real)"></div>
+    <div class="hud-note">actividad observada · no es un analizador RF real</div>
+  </div>
+
+  <aside id="side-panel" class="side-panel hidden">
+    <button id="side-panel-close" class="side-panel-close">✕</button>
+    <div class="side-panel-title" id="sp-ssid">—</div>
+    <div class="side-panel-row"><span>BSSID</span><span id="sp-bssid">—</span></div>
+    <div class="side-panel-row"><span>Vendor</span><span id="sp-vendor">—</span></div>
+    <div class="side-panel-row"><span>RSSI</span><span id="sp-rssi">—</span></div>
+    <div class="side-panel-row"><span>Channel</span><span id="sp-channel">—</span></div>
+    <div class="side-panel-row"><span>Security</span><span id="sp-security">—</span></div>
+    <div class="side-panel-row"><span>First Seen</span><span id="sp-first">—</span></div>
+    <div class="side-panel-row"><span>Last Seen</span><span id="sp-last">—</span></div>
+    <div class="side-panel-row"><span>Frames</span><span id="sp-frames">—</span></div>
+    <div class="side-panel-row"><span>Clients</span><span id="sp-clients">—</span></div>
+  </aside>
+
+  <div class="event-ticker" id="event-ticker"></div>
+
+  <div id="ws-status" class="ws-status"></div>
+
+  <script type="module" src="airspace.js"></script>
+</body>
+</html>

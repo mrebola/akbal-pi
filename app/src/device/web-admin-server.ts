@@ -8,11 +8,16 @@ import Router from "@koa/router";
 import bodyParser from "koa-bodyparser";
 import serve from "koa-static";
 import axios from "axios";
+import { WebSocketServer, WebSocket } from "ws";
+import { AirspaceService } from "../airspace/service";
+import { registerShutdownHook } from "./display";
 import {
   getCurrentModel,
+  isModelLoaded,
   listOllamaModelsWithSize,
   ollamaEndpoint,
   switchModel,
+  unloadModel,
 } from "../cloud-api/local/ollama-llm";
 import { isAgentMode } from "../config/device-mode";
 import { getBatteryReading } from "../status/battery-status";
@@ -42,6 +47,11 @@ const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days — a LAN admin
 // Paths reachable with no session at all — just enough to render and submit
 // the login form itself.
 const PUBLIC_PATHS = new Set(["/login", "/login.html", "/api/login"]);
+// AIRSPACE broadcasts a snapshot to every connected client on this cadence
+// — 2-4Hz per the spec, not per-packet, which is most of what keeps this
+// cheap: the aggregator can ingest hundreds of frames/sec while the network
+// only ever sees ~3 JSON messages/sec regardless.
+const AIRSPACE_BROADCAST_MS = 300;
 
 // Small local admin UI, reachable from any device on the LAN — a chat page
 // for the local Ollama models (like a mini OpenWebUI) and a wifi settings
@@ -54,20 +64,30 @@ const PUBLIC_PATHS = new Set(["/login", "/login.html", "/api/login"]);
 export class WebAdminServer {
   private app: Koa;
   private server: http.Server | null = null;
+  private wss: WebSocketServer | null = null;
   private port: number;
   private username: string;
   private password: string;
+  // Bare random tokens instead of Koa's signed-cookie helper — same
+  // security property (unguessable, 192 bits) but readable from a plain
+  // Set both here and in the raw WebSocket upgrade handler below, which
+  // never goes through Koa's request/response cycle so ctx.cookies isn't
+  // available there.
+  private validSessions = new Set<string>();
+  private airspace: AirspaceService;
 
   constructor(options: { port: number; username: string; password: string }) {
     this.port = options.port;
     this.username = options.username;
     this.password = options.password;
+    this.airspace = new AirspaceService();
+    // Restoring wlan1 out of monitor mode and killing tshark has to
+    // actually finish before the process exits, or a redeploy/restart
+    // leaves the AR9271 stuck in monitor mode and a root tshark orphaned —
+    // see display.ts's shutdown hook system for why this isn't a plain
+    // SIGTERM listener here.
+    registerShutdownHook(() => this.airspace.stop());
     this.app = new Koa();
-    // Signs the session cookie — generated fresh per process start, so a
-    // service restart (deploy, reboot) just means logging in again. Not
-    // persisted to disk on purpose: keeps this out of anything that could
-    // leak via a backup or a stray log line.
-    this.app.keys = [crypto.randomBytes(32).toString("hex")];
     this.app.use(this.sessionAuth());
     this.app.use(bodyParser());
 
@@ -86,7 +106,8 @@ export class WebAdminServer {
         await next();
         return;
       }
-      if (ctx.cookies.get(SESSION_COOKIE, { signed: true }) === "ok") {
+      const token = ctx.cookies.get(SESSION_COOKIE);
+      if (token && this.validSessions.has(token)) {
         await next();
         return;
       }
@@ -100,6 +121,21 @@ export class WebAdminServer {
     };
   }
 
+  // Same token check as sessionAuth(), for the raw upgrade request behind
+  // the WebSocket server (see start()) — there is no Koa ctx there.
+  private isValidSessionCookie(cookieHeader: string | undefined): boolean {
+    if (!cookieHeader) return false;
+    for (const part of cookieHeader.split(";")) {
+      const eq = part.indexOf("=");
+      if (eq === -1) continue;
+      const name = part.slice(0, eq).trim();
+      if (name !== SESSION_COOKIE) continue;
+      const value = decodeURIComponent(part.slice(eq + 1).trim());
+      return this.validSessions.has(value);
+    }
+    return false;
+  }
+
   private registerRoutes(router: Router): void {
     router.get("/login", (ctx) => {
       ctx.set("Cache-Control", "no-store");
@@ -110,8 +146,9 @@ export class WebAdminServer {
     router.post("/api/login", (ctx) => {
       const { username: u, password: p } = (ctx.request.body as any) || {};
       if (u === this.username && p === this.password) {
-        ctx.cookies.set(SESSION_COOKIE, "ok", {
-          signed: true,
+        const token = crypto.randomBytes(24).toString("hex");
+        this.validSessions.add(token);
+        ctx.cookies.set(SESSION_COOKIE, token, {
           httpOnly: true,
           sameSite: "lax",
           maxAge: SESSION_MAX_AGE_MS,
@@ -124,6 +161,8 @@ export class WebAdminServer {
     });
 
     router.post("/api/logout", (ctx) => {
+      const token = ctx.cookies.get(SESSION_COOKIE);
+      if (token) this.validSessions.delete(token);
       ctx.cookies.set(SESSION_COOKIE, "", { maxAge: 0 });
       ctx.body = { ok: true };
     });
@@ -153,10 +192,32 @@ export class WebAdminServer {
       ctx.body = fs.createReadStream(filePath);
     });
 
+    // AIRSPACE — fullscreen Three.js WiFi visualization. Its own page
+    // (not a tab in index.html's chat/wifi/usb layout — a WebGL scene
+    // deserves the whole viewport) backed by the AirspaceService created
+    // above; live data streams over /airspace/ws (see start()), this route
+    // just serves the page shell and an initial snapshot for first paint
+    // before the socket connects.
+    router.get("/airspace", (ctx) => {
+      ctx.set("Cache-Control", "no-store");
+      ctx.type = "text/html";
+      ctx.body = fs.createReadStream(path.resolve(__dirname, "../..", "web", "admin", "airspace.html"));
+    });
+
+    router.get("/api/airspace/snapshot", (ctx) => {
+      const revealFullMac = ctx.query.fullMac === "1";
+      ctx.body = this.airspace.getSnapshot(revealFullMac);
+    });
+
     router.get("/api/status", async (ctx) => {
-      const [wifi, system] = await Promise.all([getWifiStatus(), getSystemStats()]);
+      const [wifi, system, modelLoaded] = await Promise.all([
+        getWifiStatus(),
+        getSystemStats(),
+        isModelLoaded(),
+      ]);
       ctx.body = {
         model: getCurrentModel(),
+        modelLoaded,
         deviceMode: isAgentMode() ? "agent" : "local",
         wifi,
         battery: getBatteryReading(),
@@ -178,6 +239,20 @@ export class WebAdminServer {
       try {
         await switchModel(tag);
         ctx.body = { ok: true, model: getCurrentModel() };
+      } catch (err: any) {
+        ctx.status = 500;
+        ctx.body = { ok: false, error: err?.message || String(err) };
+      }
+    });
+
+    // Frees the Pi's RAM back up without changing which model is
+    // "selected" — picking a model again afterward (physical menu, voice,
+    // or this same web UI) reloads it the normal way (switchModel already
+    // always calls warmUpModel, whether or not the tag actually changed).
+    router.post("/api/models/unload", async (ctx) => {
+      try {
+        await unloadModel();
+        ctx.body = { ok: true };
       } catch (err: any) {
         ctx.status = 500;
         ctx.body = { ok: false, error: err?.message || String(err) };
@@ -411,12 +486,50 @@ export class WebAdminServer {
       console.warn(`[WebAdmin] Public dir not found at ${publicRoot}, UI will 404`);
     }
     this.server = http.createServer(this.app.callback());
+
+    // Mounted on the same http.Server/port as the rest of the admin UI
+    // (path-routed, not a separate port) so there's nothing new to open in
+    // a firewall — `noServer: true` + a manual `upgrade` handler below is
+    // what makes that possible, and is also where the session cookie gets
+    // checked, since a WebSocket upgrade request never goes through Koa.
+    this.wss = new WebSocketServer({ noServer: true });
+    this.server.on("upgrade", (req, socket, head) => {
+      if (req.url !== "/airspace/ws" || !this.isValidSessionCookie(req.headers.cookie)) {
+        socket.destroy();
+        return;
+      }
+      this.wss!.handleUpgrade(req, socket, head, (ws) => {
+        this.wss!.emit("connection", ws, req);
+      });
+    });
+    this.wss.on("connection", (ws: WebSocket, req) => {
+      const url = new URL(req.url || "", "http://localhost");
+      const revealFullMac = url.searchParams.get("fullMac") === "1";
+      const send = () => {
+        if (ws.readyState !== WebSocket.OPEN) return;
+        try {
+          ws.send(JSON.stringify(this.airspace.getSnapshot(revealFullMac)));
+        } catch (err) {
+          console.warn("[WebAdmin] airspace ws send failed:", err);
+        }
+      };
+      send();
+      const interval = setInterval(send, AIRSPACE_BROADCAST_MS);
+      ws.on("close", () => clearInterval(interval));
+      ws.on("error", () => clearInterval(interval));
+    });
+
+    void this.airspace.start();
+
     this.server.listen(this.port, "0.0.0.0", () => {
       console.log(`[WebAdmin] Listening on http://0.0.0.0:${this.port}`);
     });
   }
 
   stop(): void {
+    this.wss?.close();
+    this.wss = null;
+    void this.airspace.stop();
     this.server?.close();
     this.server = null;
   }

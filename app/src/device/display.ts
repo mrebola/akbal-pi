@@ -653,30 +653,82 @@ export const onTextInput =
 export const isButtonDown =
   displayInstance.isButtonDown.bind(displayInstance);
 
-function cleanup() {
+// Other modules with their own teardown needs (AirspaceService restoring
+// the AR9271 out of monitor mode, killing its capture process — see
+// airspace/service.ts / device/web-admin-server.ts) register here instead
+// of adding their own competing SIGINT/SIGTERM listeners: process.exit()
+// inside the *first* listener for a given signal stops Node from calling
+// any listener registered after it, so this is the one place that gets to
+// run async cleanup before the process actually exits.
+type ShutdownHook = () => void | Promise<void>;
+const shutdownHooks: ShutdownHook[] = [];
+export function registerShutdownHook(hook: ShutdownHook): void {
+  shutdownHooks.push(hook);
+}
+
+const SHUTDOWN_HOOK_TIMEOUT_MS = 2000;
+
+async function runShutdownHooks(): Promise<void> {
+  await Promise.all(
+    shutdownHooks.map((hook) =>
+      Promise.race([
+        Promise.resolve().then(hook),
+        new Promise((resolve) => setTimeout(resolve, SHUTDOWN_HOOK_TIMEOUT_MS)),
+      ]).catch((err) => console.warn("[Shutdown] hook failed:", err)),
+    ),
+  );
+}
+
+async function cleanup(): Promise<void> {
   console.log("Cleaning up display process before exit...");
   displayInstance.killPythonProcess();
   displayInstance.stopWebDisplay();
+  await runShutdownHooks();
+}
+
+// KillMode=control-group in the systemd unit delivers SIGTERM to every
+// process in the service's cgroup — in practice this process ends up
+// seeing more than one SIGTERM in quick succession while shutting down.
+// Without a re-entrancy guard, a *second* signal arriving mid-cleanup
+// would start a completely independent second call to shutdown() — and
+// since a shutdown hook can clear its own "still working" state (e.g.
+// AirspaceService nulling monitorIface) before its own async work
+// actually finishes, that second call can reach process.exit() *first*
+// and kill the process out from under the original call's in-flight
+// cleanup. Confirmed the hard way: AIRSPACE's monitor-mode restore was
+// getting cut off mid-flight this way, leaving the AR9271 stuck in
+// monitor mode after every stop. One shared promise means every signal
+// after the first just waits on the same in-flight shutdown instead of
+// racing it.
+let shutdownPromise: Promise<void> | null = null;
+function shutdown(exitCode: number): Promise<void> {
+  if (!shutdownPromise) {
+    shutdownPromise = cleanup().then(() => process.exit(exitCode));
+  }
+  return shutdownPromise;
 }
 
 // kill the Python process on exit signals
-process.on("exit", cleanup);
+process.on("exit", () => {
+  // Best-effort only — 'exit' listeners can't do async work, the event
+  // loop is already stopping. shutdown() above is what actually waits for
+  // shutdownHooks to finish.
+  displayInstance.killPythonProcess();
+  displayInstance.stopWebDisplay();
+});
 ["SIGINT", "SIGTERM"].forEach((signal) => {
   process.on(signal, () => {
     console.log(`Received ${signal}, exiting...`);
-    cleanup();
-    process.exit(0);
+    void shutdown(0);
   });
 });
 process.on("uncaughtException", (err) => {
   console.error("Uncaught Exception:", err);
-  cleanup();
-  process.exit(1);
+  void shutdown(1);
 });
 process.on("unhandledRejection", (reason, promise) => {
   console.error("Unhandled Rejection at:", promise, "reason:", reason);
-  cleanup();
-  process.exit(1);
+  void shutdown(1);
 });
 process.on("keyboardInterrupt", () => {
   console.log("Keyboard Interrupt received, killing Python process...");

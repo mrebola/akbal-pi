@@ -29,7 +29,8 @@ Raspberry Pi OS 64-bit, basado en Debian Trixie.
 | Orquestación | [whisplay-ai-chatbot](https://github.com/PiSugar/whisplay-ai-chatbot) |
 | Pantalla | UI propia minimalista: íconos de wifi/batería arriba, personaje animado (cara en primer plano) al medio, texto verde terminal abajo ([`docs/display-ui.md`](docs/display-ui.md)); pantalla dedicada estilo terminal para elegir/cargar modelo de LLM ([`docs/voice-commands.md`](docs/voice-commands.md)) |
 | Comandos de voz | Volumen, cambio/consulta de modelo de LLM y modo agente/local, resueltos por expresiones regulares antes de llegar al LLM — instantáneo, sin gastar un turno. Decir "ayuda" con el botón presionado muestra un resumen de todos estos comandos en pantalla ([`docs/voice-commands.md`](docs/voice-commands.md)) |
-| Wifi | Menú físico "Internet emergencia" (ver/escanear/conectar, sin poder tipear contraseñas nuevas) ([`docs/wifi.md`](docs/wifi.md)) + interfaz web con chat a los modelos locales y wifi completo (buscar, conectar con contraseña, olvidar redes) en `http://<ip-del-dispositivo>:8090` ([`docs/web-ui.md`](docs/web-ui.md)) |
+| Wifi | Menú físico "Internet emergencia" (ver/escanear/conectar, sin poder tipear contraseñas nuevas) ([`docs/wifi.md`](docs/wifi.md)) + interfaz web con chat a los modelos locales, wifi completo (buscar, conectar con contraseña, olvidar redes), USB y batería/CPU/RAM en vivo en `http://<ip-del-dispositivo>:8090` ([`docs/web-ui.md`](docs/web-ui.md)) |
+| AIRSPACE | Visualización 3D (Three.js) del espacio WiFi alrededor del Pi, capturado pasivamente con una tarjeta Qualcomm Atheros AR9271 en modo monitor — cae a un modo demo con datos simulados si no hay hardware conectado ([`docs/airspace.md`](docs/airspace.md)) |
 
 Detalle completo del setup en [`docs/SETUP.md`](docs/SETUP.md).
 

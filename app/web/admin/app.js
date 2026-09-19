@@ -17,6 +17,8 @@ const statCpu = document.getElementById("stat-cpu");
 const statRam = document.getElementById("stat-ram");
 const statDisk = document.getElementById("stat-disk");
 const logoutBtn = document.getElementById("logout-btn");
+const modelLoadIndicator = document.getElementById("model-load-indicator");
+const unloadModelBtn = document.getElementById("unload-model-btn");
 
 logoutBtn.addEventListener("click", async () => {
   await fetch("/api/logout", { method: "POST" }).catch(() => {});
@@ -103,10 +105,30 @@ async function loadStatus() {
     statusPill.textContent = `${data.model} · ${wifiLabel}`;
     updateBatteryIndicator(data.battery);
     updateSystemStats(data.system);
+    modelLoadIndicator.textContent = data.modelLoaded ? "cargado" : "descargado";
+    modelLoadIndicator.classList.toggle("loaded", Boolean(data.modelLoaded));
   } catch {
     statusPill.textContent = "sin conexión con el dispositivo";
   }
 }
+
+unloadModelBtn.addEventListener("click", async () => {
+  unloadModelBtn.disabled = true;
+  try {
+    const res = await fetch("/api/models/unload", { method: "POST" });
+    const data = await res.json();
+    if (data.ok) {
+      addMessage("system", "Modelo liberado de la memoria de la Pi.");
+    } else {
+      addMessage("system", `No se pudo liberar el modelo: ${data.error || ""}`);
+    }
+  } catch (err) {
+    addMessage("system", `Error liberando el modelo: ${err.message}`);
+  } finally {
+    unloadModelBtn.disabled = false;
+    void loadStatus();
+  }
+});
 
 async function loadModels() {
   try {

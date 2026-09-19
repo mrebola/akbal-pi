@@ -133,3 +133,23 @@ PipeWire). El micrófono del HAT sigue roto mientras el WM8960 no registre; se
 probó usar el micrófono HFP de la bocina Bluetooth como respaldo pero graba
 silencio puro (el perfil manos-libres no se negocia bien junto con A2DP), así
 que no es una alternativa viable por ahora.
+
+### Micrófono fijado al HAT (bocina Bluetooth ya no lo secuestra)
+
+Síntoma: con una bocina Bluetooth conectada y la salida en `bluetooth`, al
+presionar el botón del HAT el asistente "no tomaba el audio". Causa: la
+grabación resolvía el dispositivo ALSA de captura **una sola vez al cargar el
+módulo**, y si en ese instante la tarjeta `whisplaysound` aún no estaba
+registrada (carrera del probe I2C del WM8960 en boot) caía a `"default"` para
+toda la vida del proceso. Al conectar la bocina, PipeWire negocia su perfil
+HFP/HSP y su micrófono (manos-libres) pasa a ser el *source* por defecto, así
+que `"default"` grababa silencio desde la bocina Bluetooth.
+
+Fix (`app/src/device/audio.ts`): el micrófono es **siempre** el del HAT. El
+dispositivo de captura se resuelve **en vivo, al momento de grabar**
+(`getAlsaInputDevice()`), apuntando directo al hardware `hw:<card>,0` de la
+tarjeta Whisplay, nunca a `"default"` salvo último recurso (con warning). Así
+una carrera de boot ya no deja el mic pegado a un fallback, y la bocina
+Bluetooth solo afecta la **salida** (`getAlsaOutputDevice()`), nunca la
+entrada. La salida sigue siendo conmutable HAT/Bluetooth desde el menú en
+pantalla o el web admin, sin reiniciar.

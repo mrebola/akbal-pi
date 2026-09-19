@@ -30,35 +30,68 @@ const detectWhisplaySoundCardRef = (): string | undefined => {
   }
 };
 
-const soundCardRef =
+// Resolve the Whisplay HAT's ALSA sound card. Recomputed on demand (not once
+// at module load) so a boot-time I2C probe race that briefly delays the
+// WM8960 registration can't permanently lock the device to a wrong fallback
+// for the rest of the process lifetime.
+const resolveSoundCardRef = (): string | undefined =>
   process.env.SOUND_CARD_NAME ||
   process.env.SOUND_CARD_INDEX ||
   detectWhisplaySoundCardRef();
-const defaultAlsaInputDevice = soundCardRef ? `hw:${soundCardRef},0` : "default";
-const defaultAlsaOutputDevice = soundCardRef === "whisplaysound"
-  ? "playback"
-  : soundCardRef
-    ? `plughw:${soundCardRef},0`
-    : "default";
-const alsaInputDevice = process.env.ALSA_INPUT_DEVICE || defaultAlsaInputDevice;
+
+// The microphone is ALWAYS the Whisplay HAT's onboard mic — it is the only
+// mic in the device. It must never follow PipeWire's default source: when a
+// Bluetooth speaker is connected it also advertises an HFP/HSP headset
+// profile whose (mono, low-quality) mic would otherwise hijack the ALSA
+// "default" source and record pure silence, which looks like "the button
+// doesn't take my audio". So we always target the HAT capture hardware
+// directly (hw:<card>,0), resolved live at record time.
+const getAlsaInputDevice = (): string => {
+  if (process.env.ALSA_INPUT_DEVICE) {
+    return process.env.ALSA_INPUT_DEVICE;
+  }
+  const ref = resolveSoundCardRef();
+  if (ref) {
+    return `hw:${ref},0`;
+  }
+  console.warn(
+    "[Audio] Whisplay sound card not detected; capturing from ALSA 'default'. " +
+      "A connected Bluetooth speaker may hijack the microphone. Set " +
+      "SOUND_CARD_NAME or ALSA_INPUT_DEVICE to pin the HAT mic.",
+  );
+  return "default";
+};
+
 // ALSA PCM used to reach a Bluetooth speaker: the "pulse" plugin talks to
 // pipewire-pulse (already running for the desktop session), which in turn
 // plays through PipeWire's current default sink — the paired/connected
 // Bluetooth device once selected. No pipewire-alsa package is installed on
 // this image, so there's no direct ALSA "pipewire" PCM to target instead.
 const BLUETOOTH_ALSA_OUTPUT_DEVICE = "pulse";
+// Where the HAT's onboard speaker lives. "whisplaysound" exposes a "playback"
+// PCM; other cards use plughw:<card>,0. Resolved live for the same reason as
+// the input device above.
+const getHatOutputDevice = (): string => {
+  const ref = resolveSoundCardRef();
+  if (ref === "whisplaysound") {
+    return "playback";
+  }
+  return ref ? `plughw:${ref},0` : "default";
+};
 // ALSA_OUTPUT_DEVICE, when set, is an explicit escape hatch that always wins
 // (e.g. a custom hw:/plughw: device) — it bypasses the HAT/Bluetooth toggle
 // below entirely. Otherwise the live getAlsaOutputDevice() below decides
 // between the two based on the on-screen/web-admin selection
 // (config/audio-output.ts), so switching speakers doesn't need a restart.
+// This only ever affects OUTPUT — the microphone is always the HAT (see
+// getAlsaInputDevice above).
 const getAlsaOutputDevice = (): string => {
   if (process.env.ALSA_OUTPUT_DEVICE) {
     return process.env.ALSA_OUTPUT_DEVICE;
   }
   return getAudioOutputTarget() === "bluetooth"
     ? BLUETOOTH_ALSA_OUTPUT_DEVICE
-    : defaultAlsaOutputDevice;
+    : getHatOutputDevice();
 };
 const normalizeAudioFormat = (value: string | undefined, fallback: AudioFormat): AudioFormat => {
   const normalized = (value || "").toLowerCase();
@@ -213,7 +246,7 @@ const recordAudio = async (
     const args = [
       "-t",
       "alsa",
-      alsaInputDevice,
+      getAlsaInputDevice(),
       "-t",
       recordFileFormat,
       "-c",
@@ -280,7 +313,7 @@ const recordAudioManually = (
     const recordingProcess = spawn("sox", [
       "-t",
       "alsa",
-      alsaInputDevice,
+      getAlsaInputDevice(),
       "-t",
       recordFileFormat,
       "-c",

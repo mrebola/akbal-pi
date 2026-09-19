@@ -36,6 +36,10 @@ const stripExt = (name: string): string => name.replace(/\.[^.]+$/, "");
 class Jukebox {
   private tracks: JukeboxTrack[] = [];
   private proc: ChildProcess | null = null;
+  // Every mpg123 we've ever spawned that hasn't exited yet. Tracked so a stop
+  // (or a new play) can kill ALL of them — a stale one that lost the generation
+  // race still holds the ALSA device and would otherwise play on, overlapping.
+  private procs = new Set<ChildProcess>();
   private generation = 0;
   private index = -1;
   private playing = false;
@@ -90,18 +94,21 @@ class Jukebox {
       });
   }
 
-  private killProc(): void {
+  // Kill every tracked mpg123 and bump the generation so any in-flight play()
+  // (awaiting between here and spawn) aborts instead of spawning a duplicate.
+  private killAll(): number {
     this.generation++;
-    if (this.proc) {
+    for (const p of this.procs) {
       try {
-        // Make sure a paused (SIGSTOP'd) process can actually die.
-        this.proc.kill("SIGCONT");
-        this.proc.kill("SIGKILL");
+        p.kill("SIGCONT"); // a paused (SIGSTOP'd) process must be resumed to die
+        p.kill("SIGKILL");
       } catch {
         /* ignore */
       }
-      this.proc = null;
     }
+    this.procs.clear();
+    this.proc = null;
+    return this.generation;
   }
 
   async play(index: number, seekMs = 0): Promise<JukeboxStatus> {
@@ -110,15 +117,17 @@ class Jukebox {
     const i = ((index % tracks.length) + tracks.length) % tracks.length;
     const track = tracks[i];
 
-    this.killProc();
+    const gen = this.killAll();
     // Free the persistent TTS player so ALSA is available for music.
     try {
       await releaseAudioPlayer();
     } catch {
       /* ignore */
     }
+    // If another play/stop/next happened while we awaited, abandon this one so
+    // we never end up with two players running at once.
+    if (gen !== this.generation) return this.status();
 
-    const gen = this.generation;
     this.index = i;
     this.playing = true;
     this.paused = false;
@@ -137,11 +146,14 @@ class Jukebox {
     args.push(track.file);
     const proc = spawn("mpg123", args);
     this.proc = proc;
+    this.procs.add(proc);
     proc.on("error", () => {
+      this.procs.delete(proc);
       if (gen !== this.generation) return;
       this.proc = null;
     });
     proc.on("exit", () => {
+      this.procs.delete(proc);
       if (gen !== this.generation) return; // superseded by another command
       this.proc = null;
       if (!this.playing || this.paused) return;
@@ -212,7 +224,7 @@ class Jukebox {
   }
 
   stop(): JukeboxStatus {
-    this.killProc();
+    this.killAll();
     this.playing = false;
     this.paused = false;
     this.index = -1;

@@ -359,10 +359,27 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     let progressTimer: ReturnType<typeof setInterval> | null = null;
     const HOLD_PLAYPAUSE_MS = 700;
     const HOLD_EXIT_MS = 1800;
-    const CONTROLS_HINT = "Clic: siguiente · Doble: anterior\nMantén: play/pausa · 2 seg: salir";
+    // The LCD text band only fits ~2 lines, so we don't cram a permanent
+    // control legend under the title (that overlapped everything). Instead we
+    // flash the controls for a few seconds when entering the mode, then show a
+    // clean single-line now-playing.
+    const CONTROLS_HINT = "Clic:sig  Doble:ant\nMantén:pausa  2s:salir";
+    let hintUntil = Date.now() + 4500;
 
     const render = () => {
       const s = jukebox.status();
+      if (Date.now() < hintUntil) {
+        display({
+          status: "music",
+          emoji: "🎶",
+          RGB: "#00aa66",
+          text: CONTROLS_HINT,
+          music_progress: -1,
+          music_duration_ms: 0,
+          rag_icon_visible: false,
+        });
+        return;
+      }
       const line = !s.available
         ? "No hay música cargada."
         : s.title
@@ -372,7 +389,7 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
         status: "music",
         emoji: !s.playing ? "🎵" : s.paused ? "⏸️" : "🎶",
         RGB: !s.playing ? "#0066aa" : s.paused ? "#775500" : "#00aa66",
-        text: `${line}\n${CONTROLS_HINT}`,
+        text: line,
         music_progress: s.durationMs > 0 ? s.positionMs / s.durationMs : -1,
         music_duration_ms: s.durationMs,
         rag_icon_visible: false,
@@ -398,7 +415,10 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     });
 
     onButtonDoubleClick(() => {
-      if (ctx.currentFlowName === "jukebox") void jukebox.prev().then(render);
+      if (ctx.currentFlowName === "jukebox") {
+        hintUntil = 0;
+        void jukebox.prev().then(render);
+      }
     });
     onButtonPressed(() => {
       pressAt = Date.now();
@@ -409,6 +429,7 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       if (!pressAt) return;
       const held = Date.now() - pressAt;
       pressAt = 0;
+      hintUntil = 0;
       if (held >= HOLD_EXIT_MS) {
         leave();
       } else if (held >= HOLD_PLAYPAUSE_MS) {

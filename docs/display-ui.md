@@ -166,11 +166,18 @@ dispositivo de voz. Se separaron los roles en `chatbot-ui.py`:
 También se sacó el prefijo `>_` de los títulos de menú (venía del estilo
 terminal original) y se dejó de forzar el nombre del modelo a mayúsculas.
 
-## Indicador de modo en la barra superior
+## Marca "AKBAL" y color de modo en la barra superior
 
-La barra superior (wifi/batería) ahora también muestra, a la izquierda, una
-etiqueta chica **LOCAL** (gris) o **AGENTE** (verde acento) según
-`isAgentMode()` — ver `top_bar_mode` en `Status` (`app/src/device/display.ts`)
-y `render_top_bar()`. Se actualiza al entrar a "sleep" y al confirmar un
-cambio de modo (`mode_loading` en `states.ts`), así siempre refleja el modo
-real sin tener que abrir el menú de modo para saberlo.
+La barra superior (wifi/batería) muestra, a la izquierda, la palabra
+**AKBAL** de forma permanente — no depende de ningún estado, así que siempre
+está visible aunque `top_bar_mode` todavía no se haya seteado. Tiene un
+padding extra (`BRAND_LEFT_PADDING`, además de `TOP_BAR_MARGIN_X`) porque el
+borde izquierdo del case recorta el texto más cerca de lo que el margen de
+los íconos ya contemplaba — verificado en el dispositivo real.
+
+El único rastro del modo agente/local que queda ahí es el **color** del
+texto: verde acento cuando `top_bar_mode === "agent"`, gris apagado en
+cualquier otro caso (local, o antes de que se sete por primera vez) — ver
+`top_bar_mode` en `Status` (`app/src/device/display.ts`) y
+`render_top_bar()`. Se actualiza al entrar a "sleep" y al confirmar un
+cambio de modo (`mode_loading` en `states.ts`).

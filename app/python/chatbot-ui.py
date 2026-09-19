@@ -35,6 +35,11 @@ BOTTOM_TEXT_MAX_LINES = 2
 BOTTOM_TEXT_FONT_SIZE = 16
 BOTTOM_TEXT_MARGIN_X = 10
 TOP_BAR_MARGIN_X = 14
+# Extra left offset just for the "AKBAL" brand label (see render_top_bar) —
+# the case's left edge clips text closer in than TOP_BAR_MARGIN_X alone
+# accounts for, confirmed on the real device.
+BRAND_LEFT_PADDING = 5
+BRAND_LABEL = "AKBAL"
 # The right ~10% of the panel is hidden behind the case bezel. This is the
 # one global safe-area value every screen's content (top bar, model/mode/
 # quick-menu cards, help) is inset by on the right, so nothing ever drifts
@@ -442,19 +447,18 @@ class RenderThread(threading.Thread):
             icon.render(draw, icon_x, icon_y)
             cursor_x = icon_x - TOP_BAR_MARGIN_X
 
-        # Small, discreet LOCAL/AGENTE tag on the left — see
-        # chat-flow/states.ts (top_bar_mode) and docs/agent-mode.md. Green
-        # only when it's the accent-worthy state (agente); local stays muted.
-        if current_top_bar_mode == "agent":
-            mode_label, mode_color = "AGENTE", ACCENT_GREEN
-        elif current_top_bar_mode == "local":
-            mode_label, mode_color = "LOCAL", TEXT_SECONDARY
-        else:
-            mode_label, mode_color = None, None
-        if mode_label:
-            bbox = draw.textbbox((0, 0), mode_label, font=self.top_bar_mode_font)
-            text_h = bbox[3] - bbox[1]
-            draw.text((TOP_BAR_MARGIN_X, (TOP_BAR_HEIGHT - text_h) // 2 - bbox[1]), mode_label, font=self.top_bar_mode_font, fill=mode_color)
+        # "AKBAL" always shows on the left — a fixed brand mark, not a status
+        # readout, so it never depends on top_bar_mode being set yet. It
+        # still picks up a subtle mode tint (green only for the
+        # accent-worthy "agente" state; local/unset stay muted) — see
+        # chat-flow/states.ts (top_bar_mode) and docs/agent-mode.md.
+        # BRAND_LEFT_PADDING is extra vs. TOP_BAR_MARGIN_X: this label sits
+        # right at the case's left edge, which clips a bit more than the
+        # icons' side ever needed to account for.
+        brand_color = ACCENT_GREEN if current_top_bar_mode == "agent" else TEXT_SECONDARY
+        bbox = draw.textbbox((0, 0), BRAND_LABEL, font=self.top_bar_mode_font)
+        text_h = bbox[3] - bbox[1]
+        draw.text((TOP_BAR_MARGIN_X + BRAND_LEFT_PADDING, (TOP_BAR_HEIGHT - text_h) // 2 - bbox[1]), BRAND_LABEL, font=self.top_bar_mode_font, fill=brand_color)
 
         rgb565_data = ImageUtils.image_to_rgb565(bar, self.whisplay.LCD_WIDTH, TOP_BAR_HEIGHT)
         self.whisplay.draw_image(0, 0, self.whisplay.LCD_WIDTH, TOP_BAR_HEIGHT, rgb565_data)

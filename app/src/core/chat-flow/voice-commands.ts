@@ -76,7 +76,8 @@ export type VoiceCommand =
   | { type: "model_switch"; alias: ModelAlias }
   | { type: "model_switch_failed" }
   | { type: "model_current" }
-  | { type: "device_mode_menu"; target: DeviceMode | null };
+  | { type: "device_mode_menu"; target: DeviceMode | null }
+  | { type: "help_menu" };
 
 function normalize(text: string): string {
   return text
@@ -90,6 +91,17 @@ function normalize(text: string): string {
 
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// "ayuda" (while holding the button, like any other voice command) opens the
+// on-screen voice-command cheat sheet — see help-mode.ts and states.ts.
+const HELP_WORD = /\b(ayuda|help)\b/;
+
+function matchHelpCommand(norm: string): VoiceCommand | null {
+  if (HELP_WORD.test(norm)) {
+    return { type: "help_menu" };
+  }
+  return null;
 }
 
 const VOLUME_WORD = /\bvolum(en|e)\b/;
@@ -256,6 +268,7 @@ export function matchVoiceCommand(rawText: string): VoiceCommand | null {
   const norm = normalize(rawText || "");
   if (!norm) return null;
   return (
+    matchHelpCommand(norm) ||
     matchModelCommand(norm) ||
     matchDeviceModeCommand(norm) ||
     matchVolumeCommand(norm)

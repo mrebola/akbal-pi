@@ -115,6 +115,10 @@ current_model_ui_percent = 0
 current_model_ui_index = 0
 current_model_ui_total = 0
 current_model_ui_active = False
+current_help_ui = ""
+current_help_ui_body = ""
+current_help_ui_page = 0
+current_help_ui_total = 0
 camera_mode = False
 camera_capture_image_path = ""
 camera_thread = None
@@ -154,6 +158,11 @@ class RenderThread(threading.Thread):
         self.model_ui_pct_font = ImageFont.truetype(self.font_path, 24)
         self.model_ui_hint_font = ImageFont.truetype(self.font_path, 13)
         self.model_ui_cache_key = None
+        self.help_ui_title_font = ImageFont.truetype(self.font_path, 13)
+        self.help_ui_body_font = ImageFont.truetype(self.font_path, 13)
+        self.help_ui_hint_font = ImageFont.truetype(self.font_path, 12)
+        self.help_ui_exit_font = ImageFont.truetype(self.font_path, 18)
+        self.help_ui_cache_key = None
 
     def render_init_screen(self):
         # Display logo on startup
@@ -177,6 +186,10 @@ class RenderThread(threading.Thread):
             # the model-ui screen drew into — force a full redraw next time
             # it's shown instead of trusting a stale cache key.
             self.model_ui_cache_key = None
+        if current_help_ui:
+            return self.render_help_screen(apply_tool_placeholders(text))
+        if self.help_ui_cache_key is not None:
+            self.help_ui_cache_key = None
         if current_image_path not in [None, ""]:
             # Try to load image from path
             if current_image is not None:
@@ -273,6 +286,58 @@ class RenderThread(threading.Thread):
                 fill_w = int((bar_w - 4) * percent / 100)
                 if fill_w > 0:
                     draw.rectangle((bar_x + 2, bar_y + 2, bar_x + 2 + fill_w, bar_y + bar_h - 2), fill=TERMINAL_FG)
+
+            rgb565_data = ImageUtils.image_to_rgb565(frame, VIDEO_WIDTH, VIDEO_HEIGHT)
+            self.whisplay.draw_image(0, TOP_BAR_HEIGHT, VIDEO_WIDTH, VIDEO_HEIGHT, rgb565_data)
+
+        self.render_bottom_text(text)
+        return False  # event-driven: Node pushes a new frame on every change
+
+    def render_help_screen(self, text):
+        """Terminal-style voice-command cheat sheet (chat-flow/help-mode.ts),
+        opened by saying "ayuda" while holding the button. Click pages
+        through short command examples; the last page highlights "Salir"."""
+        self.render_top_bar()
+
+        mode = current_help_ui
+        body = current_help_ui_body or ""
+        page = current_help_ui_page or 0
+        total = max(current_help_ui_total or 0, 0)
+
+        cache_key = (mode, body, page, total)
+        if cache_key != self.help_ui_cache_key:
+            self.help_ui_cache_key = cache_key
+            frame = Image.new("RGBA", (VIDEO_WIDTH, VIDEO_HEIGHT), (0, 0, 0, 255))
+            draw = ImageDraw.Draw(frame)
+
+            draw.text((14, 10), ">_ AYUDA", font=self.help_ui_title_font, fill=TERMINAL_FG)
+
+            if mode == "exit":
+                box_w, box_h = 140, 46
+                box_x = (VIDEO_WIDTH - box_w) // 2
+                box_y = (VIDEO_HEIGHT - box_h) // 2
+                draw.rectangle((box_x, box_y, box_x + box_w, box_y + box_h), outline=TERMINAL_FG, width=2)
+                self._draw_centered(draw, "SALIR", self.help_ui_exit_font, box_y + 12)
+            else:
+                content_width = VIDEO_WIDTH - 28
+                lines = []
+                for raw_line in body.split("\n"):
+                    if raw_line == "":
+                        lines.append("")
+                        continue
+                    lines.extend(
+                        line for line in TextUtils.wrap_text(draw, raw_line, self.help_ui_body_font, content_width)
+                        if line != ""
+                    )
+                ascent, descent = self.help_ui_body_font.getmetrics()
+                line_height = ascent + descent + 3
+                y = 38
+                for line in lines:
+                    draw.text((14, y), line, font=self.help_ui_body_font, fill=TERMINAL_FG)
+                    y += line_height
+
+                if total:
+                    self._draw_centered(draw, f"[{page}/{total}]", self.help_ui_hint_font, VIDEO_HEIGHT - 22)
 
             rgb565_data = ImageUtils.image_to_rgb565(frame, VIDEO_WIDTH, VIDEO_HEIGHT)
             self.whisplay.draw_image(0, TOP_BAR_HEIGHT, VIDEO_WIDTH, VIDEO_HEIGHT, rgb565_data)
@@ -386,7 +451,8 @@ def update_display_data(status=None, emoji=None, text=None,
                   wifi_signal_level=None, tool_placeholders=None,
                   music_progress=None, music_duration_ms=None, approval_mode=None, terminal_text=None,
                   model_ui=None, model_ui_label=None, model_ui_percent=None,
-                  model_ui_index=None, model_ui_total=None, model_ui_active=None):
+                  model_ui_index=None, model_ui_total=None, model_ui_active=None,
+                  help_ui=None, help_ui_body=None, help_ui_page=None, help_ui_total=None):
     global current_status, current_emoji, current_text, current_battery_level
     global current_terminal_text
     global current_tool_placeholders
@@ -400,6 +466,7 @@ def update_display_data(status=None, emoji=None, text=None,
     global current_approval_mode
     global current_model_ui, current_model_ui_label, current_model_ui_percent
     global current_model_ui_index, current_model_ui_total, current_model_ui_active
+    global current_help_ui, current_help_ui_body, current_help_ui_page, current_help_ui_total
     global render_thread
 
     next_text = text
@@ -511,6 +578,20 @@ def update_display_data(status=None, emoji=None, text=None,
         current_model_ui_total = model_ui_total
     if model_ui_active is not None:
         current_model_ui_active = bool(model_ui_active)
+    if help_ui is not None:
+        current_help_ui = help_ui
+    if help_ui_body is not None:
+        current_help_ui_body = help_ui_body
+    if help_ui_page is not None:
+        try:
+            current_help_ui_page = int(help_ui_page)
+        except (TypeError, ValueError):
+            print(f"[Display] Invalid help_ui_page payload: {help_ui_page}")
+    if help_ui_total is not None:
+        try:
+            current_help_ui_total = int(help_ui_total)
+        except (TypeError, ValueError):
+            print(f"[Display] Invalid help_ui_total payload: {help_ui_total}")
     if render_thread is not None:
         render_thread.request_render()
 
@@ -628,6 +709,10 @@ def handle_client(client_socket, addr, whisplay):
                     model_ui_index = content.get("model_ui_index", None)
                     model_ui_total = content.get("model_ui_total", None)
                     model_ui_active = content.get("model_ui_active", None)
+                    help_ui = content.get("help_ui", None)
+                    help_ui_body = content.get("help_ui_body", None)
+                    help_ui_page = content.get("help_ui_page", None)
+                    help_ui_total = content.get("help_ui_total", None)
 
                     if rgbled:
                         rgb255_tuple = ColorUtils.get_rgb255_from_any(rgbled)
@@ -676,7 +761,9 @@ def handle_client(client_socket, addr, whisplay):
                             (music_progress is not None) or (music_duration_ms is not None) or (approval_mode is not None) or \
                             (terminal_text is not None) or \
                             (model_ui is not None) or (model_ui_label is not None) or (model_ui_percent is not None) or \
-                            (model_ui_index is not None) or (model_ui_total is not None) or (model_ui_active is not None):
+                            (model_ui_index is not None) or (model_ui_total is not None) or (model_ui_active is not None) or \
+                            (help_ui is not None) or (help_ui_body is not None) or \
+                            (help_ui_page is not None) or (help_ui_total is not None):
                         update_display_data(status=status, emoji=emoji,
                                      text=text, text_delta=text_delta, scroll_speed=scroll_speed, scroll_sync=scroll_sync,
                                      battery_level=battery_level, battery_color=battery_tuple,
@@ -696,7 +783,11 @@ def handle_client(client_socket, addr, whisplay):
                                                  model_ui_percent=model_ui_percent,
                                                  model_ui_index=model_ui_index,
                                                  model_ui_total=model_ui_total,
-                                                 model_ui_active=model_ui_active)
+                                                 model_ui_active=model_ui_active,
+                                                 help_ui=help_ui,
+                                                 help_ui_body=help_ui_body,
+                                                 help_ui_page=help_ui_page,
+                                                 help_ui_total=help_ui_total)
 
                     client_socket.send(b"OK\n")
                     if response_to_client:

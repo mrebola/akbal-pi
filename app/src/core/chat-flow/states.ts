@@ -57,6 +57,12 @@ import {
   onModeSelectConfirm,
   onModeSelectTimeout,
 } from "./mode-select-mode";
+import {
+  enterHelpMode,
+  handleHelpClick,
+  handleHelpDoubleClick,
+  onHelpExit,
+} from "./help-mode";
 import { isAgentMode, setDeviceMode } from "../../config/device-mode";
 import {
   getCurrentModel,
@@ -102,6 +108,7 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       // in "model_select", which has no other cleanup step.
       model_ui: "",
       model_ui_percent: 0,
+      help_ui: "",
       ...(getCurrentStatus().text.endsWith("Escuchando...") || !getCurrentStatus().text
         ? {
           text: `Mantén presionado el botón para hablar${ctx.enableCamera ? ",\ndoble clic para abrir la cámara" : ""
@@ -302,6 +309,10 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
         // going through the LLM — see voice-commands.ts for why.
         const voiceCommand = matchVoiceCommand(result);
         if (voiceCommand) {
+          if (voiceCommand.type === "help_menu") {
+            ctx.transitionTo("help");
+            return;
+          }
           if (voiceCommand.type === "volume") {
             const reply = await handleVoiceCommand(voiceCommand);
             if (ctx.currentFlowName !== "asr") return;
@@ -835,5 +846,16 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
         ctx.transitionTo("sleep");
       }
     }, 2500);
+  },
+  help: (ctx: ChatFlowContext) => {
+    onHelpExit(() => {
+      if (ctx.currentFlowName === "help") {
+        ctx.transitionTo("sleep");
+      }
+    });
+    onButtonDoubleClick(() => handleHelpDoubleClick());
+    onButtonPressed(noop);
+    onButtonReleased(() => handleHelpClick());
+    enterHelpMode();
   },
 };

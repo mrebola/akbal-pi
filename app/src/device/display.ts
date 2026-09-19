@@ -48,6 +48,14 @@ export interface Status {
   model_ui_index: number;
   model_ui_total: number;
   model_ui_active: boolean;
+  // Voice-command cheat sheet overlay ("ayuda" — see
+  // chat-flow/help-mode.ts). Same "replace the character GIF with a
+  // hacker-style screen" pattern as model_ui, but paging through static
+  // help text instead of a model carousel.
+  help_ui: "" | "view" | "exit";
+  help_ui_body: string;
+  help_ui_page: number;
+  help_ui_total: number;
 }
 
 export class WhisplayDisplay {
@@ -80,6 +88,10 @@ export class WhisplayDisplay {
     model_ui_index: 0,
     model_ui_total: 0,
     model_ui_active: false,
+    help_ui: "",
+    help_ui_body: "",
+    help_ui_page: 0,
+    help_ui_total: 0,
   };
 
   private client = null as Socket | null;
@@ -436,6 +448,10 @@ export class WhisplayDisplay {
       model_ui_index,
       model_ui_total,
       model_ui_active,
+      help_ui,
+      help_ui_body,
+      help_ui_page,
+      help_ui_total,
     } = {
       ...this.currentStatus,
       ...normalizedStatus,
@@ -474,6 +490,10 @@ export class WhisplayDisplay {
     this.currentStatus.model_ui_index = model_ui_index;
     this.currentStatus.model_ui_total = model_ui_total;
     this.currentStatus.model_ui_active = model_ui_active;
+    this.currentStatus.help_ui = help_ui;
+    this.currentStatus.help_ui_body = help_ui_body;
+    this.currentStatus.help_ui_page = help_ui_page;
+    this.currentStatus.help_ui_total = help_ui_total;
 
     const changedValuesObj = Object.fromEntries(changedValues);
     changedValuesObj.brightness = 100;

@@ -1,4 +1,4 @@
-# Comandos de voz (volumen, modelo y modo)
+# Comandos de voz (volumen, modelo, modo y ayuda)
 
 ## Lista rápida
 
@@ -16,6 +16,7 @@ las secciones de abajo):
 | Abrir menú de modo en "modo agente" | "activa modo agente", "modo agente" |
 | Abrir menú de modo en "modo local" | "activa modo local", "modo local", "desactiva modo agente" |
 | Abrir menú de modo (sin decir cuál) | "cambiar modo" |
+| Ver esta lista en pantalla | "ayuda" |
 
 El volumen inicial al prender el dispositivo es **60%** por defecto
 (`INITIAL_VOLUME_PERCENT` en `.env`, ver [`SETUP.md`](./SETUP.md)); estos
@@ -142,6 +143,27 @@ sin tocar el botón cierra el menú solo.
 
 El cambio se guarda en `DEVICE_MODE` dentro de `.env`, así sobrevive a un
 reinicio — igual que el cambio de modelo se guarda en `OLLAMA_MODEL`.
+
+## Pantalla de ayuda
+
+Decir **"ayuda"** (manteniendo presionado el botón, como cualquier otro
+comando de voz) abre una pantalla estilo terminal con un resumen de todos
+los comandos de esta página, para consultarla sin tener que acordarse de la
+frase exacta.
+
+- **Click corto**: pasa a la siguiente página de comandos.
+- **Al llegar a la última página**, el botón cambia de función: se muestra
+  un recuadro **"SALIR"** seleccionado, y un click corto ahí vuelve a la
+  pantalla normal de Akbal (sin mantener presionado, a diferencia del menú
+  de modelo/modo).
+- **Doble clic**: sale directo en cualquier momento, sin tener que llegar al
+  final.
+- Si no se toca el botón por 20 segundos, la ayuda se cierra sola (mismo
+  mecanismo que el resto de los menús).
+
+El contenido se define en el array `HELP_ENTRIES` de
+`app/src/core/chat-flow/help-mode.ts` — para agregar o cambiar una línea,
+editarlo ahí, recompilar (`npm run build`) y reiniciar `chatbot.service`.
 
 ## Si se agrega o se borra un modelo con `ollama pull` / `ollama rm`
 

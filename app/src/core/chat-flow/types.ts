@@ -16,7 +16,8 @@ export type FlowName =
   | "model_select"
   | "model_loading"
   | "mode_select"
-  | "mode_loading";
+  | "mode_loading"
+  | "help";
 
 export type FlowStateHandler = (ctx: ChatFlowContext) => void;
 

@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import http from "http";
+import { Readable } from "stream";
 import Koa from "koa";
 import Router from "@koa/router";
 import bodyParser from "koa-bodyparser";
@@ -131,15 +132,40 @@ export class WebAdminServer {
         return;
       }
       const abortController = new AbortController();
-      const onClientGone = () => abortController.abort();
-      ctx.req.on("close", onClientGone);
-      ctx.req.on("aborted", onClientGone);
+      // axios' `signal` only cancels the request while it's still being
+      // established — once responseType:"stream" resolves, response.data
+      // is a live Node Readable already flowing, and aborting the signal
+      // at that point does *not* tear it down (confirmed the hard way: the
+      // llama-server process kept running well after the browser
+      // disconnected). Destroying the stream directly closes its
+      // underlying socket to Ollama, which is what actually makes Ollama
+      // cancel the generation.
+      let upstream: Readable | null = null;
+      const onClientGone = () => {
+        abortController.abort();
+        upstream?.destroy();
+      };
+      // Belt and suspenders: which of these actually fires for a given
+      // disconnect (client abort vs. tab close vs. lost network) varies,
+      // so all four are wired — cleanupListeners removes them all once,
+      // however we got there.
+      const emitters: [NodeJS.EventEmitter, string][] = [
+        [ctx.req, "close"],
+        [ctx.req, "aborted"],
+        [ctx.res, "close"],
+        [ctx.req.socket, "close"],
+      ];
+      for (const [emitter, event] of emitters) emitter.on(event, onClientGone);
+      const cleanupListeners = (): void => {
+        for (const [emitter, event] of emitters) emitter.off(event, onClientGone);
+      };
       try {
         const response = await axios.post(
           `${ollamaEndpoint}/api/chat`,
           { model, messages, stream: true, options: { num_predict: MAX_PREDICT_TOKENS } },
           { responseType: "stream", signal: abortController.signal },
         );
+        upstream = response.data;
         ctx.respond = false;
         ctx.res.writeHead(200, { "Content-Type": "application/x-ndjson" });
         response.data.pipe(ctx.res);
@@ -147,17 +173,12 @@ export class WebAdminServer {
           // An unhandled 'error' on a Readable stream crashes the process —
           // Ollama closing the connection after we aborted it lands here,
           // not in the outer catch, since piping already started.
-          ctx.req.off("close", onClientGone);
-          ctx.req.off("aborted", onClientGone);
+          cleanupListeners();
           ctx.res.end();
         });
-        response.data.on("close", () => {
-          ctx.req.off("close", onClientGone);
-          ctx.req.off("aborted", onClientGone);
-        });
+        response.data.on("close", cleanupListeners);
       } catch (err: any) {
-        ctx.req.off("close", onClientGone);
-        ctx.req.off("aborted", onClientGone);
+        cleanupListeners();
         if (axios.isCancel(err) || abortController.signal.aborted) {
           // Client already gone — nothing to send a response to.
           return;

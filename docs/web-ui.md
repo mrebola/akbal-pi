@@ -40,6 +40,26 @@ aparte, siempre corriendo (si `WEB_ADMIN_ENABLED` no está en `false`).
 - `POST /api/chat`: reenvía directo a `/api/chat` de Ollama con
   `stream: true` y hace *pipe* de la respuesta NDJSON tal cual — el
   frontend (`app/web/admin/app.js`) la va leyendo línea por línea.
+
+  **Incidente real (18/09):** un modelo (`huihui_ai/qwen3-abliterated:1.7b`,
+  ya marcado en `llm-model-selection.md` como propenso a repetirse) entró
+  en loop en el chat y corrió al ~70% CPU **45+ minutos** sin que nada lo
+  parara — no había ni botón de cancelar ni límite de tokens. Dos redes de
+  seguridad independientes, agregadas después:
+  1. `options.num_predict` (default 2048, `WEB_ADMIN_CHAT_MAX_TOKENS` en
+     `.env`) — techo duro de tokens por respuesta, para que un loop de
+     repetición no pueda correr para siempre así nadie lo note.
+  2. El botón **Cancelar** en el chat corta la conexión del browser, lo que
+     el servidor detecta (`ctx.req`/`ctx.res`/el socket, escuchando los
+     cuatro eventos posibles porque cuál dispara depende de cómo se cortó
+     la conexión) y usa para **destruir el stream de axios hacia Ollama**
+     — nada más que abortar el `AbortController` de axios *no alcanza* una
+     vez que la respuesta ya empezó a fluir (confirmado en el dispositivo:
+     el proceso seguía corriendo igual). Destruir el stream sí cierra la
+     conexión real con Ollama, y Ollama cancela la generación en cuanto
+     detecta que su cliente se desconectó — verificado en el dispositivo
+     real: el tiempo de CPU del proceso `llama-server` deja de subir
+     apenas se cancela.
 - `GET /api/models` / `POST /api/models/select`: reusan
   `listOllamaModelsWithSize` / `switchModel` de `ollama-llm.ts` — el mismo
   código que usa el menú físico de modelo.

@@ -116,6 +116,9 @@ current_rag_icon_visible = False
 current_image_icon_visible = False
 current_music_progress = None
 current_music_duration_ms = None
+current_music_ui = None       # None or "player"
+current_music_icon = None     # "play" | "pause" | "next" | "prev" | "exit"
+current_music_title = ""
 current_approval_mode = False
 current_model_ui = ""
 current_model_ui_title = ""
@@ -180,6 +183,7 @@ class RenderThread(threading.Thread):
         self.model_ui_label_font = ImageFont.truetype(self.font_path, 19)
         self.model_ui_hint_font = ImageFont.truetype(self.font_path, 13)
         self.model_ui_cache_key = None
+        self.music_ui_cache_key = None
         self.help_ui_title_font = ImageFont.truetype(self.font_path, 12)
         self.help_ui_label_font = ImageFont.truetype(self.font_path, 15)
         self.help_ui_example_font = ImageFont.truetype(self.font_path, 13)
@@ -218,6 +222,10 @@ class RenderThread(threading.Thread):
         self.pending_auto_scroll_after_hold = False
         if camera_mode:
             return False  # Skip rendering if in camera mode
+        if current_music_ui:
+            return self.render_music_screen(apply_tool_placeholders(text))
+        if self.music_ui_cache_key is not None:
+            self.music_ui_cache_key = None
         if current_model_ui:
             return self.render_model_ui_screen(apply_tool_placeholders(text))
         if self.model_ui_cache_key is not None:
@@ -597,6 +605,89 @@ class RenderThread(threading.Thread):
         self.render_bottom_text(text)
         return True  # keep looping so the animation keeps playing
 
+    def _draw_music_icon(self, draw, cx, cy, size, kind, color):
+        """Simple vector transport glyph centered at (cx, cy) — no emoji font
+        needed. Green, matching the rest of the accent UI."""
+        h = size
+        w = size
+        if kind == "pause":
+            bw = max(4, w // 4)
+            gap = max(4, w // 6)
+            draw.rectangle([cx - gap - bw, cy - h // 2, cx - gap, cy + h // 2], fill=color)
+            draw.rectangle([cx + gap, cy - h // 2, cx + gap + bw, cy + h // 2], fill=color)
+        elif kind == "play":
+            draw.polygon([(cx - w // 3, cy - h // 2), (cx - w // 3, cy + h // 2), (cx + w // 2, cy)], fill=color)
+        elif kind == "stop":
+            draw.rectangle([cx - w // 2, cy - h // 2, cx + w // 2, cy + h // 2], fill=color)
+        elif kind == "next":
+            draw.polygon([(cx - w // 2, cy - h // 2), (cx - w // 2, cy + h // 2), (cx, cy)], fill=color)
+            draw.polygon([(cx, cy - h // 2), (cx, cy + h // 2), (cx + w // 2, cy)], fill=color)
+            draw.rectangle([cx + w // 2, cy - h // 2, cx + w // 2 + max(3, w // 8), cy + h // 2], fill=color)
+        elif kind == "prev":
+            draw.polygon([(cx + w // 2, cy - h // 2), (cx + w // 2, cy + h // 2), (cx, cy)], fill=color)
+            draw.polygon([(cx, cy - h // 2), (cx, cy + h // 2), (cx - w // 2, cy)], fill=color)
+            draw.rectangle([cx - w // 2 - max(3, w // 8), cy - h // 2, cx - w // 2, cy + h // 2], fill=color)
+        elif kind == "exit":
+            # arrow pointing right into a wall "→|"
+            bar_x = cx + w // 2
+            draw.rectangle([bar_x, cy - h // 2, bar_x + max(3, w // 8), cy + h // 2], fill=color)
+            draw.line([(cx - w // 2, cy), (bar_x - 2, cy)], fill=color, width=max(3, w // 8))
+            draw.polygon([(bar_x - 2, cy - h // 4), (bar_x - 2, cy + h // 4), (bar_x + w // 6, cy)], fill=color)
+
+    def render_music_screen(self, text):
+        """Clean, dedicated music-player screen for the HAT: a big transport
+        glyph for the last action / current state, the track title, and a
+        progress bar. No spinner, no character GIF."""
+        self.render_top_bar()
+
+        icon = current_music_icon or "play"
+        title = current_music_title or "Música"
+        progress = current_music_progress  # 0..1 or None
+        prog_pct = int(max(0.0, min(1.0, progress)) * 100) if progress is not None else -1
+
+        cache_key = (icon, title, prog_pct, current_top_bar_mode)
+        if cache_key != self.music_ui_cache_key:
+            self.music_ui_cache_key = cache_key
+            frame = Image.new("RGBA", (VIDEO_WIDTH, VIDEO_HEIGHT), (0, 0, 0, 255))
+            draw = ImageDraw.Draw(frame)
+            center_x = VIDEO_WIDTH // 2
+
+            # eyebrow
+            draw.text((14, 8), "MÚSICA", font=self.model_ui_title_font, fill=TEXT_SECONDARY)
+
+            # big central transport glyph
+            self._draw_music_icon(draw, center_x, 70, 54, icon, ACCENT_GREEN)
+
+            # track title (centered, up to 2 lines)
+            content_width = VIDEO_WIDTH - 24
+            lines = [
+                line for line in TextUtils.wrap_text(draw, title, self.model_ui_label_font, content_width)
+                if line
+            ][:2] or [""]
+            ascent, descent = self.model_ui_label_font.getmetrics()
+            lh = ascent + descent
+            ty = 112
+            for line in lines:
+                bbox = draw.textbbox((0, 0), line, font=self.model_ui_label_font)
+                lw = bbox[2] - bbox[0]
+                draw.text((center_x - lw // 2, ty), line, font=self.model_ui_label_font, fill=TEXT_PRIMARY)
+                ty += lh
+
+            # progress bar
+            if prog_pct >= 0:
+                bar_x0, bar_x1 = 16, VIDEO_WIDTH - 16
+                bar_y = VIDEO_HEIGHT - 20
+                draw.rounded_rectangle([bar_x0, bar_y, bar_x1, bar_y + 6], radius=3, fill=(30, 40, 34, 255))
+                fill_x = bar_x0 + int((bar_x1 - bar_x0) * prog_pct / 100)
+                if fill_x > bar_x0:
+                    draw.rounded_rectangle([bar_x0, bar_y, fill_x, bar_y + 6], radius=3, fill=ACCENT_GREEN)
+
+            rgb565_data = ImageUtils.image_to_rgb565(frame, VIDEO_WIDTH, VIDEO_HEIGHT)
+            self.whisplay.draw_image(0, TOP_BAR_HEIGHT, VIDEO_WIDTH, VIDEO_HEIGHT, rgb565_data)
+
+        self.render_bottom_text(text)
+        return False  # static screen; redraws only when content changes
+
     def render_top_bar(self):
         cache_key = (current_wifi_signal_level, current_battery_level, current_battery_color, current_top_bar_mode)
         if cache_key == self.top_bar_cache_key:
@@ -687,7 +778,9 @@ def update_display_data(status=None, emoji=None, text=None,
                   scroll_speed=None, scroll_sync=None, battery_level=None, battery_color=None, image_path=None,
                   network_connected=None, vpn_connected=None, rag_icon_visible=None, image_icon_visible=None, transaction_id=None,
                   wifi_signal_level=None, tool_placeholders=None,
-                  music_progress=None, music_duration_ms=None, approval_mode=None, terminal_text=None,
+                  music_progress=None, music_duration_ms=None,
+                  music_ui=None, music_icon=None, music_title=None,
+                  approval_mode=None, terminal_text=None,
                   model_ui=None, model_ui_title=None, model_ui_label=None, model_ui_description=None, model_ui_percent=None,
                   model_ui_index=None, model_ui_total=None, model_ui_active=None, model_ui_qr_path=None,
                   help_ui=None, help_ui_body=None, help_ui_page=None, help_ui_total=None,
@@ -705,6 +798,7 @@ def update_display_data(status=None, emoji=None, text=None,
     global current_network_connected, current_vpn_connected, current_rag_icon_visible, current_image_icon_visible, current_transaction_id
     global current_wifi_signal_level
     global current_music_progress, current_music_duration_ms
+    global current_music_ui, current_music_icon, current_music_title
     global current_approval_mode
     global current_model_ui, current_model_ui_title, current_model_ui_label, current_model_ui_description, current_model_ui_percent
     global current_model_ui_index, current_model_ui_total, current_model_ui_active, current_model_ui_qr_path
@@ -807,6 +901,12 @@ def update_display_data(status=None, emoji=None, text=None,
         current_music_progress = music_progress if music_progress >= 0 else None
     if music_duration_ms is not None:
         current_music_duration_ms = music_duration_ms if music_duration_ms > 0 else None
+    if music_ui is not None:
+        current_music_ui = music_ui or None
+    if music_icon is not None:
+        current_music_icon = music_icon or None
+    if music_title is not None:
+        current_music_title = music_title
     if approval_mode is not None:
         current_approval_mode = bool(approval_mode)
     if model_ui is not None:
@@ -982,6 +1082,9 @@ def handle_client(client_socket, addr, whisplay):
                     image_icon_visible = content.get("image_icon_visible", None)
                     music_progress = content.get("music_progress", None)
                     music_duration_ms = content.get("music_duration_ms", None)
+                    music_ui = content.get("music_ui", None)
+                    music_icon = content.get("music_icon", None)
+                    music_title = content.get("music_title", None)
                     approval_mode = content.get("approval_mode", None)
                     capture_image_path = content.get("capture_image_path", None)
                     trigger_camera_capture = content.get("camera_capture", None)
@@ -1055,7 +1158,9 @@ def handle_client(client_socket, addr, whisplay):
                             (vpn_connected is not None) or \
                             (rag_icon_visible is not None) or (image_icon_visible is not None) or (scroll_sync is not None) or \
                             (tool_placeholders is not None) or \
-                            (music_progress is not None) or (music_duration_ms is not None) or (approval_mode is not None) or \
+                            (music_progress is not None) or (music_duration_ms is not None) or \
+                            (music_ui is not None) or (music_icon is not None) or (music_title is not None) or \
+                            (approval_mode is not None) or \
                             (terminal_text is not None) or \
                             (model_ui is not None) or (model_ui_title is not None) or (model_ui_label is not None) or \
                             (model_ui_description is not None) or (model_ui_percent is not None) or \
@@ -1081,6 +1186,9 @@ def handle_client(client_socket, addr, whisplay):
                                                  transaction_id=transaction_id,
                                                  music_progress=music_progress,
                                                  music_duration_ms=music_duration_ms,
+                                                 music_ui=music_ui,
+                                                 music_icon=music_icon,
+                                                 music_title=music_title,
                                                  approval_mode=approval_mode,
                                                  terminal_text=terminal_text,
                                                  model_ui=model_ui,

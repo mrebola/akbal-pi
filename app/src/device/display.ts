@@ -38,6 +38,9 @@ export interface Status {
   image_icon_visible: boolean;
   music_progress: number | undefined;
   music_duration_ms: number | undefined;
+  music_ui: string | undefined;
+  music_icon: string | undefined;
+  music_title: string | undefined;
   approval_mode: boolean;
   // Generic button-driven carousel overlay, shared by the model picker
   // (model-select-mode.ts), the agent/local picker (mode-select-mode.ts) and
@@ -125,6 +128,9 @@ export class WhisplayDisplay {
     image_icon_visible: false,
     music_progress: undefined,
     music_duration_ms: undefined,
+    music_ui: undefined,
+    music_icon: undefined,
+    music_title: undefined,
     approval_mode: false,
     model_ui: "",
     model_ui_title: "",
@@ -498,6 +504,9 @@ export class WhisplayDisplay {
       image_icon_visible,
       music_progress,
       music_duration_ms,
+      music_ui,
+      music_icon,
+      music_title,
       approval_mode,
       model_ui,
       model_ui_title,
@@ -553,6 +562,9 @@ export class WhisplayDisplay {
     this.currentStatus.image_icon_visible = image_icon_visible;
     this.currentStatus.music_progress = music_progress;
     this.currentStatus.music_duration_ms = music_duration_ms;
+    this.currentStatus.music_ui = music_ui;
+    this.currentStatus.music_icon = music_icon;
+    this.currentStatus.music_title = music_title;
     this.currentStatus.approval_mode = approval_mode;
     this.currentStatus.model_ui = model_ui;
     this.currentStatus.model_ui_title = model_ui_title;

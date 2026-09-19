@@ -352,48 +352,43 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     });
   },
   jukebox: (ctx: ChatFlowContext) => {
-    // Dedicated Cypher OST player mode (separate from the voice-driven "music"
-    // state). One-button controls: short click = next track, hold = play/pause,
-    // double click = exit. Full transport is on the web player.
+    // Dedicated Cypher OST player mode. One-button controls:
+    //   short click = play/pausa · doble click = siguiente · mantener = salir
+    // The screen shows a big transport icon reflecting the action/state, the
+    // track title and a progress bar (see render_music_screen in chatbot-ui.py).
     let pressAt = 0;
     let progressTimer: ReturnType<typeof setInterval> | null = null;
-    const HOLD_PLAYPAUSE_MS = 700;
-    const HOLD_EXIT_MS = 1800;
-    // The LCD text band only fits ~2 lines, so we don't cram a permanent
-    // control legend under the title (that overlapped everything). Instead we
-    // flash the controls for a few seconds when entering the mode, then show a
-    // clean single-line now-playing.
-    const CONTROLS_HINT = "Clic:sig  Doble:ant\nMantén:pausa  2s:salir";
-    let hintUntil = Date.now() + 4500;
+    const HOLD_EXIT_MS = 700; // a deliberate hold, vs a quick click
+    const CONTROLS_HINT = "Clic: play/pausa · Doble: siguiente\nMantén: salir";
+    // Briefly flash an action icon (e.g. "next") over the steady state icon.
+    let flashIcon: string | null = null;
+    let flashUntil = 0;
+
+    const iconFor = (s: ReturnType<typeof jukebox.status>): string => {
+      if (flashIcon && Date.now() < flashUntil) return flashIcon;
+      if (!s.playing) return "play";
+      return s.paused ? "pause" : "play";
+    };
 
     const render = () => {
       const s = jukebox.status();
-      if (Date.now() < hintUntil) {
-        display({
-          status: "music",
-          emoji: "🎶",
-          RGB: "#00aa66",
-          text: CONTROLS_HINT,
-          music_progress: -1,
-          music_duration_ms: 0,
-          rag_icon_visible: false,
-        });
-        return;
-      }
-      const line = !s.available
-        ? "No hay música cargada."
-        : s.title
-          ? `${s.paused ? "⏸ " : "♪ "}${s.title}`
-          : "Música Cypher OST";
       display({
         status: "music",
-        emoji: !s.playing ? "🎵" : s.paused ? "⏸️" : "🎶",
-        RGB: !s.playing ? "#0066aa" : s.paused ? "#775500" : "#00aa66",
-        text: line,
+        model_ui: "", // clear any leftover quick-menu card / loading spinner
+        music_ui: "player",
+        music_icon: iconFor(s),
+        music_title: s.available ? s.title || "Música Cypher OST" : "Sin música",
         music_progress: s.durationMs > 0 ? s.positionMs / s.durationMs : -1,
         music_duration_ms: s.durationMs,
+        text: CONTROLS_HINT,
         rag_icon_visible: false,
       });
+    };
+
+    const flash = (icon: string) => {
+      flashIcon = icon;
+      flashUntil = Date.now() + 1000;
+      render();
     };
 
     const stopTimers = () => {
@@ -407,6 +402,7 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       stopTimers();
       jukebox.setOnChange(null);
       jukebox.stop();
+      display({ music_ui: "" }); // turn off the player screen
       ctx.transitionTo("sleep");
     };
 
@@ -416,26 +412,23 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
 
     onButtonDoubleClick(() => {
       if (ctx.currentFlowName === "jukebox") {
-        hintUntil = 0;
-        void jukebox.prev().then(render);
+        flash("next");
+        void jukebox.next().then(render);
       }
     });
     onButtonPressed(() => {
       pressAt = Date.now();
     });
     onButtonReleased(() => {
-      // Ignore the stray release from the quick-menu hold that entered this
-      // mode (no press was registered here yet).
+      // Ignore the stray release from the quick-menu hold that entered this mode.
       if (!pressAt) return;
       const held = Date.now() - pressAt;
       pressAt = 0;
-      hintUntil = 0;
       if (held >= HOLD_EXIT_MS) {
-        leave();
-      } else if (held >= HOLD_PLAYPAUSE_MS) {
-        void jukebox.playPause().then(render);
+        flash("exit");
+        setTimeout(leave, 250);
       } else {
-        void jukebox.next().then(render);
+        void jukebox.playPause().then(render);
       }
     });
 

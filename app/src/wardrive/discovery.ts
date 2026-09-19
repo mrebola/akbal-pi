@@ -17,6 +17,15 @@ import { WardriveTarget } from "./types";
 const STRONG_DBM = -55;
 const USABLE_DBM = -75;
 
+// Rough RSSI->distance estimate (log-distance path loss, same model as
+// utils/wifi.ts). Order-of-magnitude only, not a real measurement.
+const RSSI_AT_1M_DBM = -40;
+const PATH_LOSS_EXPONENT = 2.7;
+function estimateDistanceMeters(dbm: number): number {
+  const meters = Math.pow(10, (RSSI_AT_1M_DBM - dbm) / (10 * PATH_LOSS_EXPONENT));
+  return Math.round(meters * 10) / 10;
+}
+
 export function discoverTargets(): WardriveTarget[] {
   const snapshot = getWifiRadarSnapshot(true);
   const targets: WardriveTarget[] = snapshot.accessPoints.map((ap) => ({
@@ -25,6 +34,8 @@ export function discoverTargets(): WardriveTarget[] {
     channel: ap.channel,
     rssi: ap.rssi,
     security: ap.security,
+    clients: ap.clients ?? 0,
+    distanceMeters: estimateDistanceMeters(ap.rssi),
     inAllowlist: false, // filled in by the service
     attackable: ap.rssi >= USABLE_DBM,
   }));

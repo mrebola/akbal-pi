@@ -1612,7 +1612,7 @@ function wdRender() {
   // then the rest by signal strength.
   wdTableBody.innerHTML = "";
   if (!on) {
-    wdTableBody.innerHTML = '<tr><td colspan="7" class="muted">Modo inactivo — entra al modo wardriving para escanear</td></tr>';
+    wdTableBody.innerHTML = '<tr><td colspan="9" class="muted">Modo inactivo — entra al modo wardriving para escanear</td></tr>';
     return;
   }
   const allTargets = [...(wdStatus.targets || [])];
@@ -1624,7 +1624,7 @@ function wdRender() {
     .sort((a, b) => b.rssi - a.rssi);
   const ordered = [...pinned, ...rest];
   if (ordered.length === 0) {
-    wdTableBody.innerHTML = '<tr><td colspan="7" class="muted">Escaneando el aire...</td></tr>';
+    wdTableBody.innerHTML = '<tr><td colspan="9" class="muted">Escaneando el aire...</td></tr>';
     return;
   }
   for (const t of ordered) {
@@ -1641,11 +1641,15 @@ function wdRender() {
           : `<button data-act="attack" data-bssid="${t.bssid}">Hack</button>` +
             `<button data-act="disallow" data-bssid="${t.bssid}" class="secondary">Quitar</button>`)
       : `<button data-act="allow" data-bssid="${t.bssid}">Autorizar</button>`;
+    const dist = t.distanceMeters != null ? `~${t.distanceMeters}m` : "—";
+    const clients = t.clients != null ? String(t.clients) : "0";
     tr.innerHTML =
       `<td class="wd-ssid">${pin}${escapeHtml(t.ssid || "(oculta)")}</td>` +
       `<td class="wd-bssid">${t.bssid}</td>` +
       `<td>${t.channel}</td>` +
       `<td class="${wdDbmClass(t.rssi)}">${t.rssi}</td>` +
+      `<td>${dist}</td>` +
+      `<td>${clients}</td>` +
       `<td>${t.security}</td>` +
       `<td>${badge}</td>` +
       `<td>${actions}</td>`;

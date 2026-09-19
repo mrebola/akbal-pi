@@ -8,6 +8,8 @@ export type WardriveTarget = {
   channel: number;
   rssi: number; // dBm, most recent reading
   security: string; // as reported by the discovery source
+  clients: number; // associated clients seen in the air
+  distanceMeters: number; // rough RSSI-based estimate (order of magnitude)
   inAllowlist: boolean;
   attackable: boolean; // signal strength heuristic for UI ordering
 };

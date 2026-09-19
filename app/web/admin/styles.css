@@ -32,6 +32,12 @@ body {
   background: var(--bg-raised);
 }
 
+.brand-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .brand {
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -296,6 +302,24 @@ button.secondary {
 
 .battery-indicator.low { color: var(--danger); }
 .battery-indicator.charging { color: var(--accent); }
+
+.sys-stats {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.sys-stat.warn { color: var(--danger); }
+
+.usb-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
 
 .avatar {
   width: 40px;

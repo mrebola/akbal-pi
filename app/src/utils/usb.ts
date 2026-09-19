@@ -183,3 +183,40 @@ export async function findVolume(volumeName: string): Promise<UsbVolume | null> 
   const volumes = await listUsbVolumes();
   return volumes.find((v) => v.name === volumeName) || null;
 }
+
+export type UsbWifiAdapter = {
+  iface: string;
+  chipset: string;
+};
+
+// The Pi's own onboard wifi (brcmfmac, see docs/wifi.md) isn't a USB
+// device — only interfaces whose /sys/class/net/<iface>/device symlink
+// resolves through a "usb" path in its chain are something plugged in.
+export async function listUsbWifiAdapters(): Promise<UsbWifiAdapter[]> {
+  const netDir = "/sys/class/net";
+  const adapters: UsbWifiAdapter[] = [];
+  try {
+    const ifaces = await fs.promises.readdir(netDir);
+    for (const iface of ifaces) {
+      const hasWireless = await fs.promises
+        .access(path.join(netDir, iface, "wireless"))
+        .then(() => true)
+        .catch(() => false);
+      if (!hasWireless) continue;
+      const devicePath = path.join(netDir, iface, "device");
+      const realDevicePath = await fs.promises.realpath(devicePath).catch(() => "");
+      if (!realDevicePath.includes(`${path.sep}usb`)) continue;
+      let chipset = "desconocido";
+      try {
+        const driverLink = await fs.promises.realpath(path.join(devicePath, "driver"));
+        chipset = path.basename(driverLink);
+      } catch {
+        // No driver symlink (unlikely but not fatal) — leave "desconocido".
+      }
+      adapters.push({ iface, chipset });
+    }
+  } catch (err) {
+    console.warn("[usb] listUsbWifiAdapters failed:", err);
+  }
+  return adapters;
+}

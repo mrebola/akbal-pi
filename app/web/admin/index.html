@@ -8,13 +8,21 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">AKBAL</div>
+    <div class="brand-group">
+      <img id="avatar" class="avatar" src="/avatar/standing.gif" alt="Akbal" />
+      <div class="brand">AKBAL</div>
+    </div>
     <nav class="tabs">
       <button class="tab-btn active" data-tab="chat">Chat</button>
       <button class="tab-btn" data-tab="wifi">Wifi</button>
       <button class="tab-btn" data-tab="usb">USB</button>
     </nav>
     <div class="status" id="status-pill">—</div>
+    <div class="sys-stats" id="sys-stats" title="Recursos del sistema">
+      <span class="sys-stat" id="stat-cpu">CPU —</span>
+      <span class="sys-stat" id="stat-ram">RAM —</span>
+      <span class="sys-stat" id="stat-disk">Disco —</span>
+    </div>
     <div class="battery-indicator" id="battery-indicator" title="Batería">
       <span id="battery-icon">🔋</span>
       <span id="battery-pct">—</span>
@@ -24,7 +32,6 @@
   <main>
     <section id="tab-chat" class="tab-panel active">
       <div class="chat-toolbar">
-        <img id="avatar" class="avatar" src="/avatar/standing.gif" alt="Akbal" />
         <label for="model-select">Modelo</label>
         <select id="model-select"></select>
       </div>
@@ -53,9 +60,19 @@
     </section>
 
     <section id="tab-usb" class="tab-panel">
+      <div class="usb-toolbar">
+        <button id="usb-scan-btn">Buscar dispositivos</button>
+        <span id="usb-scan-status" class="muted"></span>
+      </div>
+
       <div class="usb-block">
         <div class="usb-block-title">Dispositivos conectados</div>
         <ul id="usb-devices-list" class="usb-devices-list"></ul>
+      </div>
+
+      <div class="usb-block">
+        <div class="usb-block-title">Adaptadores WiFi USB</div>
+        <ul id="usb-wifi-list" class="usb-devices-list"></ul>
       </div>
 
       <div class="usb-block">

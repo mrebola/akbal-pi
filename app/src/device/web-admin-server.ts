@@ -15,6 +15,7 @@ import {
 } from "../cloud-api/local/ollama-llm";
 import { isAgentMode } from "../config/device-mode";
 import { getBatteryReading } from "../status/battery-status";
+import { getSystemStats } from "../utils/system-stats";
 import {
   connectToEmergencyWifi,
   connectToWifi,
@@ -29,6 +30,7 @@ import {
   listFiles,
   listUsbDevices,
   listUsbVolumes,
+  listUsbWifiAdapters,
   resolveFilePath,
 } from "../utils/usb";
 
@@ -107,12 +109,13 @@ export class WebAdminServer {
     });
 
     router.get("/api/status", async (ctx) => {
-      const wifi = await getWifiStatus();
+      const [wifi, system] = await Promise.all([getWifiStatus(), getSystemStats()]);
       ctx.body = {
         model: getCurrentModel(),
         deviceMode: isAgentMode() ? "agent" : "local",
         wifi,
         battery: getBatteryReading(),
+        system,
       };
     });
 
@@ -269,6 +272,10 @@ export class WebAdminServer {
 
     router.get("/api/usb/volumes", async (ctx) => {
       ctx.body = await listUsbVolumes();
+    });
+
+    router.get("/api/usb/wifi-adapters", async (ctx) => {
+      ctx.body = await listUsbWifiAdapters();
     });
 
     router.post("/api/usb/mount", async (ctx) => {

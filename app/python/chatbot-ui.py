@@ -145,8 +145,10 @@ class RenderThread(threading.Thread):
         self.font_path = font_path
         self.fps = fps
         self.render_init_screen()
-        # Clear logo after 1 second and start running loop
-        time.sleep(1)
+        # render_init_screen already blocks for the animation/logo's own
+        # duration — this is just a short buffer before the running loop
+        # takes over the screen.
+        time.sleep(0.2)
         self.running = True
         self.bottom_text_font = ImageFont.truetype(self.font_path, BOTTOM_TEXT_FONT_SIZE)
         ascent, descent = self.bottom_text_font.getmetrics()
@@ -176,13 +178,27 @@ class RenderThread(threading.Thread):
         self.top_bar_mode_font = ImageFont.truetype(self.font_path, 11)
 
     def render_init_screen(self):
-        # Display logo on startup
+        # Boot animation, full-screen, played for ~1.2s while services start
+        # up (models etc. keep loading in the background — this is purely
+        # cosmetic). Falls back to a static logo if boot.gif is missing.
+        whisplay.set_backlight(100)
+        boot_path = os.path.join(IMG_DIR, "boot.gif")
+        boot_frames = load_gif_frames(boot_path, whisplay.LCD_WIDTH, whisplay.LCD_HEIGHT)
+        if boot_frames:
+            deadline = time.time() + 1.2
+            frame_index = 0
+            while time.time() < deadline:
+                whisplay.draw_image(
+                    0, 0, whisplay.LCD_WIDTH, whisplay.LCD_HEIGHT, boot_frames[frame_index % len(boot_frames)]
+                )
+                frame_index += 1
+                time.sleep(1 / 20)
+            return
         logo_path = os.path.join(IMG_DIR, "logo.png")
         if os.path.exists(logo_path):
             logo_image = Image.open(logo_path).convert("RGBA")
             logo_image = logo_image.resize((whisplay.LCD_WIDTH, whisplay.LCD_HEIGHT), Image.LANCZOS)
             rgb565_data = ImageUtils.image_to_rgb565(logo_image, whisplay.LCD_WIDTH, whisplay.LCD_HEIGHT)
-            whisplay.set_backlight(100)
             whisplay.draw_image(0, 0, whisplay.LCD_WIDTH, whisplay.LCD_HEIGHT, rgb565_data)
 
     def render_frame(self, status, text):

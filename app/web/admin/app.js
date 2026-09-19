@@ -13,19 +13,28 @@ const avatar = document.getElementById("avatar");
 const batteryIndicator = document.getElementById("battery-indicator");
 const batteryIcon = document.getElementById("battery-icon");
 const batteryPct = document.getElementById("battery-pct");
+const statCpu = document.getElementById("stat-cpu");
+const statRam = document.getElementById("stat-ram");
+const statDisk = document.getElementById("stat-disk");
 
 let history = [];
 let sending = false;
 let activeController = null;
 
-// Same still/talking GIFs the physical screen animates between — see
-// docs/display-ui.md. Toggling the <img> src (not just hiding/showing)
-// restarts the animation from frame 0 each time, which is what we want.
 function setSendingUi(isSending) {
   sending = isSending;
   chatSend.disabled = isSending;
   chatCancel.classList.toggle("hidden", !isSending);
-  avatar.src = isSending ? "/avatar/talking.gif" : "/avatar/standing.gif";
+}
+
+// Same still/talking GIFs the physical screen animates between — see
+// docs/display-ui.md. Toggling the <img> src (not just hiding/showing)
+// restarts the animation from frame 0 each time, which is what we want.
+// Kept separate from setSendingUi: the avatar should keep "thinking" (idle
+// gif) while waiting for the model's first token, and only switch to
+// "talking" once text is actually printing on screen.
+function setAvatarTalking(isTalking) {
+  avatar.src = isTalking ? "/avatar/talking.gif" : "/avatar/standing.gif";
 }
 
 function updateBatteryIndicator(battery) {
@@ -39,6 +48,24 @@ function updateBatteryIndicator(battery) {
   batteryIcon.textContent = battery.charging ? "⚡" : "🔋";
   batteryIndicator.classList.toggle("low", battery.level <= 15 && !battery.charging);
   batteryIndicator.classList.toggle("charging", Boolean(battery.charging));
+}
+
+function updateSystemStats(system) {
+  if (!system) {
+    statCpu.textContent = "CPU —";
+    statRam.textContent = "RAM —";
+    statDisk.textContent = "Disco —";
+    statCpu.classList.remove("warn");
+    statRam.classList.remove("warn");
+    statDisk.classList.remove("warn");
+    return;
+  }
+  statCpu.textContent = `CPU ${system.cpuPercent}%`;
+  statRam.textContent = `RAM ${system.ram.percent}%`;
+  statDisk.textContent = `Disco ${system.disk.percent}%`;
+  statCpu.classList.toggle("warn", system.cpuPercent >= 85);
+  statRam.classList.toggle("warn", system.ram.percent >= 85);
+  statDisk.classList.toggle("warn", system.disk.percent >= 90);
 }
 
 function addMessage(role, text) {
@@ -58,6 +85,7 @@ async function loadStatus() {
     const wifiLabel = data.wifi?.connected ? data.wifi.ssid : "sin wifi";
     statusPill.textContent = `${data.model} · modo ${modeLabel} · ${wifiLabel}`;
     updateBatteryIndicator(data.battery);
+    updateSystemStats(data.system);
   } catch {
     statusPill.textContent = "sin conexión con el dispositivo";
   }
@@ -95,6 +123,7 @@ modelSelect.addEventListener("change", async () => {
     if (data.ok) {
       addMessage("system", `Modelo activo: ${data.model}`);
       history = [];
+      void loadStatus();
     } else {
       addMessage("system", `No se pudo cambiar de modelo: ${data.error || ""}`);
     }
@@ -116,6 +145,7 @@ async function sendMessage(text) {
   activeController = controller;
   setSendingUi(true);
   let fullText = "";
+  let hasStartedTalking = false;
   try {
     const res = await fetch("/api/chat", {
       method: "POST",
@@ -142,6 +172,10 @@ async function sendMessage(text) {
         try {
           const chunk = JSON.parse(line);
           if (chunk.message?.content) {
+            if (!hasStartedTalking) {
+              hasStartedTalking = true;
+              setAvatarTalking(true);
+            }
             fullText += chunk.message.content;
             assistantEl.textContent = fullText;
             chatLog.scrollTop = chatLog.scrollHeight;
@@ -161,6 +195,7 @@ async function sendMessage(text) {
   } finally {
     activeController = null;
     setSendingUi(false);
+    setAvatarTalking(false);
   }
   if (fullText) {
     // Keep even a cancelled partial reply in history — a follow-up message
@@ -382,7 +417,10 @@ wifiScanBtn.addEventListener("click", () => void refreshWifi());
 // ---- USB ----
 
 const usbDevicesList = document.getElementById("usb-devices-list");
+const usbWifiList = document.getElementById("usb-wifi-list");
 const usbVolumesList = document.getElementById("usb-volumes-list");
+const usbScanBtn = document.getElementById("usb-scan-btn");
+const usbScanStatus = document.getElementById("usb-scan-status");
 const usbBrowser = document.getElementById("usb-browser");
 const usbBrowserClose = document.getElementById("usb-browser-close");
 const usbBreadcrumb = document.getElementById("usb-breadcrumb");
@@ -469,6 +507,42 @@ async function loadUsbVolumes() {
     usbVolumesList.innerHTML = `<li class="muted">Error: ${err.message}</li>`;
   }
 }
+
+async function loadUsbWifiAdapters() {
+  usbWifiList.innerHTML = "";
+  try {
+    const res = await fetch("/api/usb/wifi-adapters");
+    const adapters = await res.json();
+    if (adapters.length === 0) {
+      const li = document.createElement("li");
+      li.className = "muted";
+      li.textContent = "Ningún adaptador WiFi USB conectado.";
+      usbWifiList.appendChild(li);
+      return;
+    }
+    for (const a of adapters) {
+      const li = document.createElement("li");
+      const label = document.createElement("div");
+      label.textContent = a.iface;
+      const meta = document.createElement("div");
+      meta.className = "usb-item-meta";
+      meta.textContent = `Chipset: ${a.chipset}`;
+      li.appendChild(label);
+      li.appendChild(meta);
+      usbWifiList.appendChild(li);
+    }
+  } catch (err) {
+    usbWifiList.innerHTML = `<li class="muted">Error: ${err.message}</li>`;
+  }
+}
+
+async function scanUsb() {
+  usbScanStatus.textContent = "Buscando...";
+  await Promise.all([loadUsbDevices(), loadUsbVolumes(), loadUsbWifiAdapters()]);
+  usbScanStatus.textContent = `Actualizado ${new Date().toLocaleTimeString()}`;
+}
+
+usbScanBtn.addEventListener("click", () => void scanUsb());
 
 async function openUsbVolume(volumeName) {
   const mountRes = await fetch("/api/usb/mount", {
@@ -574,10 +648,7 @@ imagePreviewClose.addEventListener("click", () => {
 
 for (const btn of document.querySelectorAll(".tab-btn")) {
   if (btn.dataset.tab === "usb") {
-    btn.addEventListener("click", () => {
-      void loadUsbDevices();
-      void loadUsbVolumes();
-    });
+    btn.addEventListener("click", () => void scanUsb());
   }
 }
 

@@ -18,11 +18,31 @@ confirmar en los menús.
 
 ## Menú rápido
 
-Click corto en reposo abre un carrusel con **Modelo → Modo → Ayuda → Cámara**
-(cámara solo si `ENABLE_CAMERA=true`). Click pasa entre opciones, mantener
-~0.9s confirma la resaltada y entra a esa pantalla — mismo mecanismo que el
-selector de modelo/modo de abajo. Reemplaza al doble clic que antes abría la
-cámara directo desde reposo; ahora todo pasa por acá.
+Click corto en reposo abre un carrusel con **Modelo → Modo → Ayuda → Cámara →
+Volumen** (cámara solo si `ENABLE_CAMERA=true`). Click pasa entre opciones,
+mantener ~0.9s confirma la resaltada y entra a esa pantalla — mismo
+mecanismo que el selector de modelo/modo de abajo. Reemplaza al doble clic
+que antes abría la cámara directo desde reposo; ahora todo pasa por acá.
+
+### Volumen desde el menú rápido
+
+Fallback físico para cuando la voz no es una opción confiable (cuarto
+ruidoso, o simplemente no querés hablar) — ver
+`app/src/core/chat-flow/volume-adjust-mode.ts`. A diferencia de
+modelo/modo/cámara, el volumen es un valor continuo, no "elegir una de N
+opciones", así que el gesto es distinto:
+
+- **Click**: sube el volumen 10% (de 0 a 100, y de vuelta a 0 al pasarse) —
+  se aplica al toque, se escucha el cambio al instante, no hay que
+  confirmar nada.
+- **Mantener ~0.9s o doble clic**: listo, vuelve a la pantalla normal. No
+  hay nada que "cancelar" — cada click ya quedó aplicado.
+- 20 segundos sin tocar el botón también cierra el menú (mismo mecanismo
+  que el resto).
+
+Entra mostrando el volumen actual (redondeado al 10% más cercano). No baja
+—si te pasaste, seguís haciendo click hasta dar la vuelta completa (0→10→
+…→100→0) — para bajar puntual usá la voz ("baja el volumen").
 
 ## Lista rápida
 

@@ -18,7 +18,8 @@ export type FlowName =
   | "mode_select"
   | "mode_loading"
   | "help"
-  | "quick_menu";
+  | "quick_menu"
+  | "volume_adjust";
 
 export type FlowStateHandler = (ctx: ChatFlowContext) => void;
 

@@ -312,7 +312,8 @@ The chat flow uses a finite state machine (`src/core/chat-flow/stateMachine.ts`)
 | `mode_select` | On-screen menu to switch between "modo agente" (OpenClaw via the `whisplay-im` bridge) and "modo local" (see `docs/agent-mode.md`) |
 | `mode_loading` | Confirms the agent/local mode switch and persists it to `.env` (`DEVICE_MODE`) |
 | `help` | Voice-command cheat sheet, opened by saying "ayuda" while holding the button, or from the quick menu (see `docs/voice-commands.md`) |
-| `quick_menu` | Short click from "sleep" — carousel of Modelo/Modo/Ayuda/Cámara (see `chat-flow/quick-menu-mode.ts`) |
+| `quick_menu` | Short click from "sleep" — carousel of Modelo/Modo/Ayuda/Cámara/Volumen (see `chat-flow/quick-menu-mode.ts`) |
+| `volume_adjust` | Physical volume control from the quick menu — click bumps +10% live, hold/double-click exits (see `chat-flow/volume-adjust-mode.ts`) |
 
 State transitions are triggered by button events, wake word detection, or completion of async operations.
 

@@ -73,6 +73,13 @@ import {
   onQuickMenuConfirm,
   onQuickMenuTimeout,
 } from "./quick-menu-mode";
+import {
+  enterVolumeAdjustMode,
+  handleVolumeAdjustDoubleClick,
+  handleVolumeAdjustPress,
+  handleVolumeAdjustRelease,
+  onVolumeAdjustExit,
+} from "./volume-adjust-mode";
 import { isAgentMode, setDeviceMode } from "../../config/device-mode";
 import {
   DEFAULT_OLLAMA_MODEL,
@@ -190,6 +197,10 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       }
       if (key === "help") {
         ctx.transitionTo("help");
+        return;
+      }
+      if (key === "volume") {
+        ctx.transitionTo("volume_adjust");
         return;
       }
       const captureImgPath = `${cameraDir}/capture-${moment().format(
@@ -964,5 +975,16 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     onButtonPressed(() => handleHelpPress());
     onButtonReleased(() => handleHelpRelease());
     enterHelpMode();
+  },
+  volume_adjust: (ctx: ChatFlowContext) => {
+    onVolumeAdjustExit(() => {
+      if (ctx.currentFlowName === "volume_adjust") {
+        ctx.transitionTo("sleep");
+      }
+    });
+    onButtonDoubleClick(() => handleVolumeAdjustDoubleClick());
+    onButtonPressed(() => handleVolumeAdjustPress());
+    onButtonReleased(() => handleVolumeAdjustRelease());
+    enterVolumeAdjustMode();
   },
 };

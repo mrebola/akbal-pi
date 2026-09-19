@@ -229,7 +229,8 @@ volumen y modelo de LLM por voz — incluye el menú visual en pantalla para
 elegir modelo con el botón del Whisplay HAT (click para recorrer opciones,
 mantener ~0.9 segundos para confirmar, doble clic para cancelar), la
 pantalla de carga con spinner indeterminado mientras Ollama carga el modelo
-elegido, un menú rápido (click corto en reposo: Modelo/Modo/Ayuda/Cámara) y
+elegido, un menú rápido (click corto en reposo: Modelo/Modo/Ayuda/Cámara/
+Volumen) y
 una pantalla de ayuda (decir "ayuda" con el botón presionado, o elegirla del
 menú rápido) que resume los comandos de voz en a lo sumo 2 pantallas.
 [`docs/llm-model-selection.md`](docs/llm-model-selection.md) documenta cómo

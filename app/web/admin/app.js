@@ -283,6 +283,10 @@ for (const btn of document.querySelectorAll(".tab-btn")) {
 // ---- Wifi ----
 
 const wifiCurrentSsid = document.getElementById("wifi-current-ssid");
+const wifiCurrentActions = document.getElementById("wifi-current-actions");
+const wifiCurrentShowPasswordBtn = document.getElementById("wifi-current-show-password");
+const wifiCurrentForgetBtn = document.getElementById("wifi-current-forget");
+const wifiCurrentPasswordEl = document.getElementById("wifi-current-password");
 const wifiScanBtn = document.getElementById("wifi-scan-btn");
 const wifiScanStatus = document.getElementById("wifi-scan-status");
 const wifiList = document.getElementById("wifi-list");
@@ -417,13 +421,21 @@ function renderWifiItem(net, { saved }) {
   return li;
 }
 
+let currentConnectedSsid = null;
+
 async function refreshWifi() {
+  wifiCurrentPasswordEl.classList.add("hidden");
+  wifiCurrentPasswordEl.textContent = "";
   try {
     const statusRes = await fetch("/api/wifi/status");
     const status = await statusRes.json();
-    wifiCurrentSsid.textContent = status.connected ? status.ssid : "Sin conexión";
+    currentConnectedSsid = status.connected ? status.ssid : null;
+    wifiCurrentSsid.textContent = currentConnectedSsid || "Sin conexión";
+    wifiCurrentActions.classList.toggle("hidden", !currentConnectedSsid);
   } catch {
+    currentConnectedSsid = null;
     wifiCurrentSsid.textContent = "—";
+    wifiCurrentActions.classList.add("hidden");
   }
 
   wifiScanStatus.textContent = "Buscando...";
@@ -453,6 +465,37 @@ async function refreshWifi() {
 }
 
 wifiScanBtn.addEventListener("click", () => void refreshWifi());
+
+wifiCurrentShowPasswordBtn.addEventListener("click", async () => {
+  if (!currentConnectedSsid) return;
+  wifiCurrentPasswordEl.classList.remove("hidden");
+  wifiCurrentPasswordEl.textContent = "Buscando...";
+  try {
+    const res = await fetch(`/api/wifi/password?${new URLSearchParams({ ssid: currentConnectedSsid })}`);
+    const data = await res.json();
+    if (!data.ok) {
+      wifiCurrentPasswordEl.textContent = data.error || "No se pudo obtener la contraseña.";
+    } else if (!data.recoverable) {
+      wifiCurrentPasswordEl.textContent = data.error || "No se puede recuperar la contraseña.";
+    } else {
+      wifiCurrentPasswordEl.textContent = data.password;
+    }
+  } catch (err) {
+    wifiCurrentPasswordEl.textContent = `Error: ${err.message}`;
+  }
+});
+
+wifiCurrentForgetBtn.addEventListener("click", async () => {
+  if (!currentConnectedSsid) return;
+  if (!window.confirm(`¿Olvidar la red "${currentConnectedSsid}"? Se va a desconectar.`)) return;
+  await fetch("/api/wifi/forget", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ssid: currentConnectedSsid }),
+  });
+  void refreshWifi();
+  void loadStatus();
+});
 
 // ---- RF analysis panel ----
 // Per-BSSID signal breakdown (not deduped by SSID, unlike the list above —

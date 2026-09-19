@@ -6,7 +6,15 @@ import { display } from "../../device/display";
 // the button here confirms the highlighted item, same grammar as every
 // other menu (model-select-mode.ts, mode-select-mode.ts): click = next,
 // hold ~0.9s = select, double click = cancel.
-export type QuickMenuKey = "model" | "mode" | "help" | "camera" | "volume" | "wifi" | "network";
+export type QuickMenuKey =
+  | "model"
+  | "mode"
+  | "help"
+  | "camera"
+  | "volume"
+  | "wifi"
+  | "network"
+  | "wifiradar";
 
 type QuickMenuItem = { key: QuickMenuKey; label: string; description: string };
 
@@ -18,6 +26,7 @@ const BASE_ITEMS: QuickMenuItem[] = [
   { key: "volume", label: "Volumen", description: "Subir/bajar el sonido" },
   { key: "wifi", label: "Internet emergencia", description: "Ver/cambiar wifi" },
   { key: "network", label: "Conexión web", description: "IP, tailscale y QR" },
+  { key: "wifiradar", label: "WiFi Radar", description: "Ver redes cercanas" },
 ];
 
 const SHORT_PRESS_MAX_MS = 400;

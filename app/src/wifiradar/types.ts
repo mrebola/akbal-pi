@@ -1,8 +1,8 @@
-// Shared shapes for the AIRSPACE feature — passive 802.11 visualization.
+// Shared shapes for the WIFIRADAR feature — passive 802.11 visualization.
 // capture.ts (real AR9271 packets) and demo-mode.ts (synthetic data) both
 // produce RawFrameEvent, so aggregator.ts never has to know which one is
 // feeding it. Everything downstream (WebSocket payloads, the Three.js
-// frontend) is built from AccessPoint/Device/AirspaceEvent below.
+// frontend) is built from AccessPoint/Device/WifiRadarEvent below.
 
 export type SecurityKind = "OPEN" | "WEP" | "WPA" | "WPA2/3" | "UNKNOWN";
 
@@ -48,7 +48,7 @@ export type EventType =
 
 export type EventSeverity = "info" | "warning" | "alert";
 
-export type AirspaceEvent = {
+export type WifiRadarEvent = {
   id: number;
   type: EventType;
   severity: EventSeverity;
@@ -90,22 +90,22 @@ export type RawFrameEvent =
       timestamp: number;
     };
 
-export type AirspaceMode = "live" | "demo" | "starting" | "error";
+export type WifiRadarMode = "live" | "demo" | "starting" | "error";
 
 export type ChannelActivity = {
   channel: number;
   frames: number; // frames observed on this channel in the last window
 };
 
-export type AirspaceSnapshot = {
-  mode: AirspaceMode;
+export type WifiRadarSnapshot = {
+  mode: WifiRadarMode;
   demo: boolean;
   hardware: string | null; // e.g. "Qualcomm Atheros AR9271 802.11n"
   currentChannel: number;
   framesPerMinute: number;
   accessPoints: AccessPoint[];
   devices: Device[];
-  events: AirspaceEvent[];
+  events: WifiRadarEvent[];
   channelActivity: ChannelActivity[];
   error?: string;
 };

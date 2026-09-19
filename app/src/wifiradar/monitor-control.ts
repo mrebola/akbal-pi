@@ -69,13 +69,13 @@ export async function setChannel(iface: string, channel: number): Promise<void> 
 // Only channels the driver itself reports as available for this phy — the
 // regulatory domain is already enforced by the kernel/driver, so filtering
 // down to "whatever `iw phy info` lists" is enough to stay compliant
-// without AIRSPACE needing its own regulatory-domain logic.
+// without WIFIRADAR needing its own regulatory-domain logic.
 export async function getAvailable24GhzChannels(phy: string): Promise<number[]> {
   const { stdout } = await execFileAsync(IW, ["phy", phy, "info"]);
   const channels = new Set<number>();
   // Lines look like: "* 2412.0 MHz [1] (20.0 dBm)" — [N] is the channel
   // number; only 2.4GHz (channel 1-14, freq 2400-2500) is in scope per the
-  // AIRSPACE spec (5GHz has far more channels and DFS rules that make
+  // WIFIRADAR spec (5GHz has far more channels and DFS rules that make
   // casual hopping riskier — out of scope here).
   for (const line of stdout.split("\n")) {
     const match = line.match(/\*\s+(\d+(?:\.\d+)?)\s+MHz\s+\[(\d+)\]/);

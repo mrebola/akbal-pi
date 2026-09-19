@@ -16,7 +16,7 @@
       <button class="tab-btn active" data-tab="chat">Chat</button>
       <button class="tab-btn" data-tab="wifi">Wifi</button>
       <button class="tab-btn" data-tab="usb">USB</button>
-      <a href="/airspace" class="tab-link" title="Visualización WiFi en 3D">AIRSPACE</a>
+      <a href="/wifiradar" class="tab-link" title="Visualización WiFi en 3D">WIFIRADAR</a>
     </nav>
     <div class="status" id="status-pill">—</div>
     <div class="sys-stats" id="sys-stats" title="Recursos del sistema">
@@ -51,6 +51,11 @@
       <div class="wifi-current">
         <div class="wifi-current-label">Conexión actual</div>
         <div id="wifi-current-ssid" class="wifi-current-ssid">—</div>
+        <div id="wifi-current-actions" class="wifi-current-actions hidden">
+          <button id="wifi-current-show-password" class="secondary">Ver contraseña</button>
+          <button id="wifi-current-forget" class="secondary">Olvidar esta red</button>
+        </div>
+        <div id="wifi-current-password" class="wifi-current-password hidden"></div>
       </div>
       <div class="wifi-toolbar">
         <button id="wifi-scan-btn">Buscar redes</button>

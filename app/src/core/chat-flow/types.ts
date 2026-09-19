@@ -21,7 +21,8 @@ export type FlowName =
   | "quick_menu"
   | "volume_adjust"
   | "wifi_manager"
-  | "network_info";
+  | "network_info"
+  | "wifi_radar";
 
 export type FlowStateHandler = (ctx: ChatFlowContext) => void;
 

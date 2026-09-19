@@ -1,13 +1,13 @@
 import {
   AccessPoint,
   Device,
-  AirspaceEvent,
+  WifiRadarEvent,
   EventType,
   EventSeverity,
   RawFrameEvent,
-  AirspaceSnapshot,
+  WifiRadarSnapshot,
   ChannelActivity,
-  AirspaceMode,
+  WifiRadarMode,
 } from "./types";
 import { anonymizeMac, hashMac } from "./privacy";
 import { lookupVendor } from "./oui";
@@ -28,7 +28,7 @@ type InternalAp = AccessPoint & {
   lostReported: boolean;
 };
 
-// Owns all in-memory AIRSPACE state — the only thing that ever grows or
+// Owns all in-memory WIFIRADAR state — the only thing that ever grows or
 // shrinks this state is ingest()/sweep(), fed identically by capture.ts
 // (real frames) or demo-mode.ts (synthetic ones). No disk I/O anywhere in
 // this file: nothing here is ever more durable than the process's memory,
@@ -37,7 +37,7 @@ export class Aggregator {
   private aps = new Map<string, InternalAp>(); // key: full bssid
   private devices = new Map<string, Device>(); // key: full mac
   private apClients = new Map<string, Set<string>>(); // bssid -> client macs
-  private events: AirspaceEvent[] = [];
+  private events: WifiRadarEvent[] = [];
   private nextEventId = 1;
   private frameTimestamps: number[] = [];
   private channelFrameCounts = new Map<number, number[]>();
@@ -221,12 +221,12 @@ export class Aggregator {
   }
 
   getSnapshot(
-    mode: AirspaceMode,
+    mode: WifiRadarMode,
     demo: boolean,
     hardware: string | null,
     currentChannel: number,
     revealFullMac: boolean,
-  ): AirspaceSnapshot {
+  ): WifiRadarSnapshot {
     const now = Date.now();
     const framesPerMinute = this.frameTimestamps.filter((t) => t > now - FRAME_RATE_WINDOW_MS).length;
     const channelActivity: ChannelActivity[] = [...this.channelFrameCounts.entries()]

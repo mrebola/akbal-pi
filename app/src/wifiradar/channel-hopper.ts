@@ -28,7 +28,7 @@ export class ChannelHopper {
     this.index += 1;
     this.currentChannel = channel;
     setChannel(this.iface, channel).catch((err) => {
-      console.warn(`[airspace] setChannel(${channel}) failed:`, err?.message || err);
+      console.warn(`[wifiradar] setChannel(${channel}) failed:`, err?.message || err);
     });
   }
 

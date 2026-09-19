@@ -4,12 +4,24 @@ import { startBatteryStatus } from "./status/battery-status";
 import { startWifiStatus } from "./status/wifi-status";
 import { startVpnStatus } from "./status/vpn-status";
 import { WebAdminServer } from "./device/web-admin-server";
+import { registerShutdownHook } from "./device/display";
+import { startWifiRadarService, stopWifiRadarService } from "./wifiradar/service";
 
 dotenv.config();
 
 startBatteryStatus();
 startWifiStatus();
 startVpnStatus();
+
+// Shared between the physical device's "WiFi Radar" menu screen
+// (chat-flow/wifi-radar-mode.ts) and the web WIFIRADAR page — started
+// unconditionally (not gated behind WEB_ADMIN_ENABLED) since the physical
+// menu should work even with the web admin server off. Restoring the
+// AR9271 out of monitor mode has to actually finish before the process
+// exits, or a restart leaves it stuck — see display.ts's shutdown hook
+// system for why this isn't a plain SIGTERM listener here.
+startWifiRadarService();
+registerShutdownHook(() => stopWifiRadarService());
 
 // LAN-reachable chat + wifi admin UI — see docs/web-ui.md. On by default
 // (matches the physical device's own "just works" setup); set

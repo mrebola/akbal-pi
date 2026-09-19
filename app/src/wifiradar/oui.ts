@@ -1,7 +1,7 @@
 // Small curated OUI (MAC vendor prefix) table — intentionally not a full
 // IEEE registry (that's tens of thousands of rows and would blow past the
 // "extremely lightweight" budget for a purely cosmetic label). Covers the
-// vendors actually common in a home/SOHO airspace: phones, laptops, APs,
+// vendors actually common in a home/SOHO wifiradar: phones, laptops, APs,
 // IoT. Anything unmatched just shows "Desconocido" — the UI treats that as
 // a normal case, not an error.
 const OUI_TABLE: Record<string, string> = {

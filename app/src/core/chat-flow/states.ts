@@ -95,6 +95,13 @@ import {
   handleNetworkInfoRelease,
   onNetworkInfoExit,
 } from "./network-info-mode";
+import {
+  enterWifiRadarMode,
+  handleWifiRadarDoubleClick,
+  handleWifiRadarPress,
+  handleWifiRadarRelease,
+  onWifiRadarExit,
+} from "./wifi-radar-mode";
 import { isAgentMode, setDeviceMode } from "../../config/device-mode";
 import {
   DEFAULT_OLLAMA_MODEL,
@@ -188,12 +195,16 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       emoji: "😴",
       RGB: "#000055",
       rag_icon_visible: false,
-      // Always clear the menu-carousel/help overlay here, since "sleep" is
-      // the common return point from every flow — including the idle
-      // timeouts, which have no other cleanup step.
+      // Always clear the menu-carousel/help/radar overlay here, since
+      // "sleep" is the common return point from every flow — including the
+      // idle timeouts, which have no other cleanup step. radar_ui in
+      // particular has to be cleared explicitly: render_frame checks it
+      // independently of model_ui/help_ui, so leaving it truthy would keep
+      // the radar screen stuck on top forever after returning here.
       model_ui: "",
       model_ui_percent: 0,
       help_ui: "",
+      radar_ui: "",
       top_bar_mode: isAgentMode() ? "agent" : "local",
       ...(getCurrentStatus().text.endsWith("Escuchando...") || !getCurrentStatus().text
         ? { text: "Click: menú · Mantén: hablar" }
@@ -224,6 +235,10 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       }
       if (key === "network") {
         ctx.transitionTo("network_info");
+        return;
+      }
+      if (key === "wifiradar") {
+        ctx.transitionTo("wifi_radar");
         return;
       }
       const captureImgPath = `${cameraDir}/capture-${moment().format(
@@ -1042,5 +1057,16 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     onButtonPressed(() => handleNetworkInfoPress());
     onButtonReleased(() => handleNetworkInfoRelease());
     enterNetworkInfoMode();
+  },
+  wifi_radar: (ctx: ChatFlowContext) => {
+    onWifiRadarExit(() => {
+      if (ctx.currentFlowName === "wifi_radar") {
+        ctx.transitionTo("sleep");
+      }
+    });
+    onButtonDoubleClick(() => handleWifiRadarDoubleClick());
+    onButtonPressed(() => handleWifiRadarPress());
+    onButtonReleased(() => handleWifiRadarRelease());
+    enterWifiRadarMode();
   },
 };

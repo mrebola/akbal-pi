@@ -1,7 +1,7 @@
-// AIRSPACE — fullscreen Three.js WiFi visualization. Renders exclusively in
+// WIFIRADAR — fullscreen Three.js WiFi visualization. Renders exclusively in
 // this browser tab; the Raspberry Pi backend (device/web-admin-server.ts +
-// airspace/*) only ever sends small aggregated JSON snapshots over
-// /airspace/ws, 2-4Hz, never raw packets. See docs/airspace.md.
+// wifiradar/*) only ever sends small aggregated JSON snapshots over
+// /wifiradar/ws, 2-4Hz, never raw packets. See docs/wifiradar.md.
 import * as THREE from "three";
 import { OrbitControls } from "./vendor/OrbitControls.js";
 
@@ -633,7 +633,7 @@ let ws = null;
 let reconnectDelay = 1000;
 function connectWs() {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  ws = new WebSocket(`${proto}//${location.host}/airspace/ws`);
+  ws = new WebSocket(`${proto}//${location.host}/wifiradar/ws`);
   ws.addEventListener("open", () => {
     reconnectDelay = 1000;
     wsStatusEl.textContent = "";
@@ -644,7 +644,7 @@ function connectWs() {
       const snapshot = JSON.parse(evt.data);
       applySnapshot(snapshot);
     } catch (err) {
-      console.warn("[airspace] bad snapshot", err);
+      console.warn("[wifiradar] bad snapshot", err);
     }
   });
   ws.addEventListener("close", () => {
@@ -658,7 +658,7 @@ function connectWs() {
 // Initial snapshot over plain fetch for instant first paint — the socket
 // takes over a moment later, same data shape either way.
 bootSub.textContent = "conectando con AKBAL...";
-fetch("/api/airspace/snapshot")
+fetch("/api/wifiradar/snapshot")
   .then((res) => {
     if (res.status === 401) {
       window.location.href = "/login";

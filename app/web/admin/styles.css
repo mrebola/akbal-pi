@@ -233,6 +233,23 @@ button.secondary {
   margin-top: 2px;
 }
 
+.wifi-current-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.wifi-current-password {
+  margin-top: 10px;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  word-break: break-all;
+}
+
 .wifi-toolbar {
   display: flex;
   align-items: center;
@@ -454,8 +471,8 @@ button.secondary {
 .rf-table .rf-weak { color: var(--danger); }
 
 .avatar {
-  width: 40px;
-  height: 40px;
+  width: 80px;
+  height: 80px;
   border-radius: 50%;
   object-fit: cover;
   border: 1px solid var(--border);

@@ -5,25 +5,25 @@ import { Ar9271Capture } from "./capture";
 import { ChannelHopper } from "./channel-hopper";
 import { Aggregator } from "./aggregator";
 import { DemoGenerator } from "./demo-mode";
-import { AirspaceMode, AirspaceSnapshot } from "./types";
+import { WifiRadarMode, WifiRadarSnapshot } from "./types";
 
 const SWEEP_INTERVAL_MS = 5_000;
 
-// Orchestrates AIRSPACE end to end: try the real AR9271 pipeline
+// Orchestrates WIFIRADAR end to end: try the real AR9271 pipeline
 // (detect -> monitor mode -> channel hop -> tshark capture -> aggregator),
 // and if any step fails — no dongle, monitor mode rejected, tshark missing
 // — fall back to DemoGenerator instead of crashing or leaving the feature
 // dark. Both paths feed the same Aggregator, so everything downstream
 // (snapshots, events, the frontend) is identical either way except for the
 // `demo: true` flag.
-export class AirspaceService extends EventEmitter {
+export class WifiRadarService extends EventEmitter {
   private aggregator = new Aggregator();
   private capture: Ar9271Capture | null = null;
   private hopper: ChannelHopper | null = null;
   private demo: DemoGenerator | null = null;
   private sweepTimer: ReturnType<typeof setInterval> | null = null;
   private monitorIface: string | null = null;
-  private mode: AirspaceMode = "starting";
+  private mode: WifiRadarMode = "starting";
   private hardware: string | null = null;
   private lastError: string | undefined;
   private started = false;
@@ -49,12 +49,12 @@ export class AirspaceService extends EventEmitter {
       this.capture = new Ar9271Capture();
       this.capture.on("frame", (frame) => this.aggregator.ingest(frame));
       this.capture.on("error", (err) => {
-        console.warn("[airspace] capture process error, falling back to demo:", err?.message || err);
+        console.warn("[wifiradar] capture process error, falling back to demo:", err?.message || err);
         this.fallbackToDemo(String(err?.message || err));
       });
       this.capture.on("exit", ({ code, signal }) => {
         if (this.mode === "live") {
-          console.warn(`[airspace] tshark exited unexpectedly (code=${code} signal=${signal}), falling back to demo`);
+          console.warn(`[wifiradar] tshark exited unexpectedly (code=${code} signal=${signal}), falling back to demo`);
           this.fallbackToDemo("tshark terminó inesperadamente");
         }
       });
@@ -64,9 +64,9 @@ export class AirspaceService extends EventEmitter {
       this.hopper.start();
 
       this.mode = "live";
-      console.log(`[airspace] Live capture started on ${info.iface} (${info.phy}), ${channels.length} channels`);
+      console.log(`[wifiradar] Live capture started on ${info.iface} (${info.phy}), ${channels.length} channels`);
     } catch (err: any) {
-      console.warn("[airspace] Real capture unavailable, using DEMO MODE:", err?.message || err);
+      console.warn("[wifiradar] Real capture unavailable, using DEMO MODE:", err?.message || err);
       this.fallbackToDemo(err?.message || String(err));
     }
   }
@@ -105,12 +105,12 @@ export class AirspaceService extends EventEmitter {
       const iface = this.monitorIface;
       this.monitorIface = null;
       await exitMonitorMode(iface).catch((err) =>
-        console.warn(`[airspace] failed to restore ${iface} to managed mode:`, err?.message || err),
+        console.warn(`[wifiradar] failed to restore ${iface} to managed mode:`, err?.message || err),
       );
     }
   }
 
-  getSnapshot(revealFullMac = false): AirspaceSnapshot {
+  getSnapshot(revealFullMac = false): WifiRadarSnapshot {
     const currentChannel = this.hopper?.getCurrentChannel() || 0;
     const snapshot = this.aggregator.getSnapshot(this.mode, this.mode === "demo", this.hardware, currentChannel, revealFullMac);
     if (this.mode === "error" || (this.mode !== "live" && this.mode !== "demo")) {
@@ -119,7 +119,7 @@ export class AirspaceService extends EventEmitter {
     return snapshot;
   }
 
-  getMode(): AirspaceMode {
+  getMode(): WifiRadarMode {
     return this.mode;
   }
 
@@ -133,4 +133,29 @@ export class AirspaceService extends EventEmitter {
     await this.teardownRealCapture();
     this.started = false;
   }
+}
+
+// Single shared instance — the AR9271 can only be captured by one thing at
+// a time, so the web WIFIRADAR page (web-admin-server.ts) and the physical
+// device's own "WiFi Radar" menu screen (chat-flow/wifi-radar-mode.ts) both
+// read from this same running capture instead of each starting their own
+// (which would fight over the interface). Started once from index.ts,
+// independent of whether the web admin server is enabled — the physical
+// menu should work either way.
+const sharedWifiRadarService = new WifiRadarService();
+
+export function startWifiRadarService(): void {
+  void sharedWifiRadarService.start();
+}
+
+export function stopWifiRadarService(): Promise<void> {
+  return sharedWifiRadarService.stop();
+}
+
+export function getWifiRadarSnapshot(revealFullMac = false): WifiRadarSnapshot {
+  return sharedWifiRadarService.getSnapshot(revealFullMac);
+}
+
+export function getWifiRadarMode(): WifiRadarMode {
+  return sharedWifiRadarService.getMode();
 }

@@ -1,6 +1,6 @@
 import crypto from "crypto";
 
-// MAC/BSSID anonymization — on by default per the AIRSPACE privacy spec:
+// MAC/BSSID anonymization — on by default per the WIFIRADAR privacy spec:
 // "AA:BB:CC:••:••:••", full MAC only when a client explicitly asks for it
 // (see websocket query param handling in web-admin-server.ts).
 export function anonymizeMac(mac: string): string {

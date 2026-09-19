@@ -68,6 +68,16 @@ export interface Status {
   help_ui_body: string;
   help_ui_page: number;
   help_ui_total: number;
+  // Simplified WiFi radar screen (see chat-flow/wifi-radar-mode.ts) — a
+  // dedicated screen type like model_ui/help_ui above rather than another
+  // model_ui variant, since it needs a custom-drawn scene (rings, sweep,
+  // plotted points) instead of the shared title/label/description card
+  // layout. "unavailable" is shown when no AR9271-class adapter is
+  // detected at all; "view" draws the radar with radar_ui_points.
+  radar_ui: "" | "view" | "unavailable";
+  radar_ui_points: { angle: number; radius: number; strength: "strong" | "mid" | "weak" }[];
+  radar_ui_count: number;
+  radar_ui_channel: number;
   // Small always-on indicator in the top bar (see render_top_bar in
   // chatbot-ui.py) showing whether the device is answering via OpenClaw or
   // the local model — see docs/agent-mode.md.
@@ -111,6 +121,10 @@ export class WhisplayDisplay {
     help_ui_body: "",
     help_ui_page: 0,
     help_ui_total: 0,
+    radar_ui: "",
+    radar_ui_points: [],
+    radar_ui_count: 0,
+    radar_ui_channel: 0,
     top_bar_mode: "",
   };
 
@@ -475,6 +489,10 @@ export class WhisplayDisplay {
       help_ui_body,
       help_ui_page,
       help_ui_total,
+      radar_ui,
+      radar_ui_points,
+      radar_ui_count,
+      radar_ui_channel,
       top_bar_mode,
     } = {
       ...this.currentStatus,
@@ -521,6 +539,10 @@ export class WhisplayDisplay {
     this.currentStatus.help_ui_body = help_ui_body;
     this.currentStatus.help_ui_page = help_ui_page;
     this.currentStatus.help_ui_total = help_ui_total;
+    this.currentStatus.radar_ui = radar_ui;
+    this.currentStatus.radar_ui_points = radar_ui_points;
+    this.currentStatus.radar_ui_count = radar_ui_count;
+    this.currentStatus.radar_ui_channel = radar_ui_channel;
     this.currentStatus.top_bar_mode = top_bar_mode;
 
     const changedValuesObj = Object.fromEntries(changedValues);
@@ -653,9 +675,9 @@ export const onTextInput =
 export const isButtonDown =
   displayInstance.isButtonDown.bind(displayInstance);
 
-// Other modules with their own teardown needs (AirspaceService restoring
+// Other modules with their own teardown needs (WifiRadarService restoring
 // the AR9271 out of monitor mode, killing its capture process — see
-// airspace/service.ts / device/web-admin-server.ts) register here instead
+// wifiradar/service.ts / device/web-admin-server.ts) register here instead
 // of adding their own competing SIGINT/SIGTERM listeners: process.exit()
 // inside the *first* listener for a given signal stops Node from calling
 // any listener registered after it, so this is the one place that gets to
@@ -692,10 +714,10 @@ async function cleanup(): Promise<void> {
 // Without a re-entrancy guard, a *second* signal arriving mid-cleanup
 // would start a completely independent second call to shutdown() — and
 // since a shutdown hook can clear its own "still working" state (e.g.
-// AirspaceService nulling monitorIface) before its own async work
+// WifiRadarService nulling monitorIface) before its own async work
 // actually finishes, that second call can reach process.exit() *first*
 // and kill the process out from under the original call's in-flight
-// cleanup. Confirmed the hard way: AIRSPACE's monitor-mode restore was
+// cleanup. Confirmed the hard way: WIFIRADAR's monitor-mode restore was
 // getting cut off mid-flight this way, leaving the AR9271 stuck in
 // monitor mode after every stop. One shared promise means every signal
 // after the first just waits on the same in-flight shutdown instead of

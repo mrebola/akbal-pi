@@ -1,4 +1,4 @@
-# Interfaz web (chat + wifi + USB + AIRSPACE desde el navegador)
+# Interfaz web (chat + wifi + USB + WIFIRADAR desde el navegador)
 
 `http://<ip-del-dispositivo>:8090` — accesible desde cualquier dispositivo
 en la misma red, protegida con una pantalla de login propia (sesión por
@@ -28,8 +28,8 @@ Ya no usa el diálogo nativo de autenticación básica del navegador —
 - **USB**: dispositivos conectados, adaptadores WiFi USB (con chipset),
   almacenamiento USB con un visor de archivos (carpetas, preview de
   imágenes, descarga de todo lo demás).
-- **AIRSPACE**: visualización 3D del espacio WiFi con Three.js — página
-  aparte, ver [`airspace.md`](./airspace.md).
+- **WIFIRADAR**: visualización 3D del espacio WiFi con Three.js — página
+  aparte, ver [`wifiradar.md`](./wifiradar.md).
 - Indicadores en la topbar: batería (%, carga), CPU/RAM/disco del Pi —
   todos se refrescan solos cada 60s sin recargar la página.
 
@@ -97,7 +97,7 @@ Archivos estáticos en `app/web/admin/` (HTML/CSS/JS planos, sin build step
   internet) — igual que el resto del dispositivo.
 - Sesión por cookie (token aleatorio de 192 bits, `httpOnly`, 30 días) en
   vez de autenticación básica HTTP — `/login` y `POST /api/login` son las
-  únicas rutas públicas; todo lo demás (HTTP y el WebSocket de AIRSPACE)
+  únicas rutas públicas; todo lo demás (HTTP y el WebSocket de WIFIRADAR)
   exige la cookie de sesión. El secreto que firma nada — no hay firma: el
   token en sí es el secreto, generado con `crypto.randomBytes`, guardado
   en un `Set` en memoria del proceso — un reinicio del servicio invalida

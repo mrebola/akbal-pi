@@ -64,7 +64,7 @@ export async function detectAr9271(): Promise<Ar9271Info> {
       description: "Qualcomm Atheros AR9271 802.11n",
     };
   } catch (err) {
-    console.warn("[airspace] detectAr9271 failed:", err);
+    console.warn("[wifiradar] detectAr9271 failed:", err);
     return { present: false, iface: null, phy: null, description: "" };
   }
 }

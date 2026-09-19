@@ -1,11 +1,11 @@
-# AIRSPACE — visualización 3D del espacio WiFi
+# WIFIRADAR — visualización 3D del espacio WiFi
 
-`http://<ip-del-dispositivo>:8090/airspace` — una escena Three.js
+`http://<ip-del-dispositivo>:8090/wifiradar` — una escena Three.js
 fullscreen (radar militar + mapa estelar + estética cyberpunk/SOC) que
 muestra, en tiempo real, las redes WiFi y dispositivos que el AR9271
 detecta pasivamente alrededor del Pi. Es una página separada del panel
 principal (no una pestaña más) porque el canvas WebGL ocupa toda la
-pantalla — hay un link "AIRSPACE" en la topbar de `/` para llegar a ella,
+pantalla — hay un link "WIFIRADAR" en la topbar de `/` para llegar a ella,
 y "← AKBAL" en su propia topbar para volver.
 
 Solo detección pasiva: nunca envía deauth, no craftea ni transmite
@@ -19,11 +19,11 @@ AR9271 (wlan1, phy1)
   → channel hopping 2.4GHz (iw dev wlan1 set channel N, cada 400ms)
   → dumpcap -w - (captura, root vía sudo, escribe a stdout — nunca a disco)
   → tshark -r - -T fields (parseo de campos, sin sudo, sin resolución de nombres)
-  → parser (app/src/airspace/capture.ts) → RawFrameEvent
-  → aggregator (app/src/airspace/aggregator.ts) — estado en memoria,
+  → parser (app/src/wifiradar/capture.ts) → RawFrameEvent
+  → aggregator (app/src/wifiradar/aggregator.ts) — estado en memoria,
     detección de eventos, poda automática (sin persistencia en disco)
-  → WebSocket /airspace/ws (2-4 snapshots/seg, nunca paquete por paquete)
-  → navegador → Three.js (app/web/admin/airspace.js)
+  → WebSocket /wifiradar/ws (2-4 snapshots/seg, nunca paquete por paquete)
+  → navegador → Three.js (app/web/admin/wifiradar.js)
 ```
 
 **El Pi nunca renderiza gráficos** — Three.js corre exclusivamente en el
@@ -48,12 +48,12 @@ pipe real de shell no tiene ese problema.
 
 ### Detección de hardware y modo monitor
 
-`app/src/airspace/ar9271.ts` identifica la interfaz del AR9271 por su
+`app/src/wifiradar/ar9271.ts` identifica la interfaz del AR9271 por su
 **driver del kernel** (`ath9k_htc`, vía el symlink
 `/sys/class/net/<iface>/device/driver`) en vez de por nombre de interfaz o
 prefijo de MAC — ambos pueden variar entre dongles/reinicios, el driver no.
 
-`app/src/airspace/monitor-control.ts` convierte esa interfaz **en su
+`app/src/wifiradar/monitor-control.ts` convierte esa interfaz **en su
 lugar** (`ip link down` → `iw set type monitor` → `ip link up`) en vez de
 agregar una interfaz virtual adicional sobre el mismo phy — el firmware
 `ath9k_htc` de este dongle devolvió "Device or resource busy" al intentar
@@ -83,8 +83,8 @@ canales tarda ~5.2s).
 ### Demo Mode
 
 Si el AR9271 no está conectado, no tiene interfaz asociada, o el modo
-monitor falla por cualquier razón, AIRSPACE cae automáticamente a
-**DEMO MODE**: `app/src/airspace/demo-mode.ts` genera APs/dispositivos/
+monitor falla por cualquier razón, WIFIRADAR cae automáticamente a
+**DEMO MODE**: `app/src/wifiradar/demo-mode.ts` genera APs/dispositivos/
 eventos sintéticos pero realistas, alimentando el **mismo aggregator**
 que usaría captura real — la detección de eventos (NEW_AP, red abierta,
 WEP, SSID duplicado, ráfaga de deauth, AP perdido) es exactamente la misma
@@ -139,7 +139,7 @@ sudo apt-get install -y iw tshark
   normal (vive en `/usr/sbin`); el código lo invoca por ruta absoluta.
 - **`tshark`** — trae `dumpcap` consigo (mismo paquete). Instalar `tshark`
   via `apt` puede preguntar si usuarios no-root pueden capturar paquetes
-  (grupo `wireshark`) — no hace falta responder que sí, porque AIRSPACE
+  (grupo `wireshark`) — no hace falta responder que sí, porque WIFIRADAR
   siempre invoca `dumpcap` a través de `sudo -n`, no directamente.
 - El usuario que corre `chatbot.service` (`akbal` en este dispositivo) ya
   tiene sudo sin contraseña completo (`(ALL:ALL) ALL`, ver
@@ -171,11 +171,11 @@ corriente. Si lo ve pero no aparece ninguna interfaz `ath9k_htc`, revisar
 (`ath9k_htc` necesita `ath9k_htc/htc_9271.fw`, normalmente ya incluido en
 `firmware-atheros` de Debian).
 
-Sin el AR9271 (o si el modo monitor falla por cualquier motivo), AIRSPACE
+Sin el AR9271 (o si el modo monitor falla por cualquier motivo), WIFIRADAR
 arranca automáticamente en DEMO MODE — no hace falta nada especial para
 probar la interfaz visual sin el hardware.
 
-## Cómo iniciar AIRSPACE
+## Cómo iniciar WIFIRADAR
 
 No requiere un paso de arranque separado — corre como parte del mismo
 `chatbot.service` que todo lo demás:
@@ -184,14 +184,14 @@ No requiere un paso de arranque separado — corre como parte del mismo
 # En el dispositivo:
 sudo systemctl restart chatbot.service
 # Confirmar que arrancó en modo real (o cayó a demo):
-grep -i airspace ~/whisplay-ai-chatbot/chatbot.log | tail -5
-# "[airspace] Live capture started on wlan1 (phy1), 13 channels" → real
+grep -i wifiradar ~/whisplay-ai-chatbot/chatbot.log | tail -5
+# "[wifiradar] Live capture started on wlan1 (phy1), 13 channels" → real
 # "Real capture unavailable, using DEMO MODE: <razón>" → demo
 ```
 
 Desde el navegador: entrar a `http://<ip-del-dispositivo>:8090`, loguearse
-(ver [`web-ui.md`](./web-ui.md)), y click en **AIRSPACE** en la topbar (o
-navegar directo a `/airspace`).
+(ver [`web-ui.md`](./web-ui.md)), y click en **WIFIRADAR** en la topbar (o
+navegar directo a `/wifiradar`).
 
 ### Controles
 
@@ -218,7 +218,7 @@ entorno, y la UI no pretende serlo.
 
 ## Frontend
 
-`app/web/admin/airspace.html` + `airspace.js` + `airspace.css` — Three.js
+`app/web/admin/wifiradar.html` + `wifiradar.js` + `wifiradar.css` — Three.js
 se usa como módulo ES, vendorizado localmente (no depende de una CDN en
 tiempo de ejecución) en `app/web/admin/vendor/`:
 `three.module.min.js` (r169) y `OrbitControls.js` (control de cámara

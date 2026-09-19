@@ -17,7 +17,7 @@ const FIELDS = [
 ];
 
 // BPF filter applied at the libpcap level, before tshark's own dissector —
-// drops everything AIRSPACE doesn't use (ACKs, RTS/CTS, QoS null frames,
+// drops everything WIFIRADAR doesn't use (ACKs, RTS/CTS, QoS null frames,
 // other APs' encrypted payload bytes we can't and don't want to read)
 // right at capture time. This is most of what keeps backend CPU low: tshark
 // never even sees the bulk of 802.11 chatter, let alone parses it.
@@ -209,7 +209,7 @@ export class Ar9271Capture extends EventEmitter {
     // dumpcap prints "Capturing on 'X'" on start and a packet-count
     // summary line on exit — both startup/shutdown noise, not errors.
     if (text && !/^Capturing on|Running as user|packets captured|^File:/i.test(text)) {
-      console.warn("[airspace] capture:", text);
+      console.warn("[wifiradar] capture:", text);
     }
   }
 

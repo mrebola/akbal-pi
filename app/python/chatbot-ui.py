@@ -130,6 +130,10 @@ current_help_ui = ""
 current_help_ui_body = ""
 current_help_ui_page = 0
 current_help_ui_total = 0
+current_radar_ui = ""
+current_radar_ui_points = []
+current_radar_ui_count = 0
+current_radar_ui_channel = 0
 current_top_bar_mode = ""
 camera_mode = False
 camera_capture_image_path = ""
@@ -177,6 +181,7 @@ class RenderThread(threading.Thread):
         self.help_ui_hint_font = ImageFont.truetype(self.font_path, 12)
         self.help_ui_cache_key = None
         self.top_bar_mode_font = ImageFont.truetype(self.font_path, 11)
+        self.radar_ui_cache_key = None
 
     def render_init_screen(self):
         # Boot animation, full-screen, played for ~1.2s while services start
@@ -218,6 +223,10 @@ class RenderThread(threading.Thread):
             return self.render_help_screen(apply_tool_placeholders(text))
         if self.help_ui_cache_key is not None:
             self.help_ui_cache_key = None
+        if current_radar_ui:
+            return self.render_radar_screen(apply_tool_placeholders(text))
+        if self.radar_ui_cache_key is not None:
+            self.radar_ui_cache_key = None
         if current_image_path not in [None, ""]:
             # Try to load image from path
             if current_image is not None:
@@ -391,6 +400,69 @@ class RenderThread(threading.Thread):
         self.render_bottom_text(text)
         return False  # event-driven: Node pushes a new frame on every change
 
+    def render_radar_screen(self, text):
+        """Simplified physical-screen WIFIRADAR (chat-flow/wifi-radar-mode.ts)
+        — a radar disc with a dot per nearby AP, refreshed on a timer while
+        this screen is open (Node polls the shared WifiRadarService and
+        pushes a new radar_ui_points list every ~1.5s). "unavailable" is a
+        plain message instead of the disc, for when no AR9271-class adapter
+        is detected at all."""
+        self.render_top_bar()
+
+        mode = current_radar_ui
+        points = current_radar_ui_points or []
+        count = current_radar_ui_count or 0
+        channel = current_radar_ui_channel or 0
+        center_x = (VIDEO_WIDTH - SAFE_AREA_RIGHT_INSET) // 2
+        center_y = VIDEO_HEIGHT // 2 + 6
+
+        cache_key = (
+            mode,
+            tuple((p.get("angle"), p.get("radius"), p.get("strength")) for p in points),
+            count,
+            channel,
+        )
+        if cache_key != self.radar_ui_cache_key:
+            self.radar_ui_cache_key = cache_key
+            frame = Image.new("RGBA", (VIDEO_WIDTH, VIDEO_HEIGHT), (0, 0, 0, 255))
+            draw = ImageDraw.Draw(frame)
+            draw.text((14, 8), "WIFI RADAR", font=self.model_ui_title_font, fill=TEXT_SECONDARY)
+
+            if mode == "unavailable":
+                self._draw_centered(draw, "Sin adaptador WiFi", self.model_ui_label_font, center_y - 32, center_x, TEXT_PRIMARY)
+                self._draw_centered(draw, "compatible", self.model_ui_label_font, center_y - 8, center_x, TEXT_PRIMARY)
+                self._draw_centered(draw, "Conectá un USB WiFi (AR9271)", self.model_ui_hint_font, center_y + 24, center_x, TEXT_SECONDARY)
+            else:
+                max_r = max(20, min(center_x, VIDEO_HEIGHT - center_y - 8, center_y - 24) - 4)
+                for ring_frac in (0.34, 0.67, 1.0):
+                    r = max_r * ring_frac
+                    draw.ellipse((center_x - r, center_y - r, center_x + r, center_y + r), outline=ACCENT_DIM, width=1)
+                for point in points:
+                    angle = point.get("angle", 0) or 0
+                    radius_frac = max(0.0, min(1.0, point.get("radius", 1) or 0))
+                    strength = point.get("strength", "weak")
+                    r = max_r * radius_frac
+                    x = center_x + r * math.cos(angle)
+                    y = center_y + r * math.sin(angle)
+                    if strength == "strong":
+                        color = ACCENT_GREEN
+                    elif strength == "mid":
+                        color = (220, 190, 60, 255)
+                    else:
+                        color = (220, 90, 90, 255)
+                    dot_r = 3
+                    draw.ellipse((x - dot_r, y - dot_r, x + dot_r, y + dot_r), fill=color)
+                # AKBAL itself, at the center.
+                draw.ellipse((center_x - 3, center_y - 3, center_x + 3, center_y + 3), fill=ACCENT_GREEN)
+                if count == 0:
+                    self._draw_centered(draw, "Buscando redes...", self.model_ui_hint_font, VIDEO_HEIGHT - 22, center_x, TEXT_SECONDARY)
+
+            rgb565_data = ImageUtils.image_to_rgb565(frame, VIDEO_WIDTH, VIDEO_HEIGHT)
+            self.whisplay.draw_image(0, TOP_BAR_HEIGHT, VIDEO_WIDTH, VIDEO_HEIGHT, rgb565_data)
+
+        self.render_bottom_text(text)
+        return False  # event-driven: Node pushes a new frame on every change
+
     def _draw_centered(self, draw, text, font, y, center_x=None, fill=TEXT_PRIMARY):
         cx = center_x if center_x is not None else VIDEO_WIDTH // 2
         bbox = draw.textbbox((0, 0), text, font=font)
@@ -541,6 +613,7 @@ def update_display_data(status=None, emoji=None, text=None,
                   model_ui=None, model_ui_title=None, model_ui_label=None, model_ui_description=None, model_ui_percent=None,
                   model_ui_index=None, model_ui_total=None, model_ui_active=None, model_ui_qr_path=None,
                   help_ui=None, help_ui_body=None, help_ui_page=None, help_ui_total=None,
+                  radar_ui=None, radar_ui_points=None, radar_ui_count=None, radar_ui_channel=None,
                   top_bar_mode=None):
     global current_status, current_emoji, current_text, current_battery_level
     global current_terminal_text
@@ -556,6 +629,7 @@ def update_display_data(status=None, emoji=None, text=None,
     global current_model_ui, current_model_ui_title, current_model_ui_label, current_model_ui_description, current_model_ui_percent
     global current_model_ui_index, current_model_ui_total, current_model_ui_active, current_model_ui_qr_path
     global current_help_ui, current_help_ui_body, current_help_ui_page, current_help_ui_total
+    global current_radar_ui, current_radar_ui_points, current_radar_ui_count, current_radar_ui_channel
     global current_top_bar_mode
     global render_thread
 
@@ -688,6 +762,20 @@ def update_display_data(status=None, emoji=None, text=None,
             current_help_ui_total = int(help_ui_total)
         except (TypeError, ValueError):
             print(f"[Display] Invalid help_ui_total payload: {help_ui_total}")
+    if radar_ui is not None:
+        current_radar_ui = radar_ui
+    if radar_ui_points is not None:
+        current_radar_ui_points = radar_ui_points if isinstance(radar_ui_points, list) else []
+    if radar_ui_count is not None:
+        try:
+            current_radar_ui_count = int(radar_ui_count)
+        except (TypeError, ValueError):
+            print(f"[Display] Invalid radar_ui_count payload: {radar_ui_count}")
+    if radar_ui_channel is not None:
+        try:
+            current_radar_ui_channel = int(radar_ui_channel)
+        except (TypeError, ValueError):
+            print(f"[Display] Invalid radar_ui_channel payload: {radar_ui_channel}")
     if top_bar_mode is not None:
         current_top_bar_mode = top_bar_mode
     if render_thread is not None:
@@ -814,6 +902,10 @@ def handle_client(client_socket, addr, whisplay):
                     help_ui_body = content.get("help_ui_body", None)
                     help_ui_page = content.get("help_ui_page", None)
                     help_ui_total = content.get("help_ui_total", None)
+                    radar_ui = content.get("radar_ui", None)
+                    radar_ui_points = content.get("radar_ui_points", None)
+                    radar_ui_count = content.get("radar_ui_count", None)
+                    radar_ui_channel = content.get("radar_ui_channel", None)
                     top_bar_mode = content.get("top_bar_mode", None)
 
                     if rgbled:
@@ -867,7 +959,10 @@ def handle_client(client_socket, addr, whisplay):
                             (model_ui_index is not None) or (model_ui_total is not None) or (model_ui_active is not None) or \
                             (model_ui_qr_path is not None) or \
                             (help_ui is not None) or (help_ui_body is not None) or \
-                            (help_ui_page is not None) or (help_ui_total is not None) or (top_bar_mode is not None):
+                            (help_ui_page is not None) or (help_ui_total is not None) or \
+                            (radar_ui is not None) or (radar_ui_points is not None) or \
+                            (radar_ui_count is not None) or (radar_ui_channel is not None) or \
+                            (top_bar_mode is not None):
                         update_display_data(status=status, emoji=emoji,
                                      text=text, text_delta=text_delta, scroll_speed=scroll_speed, scroll_sync=scroll_sync,
                                      battery_level=battery_level, battery_color=battery_tuple,
@@ -895,6 +990,10 @@ def handle_client(client_socket, addr, whisplay):
                                                  help_ui_body=help_ui_body,
                                                  help_ui_page=help_ui_page,
                                                  help_ui_total=help_ui_total,
+                                                 radar_ui=radar_ui,
+                                                 radar_ui_points=radar_ui_points,
+                                                 radar_ui_count=radar_ui_count,
+                                                 radar_ui_channel=radar_ui_channel,
                                                  top_bar_mode=top_bar_mode)
 
                     client_socket.send(b"OK\n")

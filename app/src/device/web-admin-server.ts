@@ -9,8 +9,7 @@ import bodyParser from "koa-bodyparser";
 import serve from "koa-static";
 import axios from "axios";
 import { WebSocketServer, WebSocket } from "ws";
-import { AirspaceService } from "../airspace/service";
-import { registerShutdownHook } from "./display";
+import { getWifiRadarSnapshot } from "../wifiradar/service";
 import {
   getCurrentModel,
   isModelLoaded,
@@ -26,6 +25,7 @@ import {
   connectToEmergencyWifi,
   connectToWifi,
   forgetWifi,
+  getSavedWifiPassword,
   getWifiStatus,
   hasEmergencyWifiConfigured,
   scanWifiNetworks,
@@ -47,11 +47,11 @@ const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days — a LAN admin
 // Paths reachable with no session at all — just enough to render and submit
 // the login form itself.
 const PUBLIC_PATHS = new Set(["/login", "/login.html", "/api/login"]);
-// AIRSPACE broadcasts a snapshot to every connected client on this cadence
+// WIFIRADAR broadcasts a snapshot to every connected client on this cadence
 // — 2-4Hz per the spec, not per-packet, which is most of what keeps this
 // cheap: the aggregator can ingest hundreds of frames/sec while the network
 // only ever sees ~3 JSON messages/sec regardless.
-const AIRSPACE_BROADCAST_MS = 300;
+const WIFIRADAR_BROADCAST_MS = 300;
 
 // Small local admin UI, reachable from any device on the LAN — a chat page
 // for the local Ollama models (like a mini OpenWebUI) and a wifi settings
@@ -74,19 +74,16 @@ export class WebAdminServer {
   // never goes through Koa's request/response cycle so ctx.cookies isn't
   // available there.
   private validSessions = new Set<string>();
-  private airspace: AirspaceService;
 
   constructor(options: { port: number; username: string; password: string }) {
     this.port = options.port;
     this.username = options.username;
     this.password = options.password;
-    this.airspace = new AirspaceService();
-    // Restoring wlan1 out of monitor mode and killing tshark has to
-    // actually finish before the process exits, or a redeploy/restart
-    // leaves the AR9271 stuck in monitor mode and a root tshark orphaned —
-    // see display.ts's shutdown hook system for why this isn't a plain
-    // SIGTERM listener here.
-    registerShutdownHook(() => this.airspace.stop());
+    // WifiRadarService itself is a shared singleton (see wifiradar/service.ts)
+    // started/stopped from index.ts, independent of whether this admin
+    // server is even enabled — the physical device's own "WiFi Radar" menu
+    // screen reads from the same running capture. This class only reads
+    // snapshots from it (getWifiRadarSnapshot), never owns its lifecycle.
     this.app = new Koa();
     this.app.use(this.sessionAuth());
     this.app.use(bodyParser());
@@ -192,21 +189,21 @@ export class WebAdminServer {
       ctx.body = fs.createReadStream(filePath);
     });
 
-    // AIRSPACE — fullscreen Three.js WiFi visualization. Its own page
+    // WIFIRADAR — fullscreen Three.js WiFi visualization. Its own page
     // (not a tab in index.html's chat/wifi/usb layout — a WebGL scene
-    // deserves the whole viewport) backed by the AirspaceService created
-    // above; live data streams over /airspace/ws (see start()), this route
+    // deserves the whole viewport) backed by the WifiRadarService created
+    // above; live data streams over /wifiradar/ws (see start()), this route
     // just serves the page shell and an initial snapshot for first paint
     // before the socket connects.
-    router.get("/airspace", (ctx) => {
+    router.get("/wifiradar", (ctx) => {
       ctx.set("Cache-Control", "no-store");
       ctx.type = "text/html";
-      ctx.body = fs.createReadStream(path.resolve(__dirname, "../..", "web", "admin", "airspace.html"));
+      ctx.body = fs.createReadStream(path.resolve(__dirname, "../..", "web", "admin", "wifiradar.html"));
     });
 
-    router.get("/api/airspace/snapshot", (ctx) => {
+    router.get("/api/wifiradar/snapshot", (ctx) => {
       const revealFullMac = ctx.query.fullMac === "1";
-      ctx.body = this.airspace.getSnapshot(revealFullMac);
+      ctx.body = getWifiRadarSnapshot(revealFullMac);
     });
 
     router.get("/api/status", async (ctx) => {
@@ -390,6 +387,16 @@ export class WebAdminServer {
       ctx.body = await forgetWifi(ssid);
     });
 
+    router.get("/api/wifi/password", async (ctx) => {
+      const ssid = String(ctx.query.ssid || "");
+      if (!ssid) {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "ssid requerido" };
+        return;
+      }
+      ctx.body = await getSavedWifiPassword(ssid);
+    });
+
     router.get("/api/usb/devices", async (ctx) => {
       ctx.body = await listUsbDevices();
     });
@@ -494,7 +501,7 @@ export class WebAdminServer {
     // checked, since a WebSocket upgrade request never goes through Koa.
     this.wss = new WebSocketServer({ noServer: true });
     this.server.on("upgrade", (req, socket, head) => {
-      if (req.url !== "/airspace/ws" || !this.isValidSessionCookie(req.headers.cookie)) {
+      if (req.url !== "/wifiradar/ws" || !this.isValidSessionCookie(req.headers.cookie)) {
         socket.destroy();
         return;
       }
@@ -508,18 +515,16 @@ export class WebAdminServer {
       const send = () => {
         if (ws.readyState !== WebSocket.OPEN) return;
         try {
-          ws.send(JSON.stringify(this.airspace.getSnapshot(revealFullMac)));
+          ws.send(JSON.stringify(getWifiRadarSnapshot(revealFullMac)));
         } catch (err) {
-          console.warn("[WebAdmin] airspace ws send failed:", err);
+          console.warn("[WebAdmin] wifiradar ws send failed:", err);
         }
       };
       send();
-      const interval = setInterval(send, AIRSPACE_BROADCAST_MS);
+      const interval = setInterval(send, WIFIRADAR_BROADCAST_MS);
       ws.on("close", () => clearInterval(interval));
       ws.on("error", () => clearInterval(interval));
     });
-
-    void this.airspace.start();
 
     this.server.listen(this.port, "0.0.0.0", () => {
       console.log(`[WebAdmin] Listening on http://0.0.0.0:${this.port}`);
@@ -529,7 +534,6 @@ export class WebAdminServer {
   stop(): void {
     this.wss?.close();
     this.wss = null;
-    void this.airspace.stop();
     this.server?.close();
     this.server = null;
   }

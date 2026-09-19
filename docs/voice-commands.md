@@ -18,7 +18,7 @@ las secciones de abajo):
 | Abrir menú de modo (sin decir cuál) | "cambiar modo" |
 | Ver esta lista en pantalla | "ayuda" |
 
-El volumen inicial al prender el dispositivo es **60%** por defecto
+El volumen inicial al prender el dispositivo es **70%** por defecto
 (`INITIAL_VOLUME_PERCENT` en `.env`, ver [`SETUP.md`](./SETUP.md)); estos
 comandos lo ajustan después, en caliente.
 

@@ -75,7 +75,16 @@ export interface Status {
   // layout. "unavailable" is shown when no AR9271-class adapter is
   // detected at all; "view" draws the radar with radar_ui_points.
   radar_ui: "" | "view" | "unavailable";
-  radar_ui_points: { angle: number; radius: number; strength: "strong" | "mid" | "weak" }[];
+  // featured marks the one point currently named in the bottom text band
+  // (see wifi-radar-mode.ts's carousel) — chatbot-ui.py draws a white
+  // outline ring around that dot specifically, so it's obvious which
+  // network on screen the name/dBm caption below is talking about.
+  radar_ui_points: {
+    angle: number;
+    radius: number;
+    strength: "strong" | "mid" | "weak";
+    featured: boolean;
+  }[];
   radar_ui_count: number;
   radar_ui_channel: number;
   // Small always-on indicator in the top bar (see render_top_bar in

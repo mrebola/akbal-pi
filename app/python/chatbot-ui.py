@@ -404,9 +404,12 @@ class RenderThread(threading.Thread):
         """Simplified physical-screen WIFIRADAR (chat-flow/wifi-radar-mode.ts)
         — a radar disc with a dot per nearby AP, refreshed on a timer while
         this screen is open (Node polls the shared WifiRadarService and
-        pushes a new radar_ui_points list every ~1.5s). "unavailable" is a
-        plain message instead of the disc, for when no AR9271-class adapter
-        is detected at all."""
+        pushes a new radar_ui_points list every ~1.5s). The bottom text
+        band carousels through the visible APs (name + dBm, set by Node);
+        whichever dot that caption is currently naming gets a white
+        outline ring, drawn via each point's "featured" flag. "unavailable"
+        is a plain message instead of the disc, for when no AR9271-class
+        adapter is detected at all."""
         self.render_top_bar()
 
         mode = current_radar_ui
@@ -418,7 +421,7 @@ class RenderThread(threading.Thread):
 
         cache_key = (
             mode,
-            tuple((p.get("angle"), p.get("radius"), p.get("strength")) for p in points),
+            tuple((p.get("angle"), p.get("radius"), p.get("strength"), p.get("featured")) for p in points),
             count,
             channel,
         )
@@ -451,6 +454,18 @@ class RenderThread(threading.Thread):
                     else:
                         color = (220, 90, 90, 255)
                     dot_r = 3
+                    if point.get("featured"):
+                        # The one dot the bottom text band is currently
+                        # naming (see wifi-radar-mode.ts's carousel) — a
+                        # white ring around it, not just its own strength
+                        # color, so it reads clearly against green/yellow/
+                        # red dots alike.
+                        outline_r = dot_r + 3
+                        draw.ellipse(
+                            (x - outline_r, y - outline_r, x + outline_r, y + outline_r),
+                            outline=(255, 255, 255, 255),
+                            width=1,
+                        )
                     draw.ellipse((x - dot_r, y - dot_r, x + dot_r, y + dot_r), fill=color)
                 # AKBAL itself, at the center.
                 draw.ellipse((center_x - 3, center_y - 3, center_x + 3, center_y + 3), fill=ACCENT_GREEN)

@@ -7,12 +7,31 @@ import { AccessPoint } from "../../wifiradar/types";
 // whatever the AR9271 is seeing shows up here too, live or demo, without a
 // second capture competing for the interface. No 3D, no click-to-inspect
 // (single button, small screen) — just a radar disc with a dot per nearby
-// AP, refreshed on a timer while this screen is open.
+// AP, refreshed on a timer while this screen is open. The bottom text band
+// carousels through the visible APs one at a time (name + dBm), and the
+// dot it's currently naming gets a white outline in chatbot-ui.py so it's
+// obvious which one on screen the caption is talking about.
 const IDLE_TIMEOUT_MS = 30000;
 const CONFIRM_HOLD_MS = 900;
 const HOLD_TICK_MS = 60;
-const REFRESH_INTERVAL_MS = 1500;
+// 3s, not 1.5s — logs from a real device showed this screen redrawing the
+// *full* 240x196 frame (rings + up to 12 points, one SPI write) on nearly
+// every single tick, because natural RSSI jitter alone was enough to miss
+// chatbot-ui.py's render cache on every refresh. That's real CPU + SPI
+// bus time (the one screen in the app that redraws this often), and a
+// live test showed the physical button stopped registering presses
+// entirely while sat on this screen — consistent with the GPIO polling
+// thread getting starved by how much rendering was happening. Combined
+// with rounding the radius below (see buildPoints) so minor RSSI noise
+// stops forcing a redraw by itself, this should leave real headroom for
+// button polling — and 3s/name is a more readable carousel pace anyway.
+const REFRESH_INTERVAL_MS = 3000;
 const MAX_POINTS = 12; // small screen — more than this just clutters it
+// Round the visual radius to this step so a couple dBm of normal RSSI
+// noise between refreshes doesn't look like the dot moved *and*, more
+// importantly, doesn't force chatbot-ui.py's render cache to miss (see
+// REFRESH_INTERVAL_MS above) when nothing meaningfully changed.
+const RADIUS_STEP = 0.05;
 
 let pressStartedAt = 0;
 let holdTicker: ReturnType<typeof setInterval> | null = null;
@@ -20,6 +39,11 @@ let confirmTimer: ReturnType<typeof setTimeout> | null = null;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 let onExitCallback: () => void = () => {};
+// Which of the up-to-MAX_POINTS visible APs the bottom text band is
+// currently naming — advances by one every refresh tick, so the caption
+// (and the white-outlined dot matching it) cycles through whatever's been
+// found so far, carousel-style, instead of just showing a static count.
+let featuredIndex = 0;
 
 function clearHoldTimers(): void {
   if (holdTicker) {
@@ -69,12 +93,13 @@ function strengthFor(rssi: number): "strong" | "mid" | "weak" {
   return "weak";
 }
 
-function buildPoints(accessPoints: AccessPoint[]) {
-  return accessPoints.slice(0, MAX_POINTS).map((ap) => {
+function buildPoints(accessPoints: AccessPoint[], featuredAt: number) {
+  return accessPoints.slice(0, MAX_POINTS).map((ap, i) => {
     const angle = hash01(ap.id, 17) * Math.PI * 2;
     const rssi = Math.max(-95, Math.min(-30, ap.rssi));
-    const radius = 1 - (rssi + 95) / 65; // 0 = strong/close, 1 = weak/far — visual only
-    return { angle, radius, strength: strengthFor(ap.rssi) };
+    const rawRadius = 1 - (rssi + 95) / 65; // 0 = strong/close, 1 = weak/far — visual only
+    const radius = Math.round(rawRadius / RADIUS_STEP) * RADIUS_STEP;
+    return { angle, radius, strength: strengthFor(ap.rssi), featured: i === featuredAt };
   });
 }
 
@@ -96,7 +121,15 @@ function renderScreen(): void {
     });
     return;
   }
-  const points = buildPoints(snapshot.accessPoints);
+
+  const visibleAps = snapshot.accessPoints.slice(0, MAX_POINTS);
+  const featured = visibleAps.length > 0 ? visibleAps[featuredIndex % visibleAps.length] : null;
+  const points = buildPoints(snapshot.accessPoints, featured ? featuredIndex % visibleAps.length : -1);
+  const demoPrefix = snapshot.demo ? "DEMO · " : "";
+  const bottomText = featured
+    ? `${demoPrefix}${featured.ssid || "(oculta)"} · ${featured.rssi}dBm · Mantén: salir`
+    : `${demoPrefix}Buscando redes... · canal ${snapshot.currentChannel || "—"} · Mantén: salir`;
+
   display({
     model_ui: "",
     help_ui: "",
@@ -104,8 +137,12 @@ function renderScreen(): void {
     radar_ui_points: points,
     radar_ui_count: snapshot.accessPoints.length,
     radar_ui_channel: snapshot.currentChannel,
-    text: `${snapshot.demo ? "DEMO · " : ""}${snapshot.accessPoints.length} redes · canal ${snapshot.currentChannel || "—"} · Mantén: salir`,
+    text: bottomText,
   });
+
+  // Advance for the *next* tick — this tick already rendered with the
+  // current featuredIndex.
+  featuredIndex += 1;
 }
 
 export function resetWifiRadarControl(): void {
@@ -113,6 +150,7 @@ export function resetWifiRadarControl(): void {
   clearIdleTimer();
   stopRefreshTimer();
   pressStartedAt = 0;
+  featuredIndex = 0;
 }
 
 export function onWifiRadarExit(callback: () => void): void {

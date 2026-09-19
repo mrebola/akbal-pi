@@ -16,6 +16,7 @@
       <button class="tab-btn active" data-tab="chat">Chat</button>
       <button class="tab-btn" data-tab="wifi">Wifi</button>
       <button class="tab-btn" data-tab="usb">USB</button>
+      <button class="tab-btn" data-tab="music">Música</button>
       <button class="tab-btn" data-tab="wardrive">Wardriving</button>
       <a href="/wifiradar" class="tab-link" title="Visualización WiFi en 3D">WIFIRADAR</a>
       <button class="tab-btn" data-tab="settings" title="Configuración">Config</button>
@@ -123,6 +124,36 @@
           <div id="usb-breadcrumb" class="usb-breadcrumb"></div>
         </div>
         <ul id="usb-file-list" class="usb-file-list"></ul>
+      </div>
+
+      <div class="usb-block">
+        <div class="usb-block-title">Explorador de archivos (interno y USB)</div>
+        <div id="fm-usb" class="filemgr"></div>
+      </div>
+    </section>
+
+    <section id="tab-music" class="tab-panel">
+      <div class="mplayer">
+        <div class="mplayer-card">
+          <div id="mp-visual" class="mp-visual stopped" aria-hidden="true">
+            <span class="mp-eq"><i></i><i></i><i></i><i></i><i></i></span>
+            <span class="mp-pause">❚❚</span>
+            <span class="mp-stop">■</span>
+          </div>
+          <div class="mp-now">
+            <div id="mp-title" class="mp-title">Reproductor Cypher OST</div>
+            <div id="mp-sub" class="mp-sub">Selecciona una pista para empezar</div>
+          </div>
+          <div class="mp-progress"><div id="mp-progress-fill" class="mp-progress-fill"></div></div>
+          <div class="mp-time"><span id="mp-cur">0:00</span><span id="mp-dur">0:00</span></div>
+          <div class="mp-controls">
+            <button type="button" id="mp-prev" class="mp-ctrl" title="Anterior">⏮</button>
+            <button type="button" id="mp-playpause" class="mp-ctrl mp-main" title="Reproducir / Pausa">▶</button>
+            <button type="button" id="mp-stop" class="mp-ctrl" title="Detener">⏹</button>
+            <button type="button" id="mp-next" class="mp-ctrl" title="Siguiente">⏭</button>
+          </div>
+        </div>
+        <ul id="mp-list" class="mp-list"></ul>
       </div>
     </section>
 
@@ -332,6 +363,13 @@
             </div>
             <span id="settings-usb-status" class="cfg-meta"></span>
             <ul id="settings-usb-eject-list" class="cfg-list"></ul>
+          </div>
+
+          <div class="cfg-card cfg-card-wide">
+            <div class="cfg-card-head">
+              <span class="cfg-card-title">Explorador de archivos</span>
+            </div>
+            <div id="fm-settings" class="filemgr"></div>
           </div>
         </div>
 

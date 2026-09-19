@@ -15,7 +15,8 @@ export type QuickMenuKey =
   | "volume"
   | "wifi"
   | "network"
-  | "wifiradar";
+  | "wifiradar"
+  | "jukebox";
 
 type QuickMenuItem = { key: QuickMenuKey; label: string; description: string };
 
@@ -23,6 +24,7 @@ const BASE_ITEMS: QuickMenuItem[] = [
   { key: "model", label: "Modelo", description: "Elegir modelo de IA" },
   { key: "mode", label: "Modo", description: "Agente u local" },
   { key: "audio_output", label: "Audio", description: "Bocina Pi o bluetooth" },
+  { key: "jukebox", label: "Música", description: "OST de Cypher" },
   { key: "help", label: "Ayuda", description: "Comandos de voz" },
   { key: "camera", label: "Cámara", description: "Tomar una foto" },
   { key: "volume", label: "Volumen", description: "Subir/bajar el sonido" },

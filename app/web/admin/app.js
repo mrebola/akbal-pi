@@ -554,6 +554,9 @@ function activateTab(tabName) {
   document.getElementById(`tab-${tabName}`).classList.add("active");
   if (tabName === "wifi") void refreshWifi();
   if (tabName === "settings") void refreshSettings();
+  if (tabName === "music") startMusicUI();
+  else stopMusicPolling();
+  if (tabName === "usb") ensureUsbFileManager();
 }
 
 for (const btn of document.querySelectorAll(".tab-btn")) {
@@ -1230,7 +1233,10 @@ if (cfgNav) {
     }
     if (key === "audio") void loadAudioOutputs();
     else if (key === "ia") void loadIaModels();
-    else if (key === "almacenamiento") void loadSettingsUsbVolumes();
+    else if (key === "almacenamiento") {
+      void loadSettingsUsbVolumes();
+      ensureSettingsFileManager();
+    }
     else if (key === "sistema") void loadBackups();
   });
 }
@@ -1864,3 +1870,333 @@ wdFilesUpBtn.addEventListener("click", () => {
 });
 
 wdFilesRefreshBtn.addEventListener("click", () => void wdLoadFiles());
+
+// ================= Reproductor de música (Cypher OST) =================
+const mpTitle = document.getElementById("mp-title");
+const mpSub = document.getElementById("mp-sub");
+const mpFill = document.getElementById("mp-progress-fill");
+const mpCur = document.getElementById("mp-cur");
+const mpDur = document.getElementById("mp-dur");
+const mpPlayPause = document.getElementById("mp-playpause");
+const mpPrev = document.getElementById("mp-prev");
+const mpNext = document.getElementById("mp-next");
+const mpStop = document.getElementById("mp-stop");
+const mpList = document.getElementById("mp-list");
+const mpVisual = document.getElementById("mp-visual");
+
+let musicPollTimer = null;
+let musicTracksLoaded = false;
+
+function fmtTime(ms) {
+  const s = Math.max(0, Math.round((Number(ms) || 0) / 1000));
+  const m = Math.floor(s / 60);
+  return `${m}:${String(s % 60).padStart(2, "0")}`;
+}
+
+async function loadMusicTracks() {
+  if (!mpList) return;
+  try {
+    const res = await apiFetch("/api/music/tracks");
+    const data = await res.json();
+    const tracks = Array.isArray(data.tracks) ? data.tracks : [];
+    mpList.innerHTML = "";
+    if (!tracks.length) {
+      const li = document.createElement("li");
+      li.textContent = "No hay canciones en la biblioteca.";
+      li.style.cursor = "default";
+      mpList.appendChild(li);
+    }
+    for (const t of tracks) {
+      const li = document.createElement("li");
+      li.dataset.index = String(t.index);
+      const idx = document.createElement("span");
+      idx.className = "mp-idx";
+      idx.textContent = String(t.index + 1).padStart(2, "0");
+      const name = document.createElement("span");
+      name.textContent = t.title;
+      const eq = document.createElement("span");
+      eq.className = "mp-eq-mini";
+      eq.textContent = "♪";
+      li.appendChild(idx);
+      li.appendChild(name);
+      li.appendChild(eq);
+      li.addEventListener("click", () => void musicCmd("play", { index: t.index }));
+      mpList.appendChild(li);
+    }
+    musicTracksLoaded = true;
+    if (data.status) renderMusicStatus(data.status);
+  } catch {
+    /* ignore */
+  }
+}
+
+function renderMusicStatus(s) {
+  if (!mpTitle) return;
+  const stateClass = !s.playing ? "stopped" : s.paused ? "paused" : "playing";
+  if (mpVisual) mpVisual.className = `mp-visual ${stateClass}`;
+  if (s.playing && s.title) {
+    mpTitle.textContent = s.title;
+    mpSub.textContent = `Cypher OST · ${s.index + 1}/${s.total}${s.paused ? " · en pausa" : ""}`;
+  } else {
+    mpTitle.textContent = "Reproductor Cypher OST";
+    mpSub.textContent = s.available ? "Selecciona una pista para empezar" : "Sin biblioteca";
+  }
+  mpPlayPause.textContent = s.playing && !s.paused ? "❚❚" : "▶";
+  const pct = s.durationMs > 0 ? Math.min(100, (s.positionMs / s.durationMs) * 100) : 0;
+  if (mpFill) mpFill.style.width = `${pct}%`;
+  if (mpCur) mpCur.textContent = fmtTime(s.positionMs);
+  if (mpDur) mpDur.textContent = s.durationMs > 0 ? fmtTime(s.durationMs) : "0:00";
+  for (const li of mpList ? mpList.querySelectorAll("li[data-index]") : []) {
+    li.classList.toggle("active", s.playing && Number(li.dataset.index) === s.index);
+  }
+}
+
+async function pollMusicStatus() {
+  try {
+    const res = await apiFetch("/api/music/status");
+    renderMusicStatus(await res.json());
+  } catch {
+    /* ignore */
+  }
+}
+
+async function musicCmd(cmd, body) {
+  try {
+    const res = await apiFetch(`/api/music/${cmd}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {}),
+    });
+    renderMusicStatus(await res.json());
+  } catch (err) {
+    addMessage("system", `Error de música: ${err.message}`);
+  }
+}
+
+function startMusicUI() {
+  if (!musicTracksLoaded) void loadMusicTracks();
+  else void pollMusicStatus();
+  stopMusicPolling();
+  musicPollTimer = setInterval(() => void pollMusicStatus(), 1000);
+}
+function stopMusicPolling() {
+  if (musicPollTimer) {
+    clearInterval(musicPollTimer);
+    musicPollTimer = null;
+  }
+}
+
+mpPlayPause?.addEventListener("click", () => void musicCmd("playpause"));
+mpPrev?.addEventListener("click", () => void musicCmd("prev"));
+mpNext?.addEventListener("click", () => void musicCmd("next"));
+mpStop?.addEventListener("click", () => void musicCmd("stop"));
+
+// ================= Explorador de archivos (interno + USB) =================
+function humanSize(bytes) {
+  const n = Number(bytes) || 0;
+  if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(1)} GB`;
+  if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(1)} MB`;
+  if (n >= 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${n} B`;
+}
+
+function createFileManager(container) {
+  if (!container || container.dataset.mounted === "1") return;
+  container.dataset.mounted = "1";
+  let root = "internal";
+  let cwd = "";
+
+  const bar = document.createElement("div");
+  bar.className = "fm-bar";
+  const rootSel = document.createElement("select");
+  const upBtn = document.createElement("button");
+  upBtn.type = "button";
+  upBtn.className = "cfg-btn";
+  upBtn.textContent = "↑ Subir nivel";
+  const refreshBtn = document.createElement("button");
+  refreshBtn.type = "button";
+  refreshBtn.className = "cfg-icon-btn";
+  refreshBtn.textContent = "↻";
+  refreshBtn.title = "Refrescar";
+  const mkdirBtn = document.createElement("button");
+  mkdirBtn.type = "button";
+  mkdirBtn.className = "cfg-btn";
+  mkdirBtn.textContent = "+ Carpeta";
+  const uploadBtn = document.createElement("button");
+  uploadBtn.type = "button";
+  uploadBtn.className = "cfg-btn cfg-btn-accent";
+  uploadBtn.textContent = "↑ Subir archivo";
+  const fileInput = document.createElement("input");
+  fileInput.type = "file";
+  fileInput.style.display = "none";
+  bar.appendChild(rootSel);
+  bar.appendChild(upBtn);
+  bar.appendChild(mkdirBtn);
+  bar.appendChild(uploadBtn);
+  bar.appendChild(refreshBtn);
+
+  const crumb = document.createElement("div");
+  crumb.className = "fm-crumb";
+  const status = document.createElement("div");
+  status.className = "fm-progress";
+  const list = document.createElement("ul");
+  list.className = "fm-list";
+
+  container.appendChild(bar);
+  container.appendChild(crumb);
+  container.appendChild(status);
+  container.appendChild(list);
+  container.appendChild(fileInput);
+
+  async function loadRoots() {
+    try {
+      const res = await apiFetch("/api/storage/roots");
+      const data = await res.json();
+      rootSel.innerHTML = "";
+      for (const r of data.roots || []) {
+        const o = document.createElement("option");
+        o.value = r.key;
+        o.textContent = r.label;
+        rootSel.appendChild(o);
+      }
+      if (![...rootSel.options].some((o) => o.value === root)) root = rootSel.value || "internal";
+      rootSel.value = root;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function load() {
+    crumb.textContent = `${rootSel.options[rootSel.selectedIndex]?.textContent || root} / ${cwd || ""}`;
+    list.innerHTML = "";
+    try {
+      const res = await apiFetch(`/api/storage/list?root=${encodeURIComponent(root)}&path=${encodeURIComponent(cwd)}`);
+      const data = await res.json();
+      if (!data.ok) {
+        list.innerHTML = `<li class="fm-empty">${data.error || "No disponible"}</li>`;
+        return;
+      }
+      if (!data.entries.length) {
+        list.innerHTML = `<li class="fm-empty">Carpeta vacía</li>`;
+        return;
+      }
+      for (const e of data.entries) {
+        const li = document.createElement("li");
+        const name = document.createElement("span");
+        name.className = e.isDir ? "fm-name dir" : "fm-name";
+        name.textContent = (e.isDir ? "📁 " : "📄 ") + e.name;
+        if (e.isDir) {
+          name.addEventListener("click", () => {
+            cwd = cwd ? `${cwd}/${e.name}` : e.name;
+            void load();
+          });
+        }
+        const meta = document.createElement("span");
+        meta.className = "fm-meta";
+        meta.textContent = e.isDir ? "" : humanSize(e.size);
+        const actions = document.createElement("div");
+        actions.className = "fm-actions";
+        if (!e.isDir) {
+          const dl = document.createElement("a");
+          dl.className = "cfg-icon-btn";
+          dl.textContent = "↓";
+          dl.title = "Descargar";
+          const rel = cwd ? `${cwd}/${e.name}` : e.name;
+          dl.href = `/api/storage/download?root=${encodeURIComponent(root)}&path=${encodeURIComponent(rel)}`;
+          dl.setAttribute("download", e.name);
+          actions.appendChild(dl);
+        }
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "cfg-icon-btn";
+        del.textContent = "🗑";
+        del.title = "Eliminar";
+        del.addEventListener("click", () => void doDelete(e.name));
+        actions.appendChild(del);
+        li.appendChild(name);
+        li.appendChild(meta);
+        li.appendChild(actions);
+        list.appendChild(li);
+      }
+    } catch (err) {
+      list.innerHTML = `<li class="fm-empty">Error: ${err.message}</li>`;
+    }
+  }
+
+  async function doDelete(name) {
+    const rel = cwd ? `${cwd}/${name}` : name;
+    status.textContent = `Eliminando ${name}...`;
+    try {
+      const res = await apiFetch("/api/storage/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ root, path: rel }),
+      });
+      const data = await res.json();
+      status.textContent = data.ok ? "" : `Error: ${data.error || ""}`;
+    } catch (err) {
+      status.textContent = `Error: ${err.message}`;
+    }
+    void load();
+  }
+
+  rootSel.addEventListener("change", () => {
+    root = rootSel.value;
+    cwd = "";
+    void load();
+  });
+  upBtn.addEventListener("click", () => {
+    if (!cwd) return;
+    cwd = cwd.split("/").slice(0, -1).join("/");
+    void load();
+  });
+  refreshBtn.addEventListener("click", () => void load());
+  mkdirBtn.addEventListener("click", async () => {
+    const name = prompt("Nombre de la nueva carpeta:");
+    if (!name) return;
+    try {
+      const res = await apiFetch("/api/storage/mkdir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ root, path: cwd, name }),
+      });
+      const data = await res.json();
+      status.textContent = data.ok ? "" : `Error: ${data.error || ""}`;
+    } catch (err) {
+      status.textContent = `Error: ${err.message}`;
+    }
+    void load();
+  });
+  uploadBtn.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) return;
+    status.textContent = `Subiendo ${file.name}...`;
+    try {
+      const url = `/api/storage/upload?root=${encodeURIComponent(root)}&path=${encodeURIComponent(cwd)}&name=${encodeURIComponent(file.name)}`;
+      const res = await fetch(url, {
+        method: "PUT",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: file,
+      });
+      const data = await res.json();
+      status.textContent = data.ok ? "" : `Error: ${data.error || ""}`;
+    } catch (err) {
+      status.textContent = `Error: ${err.message}`;
+    }
+    fileInput.value = "";
+    void load();
+  });
+
+  (async () => {
+    await loadRoots();
+    await load();
+  })();
+}
+
+function ensureUsbFileManager() {
+  createFileManager(document.getElementById("fm-usb"));
+}
+function ensureSettingsFileManager() {
+  createFileManager(document.getElementById("fm-settings"));
+}

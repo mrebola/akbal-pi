@@ -114,6 +114,7 @@ import {
 import { isAgentMode, setDeviceMode } from "../../config/device-mode";
 import { setAudioOutputTarget } from "../../config/audio-output";
 import { connectSpeaker } from "../../device/bluetooth-audio";
+import { jukebox } from "../../device/music-jukebox";
 import {
   DEFAULT_OLLAMA_MODEL,
   getCurrentModel,
@@ -238,6 +239,10 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
         ctx.transitionTo("audio_output_select");
         return;
       }
+      if (key === "jukebox") {
+        ctx.transitionTo("jukebox");
+        return;
+      }
       if (key === "help") {
         ctx.transitionTo("help");
         return;
@@ -345,6 +350,78 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
           : "Modo música. Presiona el botón para hablar."),
       rag_icon_visible: false,
     });
+  },
+  jukebox: (ctx: ChatFlowContext) => {
+    // Dedicated Cypher OST player mode (separate from the voice-driven "music"
+    // state). One-button controls: short click = next track, hold = play/pause,
+    // double click = exit. Full transport is on the web player.
+    let pressAt = 0;
+    let progressTimer: ReturnType<typeof setInterval> | null = null;
+    const HOLD_PLAYPAUSE_MS = 700;
+
+    const render = () => {
+      const s = jukebox.status();
+      display({
+        status: "music",
+        emoji: !s.playing ? "🎵" : s.paused ? "⏸️" : "🎶",
+        RGB: !s.playing ? "#0066aa" : s.paused ? "#775500" : "#00aa66",
+        text: !s.available
+          ? "No hay música cargada."
+          : s.title
+            ? `${s.paused ? "Pausa · " : ""}${s.title}`
+            : "Música Cypher OST",
+        music_progress: s.durationMs > 0 ? s.positionMs / s.durationMs : -1,
+        music_duration_ms: s.durationMs,
+        rag_icon_visible: false,
+      });
+    };
+
+    const stopTimers = () => {
+      if (progressTimer) {
+        clearInterval(progressTimer);
+        progressTimer = null;
+      }
+    };
+
+    const leave = () => {
+      stopTimers();
+      jukebox.setOnChange(null);
+      jukebox.stop();
+      ctx.transitionTo("sleep");
+    };
+
+    jukebox.setOnChange(() => {
+      if (ctx.currentFlowName === "jukebox") render();
+    });
+
+    onButtonDoubleClick(() => {
+      if (ctx.currentFlowName === "jukebox") leave();
+    });
+    onButtonPressed(() => {
+      pressAt = Date.now();
+    });
+    onButtonReleased(() => {
+      // Ignore the stray release from the quick-menu hold that entered this
+      // mode (no press was registered here yet).
+      if (!pressAt) return;
+      const held = Date.now() - pressAt;
+      pressAt = 0;
+      if (held >= HOLD_PLAYPAUSE_MS) {
+        void jukebox.playPause().then(render);
+      } else {
+        void jukebox.next().then(render);
+      }
+    });
+
+    if (!jukebox.isActive()) {
+      void jukebox.play(0).then(render);
+    } else {
+      render();
+    }
+    progressTimer = setInterval(() => {
+      if (ctx.currentFlowName === "jukebox") render();
+      else stopTimers();
+    }, 1000);
   },
   listening: (ctx: ChatFlowContext) => {
     ctx.enterMusicAfterAnswer = false;

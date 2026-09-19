@@ -45,6 +45,15 @@ import {
   resolveBackupPath,
 } from "../utils/backup";
 import {
+  getStorageRoots,
+  storageList,
+  storageResolveFile,
+  storageDelete,
+  storageMkdir,
+  storageUploadTarget,
+} from "../utils/storage";
+import { jukebox } from "./music-jukebox";
+import {
   connectToEmergencyWifi,
   connectToWifi,
   forgetWifi,
@@ -413,6 +422,113 @@ export class WebAdminServer {
         ctx.body = { ok: true };
       } catch (err: any) {
         ctx.status = 400;
+        ctx.body = { ok: false, error: err?.message || String(err) };
+      }
+    });
+
+    // ---- Music jukebox (Cypher OST) ----
+    router.get("/api/music/tracks", async (ctx) => {
+      ctx.body = { tracks: jukebox.getTracks(), status: jukebox.status() };
+    });
+    router.get("/api/music/status", async (ctx) => {
+      ctx.body = jukebox.status();
+    });
+    router.post("/api/music/play", async (ctx) => {
+      const index = Number((ctx.request.body as any)?.index);
+      const status = await jukebox.play(Number.isFinite(index) ? index : 0);
+      ctx.body = status;
+    });
+    router.post("/api/music/pause", async (ctx) => {
+      ctx.body = jukebox.pause();
+    });
+    router.post("/api/music/resume", async (ctx) => {
+      ctx.body = jukebox.resume();
+    });
+    router.post("/api/music/playpause", async (ctx) => {
+      ctx.body = await jukebox.playPause();
+    });
+    router.post("/api/music/stop", async (ctx) => {
+      ctx.body = jukebox.stop();
+    });
+    router.post("/api/music/next", async (ctx) => {
+      ctx.body = await jukebox.next();
+    });
+    router.post("/api/music/prev", async (ctx) => {
+      ctx.body = await jukebox.prev();
+    });
+
+    // ---- Unified file manager (internal storage + USB) ----
+    router.get("/api/storage/roots", async (ctx) => {
+      ctx.body = { roots: await getStorageRoots() };
+    });
+    router.get("/api/storage/list", async (ctx) => {
+      const root = String(ctx.query.root || "internal");
+      const rel = String(ctx.query.path || "");
+      const res = await storageList(root, rel);
+      ctx.status = res.ok ? 200 : 400;
+      ctx.body = res;
+    });
+    router.get("/api/storage/download", async (ctx) => {
+      const root = String(ctx.query.root || "");
+      const rel = String(ctx.query.path || "");
+      const full = await storageResolveFile(root, rel);
+      if (!full) {
+        ctx.status = 400;
+        ctx.body = { error: "ruta inválida" };
+        return;
+      }
+      let stat;
+      try {
+        stat = fs.statSync(full);
+      } catch {
+        ctx.status = 404;
+        ctx.body = { error: "no existe" };
+        return;
+      }
+      if (!stat.isFile()) {
+        ctx.status = 400;
+        ctx.body = { error: "no es un archivo" };
+        return;
+      }
+      ctx.set("Content-Length", String(stat.size));
+      ctx.type = "application/octet-stream";
+      ctx.set("Content-Disposition", `attachment; filename="${path.basename(full)}"`);
+      ctx.body = fs.createReadStream(full);
+    });
+    router.post("/api/storage/delete", async (ctx) => {
+      const { root, path: rel } = (ctx.request.body as any) || {};
+      const res = await storageDelete(String(root || ""), String(rel || ""));
+      ctx.status = res.ok ? 200 : 400;
+      ctx.body = res;
+    });
+    router.post("/api/storage/mkdir", async (ctx) => {
+      const { root, path: rel, name } = (ctx.request.body as any) || {};
+      const res = await storageMkdir(String(root || ""), String(rel || ""), String(name || ""));
+      ctx.status = res.ok ? 200 : 400;
+      ctx.body = res;
+    });
+    // Raw-body upload: PUT the file bytes directly (avoids a multipart parser).
+    router.put("/api/storage/upload", async (ctx) => {
+      const root = String(ctx.query.root || "");
+      const rel = String(ctx.query.path || "");
+      const filename = String(ctx.query.name || "");
+      const target = await storageUploadTarget(root, rel, filename);
+      if (!target) {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "destino inválido" };
+        return;
+      }
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const out = fs.createWriteStream(target);
+          ctx.req.on("error", reject);
+          out.on("error", reject);
+          out.on("finish", () => resolve());
+          ctx.req.pipe(out);
+        });
+        ctx.body = { ok: true };
+      } catch (err: any) {
+        ctx.status = 500;
         ctx.body = { ok: false, error: err?.message || String(err) };
       }
     });

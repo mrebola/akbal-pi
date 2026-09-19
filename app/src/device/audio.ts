@@ -630,4 +630,5 @@ export {
   stopPlaying,
   releaseAudioPlayer,
   restoreAudioPlayer,
+  getAlsaOutputDevice,
 };

@@ -7,6 +7,7 @@ export type FlowName =
   | "sleep"
   | "camera"
   | "music"
+  | "jukebox"
   | "listening"
   | "wake_listening"
   | "asr"

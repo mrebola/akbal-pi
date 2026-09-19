@@ -6,11 +6,19 @@ const chatLog = document.getElementById("chat-log");
 const chatForm = document.getElementById("chat-form");
 const chatInput = document.getElementById("chat-input");
 const chatSend = document.getElementById("chat-send");
+const chatCancel = document.getElementById("chat-cancel");
 const modelSelect = document.getElementById("model-select");
 const statusPill = document.getElementById("status-pill");
 
 let history = [];
 let sending = false;
+let activeController = null;
+
+function setSendingUi(isSending) {
+  sending = isSending;
+  chatSend.disabled = isSending;
+  chatCancel.classList.toggle("hidden", !isSending);
+}
 
 function addMessage(role, text) {
   const el = document.createElement("div");
@@ -77,14 +85,21 @@ async function sendMessage(text) {
   history.push({ role: "user", content: text });
   addMessage("user", text);
   const assistantEl = addMessage("assistant", "");
-  sending = true;
-  chatSend.disabled = true;
+  // AbortController wired to the Cancelar button (below) and to the
+  // fetch's `signal` — aborting closes the connection to the server, which
+  // (see device/web-admin-server.ts) closes *its* connection to Ollama in
+  // turn, actually stopping the generation instead of leaving it running
+  // unread. See docs/web-ui.md for the incident this fixed.
+  const controller = new AbortController();
+  activeController = controller;
+  setSendingUi(true);
   let fullText = "";
   try {
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ messages: history, model: modelSelect.value }),
+      signal: controller.signal,
     });
     if (!res.ok || !res.body) {
       const errText = await res.text().catch(() => "");
@@ -115,16 +130,26 @@ async function sendMessage(text) {
       }
     }
   } catch (err) {
-    assistantEl.textContent = `(error: ${err.message})`;
-    assistantEl.classList.add("system");
+    if (err.name === "AbortError") {
+      assistantEl.textContent = fullText ? `${fullText}\n\n(cancelado)` : "(cancelado)";
+    } else {
+      assistantEl.textContent = `(error: ${err.message})`;
+      assistantEl.classList.add("system");
+    }
   } finally {
-    sending = false;
-    chatSend.disabled = false;
+    activeController = null;
+    setSendingUi(false);
   }
   if (fullText) {
+    // Keep even a cancelled partial reply in history — a follow-up message
+    // still has the (truncated) context of what was already said.
     history.push({ role: "assistant", content: fullText });
   }
 }
+
+chatCancel.addEventListener("click", () => {
+  activeController?.abort();
+});
 
 chatForm.addEventListener("submit", (e) => {
   e.preventDefault();

@@ -107,6 +107,20 @@ export class WebAdminServer {
     // Streams Ollama's own NDJSON chat response straight through — the
     // frontend (web/admin/app.js) parses one JSON object per line as it
     // arrives, same shape Ollama always returns.
+    //
+    // Two independent safety nets, after a real incident where a stuck
+    // model (huihui_ai/qwen3-abliterated:1.7b, already flagged in
+    // docs/llm-model-selection.md for sometimes looping) ran the Pi's CPU
+    // at ~70% for 45+ minutes with no way to stop it:
+    //   1. num_predict caps how many tokens a single reply can ever
+    //      generate, so a repetition loop can't run forever even if nobody
+    //      notices or clicks cancel.
+    //   2. Closing the browser connection (cancel button, tab close, lost
+    //      network) aborts *this* request to Ollama — Ollama cancels
+    //      generation as soon as its caller disconnects, so the
+    //      llama-server process actually stops instead of continuing to
+    //      burn CPU on an orphaned response nobody's reading.
+    const MAX_PREDICT_TOKENS = parseInt(process.env.WEB_ADMIN_CHAT_MAX_TOKENS || "2048", 10);
     router.post("/api/chat", async (ctx) => {
       const body = ctx.request.body as any;
       const messages = Array.isArray(body?.messages) ? body.messages : [];
@@ -116,16 +130,38 @@ export class WebAdminServer {
         ctx.body = { error: "messages requerido" };
         return;
       }
+      const abortController = new AbortController();
+      const onClientGone = () => abortController.abort();
+      ctx.req.on("close", onClientGone);
+      ctx.req.on("aborted", onClientGone);
       try {
         const response = await axios.post(
           `${ollamaEndpoint}/api/chat`,
-          { model, messages, stream: true },
-          { responseType: "stream" },
+          { model, messages, stream: true, options: { num_predict: MAX_PREDICT_TOKENS } },
+          { responseType: "stream", signal: abortController.signal },
         );
         ctx.respond = false;
         ctx.res.writeHead(200, { "Content-Type": "application/x-ndjson" });
         response.data.pipe(ctx.res);
+        response.data.on("error", () => {
+          // An unhandled 'error' on a Readable stream crashes the process —
+          // Ollama closing the connection after we aborted it lands here,
+          // not in the outer catch, since piping already started.
+          ctx.req.off("close", onClientGone);
+          ctx.req.off("aborted", onClientGone);
+          ctx.res.end();
+        });
+        response.data.on("close", () => {
+          ctx.req.off("close", onClientGone);
+          ctx.req.off("aborted", onClientGone);
+        });
       } catch (err: any) {
+        ctx.req.off("close", onClientGone);
+        ctx.req.off("aborted", onClientGone);
+        if (axios.isCancel(err) || abortController.signal.aborted) {
+          // Client already gone — nothing to send a response to.
+          return;
+        }
         ctx.status = 502;
         ctx.body = { error: err?.message || String(err) };
       }

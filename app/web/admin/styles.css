@@ -621,3 +621,126 @@ button.secondary {
   .msg { max-width: 92%; }
   .topbar { flex-wrap: wrap; }
 }
+
+/* ---- Wardriving (tab-wardrive) ---- */
+
+.wd-mode-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+
+.wd-banner-text { flex: 1; min-width: 0; }
+
+.wd-banner-title {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: #ff9500;
+}
+
+.wd-banner-title.on { color: var(--danger); }
+
+.wd-iface { color: var(--text-secondary); font-weight: 400; }
+
+.wd-banner-status { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+
+.wd-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.wd-danger {
+  background: transparent;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+}
+
+.wd-danger:hover { background: rgba(255, 107, 107, 0.12); }
+
+.wd-list-wrap { overflow-x: auto; }
+
+.wd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.wd-table th {
+  text-align: left;
+  color: var(--text-secondary);
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.wd-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid #161a17;
+  white-space: nowrap;
+}
+
+.wd-table .wd-ssid { color: var(--accent); }
+.wd-table .wd-bssid { color: var(--text-secondary); }
+.wd-strong { color: var(--accent); }
+.wd-mid { color: #ffd166; }
+.wd-weak { color: var(--danger); }
+
+.wd-status-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.wd-status-running { color: #ffd166; border-color: #ffd166; }
+.wd-status-captured { color: var(--accent); border-color: var(--accent); }
+.wd-status-failed { color: var(--danger); border-color: var(--danger); }
+
+.wd-table button { font-size: 11px; padding: 2px 8px; margin-right: 4px; }
+
+.wd-session-block {
+  margin-top: 16px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.wd-session-title {
+  font-size: 13px;
+  color: var(--text-secondary);
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+
+.wd-session-list { list-style: none; padding: 0; margin: 0 0 8px; }
+
+.wd-session-list li {
+  font-size: 12px;
+  padding: 3px 0;
+  color: var(--text-primary);
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.wd-session-list .wd-files { color: var(--text-secondary); }
+
+.wd-note { font-size: 11px; line-height: 1.5; }
+
+.wd-note code {
+  background: var(--bg-raised);
+  padding: 1px 5px;
+  border-radius: 4px;
+}

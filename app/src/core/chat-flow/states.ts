@@ -195,16 +195,18 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       emoji: "😴",
       RGB: "#000055",
       rag_icon_visible: false,
-      // Always clear the menu-carousel/help/radar overlay here, since
-      // "sleep" is the common return point from every flow — including the
-      // idle timeouts, which have no other cleanup step. radar_ui in
-      // particular has to be cleared explicitly: render_frame checks it
-      // independently of model_ui/help_ui, so leaving it truthy would keep
-      // the radar screen stuck on top forever after returning here.
+      // Always clear the menu-carousel/help/radar/wardrive overlay here,
+      // since "sleep" is the common return point from every flow —
+      // including the idle timeouts, which have no other cleanup step.
+      // radar_ui/wardrive_ui in particular have to be cleared explicitly:
+      // render_frame checks them independently of model_ui/help_ui, so
+      // leaving either truthy would keep that screen stuck on top forever
+      // after returning here.
       model_ui: "",
       model_ui_percent: 0,
       help_ui: "",
       radar_ui: "",
+      wardrive_ui: "",
       top_bar_mode: isAgentMode() ? "agent" : "local",
       ...(getCurrentStatus().text.endsWith("Escuchando...") || !getCurrentStatus().text
         ? { text: "Click: menú · Mantén: hablar" }

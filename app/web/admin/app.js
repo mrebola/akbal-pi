@@ -887,3 +887,208 @@ void loadModels();
 // Battery (and the rest of /api/status) refreshes on its own — no manual
 // reload needed to see the % move.
 setInterval(() => void loadStatus(), 60000);
+
+// ---- Wardriving (tab-wardrive) ----
+// UI only — attack authorization lives server-side in the service's
+// allowlist (src/wardrive/service.ts). This tab mirrors /api/wardrive/*
+// state: enter/exit mode, per-target attack buttons (only for allowlisted
+// BSSIDs), "attack all authorized", global cancel, and live session
+// progress. Handshake files are never fetched here — they stay in the
+// device's ~/wardrive-sessions/.
+
+const wdModeBanner = document.getElementById("wd-mode-banner");
+const wdBannerTitle = wdModeBanner.querySelector(".wd-banner-title");
+const wdIface = document.getElementById("wd-iface");
+const wdBannerStatus = document.getElementById("wd-banner-status");
+const wdEnterBtn = document.getElementById("wd-enter-btn");
+const wdExitBtn = document.getElementById("wd-exit-btn");
+const wdError = document.getElementById("wd-error");
+const wdScanBtn = document.getElementById("wd-scan-btn");
+const wdAttackAllBtn = document.getElementById("wd-attack-all-btn");
+const wdCancelBtn = document.getElementById("wd-cancel-btn");
+const wdAttackStatus = document.getElementById("wd-attack-status");
+const wdTableBody = document.getElementById("wd-table-body");
+const wdSessionId = document.getElementById("wd-session-id");
+const wdSessionList = document.getElementById("wd-session-list");
+
+let wdStatus = null;
+let wdTimer = null;
+
+async function wdApi(path, body) {
+  const res = await apiFetch(`/api/wardrive/${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return res.json();
+}
+
+function wdDbmClass(rssi) {
+  if (rssi >= -55) return "wd-strong";
+  if (rssi >= -75) return "wd-mid";
+  return "wd-weak";
+}
+
+function wdRender() {
+  if (!wdStatus) return;
+  const on = wdStatus.mode !== "inactive";
+  const attacking = wdStatus.mode === "attacking";
+  wdBannerTitle.classList.toggle("on", on);
+  wdIface.textContent = wdStatus.iface ? `· ${wdStatus.iface.toUpperCase()}` : "";
+  wdBannerStatus.textContent = on
+    ? `Activo — LLM ${wdStatus.modelsUnloaded ? "descargado de RAM" : "en RAM"} · ${wdStatus.allowlist.length} objetivo(s) autorizado(s)`
+    : "Inactivo — la Pi funciona como Akbal normal";
+  wdEnterBtn.classList.toggle("hidden", on);
+  wdExitBtn.classList.toggle("hidden", !on);
+  wdScanBtn.classList.toggle("hidden", !on);
+  wdAttackAllBtn.classList.toggle("hidden", !on || attacking);
+  wdCancelBtn.classList.toggle("hidden", !attacking);
+  wdAttackStatus.textContent = attacking
+    ? `Atacando ${wdStatus.session?.currentBssid || "..."}`
+    : on
+      ? ""
+      : "";
+  wdSessionId.textContent = wdStatus.session ? `· ${wdStatus.session.id}` : "";
+  if (wdError.textContent && wdStatus.error) wdError.textContent = wdStatus.error;
+
+  // Session captures list
+  wdSessionList.innerHTML = "";
+  if (wdStatus.session) {
+    for (const t of wdStatus.session.targets) {
+      const li = document.createElement("li");
+      const files = t.files.map((f) => f.split("/").pop()).join(", ") || "—";
+      li.innerHTML = `<span class="wd-status-badge wd-status-${t.status}">${t.status}</span>` +
+        `<span>${t.ssid || t.bssid}</span>` +
+        `<span class="wd-files">${t.method || ""} ${files}</span>`;
+      wdSessionList.appendChild(li);
+    }
+    if (wdStatus.session.targets.length === 0) {
+      wdSessionList.innerHTML = '<li class="muted">Sin objetivos aún</li>';
+    }
+  }
+
+  // Air targets table
+  wdTableBody.innerHTML = "";
+  if (!on) {
+    wdTableBody.innerHTML = '<tr><td colspan="7" class="muted">Modo inactivo — entra al modo wardriving para escanear</td></tr>';
+    return;
+  }
+  if ((wdStatus.targets || []).length === 0) {
+    wdTableBody.innerHTML = '<tr><td colspan="7" class="muted">Escaneando el aire...</td></tr>';
+    return;
+  }
+  for (const t of wdStatus.targets) {
+    const tr = document.createElement("tr");
+    const sessTarget = wdStatus.session?.targets.find((s) => s.bssid === t.bssid);
+    const badge = sessTarget
+      ? `<span class="wd-status-badge wd-status-${sessTarget.status}">${sessTarget.status}${sessTarget.method ? "·" + sessTarget.method : ""}</span>`
+      : '<span class="wd-status-badge">—</span>';
+    const auth = t.inAllowlist;
+    const actions = auth
+      ? (attacking
+          ? "—"
+          : `<button data-act="attack" data-bssid="${t.bssid}">Hack</button>` +
+            `<button data-act="disallow" data-bssid="${t.bssid}" class="secondary">Quitar</button>`)
+      : `<button data-act="allow" data-bssid="${t.bssid}">Autorizar</button>`;
+    tr.innerHTML =
+      `<td class="wd-ssid">${escapeHtml(t.ssid || "(oculta)")}</td>` +
+      `<td class="wd-bssid">${t.bssid}</td>` +
+      `<td>${t.channel}</td>` +
+      `<td class="${wdDbmClass(t.rssi)}">${t.rssi}</td>` +
+      `<td>${t.security}</td>` +
+      `<td>${badge}</td>` +
+      `<td>${actions}</td>`;
+    wdTableBody.appendChild(tr);
+  }
+}
+
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = String(text ?? "");
+  return div.innerHTML;
+}
+
+wdTableBody.addEventListener("click", async (ev) => {
+  const btn = ev.target.closest("button[data-act]");
+  if (!btn) return;
+  const bssid = btn.dataset.bssid;
+  const act = btn.dataset.act;
+  wdError.textContent = "";
+  if (act === "allow") {
+    const res = await wdApi("allowlist", { bssid });
+    if (res?.error) wdError.textContent = res.error;
+    void wdRefresh();
+  } else if (act === "disallow") {
+    const res = await wdApi("allowlist/remove", { bssid });
+    if (res?.error) wdError.textContent = res.error;
+    void wdRefresh();
+  } else if (act === "attack") {
+    const res = await wdApi("attack/one", { bssid });
+    if (res?.error) wdError.textContent = res.error;
+    void wdRefresh();
+  }
+});
+
+wdEnterBtn.addEventListener("click", async () => {
+  wdError.textContent = "";
+  const res = await wdApi("enter");
+  if (res?.error) wdError.textContent = res.error;
+  void wdRefresh();
+});
+
+wdExitBtn.addEventListener("click", async () => {
+  wdError.textContent = "";
+  const res = await wdApi("exit");
+  if (res?.error) wdError.textContent = res.error;
+  void wdRefresh();
+});
+
+wdScanBtn.addEventListener("click", () => void wdRefresh(true));
+
+wdAttackAllBtn.addEventListener("click", async () => {
+  wdError.textContent = "";
+  const bssids = (wdStatus.targets || [])
+    .filter((t) => t.inAllowlist)
+    .map((t) => t.bssid);
+  if (bssids.length === 0) {
+    wdError.textContent = "No hay objetivos autorizados visibles";
+    return;
+  }
+  const res = await wdApi("attack/many", { bssids });
+  if (res?.error) wdError.textContent = res.error;
+  void wdRefresh();
+});
+
+wdCancelBtn.addEventListener("click", async () => {
+  await wdApi("attack/cancel");
+  void wdRefresh();
+});
+
+async function wdRefresh(forceScan = false) {
+  if (forceScan && wdStatus?.mode === "ready") {
+    // A passive nudge to NetworkManager's own scan doesn't disturb the
+    // monitor interface; WIFIRADAR's capture is the actual data source.
+    await fetch("/api/wifi/scan-detailed").catch(() => {});
+  }
+  const res = await fetch("/api/wardrive/status");
+  if (res.ok) {
+    wdStatus = await res.json();
+    wdRender();
+  }
+}
+
+// The wardrive tab polls; other tabs leave it alone (cheap GET only).
+for (const btn of document.querySelectorAll(".tab-btn")) {
+  if (btn.dataset.tab === "wardrive") {
+    btn.addEventListener("click", () => {
+      void wdRefresh();
+      if (!wdTimer) wdTimer = setInterval(() => {
+        const active = document.getElementById("tab-wardrive")?.classList.contains("active");
+        if (active) void wdRefresh();
+      }, 2000);
+    });
+  }
+}
+
+// Boot into a live state if the user lands directly on #wardrive.
+if (window.location.hash === "#wardrive") void wdRefresh();

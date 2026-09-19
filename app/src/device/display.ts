@@ -91,6 +91,15 @@ export interface Status {
   // chatbot-ui.py) showing whether the device is answering via OpenClaw or
   // the local model — see docs/agent-mode.md.
   top_bar_mode: "local" | "agent" | "";
+  // WARDRIVE overlay (see chat-flow/wardrive-mode.ts): a dedicated screen
+  // type like radar_ui, drawn by chatbot-ui.py's render_wardrive_screen.
+  // "view" draws the wardrive scene (title + status line + captured/total
+  // counters); "" is the normal Akbal UI.
+  wardrive_ui: "" | "view";
+  wardrive_label: string; // e.g. "WARDRIVE" / "PMKID hackwiseWIFI…" (bottom band caption)
+  wardrive_status_text: string; // one-line status: "Escaneando", "Atacando", etc.
+  wardrive_captured: number;
+  wardrive_total: number;
 }
 
 export class WhisplayDisplay {
@@ -135,6 +144,11 @@ export class WhisplayDisplay {
     radar_ui_count: 0,
     radar_ui_channel: 0,
     top_bar_mode: "",
+    wardrive_ui: "",
+    wardrive_label: "",
+    wardrive_status_text: "",
+    wardrive_captured: 0,
+    wardrive_total: 0,
   };
 
   private client = null as Socket | null;
@@ -503,6 +517,11 @@ export class WhisplayDisplay {
       radar_ui_count,
       radar_ui_channel,
       top_bar_mode,
+      wardrive_ui,
+      wardrive_label,
+      wardrive_status_text,
+      wardrive_captured,
+      wardrive_total,
     } = {
       ...this.currentStatus,
       ...normalizedStatus,
@@ -553,6 +572,11 @@ export class WhisplayDisplay {
     this.currentStatus.radar_ui_count = radar_ui_count;
     this.currentStatus.radar_ui_channel = radar_ui_channel;
     this.currentStatus.top_bar_mode = top_bar_mode;
+    this.currentStatus.wardrive_ui = wardrive_ui;
+    this.currentStatus.wardrive_label = wardrive_label;
+    this.currentStatus.wardrive_status_text = wardrive_status_text;
+    this.currentStatus.wardrive_captured = wardrive_captured;
+    this.currentStatus.wardrive_total = wardrive_total;
 
     const changedValuesObj = Object.fromEntries(changedValues);
     changedValuesObj.brightness = 100;

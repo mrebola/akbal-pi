@@ -10,6 +10,7 @@ import serve from "koa-static";
 import axios from "axios";
 import { WebSocketServer, WebSocket } from "ws";
 import { getWifiRadarSnapshot } from "../wifiradar/service";
+import { getWardriveService } from "../wardrive/service";
 import {
   getCurrentModel,
   isModelLoaded,
@@ -395,6 +396,67 @@ export class WebAdminServer {
         return;
       }
       ctx.body = await getSavedWifiPassword(ssid);
+    });
+
+    // ── WARDRIVE (thesis/lab handshake capture) ──
+    // All routes gate through the same session cookie as the rest of the
+    // admin UI. Attack authorization is the service's allowlist — see
+    // wardrive/service.ts. No artifacts (handshakes, pcaps, hashes) are
+    // ever served here: they live only in ~/wardrive-sessions/ on the
+    // device, and this API only reports paths/names, never file contents.
+    const wardrive = getWardriveService();
+
+    router.get("/api/wardrive/status", (ctx) => {
+      ctx.body = wardrive.getStatus();
+    });
+
+    router.post("/api/wardrive/enter", async (ctx) => {
+      ctx.body = await wardrive.enter();
+    });
+
+    router.post("/api/wardrive/exit", async (ctx) => {
+      ctx.body = await wardrive.exit();
+    });
+
+    router.post("/api/wardrive/allowlist", (ctx) => {
+      const { bssid } = (ctx.request.body as any) || {};
+      const ok = wardrive.addToAllowlist(String(bssid || ""));
+      if (!ok) {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "bssid inválido" };
+        return;
+      }
+      ctx.body = { ok: true };
+    });
+
+    router.post("/api/wardrive/allowlist/remove", (ctx) => {
+      const { bssid } = (ctx.request.body as any) || {};
+      const ok = wardrive.removeFromAllowlist(String(bssid || ""));
+      if (!ok) {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "bssid inválido o atacándose ahora" };
+        return;
+      }
+      ctx.body = { ok: true };
+    });
+
+    router.post("/api/wardrive/attack/one", async (ctx) => {
+      const { bssid } = (ctx.request.body as any) || {};
+      ctx.body = await wardrive.attackOne(String(bssid || ""));
+    });
+
+    router.post("/api/wardrive/attack/many", async (ctx) => {
+      const { bssids } = (ctx.request.body as any) || {};
+      if (!Array.isArray(bssids)) {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "bssids (array) requerido" };
+        return;
+      }
+      ctx.body = await wardrive.attackMany(bssids.map(String));
+    });
+
+    router.post("/api/wardrive/attack/cancel", (ctx) => {
+      ctx.body = wardrive.cancelAttacks();
     });
 
     router.get("/api/usb/devices", async (ctx) => {

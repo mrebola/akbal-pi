@@ -134,6 +134,11 @@ current_radar_ui = ""
 current_radar_ui_points = []
 current_radar_ui_count = 0
 current_radar_ui_channel = 0
+current_wardrive_ui = ""
+current_wardrive_label = ""
+current_wardrive_status_text = ""
+current_wardrive_captured = 0
+current_wardrive_total = 0
 current_top_bar_mode = ""
 camera_mode = False
 camera_capture_image_path = ""
@@ -181,6 +186,7 @@ class RenderThread(threading.Thread):
         self.help_ui_hint_font = ImageFont.truetype(self.font_path, 12)
         self.help_ui_cache_key = None
         self.top_bar_mode_font = ImageFont.truetype(self.font_path, 11)
+        self.wardrive_ui_cache_key = None
         self.radar_ui_cache_key = None
 
     def render_init_screen(self):
@@ -227,6 +233,10 @@ class RenderThread(threading.Thread):
             return self.render_radar_screen(apply_tool_placeholders(text))
         if self.radar_ui_cache_key is not None:
             self.radar_ui_cache_key = None
+        if current_wardrive_ui:
+            return self.render_wardrive_screen(apply_tool_placeholders(text))
+        if self.wardrive_ui_cache_key is not None:
+            self.wardrive_ui_cache_key = None
         if current_image_path not in [None, ""]:
             # Try to load image from path
             if current_image is not None:
@@ -478,6 +488,59 @@ class RenderThread(threading.Thread):
         self.render_bottom_text(text)
         return False  # event-driven: Node pushes a new frame on every change
 
+    def render_wardrive_screen(self, text):
+        """Physical-screen WARDRIVE overlay (chat-flow/wardrive-mode.ts):
+        a status panel replacing the character GIF while the device is in
+        wardriving mode — the radio is held by the capture session, the LLM
+        is unloaded, and this screen makes that obvious at a glance (red
+        while attacking, amber while idle/scanning). Shows the capture
+        interface, one-line status, and captured/total handshake counters
+        for the session. All values are pushed by Node (wardrive-mode.ts);
+        this only renders and caches."""
+        self.render_top_bar()
+
+        label = current_wardrive_label or "WARDRIVE"
+        status_line = current_wardrive_status_text or "..."
+        captured = current_wardrive_captured or 0
+        total = current_wardrive_total or 0
+        attacking = "Atacando" in status_line or "PMKID:" in status_line or "Deauth:" in status_line
+        accent = (255, 90, 70, 255) if attacking else (255, 170, 60, 255)
+
+        center_x = (VIDEO_WIDTH - SAFE_AREA_RIGHT_INSET) // 2
+        cache_key = (label, status_line, captured, total)
+        if cache_key != self.wardrive_ui_cache_key:
+            self.wardrive_ui_cache_key = cache_key
+            frame = Image.new("RGBA", (VIDEO_WIDTH, VIDEO_HEIGHT), (0, 0, 0, 255))
+            draw = ImageDraw.Draw(frame)
+
+            self._draw_centered(draw, label, self.model_ui_title_font, 10, center_x, accent)
+            # Divider under the title, same visual language as the radar rings.
+            draw.line((18, 30, VIDEO_WIDTH - SAFE_AREA_RIGHT_INSET - 18, 30), fill=ACCENT_DIM, width=1)
+
+            self._draw_centered(draw, status_line[:34], self.model_ui_label_font, 52, center_x, TEXT_PRIMARY)
+            self._draw_centered(
+                draw,
+                f"Handshakes  {captured} / {total}",
+                self.model_ui_hint_font,
+                92,
+                center_x,
+                TEXT_SECONDARY,
+            )
+            self._draw_centered(
+                draw,
+                "LLM en pausa · pantalla bajo captura",
+                self.model_ui_hint_font,
+                VIDEO_HEIGHT - 40,
+                center_x,
+                ACCENT_DIM,
+            )
+
+            rgb565_data = ImageUtils.image_to_rgb565(frame, VIDEO_WIDTH, VIDEO_HEIGHT)
+            self.whisplay.draw_image(0, TOP_BAR_HEIGHT, VIDEO_WIDTH, VIDEO_HEIGHT, rgb565_data)
+
+        self.render_bottom_text(text)
+        return False  # event-driven: Node pushes a new frame on every change
+
     def _draw_centered(self, draw, text, font, y, center_x=None, fill=TEXT_PRIMARY):
         cx = center_x if center_x is not None else VIDEO_WIDTH // 2
         bbox = draw.textbbox((0, 0), text, font=font)
@@ -629,6 +692,8 @@ def update_display_data(status=None, emoji=None, text=None,
                   model_ui_index=None, model_ui_total=None, model_ui_active=None, model_ui_qr_path=None,
                   help_ui=None, help_ui_body=None, help_ui_page=None, help_ui_total=None,
                   radar_ui=None, radar_ui_points=None, radar_ui_count=None, radar_ui_channel=None,
+                  wardrive_ui=None, wardrive_label=None, wardrive_status_text=None,
+                  wardrive_captured=None, wardrive_total=None,
                   top_bar_mode=None):
     global current_status, current_emoji, current_text, current_battery_level
     global current_terminal_text
@@ -645,6 +710,8 @@ def update_display_data(status=None, emoji=None, text=None,
     global current_model_ui_index, current_model_ui_total, current_model_ui_active, current_model_ui_qr_path
     global current_help_ui, current_help_ui_body, current_help_ui_page, current_help_ui_total
     global current_radar_ui, current_radar_ui_points, current_radar_ui_count, current_radar_ui_channel
+    global current_wardrive_ui, current_wardrive_label, current_wardrive_status_text
+    global current_wardrive_captured, current_wardrive_total
     global current_top_bar_mode
     global render_thread
 
@@ -791,6 +858,22 @@ def update_display_data(status=None, emoji=None, text=None,
             current_radar_ui_channel = int(radar_ui_channel)
         except (TypeError, ValueError):
             print(f"[Display] Invalid radar_ui_channel payload: {radar_ui_channel}")
+    if wardrive_ui is not None:
+        current_wardrive_ui = wardrive_ui
+    if wardrive_label is not None:
+        current_wardrive_label = wardrive_label or ""
+    if wardrive_status_text is not None:
+        current_wardrive_status_text = wardrive_status_text or ""
+    if wardrive_captured is not None:
+        try:
+            current_wardrive_captured = int(wardrive_captured)
+        except (TypeError, ValueError):
+            print(f"[Display] Invalid wardrive_captured payload: {wardrive_captured}")
+    if wardrive_total is not None:
+        try:
+            current_wardrive_total = int(wardrive_total)
+        except (TypeError, ValueError):
+            print(f"[Display] Invalid wardrive_total payload: {wardrive_total}")
     if top_bar_mode is not None:
         current_top_bar_mode = top_bar_mode
     if render_thread is not None:

@@ -16,6 +16,7 @@
       <button class="tab-btn active" data-tab="chat">Chat</button>
       <button class="tab-btn" data-tab="wifi">Wifi</button>
       <button class="tab-btn" data-tab="usb">USB</button>
+      <button class="tab-btn" data-tab="wardrive">Wardriving</button>
       <a href="/wifiradar" class="tab-link" title="Visualización WiFi en 3D">WIFIRADAR</a>
     </nav>
     <div class="status" id="status-pill">—</div>
@@ -123,6 +124,54 @@
           <div id="usb-breadcrumb" class="usb-breadcrumb"></div>
         </div>
         <ul id="usb-file-list" class="usb-file-list"></ul>
+      </div>
+    </section>
+
+    <section id="tab-wardrive" class="tab-panel">
+      <div class="wd-mode-banner" id="wd-mode-banner">
+        <div class="wd-banner-text">
+          <div class="wd-banner-title">MODO WARDRIVE <span id="wd-iface" class="wd-iface"></span></div>
+          <div id="wd-banner-status" class="wd-banner-status">—</div>
+        </div>
+        <button id="wd-exit-btn" class="secondary hidden">Salir de modo wardriving</button>
+        <button id="wd-enter-btn" class="hidden">Entrar en modo wardriving</button>
+      </div>
+
+      <div id="wd-error" class="error"></div>
+
+      <div class="wd-toolbar">
+        <button id="wd-scan-btn">Escanear redes</button>
+        <button id="wd-attack-all-btn" class="wd-danger hidden">Atacar todos los autorizados</button>
+        <button id="wd-cancel-btn" class="secondary hidden">Cancelar ataques</button>
+        <span id="wd-attack-status" class="muted"></span>
+      </div>
+
+      <div class="wd-list-wrap">
+        <table class="wd-table">
+          <thead>
+            <tr>
+              <th>SSID</th>
+              <th>BSSID</th>
+              <th>CH</th>
+              <th>dBm</th>
+              <th>SEG</th>
+              <th>ESTADO</th>
+              <th>ACCIONES</th>
+            </tr>
+          </thead>
+          <tbody id="wd-table-body">
+            <tr><td colspan="7" class="muted">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="wd-session-block">
+        <div class="wd-session-title">SESIÓN DE CAPTURA <span id="wd-session-id" class="muted"></span></div>
+        <ul id="wd-session-list" class="wd-session-list"></ul>
+        <div class="wd-note muted">
+          Capturas en <code>~/wardrive-sessions/&lt;sesión&gt;/</code> en la Pi (nunca en este repo).
+          Solo se ataca lo que esté en la lista de objetivos del laboratorio.
+        </div>
       </div>
     </section>
   </main>

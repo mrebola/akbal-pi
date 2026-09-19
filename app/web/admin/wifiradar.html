@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Akbal · WIFIRADAR</title>
+  <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="wifiradar.css" />
   <script type="importmap">
     { "imports": { "three": "./vendor/three.module.min.js" } }
@@ -17,27 +18,60 @@
     <div class="boot-sub" id="boot-sub">inicializando radar...</div>
   </div>
 
-  <header class="as-toolbar">
-    <a href="/" class="as-back" title="Volver al panel">← AKBAL</a>
-    <div class="as-title">WIFIRADAR</div>
-    <span id="demo-badge" class="demo-badge hidden">DEMO</span>
+  <!-- Same topbar as the rest of the admin UI (see index.html) — same
+       classes from styles.css, so it looks and behaves identically: brand,
+       nav back to the other tabs, live device status/battery/stats,
+       logout. Kept, not replaced, per the point of this page still being
+       part of the same app. Wrapped together with the radar-specific
+       controls bar below in one normal-flow header — wifiradar.js measures
+       its real rendered height into --header-height so the HUD/side panel
+       overlays always start right after it, however tall it ends up
+       being (2x avatar, text wrapping on a narrow screen, etc). -->
+  <div id="wifiradar-header">
+    <header class="topbar">
+      <div class="brand-group">
+        <img id="avatar" class="avatar" src="/avatar/standing.gif" alt="Akbal" />
+        <div class="brand">AKBAL</div>
+      </div>
+      <nav class="tabs">
+        <a href="/#chat" class="tab-link">Chat</a>
+        <a href="/#wifi" class="tab-link">Wifi</a>
+        <a href="/#usb" class="tab-link">USB</a>
+        <span class="tab-link active">WIFIRADAR</span>
+      </nav>
+      <div class="status" id="status-pill">—</div>
+      <div class="sys-stats" id="sys-stats" title="Recursos del sistema">
+        <span class="sys-stat" id="stat-cpu">CPU —</span>
+        <span class="sys-stat" id="stat-ram">RAM —</span>
+        <span class="sys-stat" id="stat-disk">Disco —</span>
+      </div>
+      <div class="battery-indicator" id="battery-indicator" title="Batería">
+        <span id="battery-icon">🔋</span>
+        <span id="battery-pct">—</span>
+      </div>
+      <button id="logout-btn" class="secondary logout-btn" title="Cerrar sesión">Salir</button>
+    </header>
 
-    <div class="as-search">
-      <input id="search-input" type="text" placeholder="buscar SSID o BSSID..." autocomplete="off" />
-    </div>
+    <div class="as-toolbar">
+      <span id="demo-badge" class="demo-badge hidden">DEMO</span>
 
-    <div class="as-controls">
-      <button id="live-pause-btn" class="as-btn active" title="Pausar/reanudar el stream">LIVE</button>
-      <button id="reset-view-btn" class="as-btn" title="Restablecer cámara">RESET VIEW</button>
-      <button id="dim-toggle-btn" class="as-btn" title="Alternar 2D/3D">3D</button>
-      <select id="quality-select" class="as-select" title="Calidad gráfica">
-        <option value="auto">AUTO</option>
-        <option value="low">LOW</option>
-        <option value="medium">MEDIUM</option>
-        <option value="high">HIGH</option>
-      </select>
+      <div class="as-search">
+        <input id="search-input" type="text" placeholder="buscar SSID o BSSID..." autocomplete="off" />
+      </div>
+
+      <div class="as-controls">
+        <button id="live-pause-btn" class="as-btn active" title="Pausar/reanudar el stream">LIVE</button>
+        <button id="reset-view-btn" class="as-btn" title="Restablecer cámara">RESET VIEW</button>
+        <button id="dim-toggle-btn" class="as-btn" title="Alternar 2D/3D">3D</button>
+        <select id="quality-select" class="as-select" title="Calidad gráfica">
+          <option value="auto">AUTO</option>
+          <option value="low">LOW</option>
+          <option value="medium">MEDIUM</option>
+          <option value="high">HIGH</option>
+        </select>
+      </div>
     </div>
-  </header>
+  </div>
 
   <div class="hud-topleft" id="hud">
     <div class="hud-row"><span class="hud-label">APs</span><span class="hud-value" id="hud-aps">0</span></div>

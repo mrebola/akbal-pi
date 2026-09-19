@@ -1,14 +1,18 @@
+/* Loaded after styles.css (see wifiradar.html) — reuses its variables
+   (--bg, --bg-raised, --border, --text-primary/secondary, --accent,
+   --danger, .topbar, .tab-link, .battery-indicator, etc.) for the shared
+   topbar and the general palette, so this page reads as part of the same
+   app instead of a differently-themed one-off. --as-accent below used to
+   be its own cyan; it's the same green --accent now, kept as a separate
+   variable only because it's referenced by name throughout this file. */
 :root {
-  --as-bg: #04070a;
-  --as-panel: rgba(6, 14, 18, 0.82);
-  --as-border: rgba(56, 224, 255, 0.25);
-  --as-cyan: #38e0ff;
-  --as-blue: #2b6dff;
-  --as-green: #4dffa0;
+  --as-panel: rgba(9, 15, 11, 0.82);
+  --as-border: var(--accent-dim, #234a30);
+  --as-accent: var(--accent, #50ff78);
   --as-warning: #ffd166;
-  --as-alert: #ff4d5e;
-  --as-text: #d7f6ff;
-  --as-text-dim: #6f92a0;
+  --as-alert: var(--danger, #ff6b6b);
+  --as-text: var(--text-primary, #ececec);
+  --as-text-dim: var(--text-secondary, #969ca1);
 }
 
 * { box-sizing: border-box; }
@@ -18,9 +22,8 @@ html, body {
   height: 100%;
   width: 100%;
   overflow: hidden;
-  background: var(--as-bg);
+  background: var(--bg, #0b0d0f);
   color: var(--as-text);
-  font-family: "Courier New", Courier, monospace;
 }
 
 #scene {
@@ -36,12 +39,22 @@ html, body {
 
 .hidden { display: none !important; }
 
+/* ---- header (topbar + radar controls, stacked, normal flow — see
+   wifiradar.js for how --header-height gets set from their real
+   rendered height, so the overlays below always start right after
+   them regardless of how tall the topbar ends up being) ---- */
+
+#wifiradar-header {
+  position: relative;
+  z-index: 20;
+}
+
 /* ---- boot overlay ---- */
 
 .boot-overlay {
   position: fixed;
   inset: 0;
-  background: #04070a;
+  background: var(--bg, #04070a);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -52,13 +65,15 @@ html, body {
 }
 
 .boot-text {
+  font-family: "Courier New", Courier, monospace;
   font-size: 22px;
   letter-spacing: 0.2em;
-  color: var(--as-cyan);
-  text-shadow: 0 0 14px rgba(56, 224, 255, 0.7);
+  color: var(--as-accent);
+  text-shadow: 0 0 14px rgba(80, 255, 120, 0.6);
 }
 
 .boot-sub {
+  font-family: "Courier New", Courier, monospace;
   font-size: 12px;
   color: var(--as-text-dim);
   letter-spacing: 0.08em;
@@ -68,7 +83,7 @@ html, body {
   display: inline-block;
   width: 9px;
   height: 16px;
-  background: var(--as-cyan);
+  background: var(--as-accent);
   margin-left: 6px;
   vertical-align: -3px;
   animation: as-blink 1s steps(1) infinite;
@@ -76,42 +91,17 @@ html, body {
 
 @keyframes as-blink { 50% { opacity: 0; } }
 
-/* ---- toolbar ---- */
+/* ---- radar controls bar (sits right below .topbar, not floating over
+   the scene like before) ---- */
 
 .as-toolbar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 20;
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 10px 16px;
-  background: linear-gradient(to bottom, rgba(4, 8, 11, 0.92), rgba(4, 8, 11, 0));
-  pointer-events: none;
-}
-
-.as-toolbar > * { pointer-events: auto; }
-
-.as-back {
-  color: var(--as-text-dim);
-  text-decoration: none;
-  font-size: 12px;
-  letter-spacing: 0.05em;
-  border: 1px solid var(--as-border);
-  border-radius: 6px;
-  padding: 6px 10px;
-  background: var(--as-panel);
-}
-
-.as-back:hover { color: var(--as-cyan); border-color: var(--as-cyan); }
-
-.as-title {
-  font-size: 15px;
-  letter-spacing: 0.3em;
-  color: var(--as-cyan);
-  text-shadow: 0 0 10px rgba(56, 224, 255, 0.5);
+  padding: 8px 16px;
+  background: var(--bg-raised, #15181b);
+  border-bottom: 1px solid var(--border, #262b30);
+  font-family: "Courier New", Courier, monospace;
 }
 
 .demo-badge {
@@ -122,14 +112,14 @@ html, body {
   border-radius: 4px;
   padding: 3px 8px;
   font-weight: 700;
-  box-shadow: 0 0 10px rgba(255, 209, 102, 0.6);
+  box-shadow: 0 0 10px rgba(255, 209, 102, 0.5);
 }
 
 .as-search { flex: 1; max-width: 320px; }
 
 .as-search input {
   width: 100%;
-  background: var(--as-panel);
+  background: var(--bg, #0b0d0f);
   border: 1px solid var(--as-border);
   color: var(--as-text);
   font-family: inherit;
@@ -139,7 +129,7 @@ html, body {
   outline: none;
 }
 
-.as-search input:focus { border-color: var(--as-cyan); }
+.as-search input:focus { border-color: var(--as-accent); }
 
 .as-controls {
   display: flex;
@@ -148,7 +138,7 @@ html, body {
 }
 
 .as-btn, .as-select {
-  background: var(--as-panel);
+  background: var(--bg, #0b0d0f);
   border: 1px solid var(--as-border);
   color: var(--as-text-dim);
   font-family: inherit;
@@ -159,12 +149,12 @@ html, body {
   cursor: pointer;
 }
 
-.as-btn:hover { color: var(--as-cyan); border-color: var(--as-cyan); }
+.as-btn:hover { color: var(--as-accent); border-color: var(--as-accent); }
 
 .as-btn.active {
-  color: #04140b;
-  background: var(--as-green);
-  border-color: var(--as-green);
+  color: #06140b;
+  background: var(--as-accent);
+  border-color: var(--as-accent);
 }
 
 .as-btn.paused {
@@ -177,7 +167,7 @@ html, body {
 
 .hud-topleft {
   position: fixed;
-  top: 66px;
+  top: calc(var(--header-height, 130px) + 10px);
   left: 16px;
   z-index: 15;
   background: var(--as-panel);
@@ -186,6 +176,7 @@ html, body {
   padding: 10px 14px;
   font-size: 12px;
   min-width: 170px;
+  font-family: "Courier New", Courier, monospace;
   backdrop-filter: blur(2px);
 }
 
@@ -198,7 +189,7 @@ html, body {
 }
 
 .hud-value {
-  color: var(--as-cyan);
+  color: var(--as-accent);
   font-weight: 700;
 }
 
@@ -216,7 +207,7 @@ html, body {
 
 .hud-spectrum-bar {
   flex: 1;
-  background: var(--as-cyan);
+  background: var(--as-accent);
   opacity: 0.7;
   border-radius: 1px;
   min-height: 2px;
@@ -234,7 +225,7 @@ html, body {
 
 .side-panel {
   position: fixed;
-  top: 66px;
+  top: calc(var(--header-height, 130px) + 10px);
   right: 16px;
   bottom: 96px;
   width: 280px;
@@ -244,7 +235,8 @@ html, body {
   border-radius: 8px;
   padding: 16px;
   overflow-y: auto;
-  box-shadow: 0 0 30px rgba(56, 224, 255, 0.08);
+  font-family: "Courier New", Courier, monospace;
+  box-shadow: 0 0 30px rgba(80, 255, 120, 0.06);
 }
 
 .side-panel-close {
@@ -258,14 +250,14 @@ html, body {
   font-size: 14px;
 }
 
-.side-panel-close:hover { color: var(--as-cyan); }
+.side-panel-close:hover { color: var(--as-accent); }
 
 .side-panel-title {
   font-size: 16px;
-  color: var(--as-cyan);
+  color: var(--as-accent);
   margin: 0 24px 12px 0;
   word-break: break-word;
-  text-shadow: 0 0 8px rgba(56, 224, 255, 0.5);
+  text-shadow: 0 0 8px rgba(80, 255, 120, 0.4);
 }
 
 .side-panel-row {
@@ -274,7 +266,7 @@ html, body {
   gap: 10px;
   font-size: 12px;
   padding: 6px 0;
-  border-bottom: 1px solid rgba(56, 224, 255, 0.1);
+  border-bottom: 1px solid rgba(80, 255, 120, 0.1);
   color: var(--as-text-dim);
 }
 
@@ -298,6 +290,7 @@ html, body {
   flex-direction: column-reverse;
   gap: 4px;
   pointer-events: none;
+  font-family: "Courier New", Courier, monospace;
 }
 
 .event-item {
@@ -310,7 +303,7 @@ html, body {
   animation: as-fade-in 0.25s ease;
 }
 
-.event-item.sev-info { border-left-color: var(--as-cyan); color: var(--as-text); }
+.event-item.sev-info { border-left-color: var(--as-accent); color: var(--as-text); }
 .event-item.sev-warning { border-left-color: var(--as-warning); color: var(--as-warning); }
 .event-item.sev-alert { border-left-color: var(--as-alert); color: var(--as-alert); }
 
@@ -327,6 +320,7 @@ html, body {
   font-size: 10px;
   color: var(--as-text-dim);
   letter-spacing: 0.05em;
+  font-family: "Courier New", Courier, monospace;
 }
 
 @media (max-width: 720px) {

@@ -68,21 +68,30 @@ body {
   color: var(--accent);
 }
 
+/* Same look as .tab-btn (kept as a separate class, not .tab-btn itself,
+   only so the tab-switching JS's `querySelectorAll(".tab-btn")` loops —
+   which expect a data-tab attribute — skip this one; it navigates to a
+   real page instead of toggling a panel). */
 .tab-link {
   background: transparent;
-  border: 1px solid #164450;
-  color: #38e0ff;
-  padding: 7px 13px;
+  border: none;
+  color: var(--text-secondary);
+  padding: 8px 14px;
   border-radius: 8px;
   cursor: pointer;
   font-size: 14px;
   text-decoration: none;
-  letter-spacing: 0.04em;
 }
 
 .tab-link:hover {
-  background: rgba(56, 224, 255, 0.08);
-  border-color: #38e0ff;
+  background: var(--bg);
+  color: var(--accent);
+}
+
+.tab-link.active {
+  background: var(--bg);
+  color: var(--accent);
+  cursor: default;
 }
 
 .status {

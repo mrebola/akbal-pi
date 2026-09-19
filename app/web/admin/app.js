@@ -270,15 +270,28 @@ chatInput.addEventListener("input", () => {
 
 // ---- Tabs ----
 
+// Exposed as a URL hash (#chat/#wifi/#usb) so links from other pages
+// (WIFIRADAR's topbar, see wifiradar.html) land on the right tab instead
+// of always defaulting to Chat.
+function activateTab(tabName) {
+  const btn = document.querySelector(`.tab-btn[data-tab="${tabName}"]`);
+  if (!btn) return;
+  for (const b of document.querySelectorAll(".tab-btn")) b.classList.remove("active");
+  for (const p of document.querySelectorAll(".tab-panel")) p.classList.remove("active");
+  btn.classList.add("active");
+  document.getElementById(`tab-${tabName}`).classList.add("active");
+  if (tabName === "wifi") void refreshWifi();
+}
+
 for (const btn of document.querySelectorAll(".tab-btn")) {
   btn.addEventListener("click", () => {
-    for (const b of document.querySelectorAll(".tab-btn")) b.classList.remove("active");
-    for (const p of document.querySelectorAll(".tab-panel")) p.classList.remove("active");
-    btn.classList.add("active");
-    document.getElementById(`tab-${btn.dataset.tab}`).classList.add("active");
-    if (btn.dataset.tab === "wifi") void refreshWifi();
+    window.location.hash = btn.dataset.tab;
+    activateTab(btn.dataset.tab);
   });
 }
+
+const initialTab = window.location.hash.replace("#", "");
+if (initialTab) activateTab(initialTab);
 
 // ---- Wifi ----
 

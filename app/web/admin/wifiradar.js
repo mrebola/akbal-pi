@@ -38,6 +38,76 @@ const sp = {
   clients: document.getElementById("sp-clients"),
 };
 
+// ---- shared topbar (same markup/classes as index.html's — see
+// wifiradar.html) — kept live here too instead of just a static "back"
+// link, so this still reads as part of the same app. ----
+const headerEl = document.getElementById("wifiradar-header");
+const statusPill = document.getElementById("status-pill");
+const batteryIndicator = document.getElementById("battery-indicator");
+const batteryIcon = document.getElementById("battery-icon");
+const batteryPct = document.getElementById("battery-pct");
+const statCpu = document.getElementById("stat-cpu");
+const statRam = document.getElementById("stat-ram");
+const statDisk = document.getElementById("stat-disk");
+const logoutBtn = document.getElementById("logout-btn");
+
+logoutBtn.addEventListener("click", async () => {
+  await fetch("/api/logout", { method: "POST" }).catch(() => {});
+  window.location.href = "/login";
+});
+
+function updateBatteryIndicator(battery) {
+  if (!battery || !battery.connected) {
+    batteryPct.textContent = "—";
+    batteryIcon.textContent = "🔋";
+    batteryIndicator.classList.remove("low", "charging");
+    return;
+  }
+  batteryPct.textContent = `${battery.level}%`;
+  batteryIcon.textContent = battery.charging ? "⚡" : "🔋";
+  batteryIndicator.classList.toggle("low", battery.level <= 15 && !battery.charging);
+  batteryIndicator.classList.toggle("charging", Boolean(battery.charging));
+}
+
+function updateSystemStats(system) {
+  if (!system) return;
+  statCpu.textContent = `CPU ${system.cpuPercent}%`;
+  statRam.textContent = `RAM ${system.ram.percent}%`;
+  statDisk.textContent = `Disco ${system.disk.percent}%`;
+  statCpu.classList.toggle("warn", system.cpuPercent >= 85);
+  statRam.classList.toggle("warn", system.ram.percent >= 85);
+  statDisk.classList.toggle("warn", system.disk.percent >= 90);
+}
+
+async function loadTopbarStatus() {
+  try {
+    const res = await fetch("/api/status");
+    if (res.status === 401) {
+      window.location.href = "/login";
+      return;
+    }
+    const data = await res.json();
+    const wifiLabel = data.wifi?.connected ? data.wifi.ssid : "sin wifi";
+    statusPill.textContent = `${data.model} · ${wifiLabel}`;
+    updateBatteryIndicator(data.battery);
+    updateSystemStats(data.system);
+  } catch {
+    statusPill.textContent = "sin conexión con el dispositivo";
+  }
+}
+void loadTopbarStatus();
+setInterval(loadTopbarStatus, 60000);
+
+// The overlays (HUD, side panel) are position:fixed and need to start
+// right below the real header, whatever height it ends up rendering at
+// (2x avatar, a topbar that wraps on a narrow screen, etc.) — measuring it
+// instead of hardcoding a px value in CSS keeps this correct regardless.
+function updateHeaderHeight() {
+  document.documentElement.style.setProperty("--header-height", `${headerEl.offsetHeight}px`);
+}
+updateHeaderHeight();
+window.addEventListener("resize", updateHeaderHeight);
+
 // ---- state ----
 let paused = false;
 let is3D = true;

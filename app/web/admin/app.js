@@ -620,8 +620,10 @@ for (const btn of document.querySelectorAll(".tab-btn")) {
   });
 }
 
+// The initial tab is activated at the very end of this file (see boot), after
+// all section modules (music player, file manager, etc.) have initialized their
+// variables — activating "music"/"usb" here would hit those vars in their TDZ.
 const initialTab = window.location.hash.replace("#", "");
-if (initialTab) activateTab(initialTab);
 
 // ---- Wifi ----
 
@@ -2401,3 +2403,6 @@ apDisableBtn?.addEventListener("click", async () => {
     });
   }
 })();
+
+// ---- Boot: activate the initial tab last, once every module above is ready ----
+if (initialTab) activateTab(initialTab);

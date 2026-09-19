@@ -42,17 +42,28 @@
         <a href="/#usb" class="tab-link">Dispositivos</a>
         <a href="/#settings" class="tab-link">Ajustes</a>
       </nav>
-      <div class="status" id="status-pill">—</div>
-      <div class="sys-stats" id="sys-stats" title="Recursos del sistema">
-        <span class="sys-stat" id="stat-cpu">CPU —</span>
-        <span class="sys-stat" id="stat-ram">RAM —</span>
-        <span class="sys-stat" id="stat-disk">Disco —</span>
+      <div class="hdr-right">
+        <button type="button" id="sys-toggle" class="hdr-summary" title="Estado del sistema">
+          <span class="hdr-dot" id="hdr-online-dot"></span>
+          <span class="hdr-model" id="hdr-model">—</span>
+          <span class="battery-indicator" id="battery-indicator" title="Batería">
+            <span id="battery-icon">🔋</span>
+            <span id="battery-pct">—</span>
+          </span>
+          <span class="hdr-gear">◉</span>
+        </button>
+        <div id="sys-popover" class="popover hidden" role="menu">
+          <div class="popover-title">Sistema</div>
+          <div class="metric-row"><span class="metric-key">CPU</span><span class="metric-val mono" id="stat-cpu">—</span></div>
+          <div class="metric-row"><span class="metric-key">RAM</span><span class="metric-val mono" id="stat-ram">—</span></div>
+          <div class="metric-row"><span class="metric-key">Disco</span><span class="metric-val mono" id="stat-disk">—</span></div>
+          <div class="metric-row"><span class="metric-key">Wi-Fi</span><span class="metric-val" id="hdr-wifi">—</span></div>
+          <div class="metric-row"><span class="metric-key">Modelo</span><span class="metric-val mono" id="hdr-model-full">—</span></div>
+          <div class="popover-sep"></div>
+          <button id="logout-btn" class="btn btn-tertiary btn-block" title="Cerrar sesión">Cerrar sesión</button>
+        </div>
       </div>
-      <div class="battery-indicator" id="battery-indicator" title="Batería">
-        <span id="battery-icon">🔋</span>
-        <span id="battery-pct">—</span>
-      </div>
-      <button id="logout-btn" class="secondary logout-btn" title="Cerrar sesión">Salir</button>
+      <span id="status-pill" class="hidden">—</span>
     </header>
 
     <div class="as-toolbar">

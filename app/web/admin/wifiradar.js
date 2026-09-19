@@ -69,11 +69,16 @@ function updateBatteryIndicator(battery) {
   batteryIndicator.classList.toggle("charging", Boolean(battery.charging));
 }
 
+function setTxt(id, t) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = t;
+}
+
 function updateSystemStats(system) {
   if (!system) return;
-  statCpu.textContent = `CPU ${system.cpuPercent}%`;
-  statRam.textContent = `RAM ${system.ram.percent}%`;
-  statDisk.textContent = `Disco ${system.disk.percent}%`;
+  statCpu.textContent = `${system.cpuPercent}%`;
+  statRam.textContent = `${system.ram.percent}%`;
+  statDisk.textContent = `${system.disk.percent}%`;
   statCpu.classList.toggle("warn", system.cpuPercent >= 85);
   statRam.classList.toggle("warn", system.ram.percent >= 85);
   statDisk.classList.toggle("warn", system.disk.percent >= 90);
@@ -89,12 +94,33 @@ async function loadTopbarStatus() {
     const data = await res.json();
     const wifiLabel = data.wifi?.connected ? data.wifi.ssid : "sin wifi";
     statusPill.textContent = `${data.model} · ${wifiLabel}`;
+    setTxt("hdr-model", data.model || "—");
+    setTxt("hdr-model-full", data.model || "—");
+    setTxt("hdr-wifi", wifiLabel);
+    const dot = document.getElementById("hdr-online-dot");
+    if (dot) dot.classList.add("online");
     updateBatteryIndicator(data.battery);
     updateSystemStats(data.system);
   } catch {
     statusPill.textContent = "sin conexión con el dispositivo";
+    const dot = document.getElementById("hdr-online-dot");
+    if (dot) dot.classList.remove("online");
   }
 }
+
+// System popover toggle (same behavior as the main app header).
+(function () {
+  const toggle = document.getElementById("sys-toggle");
+  const pop = document.getElementById("sys-popover");
+  if (!toggle || !pop) return;
+  toggle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    pop.classList.toggle("hidden");
+  });
+  document.addEventListener("click", (e) => {
+    if (!pop.contains(e.target) && e.target !== toggle) pop.classList.add("hidden");
+  });
+})();
 void loadTopbarStatus();
 setInterval(loadTopbarStatus, 60000);
 

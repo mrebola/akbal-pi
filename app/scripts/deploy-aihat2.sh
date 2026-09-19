@@ -7,7 +7,7 @@
 set -euo pipefail
 
 # ---- Configuration -----------------------------------------
-PI_HOST="${PI_HOST:-pi@192.168.100.252}"
+PI_HOST="${PI_HOST:-pi@<ip-de-la-pi>}"
 REMOTE_DIR="${REMOTE_DIR:-/home/pi/whisplay-ai-chatbot}"
 HAILO_APPS_DIR="/home/pi/hailo-apps"
 PIPER_DIR="/home/pi/piper"

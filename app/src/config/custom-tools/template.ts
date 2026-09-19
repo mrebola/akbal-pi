@@ -28,7 +28,7 @@ const demoTools: LLMTool[] = [
       }
       const result = await new Promise((resolve, reject) => {
         const client = new net.Socket();
-        client.connect(8888, "192.168.100.98", () => {
+        client.connect(8888, "192.0.2.1", () => {
           client.write(
             JSON.stringify({ action: params.action, effect: "rainbow" })
           );

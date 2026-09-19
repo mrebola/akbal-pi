@@ -28,7 +28,7 @@ Raspberry Pi OS 64-bit, basado en Debian Trixie.
 | Batería | [PiSugar Power Manager](https://github.com/PiSugar/pisugar-power-manager-rs) |
 | Orquestación | [whisplay-ai-chatbot](https://github.com/PiSugar/whisplay-ai-chatbot) |
 | Pantalla | UI propia minimalista: íconos de wifi/batería arriba, personaje animado (cara en primer plano) al medio, texto verde terminal abajo ([`docs/display-ui.md`](docs/display-ui.md)); pantalla dedicada estilo terminal para elegir/cargar modelo de LLM ([`docs/voice-commands.md`](docs/voice-commands.md)) |
-| Comandos de voz | Volumen y cambio/consulta de modelo de LLM, resueltos por expresiones regulares antes de llegar al LLM — instantáneo, sin gastar un turno ([`docs/voice-commands.md`](docs/voice-commands.md)) |
+| Comandos de voz | Volumen, cambio/consulta de modelo de LLM y modo agente/local, resueltos por expresiones regulares antes de llegar al LLM — instantáneo, sin gastar un turno. Decir "ayuda" con el botón presionado muestra un resumen de todos estos comandos en pantalla ([`docs/voice-commands.md`](docs/voice-commands.md)) |
 
 Detalle completo del setup en [`docs/SETUP.md`](docs/SETUP.md).
 
@@ -227,8 +227,11 @@ la interfaz de pantalla minimalista (personaje animado + texto), y
 [`docs/voice-commands.md`](docs/voice-commands.md) para el control de
 volumen y modelo de LLM por voz — incluye el menú visual en pantalla para
 elegir modelo con el botón del Whisplay HAT (click para recorrer opciones,
-mantener 3 segundos para confirmar, doble clic para cancelar) y la pantalla
-de carga con el progreso mientras Ollama carga el modelo elegido.
+mantener 3 segundos para confirmar, doble clic para cancelar), la pantalla
+de carga con el progreso mientras Ollama carga el modelo elegido, y una
+pantalla de ayuda (decir "ayuda" con el botón presionado) que resume todos
+los comandos de voz disponibles, paginada con el mismo botón y con un
+"SALIR" seleccionable al final para volver a la pantalla normal.
 [`docs/llm-model-selection.md`](docs/llm-model-selection.md) documenta cómo
 se eligió el modelo por defecto y por qué el menú de voz ya no cambia de
 modelo a ciegas ante un comando mal reconocido (causó una regresión real:

@@ -19,7 +19,9 @@ const ENTRIES_PER_PAGE = 2;
 const HELP_ENTRIES: [label: string, example: string][] = [
   ["Volumen", '"sube/baja el volumen"'],
   ["Volumen exacto", '"pon volumen en 40"'],
+  ["Menu de modelo", '"cambia modelo"'],
   ["Cambiar modelo", '"modelo 3"'],
+  ["Que modelo uso", '"que modelo usas"'],
   ["Modo agente/local", '"activa modo agente"'],
   ["Esta ayuda", '"ayuda"'],
 ];

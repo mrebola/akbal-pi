@@ -46,22 +46,27 @@ tiene por default, aunque el usuario esté en el grupo `netdev`. Verificado
 en el dispositivo real: `nmcli dev wifi rescan` por SSH normal falla con
 `not authorized`.
 
-La solución: una regla en `/etc/sudoers.d/` que le da al usuario del
-servicio permiso para correr **solo** `/usr/bin/nmcli` sin pedir
-contraseña — no sudo general, así que el resto del sistema no queda más
-expuesto que antes:
-
-```
-# /etc/sudoers.d/akbal-nmcli
-akbal ALL=(root) NOPASSWD: /usr/bin/nmcli
-```
-
 `app/src/utils/wifi.ts` corre todo a través de `sudo -n nmcli ...` (el `-n`
 hace que falle rápido en vez de quedarse esperando una contraseña que nunca
-va a llegar, si esta regla no está instalada). **Este archivo no se instala
-solo** — hay que crearlo a mano en el dispositivo, validarlo con
-`visudo -c -f <archivo>` antes de copiarlo a `/etc/sudoers.d/`, y darle
-permisos `0440`.
+va a llegar). Dos formas de que eso funcione:
+
+1. **El usuario del servicio ya tiene sudo sin contraseña para todo**
+   (confirmalo con `sudo -n -l` — si no pide contraseña y el resultado
+   incluye algo como `(ALL : ALL) ALL`, ya está). Es el caso de esta Pi
+   (`akbal` viene así por default, el mismo criterio que el usuario `pi` en
+   Raspberry Pi OS) — no hizo falta tocar nada más.
+2. **Si no la tiene**, una regla en `/etc/sudoers.d/` acotada solo a
+   `nmcli` (no sudo general, así que el resto del sistema no queda más
+   expuesto que antes):
+
+   ```
+   # /etc/sudoers.d/akbal-nmcli
+   akbal ALL=(root) NOPASSWD: /usr/bin/nmcli
+   ```
+
+   Este archivo no se instala solo — hay que crearlo a mano en el
+   dispositivo, validarlo con `visudo -c -f <archivo>` antes de copiarlo a
+   `/etc/sudoers.d/`, y darle permisos `0440`.
 
 ## Qué hace cada cosa en `app/src/utils/wifi.ts`
 

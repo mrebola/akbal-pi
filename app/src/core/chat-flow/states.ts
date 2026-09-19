@@ -65,6 +65,7 @@ import {
 } from "./help-mode";
 import { isAgentMode, setDeviceMode } from "../../config/device-mode";
 import {
+  DEFAULT_OLLAMA_MODEL,
   getCurrentModel,
   listOllamaModels,
   switchModelWithProgress,
@@ -572,7 +573,23 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
         fellBackToLocal = true;
         ctx.agentReplyExpired = true;
         console.log(`[answer] ${reason} — falling back to the local model.`);
-        runLocalAnswer();
+        // The fallback always uses the best local model (see
+        // docs/llm-model-selection.md), not whatever a previous "modelo X"
+        // voice command left active — a dropped OpenClaw connection
+        // shouldn't also mean a worse local answer.
+        const ensureBestModel =
+          getCurrentModel().toLowerCase() === DEFAULT_OLLAMA_MODEL.toLowerCase()
+            ? Promise.resolve()
+            : switchModelWithProgress(DEFAULT_OLLAMA_MODEL, noop).catch((err) => {
+              console.error(
+                "[answer] Failed to switch to the default local model for fallback:",
+                err,
+              );
+            });
+        ensureBestModel.then(() => {
+          if (ctx.currentFlowName !== "answer" || currentAnswerId !== ctx.answerId) return;
+          runLocalAnswer();
+        });
       };
       onButtonPressed(() => {
         ctx.transitionTo("listening");

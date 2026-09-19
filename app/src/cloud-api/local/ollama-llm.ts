@@ -35,13 +35,15 @@ dotenv.config();
 // Ollama LLM configuration
 const ollamaEndpoint =
   process.env.OLLAMA_ENDPOINT || `http://localhost:${defaultPortMap.ollama}`;
+// The documented best-performing local model (see
+// docs/llm-model-selection.md) — used as the .env fallback below, and also
+// what "modo agente" switches to for its local fallback when OpenClaw
+// doesn't answer in time (see chat-flow/states.ts), regardless of whichever
+// model a previous voice command left active.
+export const DEFAULT_OLLAMA_MODEL = "huihui_ai/qwen3.5-abliterated:2B";
 // Mutable so voice commands (see chat-flow/voice-commands.ts) can switch the
 // active model at runtime without restarting the process.
-// Falls back to the documented best-performing model (see
-// docs/llm-model-selection.md) if OLLAMA_MODEL is missing from .env, instead
-// of an arbitrary untested one.
-let currentOllamaModel =
-  process.env.OLLAMA_MODEL || "huihui_ai/qwen3.5-abliterated:2B";
+let currentOllamaModel = process.env.OLLAMA_MODEL || DEFAULT_OLLAMA_MODEL;
 const ollamaEnableTools = process.env.OLLAMA_ENABLE_TOOLS === "true";
 const ollamaMaxToolRounds = Math.max(
   0,

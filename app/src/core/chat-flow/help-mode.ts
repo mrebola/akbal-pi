@@ -22,7 +22,7 @@ const HELP_ENTRIES: [label: string, example: string][] = [
   ["Menu de modelo", '"cambia modelo"'],
   ["Cambiar modelo", '"modelo 3"'],
   ["Que modelo uso", '"que modelo usas"'],
-  ["Modo agente/local", '"activa modo agente"'],
+  ["Modo agente/local", '"cambiar modo"'],
   ["Esta ayuda", '"ayuda"'],
 ];
 

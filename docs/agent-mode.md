@@ -89,6 +89,15 @@ haga falta cambiar de modo a mano.
   turno. Si OpenClaw está caído, cada pregunta tarda `AGENT_REPLY_TIMEOUT_MS`
   de más antes de caer a local — bajar ese valor si se prioriza latencia
   sobre darle más margen a OpenClaw.
+- El fallback siempre usa el **mejor modelo local documentado**
+  (`DEFAULT_OLLAMA_MODEL` en `ollama-llm.ts`, hoy
+  `huihui_ai/qwen3.5-abliterated:2B` — ver
+  [`llm-model-selection.md`](./llm-model-selection.md)), sin importar qué
+  modelo haya quedado activo por un "modelo X" anterior. Si hace falta
+  cambiarlo, `switchModelWithProgress` lo hace antes de contestar (con la
+  demora real de cargarlo si no era el que ya estaba en memoria) y lo deja
+  persistido en `OLLAMA_MODEL` — no vuelve solo al modelo que estaba antes
+  del fallback.
 
 ## Seguridad
 

@@ -53,6 +53,7 @@ import {
   storageUploadTarget,
 } from "../utils/storage";
 import { jukebox } from "./music-jukebox";
+import { getApStatus, getApQrCodes, enableAp, disableAp } from "../utils/access-point";
 import {
   connectToEmergencyWifi,
   connectToWifi,
@@ -450,6 +451,10 @@ export class WebAdminServer {
     router.post("/api/music/stop", async (ctx) => {
       ctx.body = jukebox.stop();
     });
+    router.post("/api/music/seek", async (ctx) => {
+      const ms = Number((ctx.request.body as any)?.ms);
+      ctx.body = await jukebox.seek(Number.isFinite(ms) ? ms : 0);
+    });
     router.post("/api/music/next", async (ctx) => {
       ctx.body = await jukebox.next();
     });
@@ -496,7 +501,14 @@ export class WebAdminServer {
       ctx.body = fs.createReadStream(full);
     });
     router.post("/api/storage/delete", async (ctx) => {
-      const { root, path: rel } = (ctx.request.body as any) || {};
+      const { root, path: rel, password } = (ctx.request.body as any) || {};
+      // Deleting requires re-entering the web password (an extra gate beyond
+      // the session), on top of the confirmation the UI asks for.
+      if (password !== this.password) {
+        ctx.status = 403;
+        ctx.body = { ok: false, error: "contraseña incorrecta" };
+        return;
+      }
       const res = await storageDelete(String(root || ""), String(rel || ""));
       ctx.status = res.ok ? 200 : 400;
       ctx.body = res;
@@ -527,6 +539,32 @@ export class WebAdminServer {
           ctx.req.pipe(out);
         });
         ctx.body = { ok: true };
+      } catch (err: any) {
+        ctx.status = 500;
+        ctx.body = { ok: false, error: err?.message || String(err) };
+      }
+    });
+
+    // ---- Direct WiFi (AP / hotspot) mode ----
+    router.get("/api/ap/status", async (ctx) => {
+      const status = await getApStatus();
+      const qr = await getApQrCodes(status);
+      ctx.body = { ...status, ...qr };
+    });
+    router.post("/api/ap/enable", async (ctx) => {
+      try {
+        const status = await enableAp();
+        const qr = await getApQrCodes(status);
+        ctx.body = { ok: true, ...status, ...qr };
+      } catch (err: any) {
+        ctx.status = 500;
+        ctx.body = { ok: false, error: err?.message || String(err) };
+      }
+    });
+    router.post("/api/ap/disable", async (ctx) => {
+      try {
+        const status = await disableAp();
+        ctx.body = { ok: true, ...status };
       } catch (err: any) {
         ctx.status = 500;
         ctx.body = { ok: false, error: err?.message || String(err) };

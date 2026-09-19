@@ -133,27 +133,34 @@
     </section>
 
     <section id="tab-music" class="tab-panel">
-      <div class="mplayer">
-        <div class="mplayer-card">
-          <div id="mp-visual" class="mp-visual stopped" aria-hidden="true">
-            <span class="mp-eq"><i></i><i></i><i></i><i></i><i></i></span>
-            <span class="mp-pause">❚❚</span>
-            <span class="mp-stop">■</span>
+      <div class="mx">
+        <div class="mx-console">
+          <div class="mx-scan" aria-hidden="true"></div>
+          <div class="mx-head">
+            <span class="mx-prompt">akbal@cypher</span>:<span class="mx-cwd">~/ost</span>$ <span class="mx-cmd">play</span><span class="mx-cursor">▋</span>
           </div>
-          <div class="mp-now">
-            <div id="mp-title" class="mp-title">Reproductor Cypher OST</div>
-            <div id="mp-sub" class="mp-sub">Selecciona una pista para empezar</div>
+          <div class="mx-label">// NOW PLAYING</div>
+          <div id="mp-title" class="mx-title">CYPHER_OST</div>
+          <div id="mp-sub" class="mx-sub">Selecciona una pista</div>
+          <div id="mp-visual" class="mx-visual stopped" aria-hidden="true">
+            <span class="mx-eq"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+            <span class="mx-glyph mx-pause">❚❚</span>
+            <span class="mx-glyph mx-stop">■</span>
           </div>
-          <div class="mp-progress"><div id="mp-progress-fill" class="mp-progress-fill"></div></div>
-          <div class="mp-time"><span id="mp-cur">0:00</span><span id="mp-dur">0:00</span></div>
-          <div class="mp-controls">
-            <button type="button" id="mp-prev" class="mp-ctrl" title="Anterior">⏮</button>
-            <button type="button" id="mp-playpause" class="mp-ctrl mp-main" title="Reproducir / Pausa">▶</button>
-            <button type="button" id="mp-stop" class="mp-ctrl" title="Detener">⏹</button>
-            <button type="button" id="mp-next" class="mp-ctrl" title="Siguiente">⏭</button>
+          <div id="mp-seek" class="mx-seek" title="Click para adelantar">
+            <div id="mp-progress-fill" class="mx-seek-fill"></div>
+            <div id="mp-seek-knob" class="mx-seek-knob"></div>
+          </div>
+          <div class="mx-time"><span id="mp-cur">0:00</span><span id="mp-dur">0:00</span></div>
+          <div class="mx-controls">
+            <button type="button" id="mp-prev" class="mx-btn" title="Anterior">⏮</button>
+            <button type="button" id="mp-playpause" class="mx-btn mx-main" title="Reproducir / Pausa">▶</button>
+            <button type="button" id="mp-stop" class="mx-btn" title="Detener">⏹</button>
+            <button type="button" id="mp-next" class="mx-btn" title="Siguiente">⏭</button>
           </div>
         </div>
-        <ul id="mp-list" class="mp-list"></ul>
+        <div class="mx-list-head">// TRACKLIST</div>
+        <ul id="mp-list" class="mx-list"></ul>
       </div>
     </section>
 
@@ -290,6 +297,29 @@
               <div class="cfg-row"><span class="cfg-key">Salida de audio</span><span id="ov-audio" class="cfg-val">—</span></div>
               <div class="cfg-row"><span class="cfg-key">Wifi</span><span id="ov-wifi" class="cfg-val">—</span></div>
               <div class="cfg-row"><span class="cfg-key">Batería</span><span id="ov-battery" class="cfg-val">—</span></div>
+            </div>
+          </div>
+
+          <div class="cfg-card cfg-card-wide">
+            <div class="cfg-card-head">
+              <span class="cfg-card-title">WiFi directo (punto de acceso)</span>
+              <span id="ap-state" class="cfg-badge">—</span>
+            </div>
+            <p class="cfg-meta">Convierte la Pi en su propio WiFi para entrar a esta web sin internet. Al activarlo, la Pi se desconecta de tu WiFi actual; vuelve a la normalidad al desactivarlo.</p>
+            <div class="cfg-actions">
+              <button type="button" id="ap-enable-btn" class="cfg-btn cfg-btn-accent">Activar WiFi directo</button>
+              <button type="button" id="ap-disable-btn" class="cfg-btn" style="display:none;">Desactivar</button>
+            </div>
+            <div id="ap-details" class="ap-details" style="display:none;">
+              <div class="ap-info">
+                <div class="cfg-row"><span class="cfg-key">Red (SSID)</span><span id="ap-ssid" class="cfg-val">—</span></div>
+                <div class="cfg-row"><span class="cfg-key">Contraseña</span><span id="ap-pass" class="cfg-val">—</span></div>
+                <div class="cfg-row"><span class="cfg-key">Dirección web</span><span id="ap-url" class="cfg-val">—</span></div>
+              </div>
+              <div class="ap-qrs">
+                <figure class="ap-qr"><img id="ap-qr-wifi" alt="QR para conectarse al WiFi" /><figcaption>Escanea para conectarte al WiFi</figcaption></figure>
+                <figure class="ap-qr"><img id="ap-qr-url" alt="QR para abrir la web" /><figcaption>Escanea para abrir la web</figcaption></figure>
+              </div>
             </div>
           </div>
         </div>

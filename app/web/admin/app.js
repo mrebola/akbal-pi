@@ -1449,6 +1449,7 @@ async function refreshSettings() {
     loadAudioOutputs(),
     loadIaModels(),
     loadBackups(),
+    loadAp(),
   ]);
 }
 
@@ -1883,6 +1884,9 @@ const mpNext = document.getElementById("mp-next");
 const mpStop = document.getElementById("mp-stop");
 const mpList = document.getElementById("mp-list");
 const mpVisual = document.getElementById("mp-visual");
+const mpSeek = document.getElementById("mp-seek");
+const mpSeekKnob = document.getElementById("mp-seek-knob");
+let musicDurationMs = 0;
 
 let musicPollTimer = null;
 let musicTracksLoaded = false;
@@ -1933,7 +1937,8 @@ async function loadMusicTracks() {
 function renderMusicStatus(s) {
   if (!mpTitle) return;
   const stateClass = !s.playing ? "stopped" : s.paused ? "paused" : "playing";
-  if (mpVisual) mpVisual.className = `mp-visual ${stateClass}`;
+  if (mpVisual) mpVisual.className = `mx-visual ${stateClass}`;
+  musicDurationMs = s.durationMs || 0;
   if (s.playing && s.title) {
     mpTitle.textContent = s.title;
     mpSub.textContent = `Cypher OST · ${s.index + 1}/${s.total}${s.paused ? " · en pausa" : ""}`;
@@ -1944,6 +1949,7 @@ function renderMusicStatus(s) {
   mpPlayPause.textContent = s.playing && !s.paused ? "❚❚" : "▶";
   const pct = s.durationMs > 0 ? Math.min(100, (s.positionMs / s.durationMs) * 100) : 0;
   if (mpFill) mpFill.style.width = `${pct}%`;
+  if (mpSeekKnob) mpSeekKnob.style.left = `${pct}%`;
   if (mpCur) mpCur.textContent = fmtTime(s.positionMs);
   if (mpDur) mpDur.textContent = s.durationMs > 0 ? fmtTime(s.durationMs) : "0:00";
   for (const li of mpList ? mpList.querySelectorAll("li[data-index]") : []) {
@@ -1990,6 +1996,33 @@ mpPlayPause?.addEventListener("click", () => void musicCmd("playpause"));
 mpPrev?.addEventListener("click", () => void musicCmd("prev"));
 mpNext?.addEventListener("click", () => void musicCmd("next"));
 mpStop?.addEventListener("click", () => void musicCmd("stop"));
+
+function seekFromEvent(clientX) {
+  if (!mpSeek || musicDurationMs <= 0) return;
+  const rect = mpSeek.getBoundingClientRect();
+  const frac = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  if (mpFill) mpFill.style.width = `${frac * 100}%`;
+  if (mpSeekKnob) mpSeekKnob.style.left = `${frac * 100}%`;
+  void musicCmd("seek", { ms: Math.round(frac * musicDurationMs) });
+}
+let seeking = false;
+mpSeek?.addEventListener("pointerdown", (e) => {
+  seeking = true;
+  mpSeek.setPointerCapture(e.pointerId);
+  seekFromEvent(e.clientX);
+});
+mpSeek?.addEventListener("pointermove", (e) => {
+  if (!seeking || musicDurationMs <= 0) return;
+  const rect = mpSeek.getBoundingClientRect();
+  const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  if (mpFill) mpFill.style.width = `${frac * 100}%`;
+  if (mpSeekKnob) mpSeekKnob.style.left = `${frac * 100}%`;
+});
+mpSeek?.addEventListener("pointerup", (e) => {
+  if (!seeking) return;
+  seeking = false;
+  seekFromEvent(e.clientX);
+});
 
 // ================= Explorador de archivos (interno + USB) =================
 function humanSize(bytes) {
@@ -2124,13 +2157,16 @@ function createFileManager(container) {
   }
 
   async function doDelete(name) {
+    if (!confirm(`¿Eliminar "${name}"? Esta acción no se puede deshacer.`)) return;
+    const password = prompt("Contraseña de la web para confirmar el borrado:");
+    if (!password) return;
     const rel = cwd ? `${cwd}/${name}` : name;
     status.textContent = `Eliminando ${name}...`;
     try {
       const res = await apiFetch("/api/storage/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ root, path: rel }),
+        body: JSON.stringify({ root, path: rel, password }),
       });
       const data = await res.json();
       status.textContent = data.ok ? "" : `Error: ${data.error || ""}`;
@@ -2200,3 +2236,70 @@ function ensureUsbFileManager() {
 function ensureSettingsFileManager() {
   createFileManager(document.getElementById("fm-settings"));
 }
+
+// ================= WiFi directo (AP / hotspot) =================
+const apState = document.getElementById("ap-state");
+const apEnableBtn = document.getElementById("ap-enable-btn");
+const apDisableBtn = document.getElementById("ap-disable-btn");
+const apDetails = document.getElementById("ap-details");
+const apSsid = document.getElementById("ap-ssid");
+const apPass = document.getElementById("ap-pass");
+const apUrl = document.getElementById("ap-url");
+const apQrWifi = document.getElementById("ap-qr-wifi");
+const apQrUrl = document.getElementById("ap-qr-url");
+
+function renderAp(data) {
+  if (!apState) return;
+  const active = Boolean(data.active);
+  apState.textContent = active ? "Activo" : "Inactivo";
+  apState.classList.toggle("ok", active);
+  if (apEnableBtn) apEnableBtn.style.display = active ? "none" : "";
+  if (apDisableBtn) apDisableBtn.style.display = active ? "" : "none";
+  if (apDetails) apDetails.style.display = active ? "flex" : "none";
+  if (active) {
+    if (apSsid) apSsid.textContent = data.ssid || "—";
+    if (apPass) apPass.textContent = data.password || "—";
+    if (apUrl) apUrl.textContent = data.url || "—";
+    if (apQrWifi && data.wifiQr) apQrWifi.src = data.wifiQr;
+    if (apQrUrl && data.urlQr) apQrUrl.src = data.urlQr;
+  }
+}
+
+async function loadAp() {
+  try {
+    const res = await apiFetch("/api/ap/status");
+    renderAp(await res.json());
+  } catch {
+    /* ignore */
+  }
+}
+
+apEnableBtn?.addEventListener("click", async () => {
+  if (!confirm(
+    "Vas a activar el WiFi directo de la Pi.\n\n" +
+    "La Pi se DESCONECTARÁ de tu WiFi actual, así que esta página dejará de responder. " +
+    "Conéctate a la red 'akbal-pi' con tu teléfono/laptop (usa el QR) y abre la dirección que se muestra.\n\n" +
+    "¿Continuar?"
+  )) return;
+  apEnableBtn.disabled = true;
+  apEnableBtn.textContent = "Activando... reconéctate al WiFi de la Pi";
+  try {
+    const res = await apiFetch("/api/ap/enable", { method: "POST" });
+    renderAp(await res.json());
+  } catch {
+    // Expected: the response often never arrives because wifi drops.
+    apEnableBtn.textContent = "WiFi directo activándose. Conéctate a 'akbal-pi'.";
+  }
+});
+
+apDisableBtn?.addEventListener("click", async () => {
+  apDisableBtn.disabled = true;
+  try {
+    const res = await apiFetch("/api/ap/disable", { method: "POST" });
+    renderAp(await res.json());
+  } catch {
+    /* ignore */
+  } finally {
+    apDisableBtn.disabled = false;
+  }
+});

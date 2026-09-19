@@ -60,12 +60,39 @@ export const storageResolveFile = async (root: string, rel: string): Promise<str
 const isSegmentSafe = (name: string): boolean =>
   Boolean(name) && !name.includes("/") && !name.includes("\\") && name !== "." && name !== "..";
 
+// Top-level names in the internal (home) root that hold system/credential
+// state and must never be deletable from the web, even by an authenticated
+// admin — protects SSH keys, NetworkManager/OS config, the running app, etc.
+const PROTECTED_INTERNAL = new Set([
+  ".ssh",
+  ".config",
+  ".local",
+  ".cache",
+  ".npm",
+  ".ollama",
+  ".gnupg",
+  ".bashrc",
+  ".bash_history",
+  ".bash_profile",
+  ".profile",
+  "whisplay-ai-chatbot",
+]);
+
+const isProtected = (root: string, rel: string): boolean => {
+  if (root !== "internal") return false; // external media is fair game
+  const first = (rel || "").replace(/^\/+/, "").split("/")[0];
+  return PROTECTED_INTERNAL.has(first);
+};
+
 export const storageDelete = async (
   root: string,
   rel: string,
 ): Promise<{ ok: boolean; error?: string }> => {
   const base = await baseForRoot(root);
   if (!base) return { ok: false, error: "raíz no disponible" };
+  if (isProtected(root, rel)) {
+    return { ok: false, error: "archivo de sistema protegido: no se puede borrar" };
+  }
   const full = resolveFilePath(base, rel);
   if (!full) return { ok: false, error: "ruta inválida" };
   if (full === path.resolve(base)) return { ok: false, error: "no se puede borrar la raíz" };

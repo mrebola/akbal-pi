@@ -1196,3 +1196,163 @@ button.secondary {
 .fm-empty { color: var(--text-secondary); font-size: 12px; border-style: dashed; justify-content: flex-start; }
 .fm-actions { display: flex; gap: 6px; }
 .fm-progress { font-size: 12px; color: var(--text-secondary); }
+
+/* ===== Reproductor de música — estilo terminal/hacker (Cypher) ===== */
+.mx {
+  max-width: 760px;
+  margin: 0 auto;
+  font-family: "Courier New", Courier, monospace;
+}
+.mx-console {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 50% -10%, rgba(80,255,120,0.08), transparent 60%),
+    #06090a;
+  border: 1px solid var(--accent-dim, #234a30);
+  border-radius: 12px;
+  padding: 18px 18px 20px;
+  box-shadow: inset 0 0 40px rgba(80,255,120,0.06), 0 0 0 1px rgba(0,0,0,0.4);
+}
+.mx-scan {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(80,255,120,0.05) 0px,
+    rgba(80,255,120,0.05) 1px,
+    transparent 2px,
+    transparent 4px
+  );
+  animation: mx-scan 6s linear infinite;
+  opacity: 0.5;
+}
+@keyframes mx-scan { from { background-position-y: 0; } to { background-position-y: 200px; } }
+.mx-head { font-size: 13px; color: var(--accent); text-shadow: 0 0 10px rgba(80,255,120,0.5); margin-bottom: 14px; position: relative; }
+.mx-cwd { color: var(--text-secondary); }
+.mx-cmd { color: #fff; }
+.mx-cursor { animation: mx-blink 1s steps(1) infinite; }
+@keyframes mx-blink { 50% { opacity: 0; } }
+.mx-label, .mx-list-head {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--text-secondary);
+  position: relative;
+}
+.mx-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--accent);
+  text-shadow: 0 0 12px rgba(80,255,120,0.45);
+  margin: 4px 0 2px;
+  position: relative;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mx-sub { font-size: 12px; color: var(--text-secondary); margin-bottom: 14px; position: relative; }
+.mx-visual { height: 84px; display: flex; align-items: center; justify-content: center; position: relative; margin-bottom: 12px; }
+.mx-eq { display: flex; align-items: flex-end; gap: 3px; height: 72px; }
+.mx-eq i {
+  width: 6px; height: 10px;
+  background: linear-gradient(to top, #0b6b2e, var(--accent));
+  border-radius: 2px;
+  box-shadow: 0 0 8px rgba(80,255,120,0.5);
+  animation: mx-bounce 0.8s ease-in-out infinite;
+}
+.mx-eq i:nth-child(2n) { animation-duration: 0.62s; }
+.mx-eq i:nth-child(3n) { animation-duration: 1.05s; }
+.mx-eq i:nth-child(4n) { animation-duration: 0.5s; }
+.mx-eq i:nth-child(1){animation-delay:0s}.mx-eq i:nth-child(2){animation-delay:.08s}
+.mx-eq i:nth-child(3){animation-delay:.16s}.mx-eq i:nth-child(4){animation-delay:.24s}
+.mx-eq i:nth-child(5){animation-delay:.32s}.mx-eq i:nth-child(6){animation-delay:.4s}
+.mx-eq i:nth-child(7){animation-delay:.48s}.mx-eq i:nth-child(8){animation-delay:.56s}
+.mx-eq i:nth-child(9){animation-delay:.64s}.mx-eq i:nth-child(10){animation-delay:.72s}
+.mx-eq i:nth-child(11){animation-delay:.8s}.mx-eq i:nth-child(12){animation-delay:.88s}
+.mx-eq i:nth-child(13){animation-delay:.96s}.mx-eq i:nth-child(14){animation-delay:1.04s}
+.mx-eq i:nth-child(15){animation-delay:1.12s}.mx-eq i:nth-child(16){animation-delay:1.2s}
+@keyframes mx-bounce { 0%,100% { height: 8px; opacity: 0.55; } 50% { height: 70px; opacity: 1; } }
+.mx-glyph { display: none; position: absolute; font-size: 40px; color: var(--accent); text-shadow: 0 0 16px rgba(80,255,120,0.6); }
+.mx-visual.paused .mx-eq i { animation-play-state: paused; opacity: 0.2; }
+.mx-visual.paused .mx-pause { display: block; }
+.mx-visual.stopped .mx-eq { display: none; }
+.mx-visual.stopped .mx-stop { display: block; color: var(--text-secondary); text-shadow: none; }
+.mx-seek {
+  position: relative;
+  height: 10px;
+  background: #0a1410;
+  border: 1px solid var(--accent-dim);
+  border-radius: 6px;
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+.mx-seek-fill {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: 0;
+  background: linear-gradient(to right, #0b6b2e, var(--accent));
+  border-radius: 6px;
+  box-shadow: 0 0 10px rgba(80,255,120,0.5);
+}
+.mx-seek-knob {
+  position: absolute; top: 50%; left: 0;
+  width: 12px; height: 12px;
+  transform: translate(-50%, -50%);
+  background: var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 10px rgba(80,255,120,0.9);
+  pointer-events: none;
+}
+.mx-time { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary); margin-bottom: 14px; position: relative; }
+.mx-controls { display: flex; align-items: center; justify-content: center; gap: 14px; position: relative; }
+.mx-btn {
+  background: #0a1410;
+  border: 1px solid var(--accent-dim);
+  color: var(--accent);
+  border-radius: 50%;
+  width: 44px; height: 44px;
+  font-size: 15px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.mx-btn:hover { box-shadow: 0 0 12px rgba(80,255,120,0.4); }
+.mx-btn.mx-main {
+  width: 58px; height: 58px; font-size: 20px;
+  background: var(--accent); color: #04160b; border-color: var(--accent);
+  box-shadow: 0 0 20px rgba(80,255,120,0.45);
+}
+.mx-list-head { margin: 16px 4px 6px; }
+.mx-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; font-family: "Courier New", Courier, monospace; }
+.mx-list li {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-left: 2px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+.mx-list li:hover { background: rgba(80,255,120,0.06); }
+.mx-list li.active {
+  background: rgba(80,255,120,0.08);
+  border-left-color: var(--accent);
+  color: var(--accent);
+  text-shadow: 0 0 8px rgba(80,255,120,0.4);
+}
+.mx-list .mp-idx { color: var(--text-secondary); min-width: 26px; }
+.mx-list li.active .mp-idx { color: var(--accent); }
+.mx-list .mp-eq-mini { margin-left: auto; display: none; }
+.mx-list li.active .mp-eq-mini { display: inline; animation: mx-blink 1s steps(1) infinite; }
+
+/* ===== WiFi directo (AP) ===== */
+.ap-details { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-start; }
+.ap-info { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 8px; }
+.ap-info .cfg-val { font-family: "Courier New", Courier, monospace; user-select: all; }
+.ap-qrs { display: flex; gap: 14px; flex-wrap: wrap; }
+.ap-qr { margin: 0; text-align: center; }
+.ap-qr img {
+  width: 150px; height: 150px;
+  background: #fff; border-radius: 8px; padding: 6px; display: block;
+}
+.ap-qr figcaption { font-size: 11px; color: var(--text-secondary); margin-top: 5px; max-width: 150px; }

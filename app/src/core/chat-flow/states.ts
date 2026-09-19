@@ -358,18 +358,21 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     let pressAt = 0;
     let progressTimer: ReturnType<typeof setInterval> | null = null;
     const HOLD_PLAYPAUSE_MS = 700;
+    const HOLD_EXIT_MS = 1800;
+    const CONTROLS_HINT = "Clic: siguiente · Doble: anterior\nMantén: play/pausa · 2 seg: salir";
 
     const render = () => {
       const s = jukebox.status();
+      const line = !s.available
+        ? "No hay música cargada."
+        : s.title
+          ? `${s.paused ? "⏸ " : "♪ "}${s.title}`
+          : "Música Cypher OST";
       display({
         status: "music",
         emoji: !s.playing ? "🎵" : s.paused ? "⏸️" : "🎶",
         RGB: !s.playing ? "#0066aa" : s.paused ? "#775500" : "#00aa66",
-        text: !s.available
-          ? "No hay música cargada."
-          : s.title
-            ? `${s.paused ? "Pausa · " : ""}${s.title}`
-            : "Música Cypher OST",
+        text: `${line}\n${CONTROLS_HINT}`,
         music_progress: s.durationMs > 0 ? s.positionMs / s.durationMs : -1,
         music_duration_ms: s.durationMs,
         rag_icon_visible: false,
@@ -395,7 +398,7 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     });
 
     onButtonDoubleClick(() => {
-      if (ctx.currentFlowName === "jukebox") leave();
+      if (ctx.currentFlowName === "jukebox") void jukebox.prev().then(render);
     });
     onButtonPressed(() => {
       pressAt = Date.now();
@@ -406,7 +409,9 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       if (!pressAt) return;
       const held = Date.now() - pressAt;
       pressAt = 0;
-      if (held >= HOLD_PLAYPAUSE_MS) {
+      if (held >= HOLD_EXIT_MS) {
+        leave();
+      } else if (held >= HOLD_PLAYPAUSE_MS) {
         void jukebox.playPause().then(render);
       } else {
         void jukebox.next().then(render);

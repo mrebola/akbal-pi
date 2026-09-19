@@ -104,7 +104,7 @@ class Jukebox {
     }
   }
 
-  async play(index: number): Promise<JukeboxStatus> {
+  async play(index: number, seekMs = 0): Promise<JukeboxStatus> {
     const tracks = this.getTracks();
     if (tracks.length === 0) return this.status();
     const i = ((index % tracks.length) + tracks.length) % tracks.length;
@@ -122,12 +122,20 @@ class Jukebox {
     this.index = i;
     this.playing = true;
     this.paused = false;
-    this.accumulatedMs = 0;
+    this.accumulatedMs = Math.max(0, seekMs);
     this.startedAt = Date.now();
     this.loadDuration(track.file);
 
     const device = getAlsaOutputDevice();
-    const proc = spawn("mpg123", ["-q", "-o", "alsa", "-a", device, track.file]);
+    // mpg123 seeks by frames; ~38.28 MPEG1-L3 frames per second (1152
+    // samples @ 44.1 kHz). Good enough for a music-player scrubber.
+    const args = ["-q", "-o", "alsa", "-a", device];
+    if (seekMs > 0) {
+      const frames = Math.round((seekMs / 1000) * (44100 / 1152));
+      args.push("-k", String(frames));
+    }
+    args.push(track.file);
+    const proc = spawn("mpg123", args);
     this.proc = proc;
     proc.on("error", () => {
       if (gen !== this.generation) return;
@@ -183,6 +191,12 @@ class Jukebox {
     }
     this.notify();
     return this.status();
+  }
+
+  async seek(ms: number): Promise<JukeboxStatus> {
+    if (this.index < 0 || !this.playing) return this.status();
+    const clamped = this.durationMs > 0 ? Math.max(0, Math.min(ms, this.durationMs - 1000)) : Math.max(0, ms);
+    return this.play(this.index, clamped);
   }
 
   async next(): Promise<JukeboxStatus> {

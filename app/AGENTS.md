@@ -315,8 +315,10 @@ The chat flow uses a finite state machine (`src/core/chat-flow/stateMachine.ts`)
 | `external_answer` | IM bridge receiving external message |
 | `mode_select` | On-screen menu to switch between "modo agente" (OpenClaw via the `whisplay-im` bridge) and "modo local" (see `docs/agent-mode.md`) |
 | `mode_loading` | Confirms the agent/local mode switch and persists it to `.env` (`DEVICE_MODE`) |
+| `audio_output_select` | On-screen menu to switch TTS/chime output between the onboard Whisplay HAT speaker (default) and a paired Bluetooth speaker (see `chat-flow/audio-output-select-mode.ts`, `config/audio-output.ts`) |
+| `audio_output_loading` | Confirms the speaker switch and persists it to `.env` (`AUDIO_OUTPUT`); also settable from the web admin (`/api/audio-output/select`) |
 | `help` | Voice-command cheat sheet, opened by saying "ayuda" while holding the button, or from the quick menu (see `docs/voice-commands.md`) |
-| `quick_menu` | Short click from "sleep" — carousel of Modelo/Modo/Ayuda/Cámara/Volumen/Internet emergencia (see `chat-flow/quick-menu-mode.ts`) |
+| `quick_menu` | Short click from "sleep" — carousel of Modelo/Modo/Audio/Ayuda/Cámara/Volumen/Internet emergencia (see `chat-flow/quick-menu-mode.ts`) |
 | `volume_adjust` | Physical volume control from the quick menu — click bumps +10% live, hold/double-click exits (see `chat-flow/volume-adjust-mode.ts`) |
 | `wifi_manager` | Wifi status/scan/connect from the quick menu's "Internet emergencia" (see `chat-flow/wifi-manager-mode.ts`, `docs/wifi.md`) |
 

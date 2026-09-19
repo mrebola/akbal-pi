@@ -124,6 +124,29 @@ export async function ensureMounted(
   }
 }
 
+// Unmounts the partition (flushing any buffered writes) so it's safe to
+// physically unplug — same passwordless-sudo scope as ensureMounted above.
+// Volumes lsblk never reports as mounted (or already unplugged) are treated
+// as already-safe rather than an error, since the end state the caller
+// cares about ("safe to remove") already holds.
+export async function ejectVolume(
+  volumeName: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const volumes = await listUsbVolumes();
+  const volume = volumes.find((v) => v.name === volumeName);
+  if (!volume || !volume.mounted) {
+    return { ok: true };
+  }
+  try {
+    await execFileAsync("sudo", ["-n", "umount", volume.mountPath]);
+    return { ok: true };
+  } catch (err: any) {
+    const message = err?.stderr || err?.message || String(err);
+    console.warn(`[usb] ejectVolume(${volumeName}) failed:`, message);
+    return { ok: false, error: message };
+  }
+}
+
 export type UsbFileEntry = {
   name: string;
   isDir: boolean;

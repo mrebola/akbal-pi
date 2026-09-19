@@ -18,6 +18,7 @@
       <button class="tab-btn" data-tab="usb">USB</button>
       <button class="tab-btn" data-tab="wardrive">Wardriving</button>
       <a href="/wifiradar" class="tab-link" title="Visualización WiFi en 3D">WIFIRADAR</a>
+      <button class="tab-btn" data-tab="settings" title="Configuración">⚙️</button>
     </nav>
     <div class="status" id="status-pill">—</div>
     <div class="sys-stats" id="sys-stats" title="Recursos del sistema">
@@ -37,8 +38,6 @@
       <div class="chat-toolbar">
         <label for="model-select">Modelo</label>
         <select id="model-select"></select>
-        <span id="model-load-indicator" class="model-load-indicator" title="¿El modelo está cargado en RAM?">—</span>
-        <button type="button" id="unload-model-btn" class="secondary" title="Liberar el modelo de la memoria de la Pi">Unload model</button>
       </div>
       <div id="chat-log" class="chat-log"></div>
       <form id="chat-form" class="chat-form">
@@ -235,6 +234,36 @@
           Solo <code>~/wardrive-sessions/</code>. Descargá handshakes para crackearlos offline
           (con GPU) — nunca en la Pi. Borrar es permanente.
         </div>
+      </div>
+    </section>
+
+    <section id="tab-settings" class="tab-panel">
+      <div class="usb-block">
+        <div class="usb-block-title">Audio</div>
+        <div class="chat-toolbar">
+          <label for="audio-output-select">Salida de audio</label>
+          <select id="audio-output-select">
+            <option value="hat">Bocina de la Pi</option>
+            <option value="bluetooth">Bocina bluetooth</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="usb-block">
+        <div class="usb-block-title">Modelo de IA</div>
+        <div class="chat-toolbar">
+          <span id="model-load-indicator" class="model-load-indicator" title="¿El modelo está cargado en RAM?">—</span>
+          <button type="button" id="unload-model-btn" class="secondary" title="Liberar el modelo de la memoria de la Pi">Unload model</button>
+        </div>
+      </div>
+
+      <div class="usb-block">
+        <div class="usb-block-title">Almacenamiento USB</div>
+        <div class="usb-toolbar">
+          <button type="button" id="settings-usb-refresh-btn" class="secondary">Refrescar</button>
+          <span id="settings-usb-status" class="muted"></span>
+        </div>
+        <ul id="settings-usb-eject-list" class="usb-devices-list"></ul>
       </div>
     </section>
   </main>

@@ -73,3 +73,63 @@ Después del reboot, `whisplay-soundcard sound: Whisplay 'whisplaysound' registe
 Si en el futuro se usa una variante del Whisplay HAT con códec ES8389 en vez de
 WM8960, este fix habría que revertirlo (o condicionarlo), ya que deshabilita
 explícitamente el soporte para ES8389 en el overlay.
+
+## Regresión (2026-09-19): "lost arbitration" persiste con ES8389 ya deshabilitado
+
+Con el fix de arriba ya instalado (overlay compilado confirmado con
+`status = "disabled"` en `whisplay@10`), la tarjeta `whisplaysound` dejó de
+registrarse de nuevo, con el mismo síntoma en `dmesg`:
+
+```
+wm8960 1-001a: supply ... using dummy regulator
+i2c_designware 1f00074000.i2c: i2c_dw_handle_tx_abort: lost arbitration   (x4-x8)
+wm8960 1-001a: Failed to issue reset / Failed to enable LRCM: -11
+wm8960 1-001a: probe with driver wm8960 failed with error -11
+```
+
+`i2cdetect -y 1` confirma que el WM8960 sigue respondiendo en `0x1a` (el chip
+está vivo); es específicamente el *probe* del driver `wm8960` el que falla al
+escribir el registro de reset/LRCM.
+
+### Causas descartadas (con pruebas, no solo teoría)
+
+- **Bluetooth conectado**: se apagó el radio Bluetooth por completo
+  (`bluetoothctl power off`) y se forzó un re-probe manual
+  (`echo 1-001a > /sys/bus/i2c/drivers/wm8960/bind`) — mismo error, byte por
+  byte. El Bluetooth de la Pi no comparte bus con el I2C1 del HAT (usa
+  UART/USB internamente), así que no hay relación causal.
+- **Condición de carrera de arranque**: se reintentó el bind manual del
+  driver a los ~128s y ~388s de uptime (sistema ya estable) — mismo error.
+  No es timing de boot.
+- **Otro dispositivo en el bus**: `ls /sys/bus/i2c/devices/` e `i2cdetect -l`
+  solo muestran `1-001a` en el bus `i2c-1` (Synopsys DesignWare); no hay otro
+  cliente I2C visible peleando el bus.
+- **Velocidad del bus**: se probó bajar el reloj I2C a 50kHz
+  (`dtparam=i2c_arm_baudrate=50000` junto al overlay, con reboot) — mismo
+  error (incluso con más transiciones de "lost arbitration" por intento).
+  Revertido tras la prueba.
+- **Pines GPIO2/3 (SDA1/SCL1)**: `pinctrl get 2,3` los muestra en estado
+  eléctrico normal en reposo (`a3 pu | hi`, pull-up activo, alto).
+
+### Estado
+
+No resuelto. Es consistente con reportes sin resolver de la comunidad para
+este mismo error en RP1 (Raspberry Pi 5), p. ej.
+[raspberrypi/linux#7104](https://github.com/raspberrypi/linux/issues/7104) y
+[foro oficial](https://forums.raspberrypi.com/viewtopic.php?t=396693), donde
+ingenieros de Raspberry Pi apuntan a causas externas al SoC (cableado/conector)
+cuando se descartan las causas de software de arriba.
+
+**Próximo paso sugerido (requiere manos en la Pi, no remoto)**: reasentar
+físicamente el HAT en el header GPIO (desconectar y volver a conectar
+firmemente) y revisar que no haya pines doblados/mal alineados en el conector
+I2C. Si persiste, probar el HAT en otra Raspberry Pi 5 para aislar HAT vs.
+placa base.
+
+**Mitigación mientras tanto**: el asistente puede hablar por una bocina
+Bluetooth emparejada (ver `ALSA_OUTPUT_DEVICE=pulse` en `.env`, que enruta
+`sox`/ALSA vía el plugin `pulse` → `pipewire-pulse` → sink por defecto de
+PipeWire). El micrófono del HAT sigue roto mientras el WM8960 no registre; se
+probó usar el micrófono HFP de la bocina Bluetooth como respaldo pero graba
+silencio puro (el perfil manos-libres no se negocia bien junto con A2DP), así
+que no es una alternativa viable por ahora.

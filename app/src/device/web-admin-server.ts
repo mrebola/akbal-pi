@@ -20,6 +20,11 @@ import {
   unloadModel,
 } from "../cloud-api/local/ollama-llm";
 import { isAgentMode } from "../config/device-mode";
+import {
+  AudioOutputTarget,
+  getAudioOutputTarget,
+  setAudioOutputTarget,
+} from "../config/audio-output";
 import { getBatteryReading } from "../status/battery-status";
 import { getSystemStats } from "../utils/system-stats";
 import {
@@ -33,6 +38,7 @@ import {
   scanWifiNetworksDetailed,
 } from "../utils/wifi";
 import {
+  ejectVolume,
   ensureMounted,
   findVolume,
   listFiles,
@@ -217,10 +223,26 @@ export class WebAdminServer {
         model: getCurrentModel(),
         modelLoaded,
         deviceMode: isAgentMode() ? "agent" : "local",
+        audioOutput: getAudioOutputTarget(),
         wifi,
         battery: getBatteryReading(),
         system,
       };
+    });
+
+    // Two fixed options (unlike /api/models, which lists whatever's pulled
+    // in Ollama) — "hat" (onboard Whisplay speaker, default) or "bluetooth"
+    // (whichever speaker is currently paired/connected). See
+    // config/audio-output.ts and device/audio.ts.
+    router.post("/api/audio-output/select", async (ctx) => {
+      const target = (ctx.request.body as any)?.target;
+      if (target !== "hat" && target !== "bluetooth") {
+        ctx.status = 400;
+        ctx.body = { error: "target debe ser 'hat' o 'bluetooth'" };
+        return;
+      }
+      setAudioOutputTarget(target as AudioOutputTarget);
+      ctx.body = { ok: true, audioOutput: getAudioOutputTarget() };
     });
 
     router.get("/api/models", async (ctx) => {
@@ -612,6 +634,16 @@ export class WebAdminServer {
         return;
       }
       ctx.body = await ensureMounted(volume);
+    });
+
+    router.post("/api/usb/eject", async (ctx) => {
+      const { volume } = (ctx.request.body as any) || {};
+      if (!volume || typeof volume !== "string") {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "volume requerido" };
+        return;
+      }
+      ctx.body = await ejectVolume(volume);
     });
 
     router.get("/api/usb/files", async (ctx) => {

@@ -1,6 +1,7 @@
 import { StreamResponser } from "../StreamResponsor";
 import type { WhisplayIMApprovalRequest } from "../../device/im-bridge";
 import type { DeviceMode } from "../../config/device-mode";
+import type { AudioOutputTarget } from "../../config/audio-output";
 
 export type FlowName =
   | "sleep"
@@ -17,6 +18,8 @@ export type FlowName =
   | "model_loading"
   | "mode_select"
   | "mode_loading"
+  | "audio_output_select"
+  | "audio_output_loading"
   | "help"
   | "quick_menu"
   | "volume_adjust"
@@ -50,6 +53,7 @@ export interface ChatFlowContext {
   pendingModelSwitchTag: string;
   pendingModelSwitchLabel: string;
   pendingDeviceModeSwitch: DeviceMode | "";
+  pendingAudioOutputSwitch: AudioOutputTarget | "";
   pendingApprovalRequest: WhisplayIMApprovalRequest | null;
   agentReplyExpired: boolean;
   currentExternalEmoji: string;

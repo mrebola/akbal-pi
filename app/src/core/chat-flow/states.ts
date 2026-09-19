@@ -58,6 +58,15 @@ import {
   onModeSelectTimeout,
 } from "./mode-select-mode";
 import {
+  enterAudioOutputSelectMode,
+  handleAudioOutputSelectCancel,
+  handleAudioOutputSelectPress,
+  handleAudioOutputSelectRelease,
+  onAudioOutputSelectCancel,
+  onAudioOutputSelectConfirm,
+  onAudioOutputSelectTimeout,
+} from "./audio-output-select-mode";
+import {
   enterHelpMode,
   handleHelpDoubleClick,
   handleHelpPress,
@@ -103,6 +112,7 @@ import {
   onWifiRadarExit,
 } from "./wifi-radar-mode";
 import { isAgentMode, setDeviceMode } from "../../config/device-mode";
+import { setAudioOutputTarget } from "../../config/audio-output";
 import {
   DEFAULT_OLLAMA_MODEL,
   getCurrentModel,
@@ -221,6 +231,10 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       }
       if (key === "mode") {
         ctx.transitionTo("mode_select");
+        return;
+      }
+      if (key === "audio_output") {
+        ctx.transitionTo("audio_output_select");
         return;
       }
       if (key === "help") {
@@ -1011,6 +1025,58 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     });
     setTimeout(() => {
       if (ctx.currentFlowName === "mode_loading") {
+        ctx.transitionTo("sleep");
+      }
+    }, 2500);
+  },
+  audio_output_select: (ctx: ChatFlowContext) => {
+    onAudioOutputSelectConfirm((option) => {
+      ctx.pendingAudioOutputSwitch = option.key;
+      ctx.transitionTo("audio_output_loading");
+    });
+    onAudioOutputSelectTimeout(() => {
+      if (ctx.currentFlowName === "audio_output_select") {
+        ctx.transitionTo("sleep");
+      }
+    });
+    onAudioOutputSelectCancel(() => {
+      if (ctx.currentFlowName === "audio_output_select") {
+        ctx.transitionTo("sleep");
+      }
+    });
+    // Double click backs out without switching speaker — same "no silent
+    // change" reasoning as mode_select.
+    onButtonDoubleClick(() => handleAudioOutputSelectCancel());
+    onButtonPressed(() => handleAudioOutputSelectPress());
+    onButtonReleased(() => handleAudioOutputSelectRelease());
+    enterAudioOutputSelectMode();
+  },
+  audio_output_loading: (ctx: ChatFlowContext) => {
+    onButtonDoubleClick(null);
+    onButtonPressed(noop);
+    onButtonReleased(noop);
+    const target = ctx.pendingAudioOutputSwitch || "hat";
+    ctx.pendingAudioOutputSwitch = "";
+    const label = target === "bluetooth" ? "Bocina bluetooth" : "Bocina de la Pi";
+
+    display({
+      status: "audio_output_loading",
+      model_ui: "loading",
+      model_ui_title: "AUDIO",
+      model_ui_label: label,
+      model_ui_description: "",
+      text: "Preparando...",
+    });
+
+    setAudioOutputTarget(target);
+
+    display({
+      status: "idle",
+      model_ui: "",
+      text: `${label} activada.`,
+    });
+    setTimeout(() => {
+      if (ctx.currentFlowName === "audio_output_loading") {
         ctx.transitionTo("sleep");
       }
     }, 2500);

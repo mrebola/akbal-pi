@@ -7,6 +7,7 @@ import { pluginRegistry } from "../plugin";
 import type { ASRPlugin, TTSPlugin, AudioFormat } from "../plugin";
 import { ASRServer, TTSResult, TTSServer } from "../type";
 import { webAudioBridge } from "./web-audio-bridge";
+import { getAudioOutputTarget } from "../config/audio-output";
 
 export { getDynamicVoiceDetectLevel } from "./voice-detect";
 
@@ -40,7 +41,25 @@ const defaultAlsaOutputDevice = soundCardRef === "whisplaysound"
     ? `plughw:${soundCardRef},0`
     : "default";
 const alsaInputDevice = process.env.ALSA_INPUT_DEVICE || defaultAlsaInputDevice;
-const alsaOutputDevice = process.env.ALSA_OUTPUT_DEVICE || defaultAlsaOutputDevice;
+// ALSA PCM used to reach a Bluetooth speaker: the "pulse" plugin talks to
+// pipewire-pulse (already running for the desktop session), which in turn
+// plays through PipeWire's current default sink — the paired/connected
+// Bluetooth device once selected. No pipewire-alsa package is installed on
+// this image, so there's no direct ALSA "pipewire" PCM to target instead.
+const BLUETOOTH_ALSA_OUTPUT_DEVICE = "pulse";
+// ALSA_OUTPUT_DEVICE, when set, is an explicit escape hatch that always wins
+// (e.g. a custom hw:/plughw: device) — it bypasses the HAT/Bluetooth toggle
+// below entirely. Otherwise the live getAlsaOutputDevice() below decides
+// between the two based on the on-screen/web-admin selection
+// (config/audio-output.ts), so switching speakers doesn't need a restart.
+const getAlsaOutputDevice = (): string => {
+  if (process.env.ALSA_OUTPUT_DEVICE) {
+    return process.env.ALSA_OUTPUT_DEVICE;
+  }
+  return getAudioOutputTarget() === "bluetooth"
+    ? BLUETOOTH_ALSA_OUTPUT_DEVICE
+    : defaultAlsaOutputDevice;
+};
 const normalizeAudioFormat = (value: string | undefined, fallback: AudioFormat): AudioFormat => {
   const normalized = (value || "").toLowerCase();
   return normalized === "wav" || normalized === "mp3" ? normalized : fallback;
@@ -142,7 +161,7 @@ export const playWakeupChime = (): Promise<void> => {
       "-n",
       "-t",
       "alsa",
-      alsaOutputDevice,
+      getAlsaOutputDevice(),
       "synth",
       "0.10",
       "sine",
@@ -357,7 +376,7 @@ const playAudioData = (params: TTSResult): Promise<void> => {
       new Promise<void>((resolve, reject) => {
         console.log("Playback duration:", audioDuration);
         player.isPlaying = true;
-        const process = spawn("sox", ["-q", filePath, "-t", "alsa", alsaOutputDevice]);
+        const process = spawn("sox", ["-q", filePath, "-t", "alsa", getAlsaOutputDevice()]);
         process.on("close", (code: number) => {
           player.isPlaying = false;
           if (code !== 0) {
@@ -388,7 +407,7 @@ const playAudioData = (params: TTSResult): Promise<void> => {
         "-",
         "-t",
         "alsa",
-        alsaOutputDevice,
+        getAlsaOutputDevice(),
       ]);
       player.process = process;
       process.stdin?.on("error", (err) => {
@@ -440,7 +459,7 @@ const playAudioData = (params: TTSResult): Promise<void> => {
       "-",
       "-t",
       "alsa",
-      alsaOutputDevice,
+      getAlsaOutputDevice(),
       "gain",
       MP3_SOX_GAIN_DB,
     ]);

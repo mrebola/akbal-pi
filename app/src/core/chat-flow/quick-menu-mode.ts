@@ -9,6 +9,7 @@ import { display } from "../../device/display";
 export type QuickMenuKey =
   | "model"
   | "mode"
+  | "audio_output"
   | "help"
   | "camera"
   | "volume"
@@ -21,6 +22,7 @@ type QuickMenuItem = { key: QuickMenuKey; label: string; description: string };
 const BASE_ITEMS: QuickMenuItem[] = [
   { key: "model", label: "Modelo", description: "Elegir modelo de IA" },
   { key: "mode", label: "Modo", description: "Agente u local" },
+  { key: "audio_output", label: "Audio", description: "Bocina Pi o bluetooth" },
   { key: "help", label: "Ayuda", description: "Comandos de voz" },
   { key: "camera", label: "Cámara", description: "Tomar una foto" },
   { key: "volume", label: "Volumen", description: "Subir/bajar el sonido" },

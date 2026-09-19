@@ -19,6 +19,7 @@ const statDisk = document.getElementById("stat-disk");
 const logoutBtn = document.getElementById("logout-btn");
 const modelLoadIndicator = document.getElementById("model-load-indicator");
 const unloadModelBtn = document.getElementById("unload-model-btn");
+const audioOutputSelect = document.getElementById("audio-output-select");
 
 logoutBtn.addEventListener("click", async () => {
   await fetch("/api/logout", { method: "POST" }).catch(() => {});
@@ -107,6 +108,9 @@ async function loadStatus() {
     updateSystemStats(data.system);
     modelLoadIndicator.textContent = data.modelLoaded ? "cargado" : "descargado";
     modelLoadIndicator.classList.toggle("loaded", Boolean(data.modelLoaded));
+    if (data.audioOutput && audioOutputSelect.value !== data.audioOutput) {
+      audioOutputSelect.value = data.audioOutput;
+    }
   } catch {
     statusPill.textContent = "sin conexión con el dispositivo";
   }
@@ -168,6 +172,27 @@ modelSelect.addEventListener("change", async () => {
     }
   } catch (err) {
     addMessage("system", `Error cambiando de modelo: ${err.message}`);
+  }
+});
+
+audioOutputSelect.addEventListener("change", async () => {
+  const target = audioOutputSelect.value;
+  try {
+    const res = await apiFetch("/api/audio-output/select", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      const label = target === "bluetooth" ? "bocina bluetooth" : "bocina de la Pi";
+      addMessage("system", `Audio activo: ${label}.`);
+      void loadStatus();
+    } else {
+      addMessage("system", `No se pudo cambiar la salida de audio: ${data.error || ""}`);
+    }
+  } catch (err) {
+    addMessage("system", `Error cambiando la salida de audio: ${err.message}`);
   }
 });
 
@@ -281,6 +306,7 @@ function activateTab(tabName) {
   btn.classList.add("active");
   document.getElementById(`tab-${tabName}`).classList.add("active");
   if (tabName === "wifi") void refreshWifi();
+  if (tabName === "settings") void refreshSettings();
 }
 
 for (const btn of document.querySelectorAll(".tab-btn")) {
@@ -878,6 +904,75 @@ for (const btn of document.querySelectorAll(".tab-btn")) {
   if (btn.dataset.tab === "usb") {
     btn.addEventListener("click", () => void scanUsb());
   }
+}
+
+// ---- Settings (⚙️ tab: audio output, model RAM, USB safe-eject) ----
+
+const settingsUsbEjectList = document.getElementById("settings-usb-eject-list");
+const settingsUsbRefreshBtn = document.getElementById("settings-usb-refresh-btn");
+const settingsUsbStatus = document.getElementById("settings-usb-status");
+
+async function loadSettingsUsbVolumes() {
+  settingsUsbEjectList.innerHTML = "";
+  try {
+    const res = await fetch("/api/usb/volumes");
+    const volumes = await res.json();
+    if (volumes.length === 0) {
+      const li = document.createElement("li");
+      li.className = "muted";
+      li.textContent = "No hay almacenamiento USB conectado.";
+      settingsUsbEjectList.appendChild(li);
+      return;
+    }
+    for (const v of volumes) {
+      const li = document.createElement("li");
+      const label = document.createElement("div");
+      label.textContent = `${v.label} (${v.sizeLabel})`;
+      const meta = document.createElement("div");
+      meta.className = "usb-item-meta";
+      meta.textContent = v.mounted ? v.mountPath : "Ya se puede desconectar";
+      const left = document.createElement("div");
+      left.appendChild(label);
+      left.appendChild(meta);
+      const ejectBtn = document.createElement("button");
+      ejectBtn.className = "secondary";
+      ejectBtn.textContent = "Expulsar";
+      ejectBtn.disabled = !v.mounted;
+      ejectBtn.addEventListener("click", () => void ejectUsbVolume(v.name, ejectBtn));
+      li.appendChild(left);
+      li.appendChild(ejectBtn);
+      settingsUsbEjectList.appendChild(li);
+    }
+  } catch (err) {
+    settingsUsbEjectList.innerHTML = `<li class="muted">Error: ${err.message}</li>`;
+  }
+}
+
+async function ejectUsbVolume(volumeName, btn) {
+  btn.disabled = true;
+  settingsUsbStatus.textContent = "Expulsando...";
+  try {
+    const res = await fetch("/api/usb/eject", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ volume: volumeName }),
+    });
+    const data = await res.json();
+    settingsUsbStatus.textContent = data.ok
+      ? "Ya se puede desconectar con seguridad."
+      : `Error: ${data.error || ""}`;
+  } catch (err) {
+    settingsUsbStatus.textContent = `Error: ${err.message}`;
+  } finally {
+    void loadSettingsUsbVolumes();
+  }
+}
+
+settingsUsbRefreshBtn.addEventListener("click", () => void loadSettingsUsbVolumes());
+
+async function refreshSettings() {
+  settingsUsbStatus.textContent = "";
+  await Promise.all([loadStatus(), loadSettingsUsbVolumes()]);
 }
 
 // ---- Boot ----

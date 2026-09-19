@@ -78,28 +78,39 @@ function updateBatteryIndicator(battery) {
 
 function updateSystemStats(system) {
   if (!system) {
-    statCpu.textContent = "CPU —";
-    statRam.textContent = "RAM —";
-    statDisk.textContent = "Disco —";
+    statCpu.textContent = "—";
+    statRam.textContent = "—";
+    statDisk.textContent = "—";
     statCpu.classList.remove("warn");
     statRam.classList.remove("warn");
     statDisk.classList.remove("warn");
     return;
   }
-  statCpu.textContent = `CPU ${system.cpuPercent}%`;
-  statRam.textContent = `RAM ${system.ram.percent}%`;
-  statDisk.textContent = `Disco ${system.disk.percent}%`;
+  statCpu.textContent = `${system.cpuPercent}%`;
+  statRam.textContent = `${system.ram.percent}%`;
+  statDisk.textContent = `${system.disk.percent}%`;
   statCpu.classList.toggle("warn", system.cpuPercent >= 85);
   statRam.classList.toggle("warn", system.ram.percent >= 85);
   statDisk.classList.toggle("warn", system.disk.percent >= 90);
 }
 
 function addMessage(role, text) {
+  const empty = document.getElementById("chat-empty");
+  if (empty) empty.classList.add("hidden");
   const el = document.createElement("div");
   el.className = `msg ${role}`;
   el.textContent = text;
   chatLog.appendChild(el);
   chatLog.scrollTop = chatLog.scrollHeight;
+  // System notices (audio/wifi/bluetooth/backup/model/file actions) also surface
+  // as a toast so there's feedback outside the Chat view.
+  if (role === "system" && typeof toast === "function" && text) {
+    const t = text.toLowerCase();
+    let kind = "info";
+    if (/error|no se pudo|falló|inválid/.test(t)) kind = "error";
+    else if (/activ|conect|creado|restaur|elimin|vinculad|guardad|expuls|liberad|listo/.test(t)) kind = "success";
+    toast(text, kind);
+  }
   return el;
 }
 
@@ -109,6 +120,12 @@ async function loadStatus() {
     const data = await res.json();
     const wifiLabel = data.wifi?.connected ? data.wifi.ssid : "sin wifi";
     statusPill.textContent = `${data.model} · ${wifiLabel}`;
+    // Compact header summary + system popover.
+    setText("hdr-model", data.model || "—");
+    setText("hdr-model-full", data.model || "—");
+    setText("hdr-wifi", wifiLabel);
+    const onlineDot = document.getElementById("hdr-online-dot");
+    if (onlineDot) onlineDot.classList.add("online");
     updateBatteryIndicator(data.battery);
     updateSystemStats(data.system);
     modelLoadIndicator.textContent = data.modelLoaded ? "Cargado" : "Descargado";
@@ -120,7 +137,44 @@ async function loadStatus() {
     updateSettingsOverview(data);
   } catch {
     statusPill.textContent = "sin conexión con el dispositivo";
+    const onlineDot = document.getElementById("hdr-online-dot");
+    if (onlineDot) onlineDot.classList.remove("online");
+    setText("hdr-model", "sin conexión");
   }
+}
+
+// ---- Header system popover ----
+(function () {
+  const toggle = document.getElementById("sys-toggle");
+  const pop = document.getElementById("sys-popover");
+  if (!toggle || !pop) return;
+  toggle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    pop.classList.toggle("hidden");
+  });
+  document.addEventListener("click", (e) => {
+    if (!pop.contains(e.target) && e.target !== toggle) pop.classList.add("hidden");
+  });
+})();
+
+// ---- Toasts ----
+function toast(message, kind = "info") {
+  let host = document.getElementById("toast-host");
+  if (!host) {
+    host = document.createElement("div");
+    host.id = "toast-host";
+    host.className = "toast-host";
+    document.body.appendChild(host);
+  }
+  const el = document.createElement("div");
+  el.className = `toast toast-${kind}`;
+  el.textContent = message;
+  host.appendChild(el);
+  requestAnimationFrame(() => el.classList.add("show"));
+  setTimeout(() => {
+    el.classList.remove("show");
+    setTimeout(() => el.remove(), 300);
+  }, 3200);
 }
 
 function setText(id, text) {
@@ -2303,3 +2357,29 @@ apDisableBtn?.addEventListener("click", async () => {
     apDisableBtn.disabled = false;
   }
 });
+
+// ================= Wi-Fi sub-tabs (Conexión / Redes / Espectro) =================
+(function () {
+  const nav = document.getElementById("wifi-subtabs");
+  if (!nav) return;
+  nav.addEventListener("click", (e) => {
+    const btn = e.target.closest(".subtab");
+    if (!btn) return;
+    const key = btn.dataset.wifiSub;
+    for (const b of nav.querySelectorAll(".subtab")) b.classList.toggle("active", b === btn);
+    for (const p of document.querySelectorAll("#tab-wifi .subpanel")) {
+      p.classList.toggle("active", p.dataset.wifiPanel === key);
+    }
+  });
+})();
+
+// ================= Chat: sugerencias del empty state =================
+(function () {
+  for (const b of document.querySelectorAll(".chat-suggest")) {
+    b.addEventListener("click", () => {
+      const text = b.dataset.suggest;
+      if (!text || typeof sending !== "undefined" && sending) return;
+      void sendMessage(text);
+    });
+  }
+})();

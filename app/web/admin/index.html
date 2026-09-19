@@ -14,31 +14,53 @@
     </div>
     <nav class="tabs">
       <button class="tab-btn active" data-tab="chat">Chat</button>
-      <button class="tab-btn" data-tab="wifi">Wifi</button>
-      <button class="tab-btn" data-tab="usb">USB</button>
-      <button class="tab-btn" data-tab="music">Música</button>
+      <button class="tab-btn" data-tab="wifi">Wi-Fi</button>
+      <a href="/wifiradar" class="tab-link" title="Visualización Wi-Fi en 3D">Radar Wi-Fi</a>
       <button class="tab-btn" data-tab="wardrive">Wardriving</button>
-      <a href="/wifiradar" class="tab-link" title="Visualización WiFi en 3D">WIFIRADAR</a>
-      <button class="tab-btn" data-tab="settings" title="Configuración">Config</button>
+      <button class="tab-btn" data-tab="music">Música</button>
+      <button class="tab-btn" data-tab="usb">Dispositivos</button>
+      <button class="tab-btn" data-tab="settings" title="Ajustes">Ajustes</button>
     </nav>
-    <div class="status" id="status-pill">—</div>
-    <div class="sys-stats" id="sys-stats" title="Recursos del sistema">
-      <span class="sys-stat" id="stat-cpu">CPU —</span>
-      <span class="sys-stat" id="stat-ram">RAM —</span>
-      <span class="sys-stat" id="stat-disk">Disco —</span>
+
+    <div class="hdr-right">
+      <button type="button" id="sys-toggle" class="hdr-summary" title="Estado del sistema">
+        <span class="hdr-dot" id="hdr-online-dot"></span>
+        <span class="hdr-model" id="hdr-model">—</span>
+        <span class="battery-indicator" id="battery-indicator" title="Batería">
+          <span id="battery-icon">🔋</span>
+          <span id="battery-pct">—</span>
+        </span>
+        <span class="hdr-gear">◉</span>
+      </button>
+      <div id="sys-popover" class="popover hidden" role="menu">
+        <div class="popover-title">Sistema</div>
+        <div class="metric-row"><span class="metric-key">CPU</span><span class="metric-val mono" id="stat-cpu">—</span></div>
+        <div class="metric-row"><span class="metric-key">RAM</span><span class="metric-val mono" id="stat-ram">—</span></div>
+        <div class="metric-row"><span class="metric-key">Disco</span><span class="metric-val mono" id="stat-disk">—</span></div>
+        <div class="metric-row"><span class="metric-key">Wi-Fi</span><span class="metric-val" id="hdr-wifi">—</span></div>
+        <div class="metric-row"><span class="metric-key">Modelo</span><span class="metric-val mono" id="hdr-model-full">—</span></div>
+        <div class="popover-sep"></div>
+        <button id="logout-btn" class="btn btn-tertiary btn-block" title="Cerrar sesión">Cerrar sesión</button>
+      </div>
     </div>
-    <div class="battery-indicator" id="battery-indicator" title="Batería">
-      <span id="battery-icon">🔋</span>
-      <span id="battery-pct">—</span>
-    </div>
-    <button id="logout-btn" class="secondary logout-btn" title="Cerrar sesión">Salir</button>
+    <span id="status-pill" class="hidden">—</span>
   </header>
 
   <main>
     <section id="tab-chat" class="tab-panel active">
       <div class="chat-toolbar">
-        <label for="model-select">Modelo</label>
+        <span class="chat-model-chip"><span class="chat-model-dot"></span><label for="model-select">Modelo</label></span>
         <select id="model-select"></select>
+      </div>
+      <div id="chat-empty" class="chat-empty">
+        <img class="chat-empty-avatar" src="/avatar/standing.gif" alt="Akbal" />
+        <div class="chat-empty-title">AKBAL</div>
+        <div class="chat-empty-sub">¿Qué quieres hacer?</div>
+        <div class="chat-empty-actions">
+          <button type="button" class="btn btn-secondary chat-suggest" data-suggest="¿Qué puedes hacer?">¿Qué puedes hacer?</button>
+          <button type="button" class="btn btn-secondary chat-suggest" data-suggest="Cuéntame algo de Cypher">Cuéntame de Cypher</button>
+          <button type="button" class="btn btn-secondary chat-suggest" data-suggest="¿Cómo está el sistema?">Estado del sistema</button>
+        </div>
       </div>
       <div id="chat-log" class="chat-log"></div>
       <form id="chat-form" class="chat-form">
@@ -49,25 +71,37 @@
     </section>
 
     <section id="tab-wifi" class="tab-panel">
-      <div class="wifi-current">
-        <div class="wifi-current-label">Conexión actual</div>
-        <div id="wifi-current-ssid" class="wifi-current-ssid">—</div>
-        <div id="wifi-current-actions" class="wifi-current-actions hidden">
-          <button id="wifi-current-show-password" class="secondary">Ver contraseña</button>
-          <button id="wifi-current-forget" class="secondary">Olvidar esta red</button>
-        </div>
-        <div id="wifi-current-password" class="wifi-current-password hidden"></div>
-      </div>
-      <div class="wifi-toolbar">
-        <button id="wifi-scan-btn">Buscar redes</button>
-        <span id="wifi-scan-status" class="muted"></span>
-      </div>
-      <ul id="wifi-list" class="wifi-list"></ul>
-      <div class="wifi-toolbar">
-        <span class="muted">Redes guardadas</span>
-      </div>
-      <ul id="wifi-saved-list" class="wifi-list"></ul>
+      <nav class="subtabs" id="wifi-subtabs">
+        <button class="subtab active" data-wifi-sub="conexion">Conexión</button>
+        <button class="subtab" data-wifi-sub="redes">Redes</button>
+        <button class="subtab" data-wifi-sub="espectro">Espectro</button>
+      </nav>
 
+      <div class="subpanel active" data-wifi-panel="conexion">
+        <div class="wifi-current card">
+          <div class="wifi-current-label">Conexión actual</div>
+          <div id="wifi-current-ssid" class="wifi-current-ssid">—</div>
+          <div id="wifi-current-actions" class="wifi-current-actions hidden">
+            <button id="wifi-current-show-password" class="btn btn-tertiary">Ver contraseña</button>
+            <button id="wifi-current-forget" class="btn btn-danger">Olvidar esta red</button>
+          </div>
+          <div id="wifi-current-password" class="wifi-current-password hidden"></div>
+        </div>
+      </div>
+
+      <div class="subpanel" data-wifi-panel="redes">
+        <div class="wifi-toolbar">
+          <button id="wifi-scan-btn" class="btn btn-secondary">Buscar redes</button>
+          <span id="wifi-scan-status" class="muted"></span>
+        </div>
+        <ul id="wifi-list" class="wifi-list"></ul>
+        <div class="wifi-toolbar">
+          <span class="muted">Redes guardadas</span>
+        </div>
+        <ul id="wifi-saved-list" class="wifi-list"></ul>
+      </div>
+
+      <div class="subpanel" data-wifi-panel="espectro">
       <div class="rf-panel">
         <div class="rf-panel-header">
           <span class="rf-panel-title">// ANÁLISIS DE ESPECTRO RF</span>
@@ -94,6 +128,7 @@
             <tbody id="rf-table-body"></tbody>
           </table>
         </div>
+      </div>
       </div>
     </section>
 

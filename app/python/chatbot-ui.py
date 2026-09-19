@@ -41,6 +41,10 @@ TOP_BAR_RIGHT_INSET_PCT = 0.10
 GIF_FPS = 10
 TERMINAL_FG = (80, 255, 120, 255)
 TERMINAL_DIM = (30, 90, 55, 255)
+# Near-white gray for the help screen's example line (chat-flow/help-mode.ts)
+# — the dark terminal green (TERMINAL_DIM) used for the model-select dots
+# was too hard to read there.
+HELP_EXAMPLE_FG = (225, 225, 225, 255)
 TOOL_PLACEHOLDER_RE = re.compile(r"\{tool:([A-Za-z0-9_-]+)\}")
 
 # Model select/switch overlay (see chat-flow/model-select-mode.ts). Replaces
@@ -301,9 +305,11 @@ class RenderThread(threading.Thread):
 
         help_ui_body is "label\\nexample\\nlabel\\nexample..." — one pair per
         command, always emitted in that order by help-mode.ts. Even lines
-        (the label) render bright and slightly larger; odd lines (the
-        phrase to say) render dim and smaller, so each pair reads as one
-        grouped item instead of a wall of equal-weight text."""
+        (the label) render in the bright terminal green and slightly larger;
+        odd lines (the phrase to say) render smaller in near-white gray
+        (HELP_EXAMPLE_FG — the dark terminal green was hard to read here),
+        so each pair reads as one grouped item instead of a wall of
+        equal-weight text."""
         self.render_top_bar()
 
         mode = current_help_ui
@@ -338,7 +344,7 @@ class RenderThread(threading.Thread):
                 for i, raw_line in enumerate(raw_lines):
                     is_label = (i % 2) == 0
                     font = self.help_ui_label_font if is_label else self.help_ui_example_font
-                    color = TERMINAL_FG if is_label else TERMINAL_DIM
+                    color = TERMINAL_FG if is_label else HELP_EXAMPLE_FG
                     # Defensive wrap in case a future entry runs long — normal
                     # entries fit on one line at this width/size.
                     wrapped = [

@@ -50,6 +50,11 @@ class ChatFlow implements ChatFlowContext {
     .filter((item) => item.length > 0);
   endAfterAnswer: boolean = false;
   whisplayIMBridge: WhisplayIMBridgeServer | null = null;
+  // True while the current turn has already fallen back to the local model
+  // after the OpenClaw agent bridge didn't answer in time (see states.ts) —
+  // makes a late "reply" event from that abandoned request a no-op instead
+  // of hijacking whatever's on screen now. Reset per turn in states.ts.
+  agentReplyExpired: boolean = false;
   pendingExternalReply: string = "";
   pendingExternalEmoji: string = "";
   pendingExternalImageUrl: string = "";
@@ -151,6 +156,15 @@ class ChatFlow implements ChatFlowContext {
     this.whisplayIMBridge.on(
       "reply",
       (payload: { reply: string; emoji?: string; imagePath?: string }) => {
+        // If the "answer" state already gave up on this turn and fell back
+        // to the local model (see states.ts), a reply that shows up late
+        // must not yank the screen away from whatever's playing now.
+        if (this.agentReplyExpired) {
+          console.log(
+            "[WhisplayIM] Reply arrived after the local fallback already kicked in — ignoring.",
+          );
+          return;
+        }
         this.pendingExternalReply = payload.reply;
         this.pendingExternalEmoji = payload.emoji || "";
         this.pendingExternalImageUrl = payload.imagePath || "";

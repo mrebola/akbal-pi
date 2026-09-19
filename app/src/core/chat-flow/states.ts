@@ -369,216 +369,229 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       RGB: "#00c8a3",
     });
     const currentAnswerId = ctx.answerId;
-    if (isAgentMode()) {
-      const prompt: {
-        role: "system" | "user";
-        content: string;
-      }[] = [
-          {
-            role: "user",
-            content: ctx.asrText,
-          },
-        ];
-      sendWhisplayIMMessage(prompt)
-        .then((ok) => {
-          if (ok) {
-            display({
-              status: "idle",
-              emoji: "😊",
-              RGB: "#000055",
-              image_icon_visible: false,
-            });
-          } else {
-            display({
-              status: "error",
-              emoji: "⚠️",
-              text: "Falló el envío a OpenClaw",
-              image_icon_visible: false,
-            });
+
+    // Local model turn — used directly in "modo local", and as the fallback
+    // when "modo agente" doesn't hear back from OpenClaw in time (see below).
+    const runLocalAnswer = (): void => {
+      onButtonPressed(() => {
+        ctx.transitionTo("listening");
+      });
+      onButtonReleased(noop);
+      const {
+        partial,
+        endPartial,
+        getPlayEndPromise,
+        stop: stopPlaying,
+      } = ctx.streamResponser;
+      let llmResponseText = "";
+      const isCurrentAnswer = (): boolean =>
+        currentAnswerId === ctx.answerId && ctx.currentFlowName === "answer";
+      const trackingPartial = (text: string): void => {
+        if (!isCurrentAnswer()) return;
+        llmResponseText += text;
+        partial(text);
+        ctx.updateAnswerDisplayText(llmResponseText);
+      };
+      let resolveLlmDone: () => void = () => {};
+      const llmDonePromise = new Promise<void>((resolve) => {
+        resolveLlmDone = resolve;
+      });
+      ctx.partialThinking = "";
+      ctx.thinkingSentences = [];
+      Promise.all([
+        [() => Promise.resolve().then(() => ""), getSystemPromptWithKnowledge]
+        [enableRAG ? 1 : 0](ctx.asrText),
+        Promise.resolve().then(() => prepareMemoryPrompt(ctx.asrText)),
+      ])
+        .then(([res, memoryPrompt]: [string, string]) => {
+          let knowledgePrompt = res;
+          if (res) {
+            console.log("Retrieved knowledge for RAG:\n", res);
           }
-        })
-        .finally(() => {
-          clearPendingCapturedImgForChat();
-          ctx.transitionTo("sleep");
-        });
-      return;
-    }
-    onButtonPressed(() => {
-      ctx.transitionTo("listening");
-    });
-    onButtonReleased(noop);
-    const {
-      partial,
-      endPartial,
-      getPlayEndPromise,
-      stop: stopPlaying,
-    } = ctx.streamResponser;
-    let llmResponseText = "";
-    const isCurrentAnswer = (): boolean =>
-      currentAnswerId === ctx.answerId && ctx.currentFlowName === "answer";
-    const trackingPartial = (text: string): void => {
-      if (!isCurrentAnswer()) return;
-      llmResponseText += text;
-      partial(text);
-      ctx.updateAnswerDisplayText(llmResponseText);
-    };
-    let resolveLlmDone: () => void = () => {};
-    const llmDonePromise = new Promise<void>((resolve) => {
-      resolveLlmDone = resolve;
-    });
-    ctx.partialThinking = "";
-    ctx.thinkingSentences = [];
-    Promise.all([
-      [() => Promise.resolve().then(() => ""), getSystemPromptWithKnowledge]
-      [enableRAG ? 1 : 0](ctx.asrText),
-      Promise.resolve().then(() => prepareMemoryPrompt(ctx.asrText)),
-    ])
-      .then(([res, memoryPrompt]: [string, string]) => {
-        let knowledgePrompt = res;
-        if (res) {
-          console.log("Retrieved knowledge for RAG:\n", res);
-        }
-        if (ctx.knowledgePrompts.includes(res)) {
-          console.log(
-            "[RAG] Knowledge prompt already used in this session, skipping to avoid repetition.",
-          );
-          knowledgePrompt = "";
-        }
-        if (knowledgePrompt) {
-          ctx.knowledgePrompts.push(knowledgePrompt);
-        }
-        display({
-          rag_icon_visible: Boolean(enableRAG && knowledgePrompt),
-        });
-        const prompt: {
-          role: "system" | "user";
-          content: string;
-        }[] = compact([
-          memoryPrompt
-            ? {
-              role: "system",
-              content: memoryPrompt,
-            }
-            : null,
-          knowledgePrompt
-            ? {
-              role: "system",
-              content: knowledgePrompt,
-            }
-            : null,
-          {
-            role: "user",
-            content: ctx.asrText,
-          },
-        ]);
-        chatWithLLMStream(
-          prompt,
-          trackingPartial,
-          () => {
+          if (ctx.knowledgePrompts.includes(res)) {
+            console.log(
+              "[RAG] Knowledge prompt already used in this session, skipping to avoid repetition.",
+            );
+            knowledgePrompt = "";
+          }
+          if (knowledgePrompt) {
+            ctx.knowledgePrompts.push(knowledgePrompt);
+          }
+          display({
+            rag_icon_visible: Boolean(enableRAG && knowledgePrompt),
+          });
+          const prompt: {
+            role: "system" | "user";
+            content: string;
+          }[] = compact([
+            memoryPrompt
+              ? {
+                role: "system",
+                content: memoryPrompt,
+              }
+              : null,
+            knowledgePrompt
+              ? {
+                role: "system",
+                content: knowledgePrompt,
+              }
+              : null,
+            {
+              role: "user",
+              content: ctx.asrText,
+            },
+          ]);
+          chatWithLLMStream(
+            prompt,
+            trackingPartial,
+            () => {
+              if (isCurrentAnswer()) {
+                endPartial();
+              }
+              resolveLlmDone();
+            },
+            (partialThinking) =>
+              isCurrentAnswer() &&
+              ctx.partialThinkingCallback(partialThinking),
+            (functionName: string, result?: string) => {
+              if (!isCurrentAnswer()) return;
+              if (
+                functionName === "endConversation" &&
+                result?.startsWith("[success]")
+              ) {
+                ctx.endAfterAnswer = true;
+              }
+              if (
+                functionName === "generateImage" &&
+                result?.startsWith("[success]")
+              ) {
+                const img = getLatestGenImg();
+                if (img) {
+                  display({ image: img });
+                }
+              }
+              if (
+                functionName.startsWith("playMusic") &&
+                result?.startsWith("[success]")
+              ) {
+                ctx.enterMusicAfterAnswer = true;
+                ctx.musicDisplayText = result.replace(/^\[success\]/, "").trim();
+              }
+              if (!result) {
+                ctx.appendToolCallDisplay(functionName);
+              } else if (
+                functionName === "runCommand" &&
+                result.startsWith("[success] status=running")
+              ) {
+                const jobId = result.match(/\bjob_id=([^\s]+)/)?.[1];
+                if (jobId) {
+                  ctx.keepCommandToolDisplayRunning(jobId);
+                } else {
+                  ctx.finishToolCallDisplay(functionName);
+                }
+              } else if (
+                result.includes("status=completed")
+              ) {
+                const jobId = result.match(/\bjob_id=([^\s]+)/)?.[1];
+                if (jobId) {
+                  ctx.finishCommandToolDisplay(jobId);
+                }
+                ctx.finishToolCallDisplay(functionName);
+              } else {
+                ctx.finishToolCallDisplay(functionName);
+              }
+            },
+          ).catch((error) => {
+            console.error("[answer] LLM stream failed:", error);
             if (isCurrentAnswer()) {
               endPartial();
             }
             resolveLlmDone();
-          },
-          (partialThinking) =>
-            isCurrentAnswer() &&
-            ctx.partialThinkingCallback(partialThinking),
-          (functionName: string, result?: string) => {
-            if (!isCurrentAnswer()) return;
-            if (
-              functionName === "endConversation" &&
-              result?.startsWith("[success]")
-            ) {
-              ctx.endAfterAnswer = true;
-            }
-            if (
-              functionName === "generateImage" &&
-              result?.startsWith("[success]")
-            ) {
-              const img = getLatestGenImg();
-              if (img) {
-                display({ image: img });
-              }
-            }
-            if (
-              functionName.startsWith("playMusic") &&
-              result?.startsWith("[success]")
-            ) {
-              ctx.enterMusicAfterAnswer = true;
-              ctx.musicDisplayText = result.replace(/^\[success\]/, "").trim();
-            }
-            if (!result) {
-              ctx.appendToolCallDisplay(functionName);
-            } else if (
-              functionName === "runCommand" &&
-              result.startsWith("[success] status=running")
-            ) {
-              const jobId = result.match(/\bjob_id=([^\s]+)/)?.[1];
-              if (jobId) {
-                ctx.keepCommandToolDisplayRunning(jobId);
-              } else {
-                ctx.finishToolCallDisplay(functionName);
-              }
-            } else if (
-              result.includes("status=completed")
-            ) {
-              const jobId = result.match(/\bjob_id=([^\s]+)/)?.[1];
-              if (jobId) {
-                ctx.finishCommandToolDisplay(jobId);
-              }
-              ctx.finishToolCallDisplay(functionName);
-            } else {
-              ctx.finishToolCallDisplay(functionName);
-            }
-          },
-        ).catch((error) => {
-          console.error("[answer] LLM stream failed:", error);
-          if (isCurrentAnswer()) {
-            endPartial();
+          });
+        })
+        .catch((error) => {
+          console.error("[answer] Failed to prepare prompt:", error);
+          if (currentAnswerId === ctx.answerId) {
+            resolveLlmDone();
+            ctx.transitionTo("sleep");
           }
-          resolveLlmDone();
         });
-      })
-      .catch((error) => {
-        console.error("[answer] Failed to prepare prompt:", error);
-        if (currentAnswerId === ctx.answerId) {
-          resolveLlmDone();
-          ctx.transitionTo("sleep");
+      llmDonePromise.then(() => getPlayEndPromise()).then(() => {
+        if (ctx.currentFlowName === "answer") {
+          autoSaveExchange(ctx.asrText, llmResponseText, summaryTextWithLLM);
+          clearPendingCapturedImgForChat();
+          display({ image_icon_visible: false });
+          if (ctx.wakeSessionActive || ctx.endAfterAnswer) {
+            if (ctx.endAfterAnswer) {
+              ctx.endWakeSession();
+              ctx.transitionTo("sleep");
+            } else {
+              ctx.transitionTo("wake_listening");
+            }
+            return;
+          }
+          if (ctx.enterMusicAfterAnswer) {
+            ctx.transitionTo("music");
+            return;
+          }
+          const img = getLatestDisplayImg();
+          if (img) {
+            ctx.transitionTo("image");
+          } else {
+            ctx.transitionTo("sleep");
+          }
         }
       });
-    llmDonePromise.then(() => getPlayEndPromise()).then(() => {
-      if (ctx.currentFlowName === "answer") {
-        autoSaveExchange(ctx.asrText, llmResponseText, summaryTextWithLLM);
+      onButtonPressed(() => {
+        stopPlaying();
         clearPendingCapturedImgForChat();
         display({ image_icon_visible: false });
-        if (ctx.wakeSessionActive || ctx.endAfterAnswer) {
-          if (ctx.endAfterAnswer) {
-            ctx.endWakeSession();
-            ctx.transitionTo("sleep");
-          } else {
-            ctx.transitionTo("wake_listening");
+        ctx.transitionTo("listening");
+      });
+      onButtonReleased(noop);
+    };
+
+    if (isAgentMode()) {
+      ctx.agentReplyExpired = false;
+      const prompt: { role: "user"; content: string }[] = [
+        { role: "user", content: ctx.asrText },
+      ];
+      const timeoutMs = parseInt(
+        process.env.AGENT_REPLY_TIMEOUT_MS || "20000",
+        10,
+      );
+      let fellBackToLocal = false;
+      // Whichever happens first wins: OpenClaw's reply (handled in
+      // ChatFlow.ensureAgentBridge, which transitions to "external_answer")
+      // or this fallback. The other becomes a no-op — via the
+      // currentFlowName/answerId check below, or agentReplyExpired on the
+      // bridge side once we've already moved on.
+      const fallbackToLocal = (reason: string): void => {
+        if (fellBackToLocal) return;
+        if (ctx.currentFlowName !== "answer" || currentAnswerId !== ctx.answerId) return;
+        fellBackToLocal = true;
+        ctx.agentReplyExpired = true;
+        console.log(`[answer] ${reason} — falling back to the local model.`);
+        runLocalAnswer();
+      };
+      onButtonPressed(() => {
+        ctx.transitionTo("listening");
+      });
+      onButtonReleased(noop);
+      setTimeout(() => fallbackToLocal("OpenClaw did not reply in time"), timeoutMs);
+      sendWhisplayIMMessage(prompt)
+        .then((ok) => {
+          if (!ok) {
+            fallbackToLocal("Failed to reach the whisplay-im bridge");
+            return;
           }
-          return;
-        }
-        if (ctx.enterMusicAfterAnswer) {
-          ctx.transitionTo("music");
-          return;
-        }
-        const img = getLatestDisplayImg();
-        if (img) {
-          ctx.transitionTo("image");
-        } else {
-          ctx.transitionTo("sleep");
-        }
-      }
-    });
-    onButtonPressed(() => {
-      stopPlaying();
-      clearPendingCapturedImgForChat();
-      display({ image_icon_visible: false });
-      ctx.transitionTo("listening");
-    });
-    onButtonReleased(noop);
+          clearPendingCapturedImgForChat();
+        })
+        .catch(() => fallbackToLocal("whisplay-im bridge request threw"));
+      return;
+    }
+
+    runLocalAnswer();
   },
   image: (ctx: ChatFlowContext) => {
     onButtonPressed(() => {

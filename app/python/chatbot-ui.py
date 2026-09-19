@@ -159,9 +159,10 @@ class RenderThread(threading.Thread):
         self.model_ui_hint_font = ImageFont.truetype(self.font_path, 13)
         self.model_ui_cache_key = None
         self.help_ui_title_font = ImageFont.truetype(self.font_path, 13)
-        self.help_ui_body_font = ImageFont.truetype(self.font_path, 13)
+        self.help_ui_label_font = ImageFont.truetype(self.font_path, 15)
+        self.help_ui_example_font = ImageFont.truetype(self.font_path, 13)
         self.help_ui_hint_font = ImageFont.truetype(self.font_path, 12)
-        self.help_ui_exit_font = ImageFont.truetype(self.font_path, 18)
+        self.help_ui_exit_font = ImageFont.truetype(self.font_path, 20)
         self.help_ui_cache_key = None
 
     def render_init_screen(self):
@@ -296,7 +297,13 @@ class RenderThread(threading.Thread):
     def render_help_screen(self, text):
         """Terminal-style voice-command cheat sheet (chat-flow/help-mode.ts),
         opened by saying "ayuda" while holding the button. Click pages
-        through short command examples; the last page highlights "Salir"."""
+        through short command examples; the last page highlights "Salir".
+
+        help_ui_body is "label\\nexample\\nlabel\\nexample..." — one pair per
+        command, always emitted in that order by help-mode.ts. Even lines
+        (the label) render bright and slightly larger; odd lines (the
+        phrase to say) render dim and smaller, so each pair reads as one
+        grouped item instead of a wall of equal-weight text."""
         self.render_top_bar()
 
         mode = current_help_ui
@@ -313,31 +320,39 @@ class RenderThread(threading.Thread):
             draw.text((14, 10), ">_ AYUDA", font=self.help_ui_title_font, fill=TERMINAL_FG)
 
             if mode == "exit":
-                box_w, box_h = 140, 46
+                box_w, box_h = 150, 54
                 box_x = (VIDEO_WIDTH - box_w) // 2
                 box_y = (VIDEO_HEIGHT - box_h) // 2
                 draw.rectangle((box_x, box_y, box_x + box_w, box_y + box_h), outline=TERMINAL_FG, width=2)
-                self._draw_centered(draw, "SALIR", self.help_ui_exit_font, box_y + 12)
+                self._draw_centered(draw, "SALIR", self.help_ui_exit_font, box_y + 14)
             else:
                 content_width = VIDEO_WIDTH - 28
-                lines = []
-                for raw_line in body.split("\n"):
-                    if raw_line == "":
-                        lines.append("")
-                        continue
-                    lines.extend(
-                        line for line in TextUtils.wrap_text(draw, raw_line, self.help_ui_body_font, content_width)
+                label_ascent, label_descent = self.help_ui_label_font.getmetrics()
+                example_ascent, example_descent = self.help_ui_example_font.getmetrics()
+                label_line_height = label_ascent + label_descent + 2
+                example_line_height = example_ascent + example_descent
+                pair_gap = 10
+
+                y = 36
+                raw_lines = body.split("\n")
+                for i, raw_line in enumerate(raw_lines):
+                    is_label = (i % 2) == 0
+                    font = self.help_ui_label_font if is_label else self.help_ui_example_font
+                    color = TERMINAL_FG if is_label else TERMINAL_DIM
+                    # Defensive wrap in case a future entry runs long — normal
+                    # entries fit on one line at this width/size.
+                    wrapped = [
+                        line for line in TextUtils.wrap_text(draw, raw_line, font, content_width)
                         if line != ""
-                    )
-                ascent, descent = self.help_ui_body_font.getmetrics()
-                line_height = ascent + descent + 3
-                y = 38
-                for line in lines:
-                    draw.text((14, y), line, font=self.help_ui_body_font, fill=TERMINAL_FG)
-                    y += line_height
+                    ] or [""]
+                    for line in wrapped:
+                        draw.text((14, y), line, font=font, fill=color)
+                        y += label_line_height if is_label else example_line_height
+                    if not is_label:
+                        y += pair_gap
 
                 if total:
-                    self._draw_centered(draw, f"[{page}/{total}]", self.help_ui_hint_font, VIDEO_HEIGHT - 22)
+                    self._draw_centered(draw, f"[{page}/{total}]", self.help_ui_hint_font, VIDEO_HEIGHT - 20)
 
             rgb565_data = ImageUtils.image_to_rgb565(frame, VIDEO_WIDTH, VIDEO_HEIGHT)
             self.whisplay.draw_image(0, TOP_BAR_HEIGHT, VIDEO_WIDTH, VIDEO_HEIGHT, rgb565_data)

@@ -69,6 +69,27 @@ arrancarlo siempre desde el boot: quien nunca activó modo agente no debería
 tener un listener HTTP corriendo (sin auth si no configuraste
 `WHISPLAY_IM_TOKEN`) por default.
 
+## Fallback automático al modelo local
+
+En "modo agente", cada turno intenta primero OpenClaw — pero si no contesta
+a tiempo (sin wifi, la VM de OpenClaw caída, el puente `whisplay-im-bridge`
+apagado, etc.), el dispositivo no se queda esperando para siempre: cae solo
+al modelo local (`LLM_SERVER`, Ollama por defecto) para ese turno, sin que
+haga falta cambiar de modo a mano.
+
+- El tiempo de espera es `AGENT_REPLY_TIMEOUT_MS` en `.env` (default 20000 =
+  20 segundos). Pasado ese tiempo sin respuesta de OpenClaw, sigue el mismo
+  camino que "modo local" para esa pregunta puntual — el modo persistido
+  (`DEVICE_MODE`) no cambia, así que el siguiente turno vuelve a intentar
+  OpenClaw primero.
+- Si la respuesta de OpenClaw llega tarde (después del fallback), se
+  descarta en vez de interrumpir lo que ya está sonando — ver
+  `agentReplyExpired` en `ChatFlow.ts` / `chat-flow/states.ts`.
+- Esto no es una cola ni reintento: es un fallback de una sola vez por
+  turno. Si OpenClaw está caído, cada pregunta tarda `AGENT_REPLY_TIMEOUT_MS`
+  de más antes de caer a local — bajar ese valor si se prioriza latencia
+  sobre darle más margen a OpenClaw.
+
 ## Seguridad
 
 `WHISPLAY_IM_TOKEN` (el token que autentica al bridge, no el token del bot

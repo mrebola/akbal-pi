@@ -315,6 +315,9 @@ export class WardriveService extends EventEmitter {
         return { ok: false, error: this.error };
       }
       this.iface = info.iface;
+      // The WiFi Radar holds the same AR9271; release it so wardriving can own
+      // the adapter for a fixed-channel capture (resumed on exit()).
+      await stopWifiRadarService().catch(() => {});
       await enterMonitorMode(info.iface);
       this.error = "";
       this.mode = "ready";
@@ -353,6 +356,8 @@ export class WardriveService extends EventEmitter {
     this.mode = "inactive";
     this.currentBssid = null;
     this.modelsUnloaded = false;
+    // Give the adapter back to the WiFi Radar.
+    startWifiRadarService();
     this.broadcastStatus();
     console.log("[wardrive] mode OFF");
     return { ok: true };
@@ -718,4 +723,8 @@ export function getWardriveService(): WardriveService {
 
 // Re-exported for the web UI: needs the same full-MAC view of associated
 // clients that discovery uses.
-import { getWifiRadarSnapshot } from "../wifiradar/service";
+import {
+  getWifiRadarSnapshot,
+  stopWifiRadarService,
+  startWifiRadarService,
+} from "../wifiradar/service";

@@ -496,8 +496,28 @@ export class WebAdminServer {
         return;
       }
       ctx.set("Content-Length", String(stat.size));
-      ctx.type = "application/octet-stream";
-      ctx.set("Content-Disposition", `attachment; filename="${path.basename(full)}"`);
+      // inline=1 serves viewable types with a real content-type (no attachment)
+      // so the web file viewer can preview images/text/PDF in place.
+      const inline = String(ctx.query.inline || "") === "1";
+      const ext = path.extname(full).toLowerCase();
+      const VIEW_TYPES: Record<string, string> = {
+        ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+        ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp",
+        ".svg": "image/svg+xml", ".pdf": "application/pdf",
+        ".txt": "text/plain; charset=utf-8", ".log": "text/plain; charset=utf-8",
+        ".json": "application/json; charset=utf-8", ".md": "text/plain; charset=utf-8",
+        ".csv": "text/plain; charset=utf-8", ".ini": "text/plain; charset=utf-8",
+        ".conf": "text/plain; charset=utf-8", ".sh": "text/plain; charset=utf-8",
+        ".xml": "text/plain; charset=utf-8", ".yml": "text/plain; charset=utf-8",
+        ".yaml": "text/plain; charset=utf-8",
+      };
+      if (inline && VIEW_TYPES[ext]) {
+        ctx.type = VIEW_TYPES[ext];
+        ctx.set("Content-Disposition", `inline; filename="${path.basename(full)}"`);
+      } else {
+        ctx.type = "application/octet-stream";
+        ctx.set("Content-Disposition", `attachment; filename="${path.basename(full)}"`);
+      }
       ctx.body = fs.createReadStream(full);
     });
     router.post("/api/storage/delete", async (ctx) => {

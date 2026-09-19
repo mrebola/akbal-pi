@@ -2173,12 +2173,18 @@ function createFileManager(container) {
       for (const e of data.entries) {
         const li = document.createElement("li");
         const name = document.createElement("span");
-        name.className = e.isDir ? "fm-name dir" : "fm-name";
+        const viewable = !e.isDir && typeof fmIsViewable === "function" && fmIsViewable(e.name);
+        name.className = e.isDir ? "fm-name dir" : viewable ? "fm-name viewable" : "fm-name";
         name.textContent = (e.isDir ? "📁 " : "📄 ") + e.name;
         if (e.isDir) {
           name.addEventListener("click", () => {
             cwd = cwd ? `${cwd}/${e.name}` : e.name;
             void load();
+          });
+        } else if (viewable) {
+          name.addEventListener("click", () => {
+            const rel = cwd ? `${cwd}/${e.name}` : e.name;
+            void openFileViewer(root, rel, e.name);
           });
         }
         const meta = document.createElement("span");
@@ -2406,3 +2412,58 @@ apDisableBtn?.addEventListener("click", async () => {
 
 // ---- Boot: activate the initial tab last, once every module above is ready ----
 if (initialTab) activateTab(initialTab);
+
+// ================= Visor de archivos (imágenes / texto / PDF) =================
+const FM_IMG_EXT = /\.(jpe?g|png|gif|webp|bmp|svg)$/i;
+const FM_PDF_EXT = /\.pdf$/i;
+const FM_TXT_EXT = /\.(txt|log|json|md|csv|ini|conf|sh|xml|ya?ml|js|ts|py|html?|css)$/i;
+function fmIsViewable(name) {
+  return FM_IMG_EXT.test(name) || FM_PDF_EXT.test(name) || FM_TXT_EXT.test(name);
+}
+async function openFileViewer(root, rel, name) {
+  const modal = document.getElementById("fm-viewer");
+  const body = document.getElementById("fm-viewer-body");
+  const nameEl = document.getElementById("fm-viewer-name");
+  const dl = document.getElementById("fm-viewer-download");
+  if (!modal || !body) return;
+  const base = `/api/storage/download?root=${encodeURIComponent(root)}&path=${encodeURIComponent(rel)}`;
+  nameEl.textContent = name;
+  dl.href = base;
+  body.innerHTML = "";
+  modal.classList.remove("hidden");
+  if (FM_IMG_EXT.test(name)) {
+    const img = document.createElement("img");
+    img.src = `${base}&inline=1`;
+    img.alt = name;
+    body.appendChild(img);
+  } else if (FM_PDF_EXT.test(name)) {
+    const frame = document.createElement("iframe");
+    frame.src = `${base}&inline=1`;
+    body.appendChild(frame);
+  } else {
+    const pre = document.createElement("pre");
+    pre.textContent = "Cargando...";
+    body.appendChild(pre);
+    try {
+      const res = await apiFetch(`${base}&inline=1`);
+      const txt = await res.text();
+      pre.textContent = txt.length > 200000 ? txt.slice(0, 200000) + "\n… (truncado)" : txt;
+    } catch (err) {
+      pre.textContent = `Error: ${err.message}`;
+    }
+  }
+}
+(function () {
+  const modal = document.getElementById("fm-viewer");
+  const close = document.getElementById("fm-viewer-close");
+  if (!modal) return;
+  const hide = () => {
+    modal.classList.add("hidden");
+    const body = document.getElementById("fm-viewer-body");
+    if (body) body.innerHTML = "";
+  };
+  close?.addEventListener("click", hide);
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) hide();
+  });
+})();

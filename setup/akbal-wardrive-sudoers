@@ -1,0 +1,9 @@
+# Regla sudoers para wardriving + WiFi Radar: los helpers que la app corre con
+# `sudo -n` (modo monitor, cambio de canal, captura, deauth). Sin esto, "entrar
+# a modo monitor" falla con "sudo: a password is required" al llamar `ip`.
+# Ver app/src/wardrive/monitor.ts y app/src/wifiradar/monitor-control.ts.
+#
+# Instalar en la Pi con:
+#   sudo install -m 0440 -o root -g root akbal-wardrive-sudoers /etc/sudoers.d/010-akbal-wardrive
+#   sudo visudo -c -f /etc/sudoers.d/010-akbal-wardrive
+akbal ALL=(root) NOPASSWD: /usr/sbin/iw, /usr/bin/iw, /usr/bin/ip, /usr/sbin/ip, /sbin/ip, /usr/bin/dumpcap, /usr/bin/hcxdumptool, /usr/bin/systemd-run, /usr/sbin/aireplay-ng, /usr/bin/aireplay-ng

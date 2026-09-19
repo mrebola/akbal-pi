@@ -1530,3 +1530,49 @@ body { font-family: var(--font-sans); }
 .mx-nowinfo { min-width: 0; flex: 1; }
 .mx-now .mx-title { text-align: left; }
 .mx-now .mx-sub { text-align: left; }
+
+/* ===== Navbar moderno (override) — texto, hover en texto, activo = rect tenue ===== */
+.tab-btn, .tab-link {
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: background 0.15s, color 0.15s;
+}
+.tab-btn:hover, .tab-link:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.04);
+}
+.tab-btn.active, .tab-link.active {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  box-shadow: none;
+  font-weight: 600;
+}
+/* small accent cue so you always know where you are, without the 90s pill */
+.tab-btn.active::before, .tab-link.active::before {
+  content: "";
+  display: inline-block;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent);
+  margin-right: 7px;
+  vertical-align: middle;
+  box-shadow: 0 0 6px rgba(80,255,120,0.6);
+}
+
+/* ===== Player: quitar el cuadro gris cuando está detenido ===== */
+.mx-visual.stopped .mx-eq { display: flex; }
+.mx-visual.stopped .mx-eq i { animation-play-state: paused; opacity: 0.12; height: 14px; }
+.mx-visual.stopped .mx-stop { display: none; }
+
+/* ===== Visor de archivos ===== */
+.fm-viewer-card { max-width: 900px; width: 92%; max-height: 88vh; display: flex; flex-direction: column; }
+.fm-viewer-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.fm-viewer-name { font-size: 13px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fm-viewer-actions { display: flex; gap: 8px; flex: none; }
+.fm-viewer-body { flex: 1; min-height: 0; overflow: auto; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; }
+.fm-viewer-body img { max-width: 100%; max-height: 78vh; display: block; }
+.fm-viewer-body iframe { width: 100%; height: 78vh; border: 0; background: #fff; }
+.fm-viewer-body pre { margin: 0; padding: 14px; width: 100%; max-height: 78vh; overflow: auto; font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); white-space: pre-wrap; word-break: break-word; text-align: left; }
+.fm-name.viewable { cursor: pointer; }
+.fm-name.viewable:hover { color: var(--accent); }

@@ -3,7 +3,7 @@ import { promisify } from "util";
 import { EventEmitter } from "events";
 import fs from "fs";
 import path from "path";
-import { detectAr9271 } from "../wifiradar/ar9271";
+import { detectMonitorAdapter } from "../wifiradar/adapter";
 import { enterMonitorMode, exitMonitorMode } from "./monitor";
 import { setChannel } from "./rf";
 import { AirodumpCapture, DeauthRunner } from "./attack";
@@ -308,9 +308,14 @@ export class WardriveService extends EventEmitter {
   async enter(): Promise<{ ok: boolean; error?: string }> {
     if (this.mode !== "inactive") return { ok: true };
     try {
-      const info = await detectAr9271();
-      if (!info.present || !info.iface) {
-        this.error = "No hay adaptador AR9271 conectado";
+      const info = await detectMonitorAdapter();
+      if (!info.present) {
+        this.error = "No hay adaptador WiFi USB conectado";
+        this.broadcastStatus();
+        return { ok: false, error: this.error };
+      }
+      if (!info.monitorSupported || !info.iface) {
+        this.error = `El adaptador ${info.description || "USB"} no es compatible con modo monitor`;
         this.broadcastStatus();
         return { ok: false, error: this.error };
       }

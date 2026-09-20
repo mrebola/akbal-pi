@@ -10,6 +10,7 @@ import serve from "koa-static";
 import axios from "axios";
 import { WebSocketServer, WebSocket } from "ws";
 import { getWifiRadarSnapshot } from "../wifiradar/service";
+import { detectMonitorAdapter } from "../wifiradar/adapter";
 import { getWardriveService } from "../wardrive/service";
 import {
   getCurrentModel,
@@ -773,6 +774,18 @@ export class WebAdminServer {
     // ever served here: they live only in ~/wardrive-sessions/ on the
     // device, and this API only reports paths/names, never file contents.
     const wardrive = getWardriveService();
+
+    // Monitor-mode capability of the currently connected USB WiFi adapter — the
+    // UI uses this to enable WiFi auditing (Radar/Wardriving) or show a clear
+    // "adapter not monitor-capable" message.
+    router.get("/api/wifi/monitor-capability", async (ctx) => {
+      try {
+        ctx.body = await detectMonitorAdapter();
+      } catch (err: any) {
+        ctx.status = 500;
+        ctx.body = { present: false, monitorSupported: false, error: err?.message || String(err) };
+      }
+    });
 
     router.get("/api/wardrive/status", (ctx) => {
       ctx.body = wardrive.getStatus();

@@ -1,5 +1,5 @@
 import { EventEmitter } from "events";
-import { detectAr9271 } from "./ar9271";
+import { detectMonitorAdapter } from "./adapter";
 import { enterMonitorMode, exitMonitorMode, getAvailable24GhzChannels } from "./monitor-control";
 import { Ar9271Capture } from "./capture";
 import { ChannelHopper } from "./channel-hopper";
@@ -34,9 +34,12 @@ export class WifiRadarService extends EventEmitter {
     this.sweepTimer = setInterval(() => this.aggregator.sweep(), SWEEP_INTERVAL_MS);
 
     try {
-      const info = await detectAr9271();
-      if (!info.present || !info.iface || !info.phy) {
-        throw new Error("AR9271 no detectada (lsusb) o sin interfaz de red asociada");
+      const info = await detectMonitorAdapter();
+      if (!info.present) {
+        throw new Error("No hay adaptador WiFi USB conectado");
+      }
+      if (!info.monitorSupported || !info.iface || !info.phy) {
+        throw new Error(`El adaptador ${info.description || "USB"} no es compatible con modo monitor`);
       }
       this.hardware = info.description;
       const channels = await getAvailable24GhzChannels(info.phy);

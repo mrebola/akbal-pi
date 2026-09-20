@@ -1544,6 +1544,19 @@ const wdSessionId = document.getElementById("wd-session-id");
 const wdSessionList = document.getElementById("wd-session-list");
 
 let wdStatus = null;
+let wdMonitorCap = null;
+
+async function loadMonitorCap() {
+  try {
+    const res = await fetch("/api/wifi/monitor-capability");
+    if (res.ok) {
+      wdMonitorCap = await res.json();
+      if (wdStatus) wdRender();
+    }
+  } catch {
+    /* leave unknown */
+  }
+}
 let wdTimer = null;
 // Pausa de escaneo: congela la tabla (deja de pedir /status a 2Hz) para que
 // las filas no se re-ordenen/muevan mientras elegís la red a auditar. El
@@ -1572,10 +1585,21 @@ function wdRender() {
   const attacking = wdStatus.mode === "attacking";
   wdBannerTitle.classList.toggle("on", on);
   wdIface.textContent = wdStatus.iface ? `· ${wdStatus.iface.toUpperCase()}` : "";
+  // Auditing needs a monitor-capable USB adapter. Gate the inactive state on it.
+  const cap = wdMonitorCap;
+  const monitorReady = !cap || cap.monitorSupported; // null = unknown, don't block yet
   wdBannerStatus.textContent = on
     ? `Activo — LLM ${wdStatus.modelsUnloaded ? "descargado de RAM" : "en RAM"} · ${wdStatus.allowlist.length} objetivo(s) autorizado(s)` + (wdPaused ? " · ESCANEO EN PAUSA" : "")
-    : "Inactivo — la Pi funciona como Akbal normal";
+    : cap && !cap.present
+      ? "Sin adaptador WiFi USB. Conecta uno con modo monitor para auditar."
+      : cap && !cap.monitorSupported
+        ? `El adaptador ${cap.description || "conectado"} no es compatible con modo monitor.`
+        : cap && cap.monitorSupported
+          ? `Inactivo — adaptador ${cap.description || cap.iface} listo (modo monitor)`
+          : "Inactivo — la Pi funciona como Akbal normal";
   wdEnterBtn.classList.toggle("hidden", on);
+  wdEnterBtn.disabled = !on && !monitorReady;
+  wdEnterBtn.title = !monitorReady ? "Requiere un adaptador WiFi USB con modo monitor" : "";
   wdExitBtn.classList.toggle("hidden", !on);
   wdScanBtn.classList.toggle("hidden", !on);
   wdPauseBtn.classList.toggle("hidden", !on);
@@ -1755,6 +1779,7 @@ async function wdRefreshOnce() {
 for (const btn of document.querySelectorAll(".tab-btn")) {
   if (btn.dataset.tab === "wardrive") {
     btn.addEventListener("click", () => {
+      void loadMonitorCap();
       void wdRefresh();
       if (!wdTimer) wdTimer = setInterval(() => {
         if (wdPaused) return; // pausa de escaneo: no re-ordenar la tabla
@@ -1766,7 +1791,10 @@ for (const btn of document.querySelectorAll(".tab-btn")) {
 }
 
 // Boot into a live state if the user lands directly on #wardrive.
-if (window.location.hash === "#wardrive") void wdRefresh();
+if (window.location.hash === "#wardrive") {
+  void loadMonitorCap();
+  void wdRefresh();
+}
 
 // ---- Wardriving sub-tabs (Objetivos / Deauth / Archivos) ----
 

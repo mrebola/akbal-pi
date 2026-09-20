@@ -117,7 +117,7 @@ function renderScreen(): void {
       radar_ui_points: [],
       radar_ui_count: 0,
       radar_ui_channel: 0,
-      text: "Conectá un USB WiFi compatible (AR9271) · Mantén: salir",
+      text: "Conecta un USB WiFi con modo monitor · Mantén: salir",
     });
     return;
   }

@@ -34,6 +34,7 @@
 
 .hidden { display: none !important; }
 
+html { overflow-x: hidden; }
 body {
   margin: 0;
   background: var(--bg);
@@ -42,6 +43,8 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow-x: hidden;
+  width: 100%;
 }
 
 .topbar {
@@ -114,6 +117,36 @@ body {
   color: var(--accent);
   cursor: default;
 }
+
+/* ---- Mobile nav: hamburger + dropdown (see the 720px query below for the
+   actual mobile layout; these base rules just define the button/backdrop,
+   hidden on desktop) ---- */
+.nav-toggle {
+  display: none;
+  flex: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  width: 40px;
+  height: 40px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.nav-toggle span {
+  display: block;
+  width: 18px;
+  height: 2px;
+  background: var(--text-primary);
+  border-radius: 2px;
+  transition: transform 0.2s, opacity 0.2s;
+}
+.nav-toggle[aria-expanded="true"] span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+.nav-toggle[aria-expanded="true"] span:nth-child(2) { opacity: 0; }
+.nav-toggle[aria-expanded="true"] span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+.nav-backdrop { display: none; }
 
 .status {
   font-size: 12px;
@@ -1138,11 +1171,19 @@ button.secondary {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 4px 12px;
   font-size: 13px;
 }
-.cfg-key { color: var(--text-secondary); }
-.cfg-val { color: var(--text-primary); font-weight: 600; text-align: right; }
+.cfg-key { color: var(--text-secondary); flex: none; }
+.cfg-val {
+  color: var(--text-primary);
+  font-weight: 600;
+  text-align: right;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
 .cfg-sub {
   font-size: 11px;
   text-transform: uppercase;
@@ -1168,6 +1209,10 @@ button.secondary {
   font-size: 15px;
   font-weight: 700;
   color: var(--text-primary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .cfg-badge {
   font-size: 11px;
@@ -1224,6 +1269,33 @@ button.secondary {
   color: var(--accent);
 }
 .cfg-btn-accent:hover { border-color: var(--accent); }
+.cfg-toggle-group {
+  display: flex;
+  gap: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 3px;
+}
+.cfg-toggle-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  border-radius: 7px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.cfg-toggle-btn:hover { color: var(--text-primary); }
+.cfg-toggle-btn.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+.cfg-toggle-btn:disabled { opacity: 0.6; cursor: default; }
 .cfg-icon-btn {
   background: transparent;
   border: 1px solid var(--border);
@@ -1267,7 +1339,8 @@ button.secondary {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 6px 10px;
   font-size: 13px;
 }
 .cfg-list .cfg-item-name { font-weight: 600; color: var(--text-primary); }
@@ -1605,6 +1678,81 @@ button.secondary {
   background: var(--accent); color: #04160b; border-color: var(--accent);
   box-shadow: 0 0 20px rgba(80,255,120,0.45);
 }
+/* Flat SVG glyphs instead of Unicode transport symbols (⏮/⏹/⏭) — those
+   render as full-color emoji on iOS regardless of font-family, which is
+   what made every control except ▶ look broken there. fill: currentColor
+   picks up .mx-btn's color automatically, mx-main's included. */
+.mx-icon { width: 18px; height: 18px; fill: currentColor; flex: none; }
+.mx-btn.mx-main .mx-icon { width: 22px; height: 22px; }
+.mx-icon-pause { display: none; }
+#mp-playpause.is-playing .mx-icon-play { display: none; }
+#mp-playpause.is-playing .mx-icon-pause { display: block; }
+.mx-extra {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+.mx-volume {
+  flex: 1;
+  min-width: 150px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #0a1410;
+  border: 1px solid var(--accent-dim);
+  border-radius: 10px;
+  padding: 6px 8px;
+}
+.mx-vol-btn {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  background: transparent;
+  border: 1px solid var(--accent-dim);
+  color: var(--accent);
+  border-radius: 8px;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.mx-vol-btn:hover { box-shadow: 0 0 10px rgba(80,255,120,0.35); }
+.mx-vol-btn:disabled { opacity: 0.4; cursor: default; box-shadow: none; }
+.mx-vol-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.3;
+}
+.mx-vol-label { font-size: 10px; letter-spacing: 0.1em; color: var(--text-secondary); }
+.mx-vol-pct { font-size: 13px; color: var(--accent); font-weight: 700; }
+.mx-output {
+  flex: 1;
+  min-width: 150px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #0a1410;
+  border: 1px solid var(--accent-dim);
+  border-radius: 10px;
+  padding: 0 10px;
+}
+.mx-output-label { font-size: 10px; letter-spacing: 0.1em; color: var(--text-secondary); flex: none; }
+.mx-output select {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  color: var(--accent);
+  border: none;
+  font-family: inherit;
+  font-size: 12px;
+  padding: 9px 0;
+  cursor: pointer;
+}
+.mx-output select:focus { outline: none; }
+
 .mx-list-head { margin: 16px 4px 6px; }
 .mx-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; font-family: "Courier New", Courier, monospace; }
 .mx-list li {
@@ -1756,10 +1904,61 @@ body { font-family: var(--font-sans); }
 
 /* ---- Responsive ---- */
 @media (max-width: 720px) {
-  .tabs { overflow-x: auto; flex-wrap: nowrap; }
+  .nav-toggle { display: flex; }
+  .tabs {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    background: var(--bg-raised);
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 16px 32px rgba(0, 0, 0, 0.45);
+    padding: 8px;
+    gap: 2px;
+    z-index: 150;
+    max-height: calc(100vh - 56px);
+    overflow-y: auto;
+  }
+  .tabs.open { display: flex; }
+  .tabs .tab-btn,
+  .tabs .tab-link {
+    width: 100%;
+    text-align: left;
+    padding: 13px 14px;
+    font-size: 15px;
+  }
+  .nav-backdrop:not(.hidden) {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 140;
+  }
   .hdr-model { display: none; }
   .tab-panel { padding: 16px 12px; }
   .cfg-panel { grid-template-columns: 1fr !important; }
+
+  /* Settings sub-nav (General/Wifi/Audio/IA/...): a single scrollable row
+     instead of wrapping into two cramped lines. */
+  .cfg-nav {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .cfg-nav::-webkit-scrollbar { display: none; }
+  .cfg-nav-btn { flex: none; }
+
+  /* OST player: smaller cover art / title leave more room for the track
+     name before ellipsis has to kick in, and the transport row can't be
+     wider than the screen either. */
+  .mx-cover { width: 60px; height: 60px; }
+  .mx-cover-glyph { font-size: 22px; }
+  .mx-title { font-size: 17px; }
+  .mx-controls { gap: 10px; }
 }
 
 /* ---- Chat: chip de modelo + empty state ---- */
@@ -1790,7 +1989,7 @@ body { font-family: var(--font-sans); }
 }
 .mx-cover-glyph { font-size: 30px; color: var(--accent); text-shadow: 0 0 14px rgba(80,255,120,0.6); line-height: 1; }
 .mx-cover-tag { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; color: var(--text-secondary); }
-.mx-nowinfo { min-width: 0; flex: 1; }
+.mx-nowinfo { min-width: 0; flex: 1; overflow: hidden; }
 .mx-now .mx-title { text-align: left; }
 .mx-now .mx-sub { text-align: left; }
 

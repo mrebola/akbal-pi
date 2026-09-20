@@ -205,6 +205,7 @@ function updateSettingsOverview(data) {
   setText("ov-wifi", data.wifi?.connected ? data.wifi.ssid : "sin wifi");
   setText("ov-battery", data.battery?.connected ? `${data.battery.level}%` : "—");
   setText("ia-model-name", data.model || "—");
+  if (data.deviceMode) renderModeToggle(data.deviceMode);
   if (sys) {
     setText("ia-ram", `${formatBytes(sys.ram.usedBytes)} / ${formatBytes(sys.ram.totalBytes)} (${sys.ram.percent}%)`);
     setBar("ia-ram-bar", sys.ram.percent);
@@ -285,15 +286,21 @@ async function loadAudioOutputs() {
     const data = await res.json();
     if (!Array.isArray(data.options)) return;
     audioOutputSelect.innerHTML = "";
+    const mpOutputSelect = document.getElementById("mp-output-select");
+    if (mpOutputSelect) mpOutputSelect.innerHTML = "";
     const paired = [];
     for (const opt of data.options) {
       const el = document.createElement("option");
       el.value = opt.key;
       el.textContent = opt.connected && opt.key !== "hat" ? `${opt.label} (conectada)` : opt.label;
       audioOutputSelect.appendChild(el);
+      mpOutputSelect?.appendChild(el.cloneNode(true));
       if (opt.key.startsWith("bt:")) paired.push(opt);
     }
-    if (data.active) audioOutputSelect.value = data.active;
+    if (data.active) {
+      audioOutputSelect.value = data.active;
+      if (mpOutputSelect) mpOutputSelect.value = data.active;
+    }
     renderPairedList(paired);
 
     // Active-device summary card + General overview.
@@ -616,8 +623,42 @@ for (const btn of document.querySelectorAll(".tab-btn")) {
   btn.addEventListener("click", () => {
     window.location.hash = btn.dataset.tab;
     activateTab(btn.dataset.tab);
+    closeMobileNav();
   });
 }
+
+// ---- Mobile nav: hamburger dropdown (see the 720px media query in
+// styles.css) — the same .tabs markup used on desktop, just repositioned
+// and toggled by this button below that breakpoint.
+const navToggle = document.getElementById("nav-toggle");
+const mainTabs = document.getElementById("main-tabs");
+const navBackdrop = document.getElementById("nav-backdrop");
+
+function closeMobileNav() {
+  mainTabs?.classList.remove("open");
+  navBackdrop?.classList.add("hidden");
+  navToggle?.setAttribute("aria-expanded", "false");
+}
+
+function openMobileNav() {
+  mainTabs?.classList.add("open");
+  navBackdrop?.classList.remove("hidden");
+  navToggle?.setAttribute("aria-expanded", "true");
+}
+
+navToggle?.addEventListener("click", () => {
+  if (mainTabs?.classList.contains("open")) closeMobileNav();
+  else openMobileNav();
+});
+navBackdrop?.addEventListener("click", closeMobileNav);
+// .tab-link (Radar Wi-Fi) navigates away instead of going through
+// activateTab, so it needs its own close-on-click.
+for (const link of document.querySelectorAll(".tab-link")) {
+  link.addEventListener("click", closeMobileNav);
+}
+window.addEventListener("resize", () => {
+  if (window.innerWidth > 720) closeMobileNav();
+});
 
 // The initial tab is activated at the very end of this file (see boot), after
 // all section modules (music player, file manager, etc.) have initialized their
@@ -1998,7 +2039,7 @@ function renderMusicStatus(s) {
     mpTitle.textContent = "Reproductor Cypher OST";
     mpSub.textContent = s.available ? "Selecciona una pista para empezar" : "Sin biblioteca";
   }
-  mpPlayPause.textContent = s.playing && !s.paused ? "❚❚" : "▶";
+  mpPlayPause.classList.toggle("is-playing", Boolean(s.playing && !s.paused));
   const pct = s.durationMs > 0 ? Math.min(100, (s.positionMs / s.durationMs) * 100) : 0;
   if (mpFill) mpFill.style.width = `${pct}%`;
   if (mpSeekKnob) mpSeekKnob.style.left = `${pct}%`;
@@ -2036,6 +2077,8 @@ function startMusicUI() {
   else void pollMusicStatus();
   stopMusicPolling();
   musicPollTimer = setInterval(() => void pollMusicStatus(), 1000);
+  void loadVolume();
+  void loadAudioOutputs();
 }
 function stopMusicPolling() {
   if (musicPollTimer) {
@@ -2048,6 +2091,71 @@ mpPlayPause?.addEventListener("click", () => void musicCmd("playpause"));
 mpPrev?.addEventListener("click", () => void musicCmd("prev"));
 mpNext?.addEventListener("click", () => void musicCmd("next"));
 mpStop?.addEventListener("click", () => void musicCmd("stop"));
+
+// ---- Volumen (misma escala de 10 puntos que el menú físico / voz) ----
+const mpVolPct = document.getElementById("mp-vol-pct");
+const mpVolUp = document.getElementById("mp-vol-up");
+const mpVolDown = document.getElementById("mp-vol-down");
+
+async function loadVolume() {
+  if (!mpVolPct) return;
+  try {
+    const res = await apiFetch("/api/volume");
+    const data = await res.json();
+    mpVolPct.textContent = `${data.percent}%`;
+  } catch {
+    mpVolPct.textContent = "—";
+  }
+}
+
+async function stepVolume(delta) {
+  if (mpVolUp) mpVolUp.disabled = true;
+  if (mpVolDown) mpVolDown.disabled = true;
+  try {
+    const res = await apiFetch("/api/volume", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ delta }),
+    });
+    const data = await res.json();
+    if (data.ok && mpVolPct) mpVolPct.textContent = `${data.percent}%`;
+  } catch {
+    /* ignore */
+  } finally {
+    if (mpVolUp) mpVolUp.disabled = false;
+    if (mpVolDown) mpVolDown.disabled = false;
+  }
+}
+
+mpVolUp?.addEventListener("click", () => void stepVolume(10));
+mpVolDown?.addEventListener("click", () => void stepVolume(-10));
+
+// ---- Salida de audio: mismo selector que Ajustes → Audio, para no tener
+// que salir del reproductor a cambiar de bocina (ver loadAudioOutputs).
+const mpOutputSelect = document.getElementById("mp-output-select");
+mpOutputSelect?.addEventListener("change", async () => {
+  const target = mpOutputSelect.value;
+  mpOutputSelect.disabled = true;
+  try {
+    const res = await apiFetch("/api/audio-output/select", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      toast("Salida de audio cambiada.", "success");
+      await loadAudioOutputs();
+    } else {
+      toast(data.error || "No se pudo cambiar la salida de audio.", "error");
+      await loadAudioOutputs();
+    }
+  } catch (err) {
+    toast(err.message, "error");
+  } finally {
+    mpOutputSelect.disabled = false;
+  }
+});
 
 function seekFromEvent(clientX) {
   if (!mpSeek || musicDurationMs <= 0) return;
@@ -2311,6 +2419,48 @@ function ensureUsbFileManager() {
 function ensureSettingsFileManager() {
   if (!fmSettingsInstance) fmSettingsInstance = createFileManager(document.getElementById("fm-settings"));
 }
+
+// ================= Modo de IA (local / agente OpenClaw) =================
+const modeBadge = document.getElementById("mode-badge");
+const modeToggle = document.getElementById("mode-toggle");
+let modeSwitching = false;
+
+function renderModeToggle(mode) {
+  if (!modeToggle) return;
+  for (const btn of modeToggle.querySelectorAll(".cfg-toggle-btn")) {
+    btn.classList.toggle("active", btn.dataset.mode === mode);
+  }
+  if (modeBadge) {
+    modeBadge.textContent = mode === "agent" ? "Agente" : "Local";
+    modeBadge.classList.toggle("ok", mode === "agent");
+  }
+}
+
+modeToggle?.addEventListener("click", async (e) => {
+  const btn = e.target.closest(".cfg-toggle-btn");
+  if (!btn || modeSwitching || btn.classList.contains("active")) return;
+  const mode = btn.dataset.mode;
+  modeSwitching = true;
+  for (const b of modeToggle.querySelectorAll(".cfg-toggle-btn")) b.disabled = true;
+  try {
+    const res = await apiFetch("/api/mode/select", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      renderModeToggle(data.mode);
+    } else {
+      toast(data.error || "No se pudo cambiar el modo.", "error");
+    }
+  } catch (err) {
+    toast(err.message, "error");
+  } finally {
+    modeSwitching = false;
+    for (const b of modeToggle.querySelectorAll(".cfg-toggle-btn")) b.disabled = false;
+  }
+});
 
 // ================= WiFi directo (AP / hotspot) =================
 const apState = document.getElementById("ap-state");

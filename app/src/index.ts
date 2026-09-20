@@ -36,14 +36,21 @@ startWardriveDisplayMirror();
 // LAN-reachable chat + wifi admin UI — see docs/web-ui.md. On by default
 // (matches the physical device's own "just works" setup); set
 // WEB_ADMIN_ENABLED=false to turn it off.
+let webAdminServer: WebAdminServer | null = null;
 if ((process.env.WEB_ADMIN_ENABLED || "true").toLowerCase() !== "false") {
-  new WebAdminServer({
+  webAdminServer = new WebAdminServer({
     port: parseInt(process.env.WEB_ADMIN_PORT || "8090", 10),
     username: process.env.WEB_ADMIN_USER || "akbal",
     password: process.env.WEB_ADMIN_PASSWORD || "akbal",
-  }).start();
+  });
+  webAdminServer.start();
 }
 
-new ChatFlow({
+const chatFlow = new ChatFlow({
   enableCamera: process.env.ENABLE_CAMERA === "true",
 });
+
+// Lets a web-triggered "modo agente" switch (POST /api/mode/select) start
+// the whisplay-im bridge too, same as the physical device's mode_loading
+// flow state — see web-admin-server.ts's setEnsureAgentBridge.
+webAdminServer?.setEnsureAgentBridge(() => chatFlow.ensureAgentBridge());

@@ -12,7 +12,10 @@
       <img id="avatar" class="avatar" src="/avatar/standing.gif" alt="Akbal" />
       <div class="brand">AKBAL</div>
     </div>
-    <nav class="tabs">
+    <button type="button" id="nav-toggle" class="nav-toggle" aria-label="Menú" aria-expanded="false" aria-controls="main-tabs">
+      <span></span><span></span><span></span>
+    </button>
+    <nav class="tabs" id="main-tabs">
       <button class="tab-btn active" data-tab="chat">Chat</button>
       <a href="/wifiradar" class="tab-link" title="Visualización Wi-Fi en 3D">Radar Wi-Fi</a>
       <button class="tab-btn" data-tab="wardrive">Wardriving</button>
@@ -20,6 +23,7 @@
       <button class="tab-btn" data-tab="usb">Dispositivos</button>
       <button class="tab-btn" data-tab="settings" title="Ajustes">Ajustes</button>
     </nav>
+    <div id="nav-backdrop" class="nav-backdrop hidden"></div>
 
     <div class="hdr-right">
       <button type="button" id="sys-toggle" class="hdr-summary" title="Estado del sistema">
@@ -127,10 +131,33 @@
           </div>
           <div class="mx-time"><span id="mp-cur">0:00</span><span id="mp-dur">0:00</span></div>
           <div class="mx-controls">
-            <button type="button" id="mp-prev" class="mx-btn" title="Anterior">⏮</button>
-            <button type="button" id="mp-playpause" class="mx-btn mx-main" title="Reproducir / Pausa">▶</button>
-            <button type="button" id="mp-stop" class="mx-btn" title="Detener">⏹</button>
-            <button type="button" id="mp-next" class="mx-btn" title="Siguiente">⏭</button>
+            <button type="button" id="mp-prev" class="mx-btn" title="Anterior">
+              <svg class="mx-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="3" height="14"/><polygon points="19,5 19,19 8,12"/></svg>
+            </button>
+            <button type="button" id="mp-playpause" class="mx-btn mx-main" title="Reproducir / Pausa">
+              <svg class="mx-icon mx-icon-play" viewBox="0 0 24 24" aria-hidden="true"><polygon points="6,4 20,12 6,20"/></svg>
+              <svg class="mx-icon mx-icon-pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
+            </button>
+            <button type="button" id="mp-stop" class="mx-btn" title="Detener">
+              <svg class="mx-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+            </button>
+            <button type="button" id="mp-next" class="mx-btn" title="Siguiente">
+              <svg class="mx-icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="5,5 5,19 16,12"/><rect x="17" y="5" width="3" height="14"/></svg>
+            </button>
+          </div>
+          <div class="mx-extra">
+            <div class="mx-volume">
+              <button type="button" id="mp-vol-down" class="mx-vol-btn" title="Bajar volumen">−</button>
+              <div class="mx-vol-info">
+                <span class="mx-vol-label">// VOLUMEN</span>
+                <span id="mp-vol-pct" class="mx-vol-pct">—</span>
+              </div>
+              <button type="button" id="mp-vol-up" class="mx-vol-btn" title="Subir volumen">+</button>
+            </div>
+            <label class="mx-output">
+              <span class="mx-output-label">// SALIDA</span>
+              <select id="mp-output-select"></select>
+            </label>
           </div>
         </div>
         <div class="mx-list-head">// TRACKLIST</div>
@@ -227,6 +254,18 @@
               <div class="cfg-row"><span class="cfg-key">Salida de audio</span><span id="ov-audio" class="cfg-val">—</span></div>
               <div class="cfg-row"><span class="cfg-key">Wifi</span><span id="ov-wifi" class="cfg-val">—</span></div>
               <div class="cfg-row"><span class="cfg-key">Batería</span><span id="ov-battery" class="cfg-val">—</span></div>
+            </div>
+          </div>
+
+          <div class="cfg-card">
+            <div class="cfg-card-head">
+              <span class="cfg-card-title">Modo de IA</span>
+              <span id="mode-badge" class="cfg-badge">—</span>
+            </div>
+            <p class="cfg-meta">Local usa el modelo instalado en este dispositivo. Agente conversa a través de OpenClaw.</p>
+            <div class="cfg-toggle-group" id="mode-toggle">
+              <button type="button" class="cfg-toggle-btn" data-mode="local">Local</button>
+              <button type="button" class="cfg-toggle-btn" data-mode="agent">Agente (OpenClaw)</button>
             </div>
           </div>
 

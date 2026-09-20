@@ -20,7 +20,7 @@ import {
   switchModel,
   unloadModel,
 } from "../cloud-api/local/ollama-llm";
-import { isAgentMode } from "../config/device-mode";
+import { isAgentMode, setDeviceMode } from "../config/device-mode";
 import {
   AudioOutputTarget,
   getAudioOutputTarget,
@@ -36,6 +36,7 @@ import {
   removeSpeaker,
   isValidMac,
 } from "./bluetooth-audio";
+import { getCurrentLogPercent, setVolumeByAmixer } from "../utils/volume";
 import { getBatteryReading } from "../status/battery-status";
 import { getSystemStats } from "../utils/system-stats";
 import {
@@ -108,6 +109,12 @@ export class WebAdminServer {
   // never goes through Koa's request/response cycle so ctx.cookies isn't
   // available there.
   private validSessions = new Set<string>();
+  // Wired from index.ts once the ChatFlow instance exists (this server is
+  // constructed first) — switching to "modo agente" from the web needs to
+  // actually start the whisplay-im bridge, the same way the physical
+  // device's mode_loading flow state does (see chat-flow/states.ts), not
+  // just flip the DEVICE_MODE flag.
+  private ensureAgentBridge: (() => void) | null = null;
 
   constructor(options: { port: number; username: string; password: string }) {
     this.port = options.port;
@@ -259,6 +266,21 @@ export class WebAdminServer {
       };
     });
 
+    // "Modo agente" (OpenClaw via whisplay-im) vs "modo local" (Ollama) —
+    // same switch as the physical device's quick-menu (chat-flow/
+    // mode-select-mode.ts, docs/agent-mode.md), reachable from the web too.
+    router.post("/api/mode/select", async (ctx) => {
+      const mode = (ctx.request.body as any)?.mode;
+      if (mode !== "local" && mode !== "agent") {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "mode debe ser 'local' o 'agent'" };
+        return;
+      }
+      setDeviceMode(mode);
+      if (mode === "agent") this.ensureAgentBridge?.();
+      ctx.body = { ok: true, mode };
+    });
+
     // Speaker options: HAT (onboard Whisplay speaker, default) + one entry per
     // paired Bluetooth speaker, discovered live. See config/audio-output.ts,
     // device/bluetooth-audio.ts and device/audio.ts.
@@ -301,6 +323,32 @@ export class WebAdminServer {
       }
       setAudioOutputTarget(target as AudioOutputTarget);
       ctx.body = { ok: true, audioOutput: getAudioOutputTarget() };
+    });
+
+    // Output volume — same amixer path + 10-point step as the physical
+    // device's quick-menu (chat-flow/volume-adjust-mode.ts) and "sube/baja
+    // el volumen" voice command (chat-flow/voice-commands.ts). Used by the
+    // OST player's volume buttons so switching speakers doesn't require
+    // leaving the web page.
+    router.get("/api/volume", async (ctx) => {
+      ctx.body = { percent: Math.round(getCurrentLogPercent()) };
+    });
+
+    router.post("/api/volume", async (ctx) => {
+      const { percent, delta } = (ctx.request.body as any) || {};
+      let next: number;
+      if (typeof percent === "number") {
+        next = percent;
+      } else if (typeof delta === "number") {
+        next = getCurrentLogPercent() + delta;
+      } else {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "percent o delta requerido" };
+        return;
+      }
+      next = Math.min(100, Math.max(0, Math.round(next)));
+      setVolumeByAmixer(next);
+      ctx.body = { ok: true, percent: next };
     });
 
     // Discover nearby, not-yet-paired Bluetooth speakers. Blocks for the scan
@@ -1101,6 +1149,10 @@ export class WebAdminServer {
       }
       ctx.body = fs.createReadStream(filePath);
     });
+  }
+
+  setEnsureAgentBridge(fn: () => void): void {
+    this.ensureAgentBridge = fn;
   }
 
   start(): void {

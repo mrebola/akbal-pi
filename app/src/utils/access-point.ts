@@ -144,8 +144,20 @@ export const enableAp = async (): Promise<ApStatus> => {
 };
 
 export const disableAp = async (): Promise<ApStatus> => {
-  await runNmcli(["connection", "down", AP_CON_NAME]).catch(() => "");
-  // Nudge NetworkManager to reconnect the normal (autoconnect) wifi.
-  await runNmcli(["device", "connect", AP_IFACE]).catch(() => "");
+  await runNmcli(["connection", "down", AP_CON_NAME]).catch((err) =>
+    console.warn("[access-point] connection down failed:", err?.message || err),
+  );
+  // Nudge NetworkManager to reconnect the normal (autoconnect) wifi right
+  // away, instead of waiting for its own periodic autoconnect scan.
+  // Deliberately NOT awaited: switching the radio out of AP mode and
+  // re-associating + DHCP can take well past runNmcli's 25s timeout (which
+  // was silently killing this step before — "down" would succeed but the
+  // reconnect never got the time it needed, so the caller looked like it
+  // did nothing). Neither the web button nor the device menu should block
+  // on that; both return the moment the AP itself is down, and this keeps
+  // going in the background.
+  execFileAsync("sudo", ["-n", "nmcli", "device", "connect", AP_IFACE], { timeout: 60000 }).catch(
+    (err) => console.warn("[access-point] reconnect nudge failed:", err?.message || err),
+  );
   return getApStatus();
 };

@@ -113,18 +113,24 @@ escribir el registro de reset/LRCM.
 
 ### Estado
 
-No resuelto. Es consistente con reportes sin resolver de la comunidad para
-este mismo error en RP1 (Raspberry Pi 5), p. ej.
-[raspberrypi/linux#7104](https://github.com/raspberrypi/linux/issues/7104) y
-[foro oficial](https://forums.raspberrypi.com/viewtopic.php?t=396693), donde
-ingenieros de Raspberry Pi apuntan a causas externas al SoC (cableado/conector)
-cuando se descartan las causas de software de arriba.
+**Mitigado (2026-09-20)** — ver la sección "Causa raíz encontrada" más abajo:
+la causa era la calidad de alimentación al pasar por la PiSugar, no el
+device-tree ni el bus en sí. Alimentando la Pi con luz directa (sin pasar
+por la PiSugar) el WM8960 registra limpio de forma consistente. Sigue siendo
+consistente con reportes de la comunidad para este error en RP1 (Raspberry
+Pi 5), p. ej. [raspberrypi/linux#7104](https://github.com/raspberrypi/linux/issues/7104)
+y el [foro oficial](https://forums.raspberrypi.com/viewtopic.php?t=396693),
+donde se apunta a causas externas al SoC (alimentación/cableado) — la
+PiSugar en el camino de energía es exactamente ese tipo de causa externa.
 
-**Próximo paso sugerido (requiere manos en la Pi, no remoto)**: reasentar
-físicamente el HAT en el header GPIO (desconectar y volver a conectar
-firmemente) y revisar que no haya pines doblados/mal alineados en el conector
-I2C. Si persiste, probar el HAT en otra Raspberry Pi 5 para aislar HAT vs.
-placa base.
+**Si algún día se quiere recuperar el respaldo de batería de la PiSugar**:
+el próximo paso sería mirar la salud/antigüedad de esa batería en particular
+y su boost converter bajo esta carga específica, no el HAT ni el driver. Si
+en algún momento hiciera falta descartar también el conector físico del
+HAT: reasentarlo en el header GPIO (desconectar y volver a conectar
+firmemente, revisando que no haya pines doblados) sigue siendo un chequeo
+barato, aunque la prueba de alimentación de arriba ya apunta a la PiSugar
+como la causa.
 
 **Mitigación mientras tanto**: el asistente puede hablar por una bocina
 Bluetooth emparejada (ver `ALSA_OUTPUT_DEVICE=pulse` en `.env`, que enruta
@@ -133,6 +139,69 @@ PipeWire). El micrófono del HAT sigue roto mientras el WM8960 no registre; se
 probó usar el micrófono HFP de la bocina Bluetooth como respaldo pero graba
 silencio puro (el perfil manos-libres no se negocia bien junto con A2DP), así
 que no es una alternativa viable por ahora.
+
+## Causa raíz encontrada (2026-09-20): calidad de alimentación vía PiSugar
+
+Retomando la investigación "no resuelta" de arriba: el disparador real es la
+**fuente de alimentación**, no el device-tree ni el bus I2C en sí — ninguno
+de los dos había cambiado (ver "¿Es una regresión de código?" más abajo).
+
+### La prueba
+
+Con la Pi arrancando con energía routeada por la PiSugar (a batería, o por
+el propio paso de la PiSugar), el mismo boot que antes fallaba en 2 de 2
+intentos volvió a fallar, con el mismo `lost arbitration` /
+`Failed to enable LRCM: -11`. Cambiando **únicamente la fuente de
+alimentación** — mismo HAT, misma conexión física, sin abrir nada — a luz
+directa al puerto de la propia Raspberry Pi (sin pasar por la PiSugar), el
+siguiente boot registró `whisplaysound` limpio, cero errores de I2C.
+
+Como confirmación adicional: con la luz routeada así (directo a la Pi,
+evitando la PiSugar), `pisugar-server` deja de poder hablarle a su propio
+chip de gestión de batería (`get battery` → `I2C not connected`) — es decir,
+sacar a la PiSugar del camino de la energía es justamente lo que deja el
+riel limpio para el WM8960.
+
+`vcgencmd get_throttled` reportó `0x0` (sin undervoltage detectado) en
+ambos casos — ese monitor ve la alimentación *de la Pi*, no el riel
+específico de 3.3V que le llega al HAT después de pasar por la PiSugar y el
+conector apilado, así que no contradice esto: hay margen para que ese tramo
+puntual esté ruidoso sin que el monitor general de la Pi lo vea.
+
+### Mitigación recomendada
+
+Para un dispositivo que vive enchufado en un lugar fijo (como este), lo más
+simple y confiable es alimentarlo con luz directa a la Raspberry Pi,
+dejando la PiSugar fuera del camino de energía. Costo: se pierde el respaldo
+de batería de la PiSugar mientras esté cableado así — aceptable para un
+asistente que no necesita ser portátil.
+
+Si en algún momento se quiere recuperar el respaldo de batería, el próximo
+paso sería enfocarse en la PiSugar en particular (salud/antigüedad de la
+batería, firmware, posible ripple del boost converter bajo esta carga) en
+vez del HAT o el driver — esa parte del stack es la que introduce el ruido.
+
+### ¿Es una regresión de código? — cronología verificada
+
+No. Se verificó explícitamente para descartar esta hipótesis:
+
+- El repo del driver (`~/Whisplay` en el dispositivo) no tiene commits desde
+  el 2026-09-09.
+- El overlay compilado (`/boot/firmware/overlays/whisplay-soundcard.dtbo`)
+  tiene fecha del 2026-09-17 — el mismo fix de "ES8389 deshabilitado" de
+  arriba, intacto.
+- La sección "Regresión" de este documento ya estaba fechada 2026-09-19 —
+  un día antes de encontrar la causa de arriba — describiendo el mismo
+  error como ya activo y sin resolver.
+
+O sea: el bug ya existía y ya estaba siendo investigado antes de esta
+sesión. Que el dispositivo "llevara días sin problemas" y el bug fuera
+preexistente no se contradicen — **solo se juega en el instante del
+arranque**. Un dispositivo que no se reinicia no vuelve a tirar los dados,
+así que puede andar perfecto por días aunque la condición de carrera siga
+ahí. Lo que expuso el problema en esta sesión fueron dos reinicios
+(pedidos explícitamente durante la sesión) — cada uno relanzó la carrera, y
+esa vez, a batería, la perdió las dos veces.
 
 ### Micrófono fijado al HAT (bocina Bluetooth ya no lo secuestra)
 

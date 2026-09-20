@@ -655,8 +655,10 @@ class RenderThread(threading.Thread):
             # eyebrow
             draw.text((14, 8), "MÚSICA", font=self.model_ui_title_font, fill=TEXT_SECONDARY)
 
-            # big central transport glyph
-            self._draw_music_icon(draw, center_x, 70, 54, icon, ACCENT_GREEN)
+            # big central transport glyph — smaller than the old 54px so it
+            # reads as an icon next to the title instead of dominating the
+            # screen.
+            self._draw_music_icon(draw, center_x, 62, 32, icon, ACCENT_GREEN)
 
             # track title (centered, up to 2 lines)
             content_width = VIDEO_WIDTH - 24
@@ -715,14 +717,11 @@ class RenderThread(threading.Thread):
             cursor_x = icon_x - TOP_BAR_MARGIN_X
 
         # "AKBAL" always shows on the left — a fixed brand mark, not a status
-        # readout, so it never depends on top_bar_mode being set yet. It
-        # still picks up a subtle mode tint (green only for the
-        # accent-worthy "agente" state; local/unset stay muted) — see
-        # chat-flow/states.ts (top_bar_mode) and docs/agent-mode.md.
+        # readout, so it never depends on top_bar_mode being set yet.
         # BRAND_LEFT_PADDING is extra vs. TOP_BAR_MARGIN_X: this label sits
         # right at the case's left edge, which clips a bit more than the
         # icons' side ever needed to account for.
-        brand_color = ACCENT_GREEN if current_top_bar_mode == "agent" else TEXT_SECONDARY
+        brand_color = ACCENT_GREEN
         bbox = draw.textbbox((0, 0), BRAND_LABEL, font=self.top_bar_mode_font)
         text_h = bbox[3] - bbox[1]
         draw.text((TOP_BAR_MARGIN_X + BRAND_LEFT_PADDING, (TOP_BAR_HEIGHT - text_h) // 2 - bbox[1]), BRAND_LABEL, font=self.top_bar_mode_font, fill=brand_color)

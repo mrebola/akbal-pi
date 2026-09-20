@@ -55,13 +55,12 @@ import {
 } from "../utils/storage";
 import { jukebox } from "./music-jukebox";
 import { getApStatus, getApQrCodes, enableAp, disableAp } from "../utils/access-point";
+import { persistEnvVar } from "../utils/env-file";
 import {
-  connectToEmergencyWifi,
   connectToWifi,
   forgetWifi,
   getSavedWifiPassword,
   getWifiStatus,
-  hasEmergencyWifiConfigured,
   scanWifiNetworks,
   scanWifiNetworksDetailed,
 } from "../utils/wifi";
@@ -91,7 +90,7 @@ const WIFIRADAR_BROADCAST_MS = 300;
 // Small local admin UI, reachable from any device on the LAN — a chat page
 // for the local Ollama models (like a mini OpenWebUI) and a wifi settings
 // page (scan/connect/forget, with a real password field — the physical
-// on-screen menu can't do that, see wifi-manager-mode.ts). Same Koa/
+// on-screen menu can't do that, see chat-flow/wifi-connect-mode.ts). Same Koa/
 // koa-static stack as WebDisplayServer (device/web-display.ts), which this
 // intentionally doesn't touch or replace — that one mirrors the device's
 // own screen for dev without hardware; this one is a separate, always-on
@@ -592,6 +591,31 @@ export class WebAdminServer {
       }
     });
 
+    // Changing the web admin password persists it to the device's own .env
+    // (plain text, readable over SSH — see AGENTS.md's anti-secrets
+    // checklist: this file is never committed) so it's recoverable if
+    // forgotten, the same way AP_PASSWORD already works.
+    router.post("/api/settings/password", async (ctx) => {
+      const { currentPassword, newPassword } = (ctx.request.body as any) || {};
+      if (currentPassword !== this.password) {
+        // 403, not 401 — apiFetch() on the client treats 401 as "session
+        // expired, go to /login", which would be wrong here (the session
+        // is fine, just the typed password).
+        ctx.status = 403;
+        ctx.body = { ok: false, error: "La contraseña actual no coincide" };
+        return;
+      }
+      if (typeof newPassword !== "string" || newPassword.length < 4) {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "La contraseña nueva debe tener al menos 4 caracteres" };
+        return;
+      }
+      this.password = newPassword;
+      process.env.WEB_ADMIN_PASSWORD = newPassword;
+      persistEnvVar("WEB_ADMIN_PASSWORD", newPassword);
+      ctx.body = { ok: true };
+    });
+
     router.get("/api/models", async (ctx) => {
       ctx.body = await listOllamaModelsWithSize();
     });
@@ -718,14 +742,7 @@ export class WebAdminServer {
     });
 
     router.get("/api/wifi/scan", async (ctx) => {
-      const networks = await scanWifiNetworks();
-      const emergencySsid = process.env.EMERGENCY_WIFI_SSID;
-      ctx.body = networks.map((n) => ({
-        ...n,
-        // Flags the pre-configured emergency network (see docs/wifi.md) so
-        // the UI can tag it and skip asking for a password it already has.
-        isEmergency: Boolean(emergencySsid) && n.ssid === emergencySsid,
-      }));
+      ctx.body = await scanWifiNetworks();
     });
 
     router.post("/api/wifi/connect", async (ctx) => {
@@ -736,15 +753,6 @@ export class WebAdminServer {
         return;
       }
       ctx.body = await connectToWifi(ssid, typeof password === "string" ? password : undefined);
-    });
-
-    router.post("/api/wifi/connect-emergency", async (ctx) => {
-      if (!hasEmergencyWifiConfigured()) {
-        ctx.status = 400;
-        ctx.body = { ok: false, error: "No hay red de emergencia configurada" };
-        return;
-      }
-      ctx.body = await connectToEmergencyWifi();
     });
 
     router.post("/api/wifi/forget", async (ctx) => {

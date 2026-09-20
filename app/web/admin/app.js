@@ -606,7 +606,6 @@ function activateTab(tabName) {
   for (const p of document.querySelectorAll(".tab-panel")) p.classList.remove("active");
   btn.classList.add("active");
   document.getElementById(`tab-${tabName}`).classList.add("active");
-  if (tabName === "wifi") void refreshWifi();
   if (tabName === "settings") void refreshSettings();
   if (tabName === "music") startMusicUI();
   else stopMusicPolling();
@@ -688,13 +687,13 @@ function renderWifiItem(net, { saved }) {
   const left = document.createElement("div");
   const name = document.createElement("div");
   name.className = "wifi-item-name";
-  name.innerHTML = `${net.active ? '<span class="active-dot">●</span>' : ""}${net.ssid}${net.isEmergency ? '<span class="tag">wifi emergencia</span>' : ""}`;
+  name.innerHTML = `${net.active ? '<span class="active-dot">●</span>' : ""}${net.ssid}`;
   const meta = document.createElement("div");
   meta.className = "wifi-item-meta";
   meta.textContent = net.active
     ? "Conectada ahora"
     : [
-        net.isEmergency ? "Ya tenés la contraseña" : net.secure ? "Con contraseña" : "Abierta",
+        net.secure ? "Con contraseña" : "Abierta",
         net.saved ? "guardada" : null,
         net.signal ? `${net.signal}%` : null,
       ]
@@ -709,21 +708,6 @@ function renderWifiItem(net, { saved }) {
     const connectBtn = document.createElement("button");
     connectBtn.textContent = "Conectar";
     connectBtn.addEventListener("click", () => {
-      // Emergency network already has its password on the device (see
-      // docs/wifi.md) — no modal, no typing it again.
-      if (net.isEmergency) {
-        void (async () => {
-          const res = await fetch("/api/wifi/connect-emergency", { method: "POST" });
-          const data = await res.json();
-          if (data.ok) {
-            void refreshWifi();
-            void loadStatus();
-          } else {
-            modalError.textContent = data.error || "No se pudo conectar a la red de emergencia.";
-          }
-        })();
-        return;
-      }
       if (net.saved || !net.secure) {
         void (async () => {
           const res = await fetch("/api/wifi/connect", {
@@ -1288,7 +1272,8 @@ if (cfgNav) {
     for (const p of document.querySelectorAll(".cfg-panel")) {
       p.classList.toggle("active", p.dataset.cfgPanel === key);
     }
-    if (key === "audio") void loadAudioOutputs();
+    if (key === "wifi") void refreshWifi();
+    else if (key === "audio") void loadAudioOutputs();
     else if (key === "ia") void loadIaModels();
     else if (key === "almacenamiento") {
       void loadSettingsUsbVolumes();
@@ -2394,6 +2379,32 @@ apDisableBtn?.addEventListener("click", async () => {
   }
 });
 
+// ================= Contraseña de la web admin =================
+const pwForm = document.getElementById("password-change-form");
+const pwStatus = document.getElementById("pw-change-status");
+pwForm?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const currentPassword = document.getElementById("pw-current").value;
+  const newPassword = document.getElementById("pw-new").value;
+  pwStatus.textContent = "Guardando...";
+  try {
+    const res = await apiFetch("/api/settings/password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      pwStatus.textContent = "Contraseña actualizada.";
+      pwForm.reset();
+    } else {
+      pwStatus.textContent = data.error || "No se pudo cambiar la contraseña.";
+    }
+  } catch (err) {
+    pwStatus.textContent = err.message;
+  }
+});
+
 // ================= Wi-Fi sub-tabs (Conexión / Redes / Espectro) =================
 (function () {
   const nav = document.getElementById("wifi-subtabs");
@@ -2403,7 +2414,7 @@ apDisableBtn?.addEventListener("click", async () => {
     if (!btn) return;
     const key = btn.dataset.wifiSub;
     for (const b of nav.querySelectorAll(".subtab")) b.classList.toggle("active", b === btn);
-    for (const p of document.querySelectorAll("#tab-wifi .subpanel")) {
+    for (const p of document.querySelectorAll('[data-cfg-panel="wifi"] .subpanel')) {
       p.classList.toggle("active", p.dataset.wifiPanel === key);
     }
   });
@@ -2421,7 +2432,15 @@ apDisableBtn?.addEventListener("click", async () => {
 })();
 
 // ---- Boot: activate the initial tab last, once every module above is ready ----
-if (initialTab) activateTab(initialTab);
+// "#wifi" used to be its own top-level tab — now it lives inside Settings,
+// so old links/bookmarks (including wifiradar.html's topbar) land there
+// instead of silently doing nothing.
+if (initialTab === "wifi") {
+  activateTab("settings");
+  document.querySelector('.cfg-nav-btn[data-cfg="wifi"]')?.click();
+} else if (initialTab) {
+  activateTab(initialTab);
+}
 
 // ================= Visor de archivos (imágenes / texto / PDF) =================
 const FM_IMG_EXT = /\.(jpe?g|png|gif|webp|bmp|svg)$/i;

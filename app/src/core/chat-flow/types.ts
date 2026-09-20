@@ -24,7 +24,7 @@ export type FlowName =
   | "help"
   | "quick_menu"
   | "volume_adjust"
-  | "wifi_manager"
+  | "wifi_connect"
   | "network_info"
   | "wifi_radar";
 

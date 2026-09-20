@@ -84,9 +84,9 @@ aparte, siempre corriendo (si `WEB_ADMIN_ENABLED` no está en `false`).
   `listOllamaModelsWithSize` / `switchModel` de `ollama-llm.ts` — el mismo
   código que usa el menú físico de modelo.
 - `GET/POST /api/wifi/*`: reusan `app/src/utils/wifi.ts` (ver
-  [`wifi.md`](./wifi.md)) — mismo camino que el menú físico "Internet
-  emergencia", con la diferencia de que acá sí se puede mandar una
-  contraseña nueva y hay un botón "Olvidar".
+  [`wifi.md`](./wifi.md)) — mismo camino que el escaneo/conexión del menú
+  físico, con la diferencia de que acá sí se puede mandar una contraseña
+  nueva y hay un botón "Olvidar".
 
 Archivos estáticos en `app/web/admin/` (HTML/CSS/JS planos, sin build step
 — mismo criterio que `app/web/whisplay-display/`).

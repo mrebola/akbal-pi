@@ -1189,7 +1189,8 @@ button.secondary {
   margin-top: 4px;
 }
 .cfg-field .cfg-key { font-size: 12px; }
-.cfg-field select {
+.cfg-field select,
+.cfg-field input {
   width: 100%;
   background: var(--bg);
   color: var(--text-primary);
@@ -1197,7 +1198,9 @@ button.secondary {
   border-radius: 8px;
   padding: 8px 10px;
   font-size: 13px;
+  font-family: inherit;
 }
+.cfg-form { display: flex; flex-direction: column; gap: 8px; }
 .cfg-actions {
   display: flex;
   gap: 8px;

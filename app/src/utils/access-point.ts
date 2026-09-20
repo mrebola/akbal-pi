@@ -1,5 +1,7 @@
 import { execFile } from "child_process";
 import { promisify } from "util";
+import os from "os";
+import path from "path";
 import QRCode from "qrcode";
 import { persistEnvVar } from "./env-file";
 
@@ -72,6 +74,22 @@ export const getApQrCodes = async (
     QRCode.toDataURL(status.url, { margin: 1, width: 240 }),
   ]);
   return { wifiQr, urlQr };
+};
+
+const DEVICE_QR_PATH = path.join(os.tmpdir(), "akbal-ap-wifi-qr.png");
+
+// Same "WIFI:...;;" payload as getApQrCodes' wifiQr, but rendered to a PNG
+// file instead of a data URL — the physical LCD (wifi-connect-mode.ts) reads
+// image files, unlike the web settings page's <img src>.
+export const generateApConnectQrFile = async (status: ApStatus): Promise<string> => {
+  const wifiPayload = `WIFI:T:WPA;S:${status.ssid};P:${status.password};;`;
+  await QRCode.toFile(DEVICE_QR_PATH, wifiPayload, {
+    type: "png",
+    width: 240,
+    margin: 1,
+    color: { dark: "#50ff78ff", light: "#0b0d0fff" },
+  });
+  return DEVICE_QR_PATH;
 };
 
 export const enableAp = async (): Promise<ApStatus> => {

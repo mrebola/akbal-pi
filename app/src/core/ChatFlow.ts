@@ -99,8 +99,13 @@ class ChatFlow implements ChatFlowContext {
         } else {
           emoji = extractEmojis(fullText) || emoji;
         }
+        // No "status: answering" here on purpose — the sentence is parsed
+        // from the LLM stream before its audio is synthesized/played, so
+        // switching the character to the talking animation this early would
+        // show it "hablando" while it's still just thinking. The talking
+        // animation is triggered from the sentencePlayCallback below,
+        // exactly when audio actually starts sounding.
         display({
-          status: "answering",
           emoji,
           RGB: "#0000ff",
           scroll_speed: 3,
@@ -115,7 +120,11 @@ class ChatFlow implements ChatFlowContext {
       ({ charEnd, durationMs }) => {
         if (!this.isAnswerFlow()) return;
         if (!durationMs || durationMs <= 0) return;
+        // This fires right as this sentence's audio is about to play — the
+        // one true moment to switch the character to "hablando" (see the
+        // sentencesCallback above for why it isn't triggered any earlier).
         display({
+          status: "answering",
           scroll_sync: {
             char_end: charEnd,
             duration_ms: durationMs,
@@ -199,7 +208,11 @@ class ChatFlow implements ChatFlowContext {
             text_input_enabled: false,
           },
           answering: {
-            status: "answering...",
+            // Not "answering..." on purpose — this is OpenClaw reporting it's
+            // composing a reply, not audio actually sounding yet. The talking
+            // animation only kicks in once streamExternalReply's audio plays
+            // (see sentencePlayCallback in the constructor above).
+            status: "thinking",
             emoji: payload.emoji || "💬",
             RGB: "#00c8a3",
             text_input_enabled: false,
@@ -335,8 +348,10 @@ class ChatFlow implements ChatFlowContext {
       this.answerDisplayTimer = undefined;
       if (!this.isAnswerFlow()) return;
       this.lastAnswerDisplayAt = Date.now();
+      // No "status" here either — this renders the streamed text/tool-call
+      // placeholders, which lands well before that text's audio plays (see
+      // the streamResponser callbacks in the constructor above).
       display({
-        status: "answering",
         text: this.composeAnswerDisplayText(),
         tool_placeholders: this.getToolPlaceholders(),
         scroll_speed: 3,
@@ -468,8 +483,10 @@ class ChatFlow implements ChatFlowContext {
       return;
     }
     if (emoji) {
+      // Status stays whatever it already is (still "thinking") — the
+      // sentencePlayCallback flips it to "answering" once audio for this
+      // reply actually starts playing.
       display({
-        status: "answering",
         emoji,
         scroll_speed: 3,
       });

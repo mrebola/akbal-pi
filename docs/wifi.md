@@ -1,4 +1,4 @@
-# Wifi: menú "Internet emergencia" y administrador desde la web
+# Wifi: menú "Wifi connect" y administrador desde la web
 
 ## Qué hace
 
@@ -6,35 +6,40 @@ El dispositivo usa wifi normal (`NetworkManager`, ya configurado en el
 sistema — nada nuevo ahí) para todo el tráfico normal, incluido el modo
 agente. Esto agrega dos formas de gestionarla sin entrar por SSH:
 
-1. **Menú físico** ("Internet emergencia" en el [menú
-   rápido](./voice-commands.md#menú-rápido)): ver el estado actual, re-
-   escanear, conectarse a una red de emergencia pre-configurada, o a
-   cualquier red abierta/ya guardada que esté al alcance. No puede escribir
-   una contraseña nueva — no hay con qué, en un dispositivo de un solo botón
-   — así que una red segura que nunca se guardó antes solo se puede sumar
-   desde la interfaz web.
-2. **Interfaz web** (ver [`web-ui.md`](./web-ui.md)): lo mismo, más poder
-   escribir contraseñas de redes nuevas y "olvidar" redes guardadas.
+1. **Menú físico** ("Wifi connect" en el [menú
+   rápido](./voice-commands.md#menú-rápido)): convierte la wifi de la propia
+   Pi en un punto de acceso (`akbal-pi`) para conectarse directo desde un
+   celular sin necesitar internet ni la wifi de siempre — ver
+   [`chat-flow/wifi-connect-mode.ts`](../app/src/core/chat-flow/wifi-connect-mode.ts)
+   y la sección de abajo. Un solo botón: click activa/desactiva, mantener
+   sale del menú.
+2. **Interfaz web** (ver [`web-ui.md`](./web-ui.md)): ver el estado actual,
+   escanear y conectarse a redes (con contraseña si hace falta), "olvidar"
+   redes guardadas, y activar/desactivar el mismo modo punto de acceso desde
+   Ajustes → General.
 
-## Red de emergencia: configurarla
+> Antes existía un menú "Internet emergencia" que unía el dispositivo a una
+> red pre-configurada en `.env`. Se quitó a favor de "Wifi connect": andaba
+> mejor conectarse directo al dispositivo (sin depender de que haya wifi
+> disponible cerca) que memorizar una red de respaldo.
 
-`EMERGENCY_WIFI_SSID` / `EMERGENCY_WIFI_PASSWORD` en el `.env` del
-dispositivo — **nunca en este repo**. El template (`.env.template`) solo
-tiene las claves comentadas, sin valor. Para configurarla:
+## Wifi connect: punto de acceso directo
 
-```bash
-# en la Pi, editando ~/whisplay-ai-chatbot/.env
-EMERGENCY_WIFI_SSID=el-nombre-de-tu-red
-EMERGENCY_WIFI_PASSWORD=la-contraseña
-```
+`app/src/utils/access-point.ts` maneja todo el ciclo vida (crear/activar/
+desactivar la conexión `akbal-ap` vía `nmcli`, generar la clave, armar los
+QR). El SSID es siempre `akbal-pi`; la clave se genera sola la primera vez
+(`akbal` + 4 dígitos, cumple el mínimo de 8 caracteres que pide WPA) y queda
+guardada en `.env` (`AP_SSID`/`AP_PASSWORD`) para no cambiar en cada reinicio.
 
-y reiniciar `chatbot.service`. Sin esto configurado, la opción "Emergencia"
-simplemente no aparece en el menú de wifi (el resto — ver estado, conectar a
-otras redes — sigue funcionando igual).
+**Importante:** la wlan0 de la Pi puede ser cliente wifi *o* punto de acceso,
+no las dos cosas a la vez — activar este modo corta la conexión normal.
+Se vuelve a la normalidad desactivándolo desde el mismo menú físico o desde
+la web.
 
-Pensado para algo así como el hotspot de un celular, para cuando la wifi de
-siempre se cae — con el dispositivo pudiendo conectarse él solo apenas se lo
-pidas desde el menú, sin necesitar una laptop ni SSH.
+Pensado para cuando no hay wifi conocida al alcance: conectate directo al
+dispositivo (escaneando el QR que muestra la pantalla, o a mano con el SSID/
+clave que también se ven ahí), abrí la web admin, y desde ahí sumá una red
+real — así no hace falta volver a este modo.
 
 ## Por qué necesita `sudo` para `nmcli`
 
@@ -46,9 +51,10 @@ tiene por default, aunque el usuario esté en el grupo `netdev`. Verificado
 en el dispositivo real: `nmcli dev wifi rescan` por SSH normal falla con
 `not authorized`.
 
-`app/src/utils/wifi.ts` corre todo a través de `sudo -n nmcli ...` (el `-n`
-hace que falle rápido en vez de quedarse esperando una contraseña que nunca
-va a llegar). Dos formas de que eso funcione:
+`app/src/utils/wifi.ts` (y `access-point.ts` para el modo punto de acceso)
+corren todo a través de `sudo -n nmcli ...` (el `-n` hace que falle rápido en
+vez de quedarse esperando una contraseña que nunca va a llegar). Dos formas
+de que eso funcione:
 
 1. **El usuario del servicio ya tiene sudo sin contraseña para todo**
    (confirmalo con `sudo -n -l` — si no pide contraseña y el resultado
@@ -81,24 +87,20 @@ va a llegar). Dos formas de que eso funcione:
 - `connectToWifi(ssid, password?)`: sin contraseña, primero intenta activar
   una conexión ya guardada con ese nombre; si no, intenta como red abierta.
   Con contraseña, se la pasa directo a `nmcli dev wifi connect`.
-- `connectToEmergencyWifi()`: envoltorio de lo anterior usando
-  `EMERGENCY_WIFI_SSID`/`EMERGENCY_WIFI_PASSWORD`.
 - `forgetWifi(ssid)`: borra una conexión guardada — solo lo usa la interfaz
   web, el menú físico no tiene esta opción (no hace falta ahí).
 
-## El menú físico (`chat-flow/wifi-manager-mode.ts`)
+## El menú físico (`chat-flow/wifi-connect-mode.ts`)
 
-Mismo click/mantener/doble-clic que el resto de los menús, con la
-diferencia de que "mantener" hace algo distinto según qué entrada esté
-mostrando en vez de siempre "confirmar una selección":
+Mismo click/mantener/doble-clic que el resto de los menús, pero con una sola
+acción posible en vez de una lista para recorrer:
 
-| Entrada | Mantener hace |
+| Acción | Hace |
 |---|---|
-| Estado actual (SSID o "Sin conexión") | Vuelve a escanear |
-| "Emergencia" (si está configurada) | Conecta a la red de emergencia |
-| Red guardada o abierta | Conecta |
-| Red segura sin guardar | No conecta — muestra "Necesita contraseña, usa la web" |
+| Click | Activa el punto de acceso si estaba apagado, o lo desactiva si estaba prendido |
+| Mantener / doble clic | Sale del menú (deja el punto de acceso como esté) |
 
-Doble clic, o 30 segundos sin tocar el botón (un poco más que el resto de
-los menús, para dar tiempo a leer los resultados del escaneo), cierran el
-menú y vuelven a reposo.
+Mientras está activo, la pantalla muestra el SSID, la clave y un QR
+(`WIFI:T:WPA;S:...;P:...;;`) para unirse escaneando en vez de tipear. 60
+segundos sin tocar el botón cierran el menú y vuelven a reposo (más que el
+resto de los menús, para dar tiempo a escanear el QR).

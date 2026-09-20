@@ -13,7 +13,7 @@ export type QuickMenuKey =
   | "help"
   | "camera"
   | "volume"
-  | "wifi"
+  | "wifi_connect"
   | "network"
   | "wifiradar"
   | "jukebox";
@@ -28,7 +28,7 @@ const BASE_ITEMS: QuickMenuItem[] = [
   { key: "help", label: "Ayuda", description: "Comandos de voz" },
   { key: "camera", label: "Cámara", description: "Tomar una foto" },
   { key: "volume", label: "Volumen", description: "Subir/bajar el sonido" },
-  { key: "wifi", label: "Internet emergencia", description: "Ver/cambiar wifi" },
+  { key: "wifi_connect", label: "Wifi connect", description: "Conectate directo por wifi" },
   { key: "network", label: "Conexión web", description: "IP, tailscale y QR" },
   { key: "wifiradar", label: "WiFi Radar", description: "Ver redes cercanas" },
 ];

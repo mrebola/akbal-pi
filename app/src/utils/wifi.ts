@@ -285,19 +285,3 @@ export async function getSavedWifiPassword(
     return { ok: false, error: message };
   }
 }
-
-// EMERGENCY_WIFI_SSID/PASSWORD live only in the device's own .env — see
-// .env.template for the placeholder and docs/wifi.md for how to set them.
-// Never hold a real SSID/password in this repo.
-export function hasEmergencyWifiConfigured(): boolean {
-  return Boolean(process.env.EMERGENCY_WIFI_SSID);
-}
-
-export async function connectToEmergencyWifi(): Promise<{ ok: boolean; error?: string }> {
-  const ssid = process.env.EMERGENCY_WIFI_SSID;
-  const password = process.env.EMERGENCY_WIFI_PASSWORD;
-  if (!ssid) {
-    return { ok: false, error: "EMERGENCY_WIFI_SSID no está configurado en .env" };
-  }
-  return connectToWifi(ssid, password);
-}

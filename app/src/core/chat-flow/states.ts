@@ -90,13 +90,13 @@ import {
   onVolumeAdjustExit,
 } from "./volume-adjust-mode";
 import {
-  enterWifiManagerMode,
-  exitWifiManagerMode,
-  handleWifiManagerCancel,
-  handleWifiManagerPress,
-  handleWifiManagerRelease,
-  onWifiManagerDone,
-} from "./wifi-manager-mode";
+  enterWifiConnectMode,
+  exitWifiConnectMode,
+  handleWifiConnectDoubleClick,
+  handleWifiConnectPress,
+  handleWifiConnectRelease,
+  onWifiConnectExit,
+} from "./wifi-connect-mode";
 import {
   enterNetworkInfoMode,
   handleNetworkInfoDoubleClick,
@@ -251,8 +251,8 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
         ctx.transitionTo("volume_adjust");
         return;
       }
-      if (key === "wifi") {
-        ctx.transitionTo("wifi_manager");
+      if (key === "wifi_connect") {
+        ctx.transitionTo("wifi_connect");
         return;
       }
       if (key === "network") {
@@ -359,7 +359,7 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     let pressAt = 0;
     let progressTimer: ReturnType<typeof setInterval> | null = null;
     const HOLD_EXIT_MS = 700; // a deliberate hold, vs a quick click
-    const CONTROLS_HINT = "Clic: play/pausa · Doble: siguiente\nMantén: salir";
+    const CONTROLS_HINT = "Click: play/pausa · Doble clic: siguiente · Mantén: salir";
     // Briefly flash an action icon (e.g. "next") over the steady state icon.
     let flashIcon: string | null = null;
     let flashUntil = 0;
@@ -622,10 +622,15 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     // the same as each other today — different caption + accent so it's
     // clear at a glance which one's actually answering (see states.ts
     // fallbackToLocal for when this can silently change mid-turn).
+    // Neither status starts with "answer" — is_answering_status() in
+    // chatbot-ui.py only shows the talking animation for a status that does,
+    // so while it's actually thinking the character stays in its idle/still
+    // sequence. It switches to "answering" once audio starts sounding (see
+    // the sentencePlayCallback in ChatFlow's constructor).
     display(
       isAgentMode()
         ? { status: "agente...", emoji: "🌐", RGB: "#7a5cff", text: "Agente pensando..." }
-        : { status: "answering...", emoji: DEFAULT_EMOJI, RGB: "#00c8a3", text: "Pensando..." },
+        : { status: "thinking", emoji: DEFAULT_EMOJI, RGB: "#00c8a3", text: "Pensando..." },
     );
     const currentAnswerId = ctx.answerId;
 
@@ -935,8 +940,10 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     }
     ctx.resetToolCallDisplay();
     ctx.answerDisplayText = "";
+    // Same reasoning as "answer" above: stay off the talking animation
+    // ("answering...") until audio for this reply actually starts playing.
     display({
-      status: "answering...",
+      status: "thinking",
       emoji: ctx.pendingExternalEmoji || "🌐",
       RGB: "#7a5cff",
     });
@@ -1224,17 +1231,17 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     onButtonReleased(() => handleVolumeAdjustRelease());
     enterVolumeAdjustMode();
   },
-  wifi_manager: (ctx: ChatFlowContext) => {
-    onWifiManagerDone(() => {
-      exitWifiManagerMode();
-      if (ctx.currentFlowName === "wifi_manager") {
+  wifi_connect: (ctx: ChatFlowContext) => {
+    onWifiConnectExit(() => {
+      exitWifiConnectMode();
+      if (ctx.currentFlowName === "wifi_connect") {
         ctx.transitionTo("sleep");
       }
     });
-    onButtonDoubleClick(() => handleWifiManagerCancel());
-    onButtonPressed(() => handleWifiManagerPress());
-    onButtonReleased(() => handleWifiManagerRelease());
-    void enterWifiManagerMode();
+    onButtonDoubleClick(() => handleWifiConnectDoubleClick());
+    onButtonPressed(() => handleWifiConnectPress());
+    onButtonReleased(() => handleWifiConnectRelease());
+    enterWifiConnectMode();
   },
   network_info: (ctx: ChatFlowContext) => {
     onNetworkInfoExit(() => {

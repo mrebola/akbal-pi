@@ -203,6 +203,138 @@ ahí. Lo que expuso el problema en esta sesión fueron dos reinicios
 (pedidos explícitamente durante la sesión) — cada uno relanzó la carrera, y
 esa vez, a batería, la perdió las dos veces.
 
+## Intentos de arreglo por software (2026-09-20) — los tres fallaron
+
+Antes de aceptar "luz directa" como la única solución, se probaron tres
+vías de software distintas, cada una con una prueba real (no solo teoría),
+para que un modelo futuro no las repita:
+
+### 1. Reintento activo del driver (`unbind`/`bind` en loop)
+
+El driver `wm8960` falla su `probe()` con un error duro (`-EAGAIN`), no con
+`-EPROBE_DEFER`, así que el kernel **nunca reintenta solo**. El script
+[`../setup/whisplay-soundcard-retry.sh`](../setup/whisplay-soundcard-retry.sh)
+(instalado como el `ExecStart` de `whisplay-soundcard-warmup.service`,
+reemplazando la espera pasiva original de 30s que no hacía nada útil)
+reintenta `echo 1-001a > /sys/bus/i2c/drivers/wm8960/unbind` +
+`.../bind` hasta 20 veces con pausas.
+
+Prueba real: 20 reintentos activos durante ~4 minutos de uptime (mucho más
+agresivo que los 2 intentos sueltos de la sección de arriba, y cubriendo
+bien más allá de cualquier transitorio de arranque) — **fallaron los 20**,
+con el mismo `lost arbitration` / `Failed to enable LRCM: -11` en cada uno:
+
+```
+16:56:54 whisplay-soundcard-warmup[1545]: whisplaysound not registered, retrying wm8960 bind up to 20x
+17:01:00 whisplay-soundcard-warmup[2345]: gave up after 20 retries — whisplaysound still not registered
+```
+
+Importante: este chip **no tiene pin de reset controlable por GPIO** en
+este overlay (se revisó el `.dtbo` decompilado — no hay propiedad
+`reset-gpios` en `wm8960@1a`), así que un reintento de `bind` nunca hace un
+power-cycle real del chip, solo vuelve a llamar a `probe()`. Eso limita lo
+que este enfoque puede lograr por diseño.
+
+**El script queda instalado y habilitado** (no molesta — es un `oneshot`
+que no bloquea el arranque de `chatbot.service`), por si algún día el riel
+de la PiSugar mejora lo suficiente como para que algún reintento tenga
+éxito. Pero como arreglo, no funcionó.
+
+### 2. Bajar el consumo pico de CPU (`arm_boost=0`)
+
+Hipótesis: si el pico de corriente que pide la Pi durante el arranque
+(CPU + WiFi + backlight simultáneos) hunde momentáneamente el riel
+compartido, bajarlo debería darle margen al WM8960. Se probó agregando
+`arm_boost=0` a `/boot/firmware/config.txt` (deshabilita el turbo) y
+reiniciando a batería.
+
+Resultado: **sin efecto** — mismo error, mismo patrón, incluso en
+reintentos con 30+ segundos de uptime. Además, `vcgencmd measure_clock arm`
+mostró que la Pi 5 sigue corriendo a 2.4GHz de todas formas (en este
+modelo 2.4GHz ya es la velocidad base, no hay boost por encima que
+deshabilitar). **Revertido** (`arm_boost=1` de nuevo) — no aportaba nada y
+sí hubiera costado rendimiento al modelo local.
+
+### 3. (Descartado sin probar) Bajar la velocidad del bus I2C
+
+Ya estaba probado y descartado en la sección de arriba ("Causas
+descartadas"): bajar el baudrate I2C a 50kHz empeoró el problema (más
+transiciones de "lost arbitration" por intento), no lo mejoró.
+
+### Conclusión de esta ronda
+
+Con el kernel intentando solo una vez, 20 reintentos activos durante 4
+minutos, y menos consumo de CPU — **los tres fallaron de forma idéntica**.
+Eso es evidencia bastante fuerte de que el riel que le llega al WM8960
+mientras la PiSugar está en el camino de la energía está simplemente por
+debajo de lo que el chip necesita, de forma **persistente** (no en un
+instante puntual del boot que timing/reintentos puedan esquivar). La única
+prueba que cambió el resultado en esta sesión fue cambiar la fuente de
+alimentación (ver "Causa raíz encontrada" arriba).
+
+## Para el próximo modelo de IA que retome esto
+
+**Estado actual del sistema** (2026-09-20, fin de esta sesión):
+- `whisplay-soundcard-warmup.service`: instalado y habilitado, corre
+  [`setup/whisplay-soundcard-retry.sh`](../setup/whisplay-soundcard-retry.sh)
+  (reintento activo, ver arriba). Inofensivo, no bloquea el arranque de la
+  app.
+- `/boot/firmware/config.txt`: `arm_boost=1` (revertido a su valor
+  original; el experimento de bajarlo se descartó).
+- El overlay `whisplay-soundcard.dtbo` con el ES8389 deshabilitado sigue
+  instalado (fix de la sección "Fix" arriba).
+- El dispositivo funciona bien con luz **directa a la Raspberry Pi**
+  (bypaseando la PiSugar). Con la PiSugar en el camino (batería o su propio
+  paso), el WM8960 no registra.
+
+**Cómo reproducir/verificar rápido:**
+```bash
+cat /proc/asound/cards          # busca "whisplaysound"; si no está, el bug sigue
+arecord -l                      # debería listar la tarjeta si registró
+dmesg | grep -iE 'wm8960|lost arbitration'
+vcgencmd get_throttled          # 0x0 = sin undervoltage detectado en la Pi misma
+i2cdetect -y 1                  # el WM8960 en 0x1a debería responder siempre, registre o no
+printf 'get battery\n' | nc localhost 8423   # pisugar-server: "I2C not connected" si la PiSugar no tiene alimentación
+```
+
+**Ya descartado / probado, no repetir:**
+Bluetooth encendido, timing de boot (reintentos a 128s/388s de uptime),
+otro dispositivo en el bus I2C, velocidad del bus I2C (50kHz probado, peor),
+estado eléctrico de los pines SDA1/SCL1 en reposo (normal), reintento activo
+del driver (20x, ver arriba), bajar consumo de CPU (`arm_boost=0`, ver
+arriba), regresión de código en este repo o en el driver (cronología
+verificada, ver arriba).
+
+**Ideas NO probadas todavía** (para explorar si se quiere seguir insistiendo
+en que funcione con la PiSugar en el camino, en vez de aceptar luz directa):
+- Salud/antigüedad real de la batería de la PiSugar y su boost converter
+  bajo esta carga específica — no se pudo consultar (`pisugar-server`
+  reporta "I2C not connected" incluso corriendo a batería pura, lo cual es
+  en sí mismo raro y no se investigó a fondo: el propio chip de gestión de
+  la PiSugar tampoco aparece en `i2cdetect -y 1` en ese momento — puede ser
+  otro síntoma del mismo bus inestable, o que ese chip esté en otro bus no
+  escaneado, o un problema aparte de la PiSugar misma).
+- Firmware de la PiSugar (¿hay una versión más nueva? ¿tiene algún trim de
+  voltaje de salida configurable?).
+- Definir un regulador real (no el "dummy regulator" que usa el kernel por
+  defecto) en el device-tree para las supplies del WM8960
+  (`DCVDD`/`DBVDD`/`AVDD`/`SPKVDD1`/`SPKVDD2`), con un `startup-delay-us`,
+  para forzar una espera real antes de que el driver asuma que el riel ya
+  está estable — distinto de reintentar *después* de fallar, esto
+  retrasaría el *primer* intento. No implementado ni probado.
+- Medición directa con multímetro/osciloscopio del riel de 3.3V/5V en el
+  conector del HAT durante el boot, comparando PiSugar vs. luz directa —
+  necesita manos físicas y equipo, no se puede hacer remoto.
+- Probar el HAT en otra Raspberry Pi 5 (aislar HAT vs. placa/PiSugar de
+  esta unidad en particular).
+
+**Contexto para no perder tiempo**: no es una regresión de código de este
+repo (`akbal-pi`/`app/`) ni del driver `PiSugar/Whisplay` — ambos
+verificados sin cambios recientes relevantes a este bug. Es un problema de
+calidad de alimentación específico de esta combinación PiSugar + Whisplay
+HAT + Pi 5, ya con una mitigación funcional (luz directa) si no hace falta
+seguir insistiendo.
+
 ### Micrófono fijado al HAT (bocina Bluetooth ya no lo secuestra)
 
 Síntoma: con una bocina Bluetooth conectada y la salida en `bluetooth`, al

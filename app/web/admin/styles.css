@@ -798,6 +798,72 @@ button.secondary {
 
 .wd-note { font-size: 11px; line-height: 1.5; }
 
+/* ---- Wardriving simplified ---- */
+
+.wd-signal {
+  display: inline-block;
+  height: 6px;
+  border-radius: 3px;
+  background: currentColor;
+  opacity: 0.7;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.wd-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.wd-badge-ok { color: var(--accent); border-color: var(--accent); }
+.wd-badge-run { color: #ffd166; border-color: #ffd166; }
+.wd-badge-fail { color: var(--danger); border-color: var(--danger); }
+
+.wd-audit-btn {
+  font-size: 12px;
+  padding: 4px 14px;
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.wd-audit-btn:hover { opacity: 0.9; }
+.wd-audit-btn:disabled { opacity: 0.5; cursor: wait; }
+
+.wd-results-list { display: flex; flex-direction: column; gap: 8px; }
+
+.wd-result-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.wd-result-info { display: flex; flex-direction: column; gap: 2px; }
+.wd-result-ssid { font-weight: 500; color: var(--text-primary); }
+.wd-result-meta { font-size: 11px; color: var(--text-secondary); }
+
+.wd-download-btn {
+  font-size: 12px;
+  padding: 6px 14px;
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.wd-download-btn:hover { opacity: 0.9; }
+
 .wd-note code {
   background: var(--bg-raised);
   padding: 1px 5px;

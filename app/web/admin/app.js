@@ -1519,13 +1519,9 @@ void loadModels();
 // reload needed to see the % move.
 setInterval(() => void loadStatus(), 60000);
 
-// ---- Wardriving (tab-wardrive) ----
-// UI only — attack authorization lives server-side in the service's
-// allowlist (src/wardrive/service.ts). This tab mirrors /api/wardrive/*
-// state: enter/exit mode, per-target attack buttons (only for allowlisted
-// BSSIDs), "attack all authorized", global cancel, and live session
-// progress. Handshake files are never fetched here — they stay in the
-// device's ~/wardrive-sessions/.
+// ---- Wardriving (simplified) ----
+// Flow: enter mode → see networks → click "Auditar" → handshake captured →
+// download .cap/.hc22000 for offline cracking. That's it.
 
 const wdModeBanner = document.getElementById("wd-mode-banner");
 const wdBannerTitle = wdModeBanner.querySelector(".wd-banner-title");
@@ -1536,15 +1532,14 @@ const wdExitBtn = document.getElementById("wd-exit-btn");
 const wdError = document.getElementById("wd-error");
 const wdScanBtn = document.getElementById("wd-scan-btn");
 const wdPauseBtn = document.getElementById("wd-pause-btn");
-const wdAttackAllBtn = document.getElementById("wd-attack-all-btn");
 const wdCancelBtn = document.getElementById("wd-cancel-btn");
 const wdAttackStatus = document.getElementById("wd-attack-status");
 const wdTableBody = document.getElementById("wd-table-body");
-const wdSessionId = document.getElementById("wd-session-id");
-const wdSessionList = document.getElementById("wd-session-list");
+const wdResultsList = document.getElementById("wd-results-list");
 
 let wdStatus = null;
 let wdMonitorCap = null;
+let wdPaused = false;
 
 async function loadMonitorCap() {
   try {
@@ -1553,16 +1548,8 @@ async function loadMonitorCap() {
       wdMonitorCap = await res.json();
       if (wdStatus) wdRender();
     }
-  } catch {
-    /* leave unknown */
-  }
+  } catch { /* unknown */ }
 }
-let wdTimer = null;
-// Pausa de escaneo: congela la tabla (deja de pedir /status a 2Hz) para que
-// las filas no se re-ordenen/muevan mientras elegís la red a auditar. El
-// estado real (ataques, sesión) sigue alcanzable: un refresh manual refresca
-// una vez sin retomar el polling.
-let wdPaused = false;
 
 async function wdApi(path, body) {
   const res = await apiFetch(`/api/wardrive/${path}`, {
@@ -1579,104 +1566,107 @@ function wdDbmClass(rssi) {
   return "wd-weak";
 }
 
+function wdSignalBars(rssi) {
+  const pct = rssi >= -50 ? 100 : rssi >= -60 ? 75 : rssi >= -70 ? 50 : rssi >= -80 ? 25 : 10;
+  return `<span class="wd-signal" style="width:${pct}%"></span>`;
+}
+
 function wdRender() {
   if (!wdStatus) return;
   const on = wdStatus.mode !== "inactive";
   const attacking = wdStatus.mode === "attacking";
   wdBannerTitle.classList.toggle("on", on);
   wdIface.textContent = wdStatus.iface ? `· ${wdStatus.iface.toUpperCase()}` : "";
-  // Auditing needs a monitor-capable USB adapter. Gate the inactive state on it.
   const cap = wdMonitorCap;
-  const monitorReady = !cap || cap.monitorSupported; // null = unknown, don't block yet
+  const monitorReady = !cap || cap.monitorSupported;
+
   wdBannerStatus.textContent = on
-    ? `Activo — LLM ${wdStatus.modelsUnloaded ? "descargado de RAM" : "en RAM"} · ${wdStatus.allowlist.length} objetivo(s) autorizado(s)` + (wdPaused ? " · ESCANEO EN PAUSA" : "")
+    ? `${wdStatus.targets?.length || 0} redes visibles`
     : cap && !cap.present
-      ? "Sin adaptador WiFi USB. Conecta uno con modo monitor para auditar."
+      ? "Sin adaptador WiFi USB"
       : cap && !cap.monitorSupported
-        ? `El adaptador ${cap.description || "conectado"} no es compatible con modo monitor.`
-        : cap && cap.monitorSupported
-          ? `Inactivo — adaptador ${cap.description || cap.iface} listo (modo monitor)`
-          : "Inactivo — la Pi funciona como Akbal normal";
+        ? `${cap.description || "Adaptador"} no soporta modo monitor`
+        : "Listo para auditar";
+
   wdEnterBtn.classList.toggle("hidden", on);
   wdEnterBtn.disabled = !on && !monitorReady;
-  wdEnterBtn.title = !monitorReady ? "Requiere un adaptador WiFi USB con modo monitor" : "";
   wdExitBtn.classList.toggle("hidden", !on);
   wdScanBtn.classList.toggle("hidden", !on);
   wdPauseBtn.classList.toggle("hidden", !on);
-  wdPauseBtn.textContent = wdPaused ? "Reanudar escaneo" : "Pausar escaneo";
-  wdPauseBtn.classList.toggle("wd-paused", wdPaused);
-  wdAttackAllBtn.classList.toggle("hidden", !on || attacking);
+  wdPauseBtn.textContent = wdPaused ? "Reanudar" : "Pausar";
   wdCancelBtn.classList.toggle("hidden", !attacking);
-  wdAttackStatus.textContent = attacking
-    ? `Atacando ${wdStatus.session?.currentBssid || "..."}`
-    : on
-      ? ""
-      : "";
-  wdSessionId.textContent = wdStatus.session ? `· ${wdStatus.session.id}` : "";
+  wdAttackStatus.textContent = attacking ? "Auditoría en curso..." : "";
+
   if (wdError.textContent && wdStatus.error) wdError.textContent = wdStatus.error;
 
-  // Session captures list
-  wdSessionList.innerHTML = "";
-  if (wdStatus.session) {
-    for (const t of wdStatus.session.targets) {
-      const li = document.createElement("li");
-      const files = t.files.map((f) => f.split("/").pop()).join(", ") || "—";
-      li.innerHTML = `<span class="wd-status-badge wd-status-${t.status}">${t.status}</span>` +
-        `<span>${t.ssid || t.bssid}</span>` +
-        `<span class="wd-files">${t.method || ""} ${files}</span>`;
-      wdSessionList.appendChild(li);
-    }
-    if (wdStatus.session.targets.length === 0) {
-      wdSessionList.innerHTML = '<li class="muted">Sin objetivos aún</li>';
-    }
-  }
+  // Results: handshakes captured (from session targets with status=captured)
+  const captured = (wdStatus.session?.targets || []).filter((t) => t.status === "captured");
+  wdResultsList.innerHTML = captured.length === 0
+    ? '<div class="muted">Sin capturas aún. Selecciona una red y pulsa Auditar.</div>'
+    : captured.map((t) => {
+        const hashFile = t.files.find((f) => f.endsWith(".hc22000"));
+        const capFile = t.files.find((f) => f.endsWith(".cap") || f.endsWith(".pcapng"));
+        const dl = hashFile || capFile;
+        const fname = dl ? dl.split("/").pop() : "";
+        const dlUrl = dl ? `/api/wardrive/files/download?path=${encodeURIComponent(dl.split("/").slice(-2).join("/"))}` : "";
+        return `<div class="wd-result-item">
+          <div class="wd-result-info">
+            <span class="wd-result-ssid">${escapeHtml(t.ssid || t.bssid)}</span>
+            <span class="wd-result-meta">${t.method} · ${t.attempts} intento(s)</span>
+          </div>
+          ${dl ? `<a href="${dlUrl}" download="${fname}"><button class="wd-download-btn">Descargar ${fname.endsWith(".hc22000") ? "hash" : "captura"}</button></a>` : ""}
+        </div>`;
+      }).join("");
 
-  // Air targets table — authorized targets pinned at the top (fixed
-  // ordering by BSSID among themselves so re-scan doesn't shuffle them),
-  // then the rest by signal strength.
+  // Networks table
   wdTableBody.innerHTML = "";
   if (!on) {
-    wdTableBody.innerHTML = '<tr><td colspan="9" class="muted">Modo inactivo — entra al modo wardriving para escanear</td></tr>';
+    wdTableBody.innerHTML = '<tr><td colspan="7" class="muted">Entra al modo wardriving para escanear</td></tr>';
     return;
   }
-  const allTargets = [...(wdStatus.targets || [])];
-  const pinned = allTargets
-    .filter((t) => t.inAllowlist)
-    .sort((a, b) => a.bssid.localeCompare(b.bssid));
-  const rest = allTargets
-    .filter((t) => !t.inAllowlist)
-    .sort((a, b) => b.rssi - a.rssi);
-  const ordered = [...pinned, ...rest];
-  if (ordered.length === 0) {
-    wdTableBody.innerHTML = '<tr><td colspan="9" class="muted">Escaneando el aire...</td></tr>';
+
+  const targets = [...(wdStatus.targets || [])];
+  const withHash = new Set((wdStatus.session?.targets || []).filter((t) => t.status === "captured").map((t) => t.bssid));
+
+  if (targets.length === 0) {
+    wdTableBody.innerHTML = '<tr><td colspan="7" class="muted">Escaneando redes...</td></tr>';
     return;
   }
-  for (const t of ordered) {
+
+  // Sort: captured first, then by signal
+  targets.sort((a, b) => {
+    const aCap = withHash.has(a.bssid) ? 0 : 1;
+    const bCap = withHash.has(b.bssid) ? 0 : 1;
+    if (aCap !== bCap) return aCap - bCap;
+    return b.rssi - a.rssi;
+  });
+
+  for (const t of targets) {
     const tr = document.createElement("tr");
     const sessTarget = wdStatus.session?.targets.find((s) => s.bssid === t.bssid);
-    const badge = sessTarget
-      ? `<span class="wd-status-badge wd-status-${sessTarget.status}">${sessTarget.status}${sessTarget.method ? "·" + sessTarget.method : ""}</span>`
-      : '<span class="wd-status-badge">—</span>';
-    const auth = t.inAllowlist;
-    const pin = auth ? '<span class="wd-pin" title="Autorizado — fijo arriba">📌</span> ' : "";
-    const actions = auth
-      ? (attacking
-          ? "—"
-          : `<button data-act="attack" data-bssid="${t.bssid}">Hack</button>` +
-            `<button data-act="disallow" data-bssid="${t.bssid}" class="secondary">Quitar</button>`)
-      : `<button data-act="allow" data-bssid="${t.bssid}">Autorizar</button>`;
-    const dist = t.distanceMeters != null ? `~${t.distanceMeters}m` : "—";
-    const clients = t.clients != null ? String(t.clients) : "0";
-    tr.innerHTML =
-      `<td class="wd-ssid">${pin}${escapeHtml(t.ssid || "(oculta)")}</td>` +
-      `<td class="wd-bssid">${t.bssid}</td>` +
-      `<td>${t.channel}</td>` +
-      `<td class="${wdDbmClass(t.rssi)}">${t.rssi}</td>` +
-      `<td>${dist}</td>` +
-      `<td>${clients}</td>` +
-      `<td>${t.security}</td>` +
-      `<td>${badge}</td>` +
-      `<td>${actions}</td>`;
+    const captured = sessTarget?.status === "captured";
+    const running = sessTarget?.status === "running";
+    const failed = sessTarget?.status === "failed";
+
+    let statusBadge = '<span class="wd-badge">—</span>';
+    if (captured) statusBadge = '<span class="wd-badge wd-badge-ok">CAPTURADO</span>';
+    else if (running) statusBadge = '<span class="wd-badge wd-badge-run">AUDITANDO</span>';
+    else if (failed) statusBadge = '<span class="wd-badge wd-badge-fail">Falló</span>';
+
+    const action = captured
+      ? '<span class="muted">✓ Listo</span>'
+      : attacking
+        ? "—"
+        : `<button class="wd-audit-btn" data-bssid="${t.bssid}" data-ssid="${escapeHtml(t.ssid || "")}">Auditar</button>`;
+
+    tr.innerHTML = `
+      <td class="wd-ssid">${escapeHtml(t.ssid || "(oculta)")}</td>
+      <td>${t.channel}</td>
+      <td class="${wdDbmClass(t.rssi)}">${wdSignalBars(t.rssi)} ${t.rssi}</td>
+      <td>${t.clients ?? 0}</td>
+      <td>${t.security}</td>
+      <td>${statusBadge}</td>
+      <td>${action}</td>`;
     wdTableBody.appendChild(tr);
   }
 }
@@ -1688,24 +1678,24 @@ function escapeHtml(text) {
 }
 
 wdTableBody.addEventListener("click", async (ev) => {
-  const btn = ev.target.closest("button[data-act]");
+  const btn = ev.target.closest(".wd-audit-btn");
   if (!btn) return;
   const bssid = btn.dataset.bssid;
-  const act = btn.dataset.act;
+  const ssid = btn.dataset.ssid;
   wdError.textContent = "";
-  if (act === "allow") {
-    const res = await wdApi("allowlist", { bssid });
-    if (res?.error) wdError.textContent = res.error;
-    void wdRefresh();
-  } else if (act === "disallow") {
-    const res = await wdApi("allowlist/remove", { bssid });
-    if (res?.error) wdError.textContent = res.error;
-    void wdRefresh();
-  } else if (act === "attack") {
-    const res = await wdApi("attack/one", { bssid });
-    if (res?.error) wdError.textContent = res.error;
-    void wdRefresh();
+
+  // Auto-authorize + attack in one go
+  btn.disabled = true;
+  btn.textContent = "Auditando...";
+
+  await wdApi("allowlist", { bssid });
+  const res = await wdApi("attack/one", { bssid });
+  if (res?.error) {
+    wdError.textContent = res.error;
+    btn.disabled = false;
+    btn.textContent = "Auditar";
   }
+  void wdRefresh();
 });
 
 wdEnterBtn.addEventListener("click", async () => {
@@ -1724,26 +1714,10 @@ wdExitBtn.addEventListener("click", async () => {
 
 wdScanBtn.addEventListener("click", () => void wdRefresh(true));
 
-// Pausa de escaneo: congela el polling para que la tabla no cambie mientras
-// elegís la red a auditar. El modo/ataques siguen funcionando igual.
 wdPauseBtn.addEventListener("click", () => {
   wdPaused = !wdPaused;
   wdRender();
   void wdRefreshOnce();
-});
-
-wdAttackAllBtn.addEventListener("click", async () => {
-  wdError.textContent = "";
-  const bssids = (wdStatus.targets || [])
-    .filter((t) => t.inAllowlist)
-    .map((t) => t.bssid);
-  if (bssids.length === 0) {
-    wdError.textContent = "No hay objetivos autorizados visibles";
-    return;
-  }
-  const res = await wdApi("attack/many", { bssids });
-  if (res?.error) wdError.textContent = res.error;
-  void wdRefresh();
 });
 
 wdCancelBtn.addEventListener("click", async () => {
@@ -1753,8 +1727,6 @@ wdCancelBtn.addEventListener("click", async () => {
 
 async function wdRefresh(forceScan = false) {
   if (forceScan && wdStatus?.mode === "ready") {
-    // A passive nudge to NetworkManager's own scan doesn't disturb the
-    // monitor interface; WIFIRADAR's capture is the actual data source.
     await fetch("/api/wifi/scan-detailed").catch(() => {});
   }
   const res = await fetch("/api/wardrive/status");
@@ -1764,9 +1736,6 @@ async function wdRefresh(forceScan = false) {
   }
 }
 
-// One-shot refresh that ignores the pause flag (used by the pause button
-// itself and by action buttons: even paused, attacks/captures should
-// reflect immediately).
 async function wdRefreshOnce() {
   const res = await fetch("/api/wardrive/status");
   if (res.ok) {
@@ -1775,14 +1744,14 @@ async function wdRefreshOnce() {
   }
 }
 
-// The wardrive tab polls; other tabs leave it alone (cheap GET only).
+// Poll when tab active
 for (const btn of document.querySelectorAll(".tab-btn")) {
   if (btn.dataset.tab === "wardrive") {
     btn.addEventListener("click", () => {
       void loadMonitorCap();
       void wdRefresh();
       if (!wdTimer) wdTimer = setInterval(() => {
-        if (wdPaused) return; // pausa de escaneo: no re-ordenar la tabla
+        if (wdPaused) return;
         const active = document.getElementById("tab-wardrive")?.classList.contains("active");
         if (active) void wdRefresh();
       }, 2000);
@@ -1790,176 +1759,13 @@ for (const btn of document.querySelectorAll(".tab-btn")) {
   }
 }
 
-// Boot into a live state if the user lands directly on #wardrive.
+let wdTimer = null;
+
+// Boot if direct link
 if (window.location.hash === "#wardrive") {
   void loadMonitorCap();
   void wdRefresh();
 }
-
-// ---- Wardriving sub-tabs (Objetivos / Deauth / Archivos) ----
-
-for (const sub of document.querySelectorAll(".wd-subtab")) {
-  sub.addEventListener("click", () => {
-    for (const s of document.querySelectorAll(".wd-subtab")) s.classList.remove("active");
-    for (const p of document.querySelectorAll(".wd-subpanel")) p.classList.add("hidden");
-    sub.classList.add("active");
-    document.getElementById(`wd-subtab-${sub.dataset.wdSubtab}`).classList.remove("hidden");
-    if (sub.dataset.wdSubtab === "deauth") void wdLoadDevices();
-    if (sub.dataset.wdSubtab === "files") void wdLoadFiles();
-  });
-}
-
-// ── Deauth sub-tab ──
-
-const wdDevicesScanBtn = document.getElementById("wd-devices-scan-btn");
-const wdDevicesStatus = document.getElementById("wd-devices-status");
-const wdDevicesBody = document.getElementById("wd-devices-body");
-
-let wdDevices = [];
-
-async function wdLoadDevices() {
-  const res = await fetch("/api/wardrive/devices");
-  if (res.ok) {
-    wdDevices = await res.json();
-    wdRenderDevices();
-  }
-}
-
-wdDevicesScanBtn.addEventListener("click", () => void wdLoadDevices());
-
-function wdRenderDevices() {
-  wdDevicesStatus.textContent = wdDevices.length ? `${wdDevices.length} dispositivo(s) vistos` : "";
-  wdDevicesBody.innerHTML = "";
-  if (wdDevices.length === 0) {
-    wdDevicesBody.innerHTML = '<tr><td colspan="6" class="muted">Sin dispositivos visibles (activá modo wardriving para ver el aire)</td></tr>';
-    return;
-  }
-  for (const d of wdDevices) {
-    const tr = document.createElement("tr");
-    const state = d.deauthing
-      ? '<span class="wd-status-badge wd-status-running">deauth</span>'
-      : d.deauthAuthorized
-        ? '<span class="wd-status-badge wd-status-captured">autorizado</span>'
-        : '<span class="wd-status-badge">—</span>';
-    const net = d.associatedSsid
-      ? `${escapeHtml(d.associatedSsid)}`
-      : d.associatedBssid
-        ? d.associatedBssid
-        : '<span class="muted">sin asociar</span>';
-    const actions = d.deauthing
-      ? `<button data-act="deauth-stop" data-mac="${d.mac}">Detener</button>`
-      : (d.deauthAuthorized && !d.deauthing
-          ? `<button data-act="deauth" data-mac="${d.mac}">Deauth</button>` +
-            `<button data-act="deauth-disallow" data-mac="${d.mac}" class="secondary">Quitar</button>`
-          : `<button data-act="deauth-allow" data-mac="${d.mac}">Autorizar</button>`);
-    tr.innerHTML =
-      `<td class="wd-bssid">${d.mac}</td>` +
-      `<td class="wd-ssid">${net}</td>` +
-      `<td class="${wdDbmClass(d.rssi)}">${d.rssi}</td>` +
-      `<td>${escapeHtml(d.vendor || "")}</td>` +
-      `<td>${state}</td>` +
-      `<td>${actions}</td>`;
-    wdDevicesBody.appendChild(tr);
-  }
-}
-
-wdDevicesBody.addEventListener("click", async (ev) => {
-  const btn = ev.target.closest("button[data-act]");
-  if (!btn) return;
-  const mac = btn.dataset.mac;
-  const act = btn.dataset.act;
-  wdError.textContent = "";
-  if (act === "deauth-allow") {
-    await wdApi("deauth/authorize", { mac });
-    void wdLoadDevices();
-  } else if (act === "deauth-disallow") {
-    await wdApi("deauth/deauthorize", { mac });
-    void wdLoadDevices();
-  } else if (act === "deauth") {
-    const res = await wdApi("deauth/attack", { mac, seconds: 10 });
-    if (res?.error) {
-      wdError.textContent = res.error;
-    }
-    void wdLoadDevices();
-  } else if (act === "deauth-stop") {
-    await wdApi("deauth/stop", { mac });
-    void wdLoadDevices();
-  }
-});
-
-// ── Files sub-tab ──
-
-const wdFilesUpBtn = document.getElementById("wd-files-up-btn");
-const wdFilesPath = document.getElementById("wd-files-path");
-const wdFilesRefreshBtn = document.getElementById("wd-files-refresh-btn");
-const wdFilesBody = document.getElementById("wd-files-body");
-
-let wdFilesCwd = "";
-
-function wdFormatSize(bytes) {
-  if (!bytes) return "—";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
-async function wdLoadFiles() {
-  const res = await fetch(`/api/wardrive/files?path=${encodeURIComponent(wdFilesCwd)}`);
-  if (!res.ok) {
-    wdFilesBody.innerHTML = '<tr><td colspan="3" class="muted">No se pudo listar la carpeta</td></tr>';
-    return;
-  }
-  const data = await res.json();
-  wdFilesPath.textContent = "/" + (data.path || "");
-  wdFilesUpBtn.classList.toggle("hidden", !data.path);
-  wdFilesBody.innerHTML = "";
-  if (data.items.length === 0) {
-    wdFilesBody.innerHTML = '<tr><td colspan="3" class="muted">Carpeta vacía (creá una sesión primero)</td></tr>';
-    return;
-  }
-  for (const item of data.items) {
-    const tr = document.createElement("tr");
-    const nameCell = item.type === "dir"
-      ? `<a href="#" class="wd-ssid" data-open="${item.path}">${escapeHtml(item.name)}/</a>`
-      : `<span>${escapeHtml(item.name)}</span>`;
-    const actions = item.type === "dir"
-      ? `<button data-act="del" data-path="${item.path}" class="secondary">Borrar</button>`
-      : `<a href="/api/wardrive/files/download?path=${encodeURIComponent(item.path)}"><button>Descargar</button></a>` +
-        `<button data-act="del" data-path="${item.path}" class="secondary">Borrar</button>`;
-    tr.innerHTML =
-      `<td>${nameCell}</td>` +
-      `<td class="wd-bssid">${item.type === "dir" ? "carpeta" : wdFormatSize(item.size)}</td>` +
-      `<td>${actions}</td>`;
-    wdFilesBody.appendChild(tr);
-  }
-}
-
-wdFilesBody.addEventListener("click", async (ev) => {
-  const open = ev.target.closest("a[data-open]");
-  if (open) {
-    ev.preventDefault();
-    wdFilesCwd = open.dataset.open;
-    void wdLoadFiles();
-    return;
-  }
-  const btn = ev.target.closest("button[data-act]");
-  if (!btn) return;
-  if (btn.dataset.act === "del") {
-    if (!confirm(`¿Borrar ${btn.dataset.path}? (permanente)`)) return;
-    const res = await wdApi("files/delete", { path: btn.dataset.path });
-    if (res?.error) wdError.textContent = res.error;
-    void wdLoadFiles();
-  }
-});
-
-wdFilesUpBtn.addEventListener("click", () => {
-  const parts = wdFilesCwd.split("/").filter(Boolean);
-  parts.pop();
-  wdFilesCwd = parts.join("/");
-  void wdLoadFiles();
-});
-
-wdFilesRefreshBtn.addEventListener("click", () => void wdLoadFiles());
 
 // ================= Reproductor de música (Cypher OST) =================
 const mpTitle = document.getElementById("mp-title");

@@ -207,24 +207,16 @@
           <div class="wd-banner-title">MODO WARDRIVE <span id="wd-iface" class="wd-iface"></span></div>
           <div id="wd-banner-status" class="wd-banner-status">—</div>
         </div>
-        <button id="wd-exit-btn" class="secondary hidden">Salir de modo wardriving</button>
-        <button id="wd-enter-btn" class="hidden">Entrar en modo wardriving</button>
+        <button id="wd-exit-btn" class="secondary hidden">Salir</button>
+        <button id="wd-enter-btn" class="hidden">Entrar</button>
       </div>
 
       <div id="wd-error" class="error"></div>
 
-      <div class="wd-subtabs">
-        <button class="wd-subtab active" data-wd-subtab="targets">Objetivos</button>
-        <button class="wd-subtab" data-wd-subtab="deauth">Deauth</button>
-        <button class="wd-subtab" data-wd-subtab="files">Archivos</button>
-      </div>
-
-      <div id="wd-subtab-targets" class="wd-subpanel">
       <div class="wd-toolbar">
         <button id="wd-scan-btn">Escanear redes</button>
-        <button id="wd-pause-btn" class="secondary">Pausar escaneo</button>
-        <button id="wd-attack-all-btn" class="wd-danger hidden">Atacar todos los autorizados</button>
-        <button id="wd-cancel-btn" class="secondary hidden">Cancelar ataques</button>
+        <button id="wd-pause-btn" class="secondary hidden">Pausar</button>
+        <button id="wd-cancel-btn" class="wd-danger hidden">Cancelar ataque</button>
         <span id="wd-attack-status" class="muted"></span>
       </div>
 
@@ -232,84 +224,25 @@
         <table class="wd-table">
           <thead>
             <tr>
-              <th>SSID</th>
-              <th>BSSID</th>
-              <th>CH</th>
-              <th>dBm</th>
-              <th>DIST</th>
-              <th>CLIENTES</th>
-              <th>SEG</th>
-              <th>ESTADO</th>
-              <th>ACCIONES</th>
+              <th>Red</th>
+              <th>Canal</th>
+              <th>Señal</th>
+              <th>Clientes</th>
+              <th>Seguridad</th>
+              <th>Estado</th>
+              <th>Acción</th>
             </tr>
           </thead>
           <tbody id="wd-table-body">
-            <tr><td colspan="9" class="muted">—</td></tr>
+            <tr><td colspan="7" class="muted">—</td></tr>
           </tbody>
         </table>
       </div>
 
-      <div class="wd-session-block">
-        <div class="wd-session-title">SESIÓN DE CAPTURA <span id="wd-session-id" class="muted"></span></div>
-        <ul id="wd-session-list" class="wd-session-list"></ul>
-        <div class="wd-note muted">
-          Capturas en <code>~/wardrive-sessions/&lt;sesión&gt;/</code> en la Pi (nunca en este repo).
-          Solo se ataca lo que esté en la lista de objetivos del laboratorio.
-        </div>
-      </div>
-      </div>
-
-      <div id="wd-subtab-deauth" class="wd-subpanel hidden">
-        <div class="wd-toolbar">
-          <button id="wd-devices-scan-btn">Refrescar dispositivos</button>
-          <span id="wd-devices-status" class="muted"></span>
-        </div>
-        <div class="wd-list-wrap">
-          <table class="wd-table">
-            <thead>
-              <tr>
-                <th>MAC</th>
-                <th>REDE</th>
-                <th>dBm</th>
-                <th>VENDEDOR</th>
-                <th>ESTADO</th>
-                <th>ACCIONES</th>
-              </tr>
-            </thead>
-            <tbody id="wd-devices-body">
-              <tr><td colspan="6" class="muted">—</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="wd-note muted">
-          Deauth dirigido a un cliente: lo desconecta de su red durante el tiempo indicado.
-          Requiere modo wardriving activo y autorizar al dispositivo (por seguridad, uno por uno).
-        </div>
-      </div>
-
-      <div id="wd-subtab-files" class="wd-subpanel hidden">
-        <div class="wd-toolbar">
-          <button id="wd-files-up-btn" class="secondary">← Atrás</button>
-          <span id="wd-files-path" class="wd-files-path">/</span>
-          <button id="wd-files-refresh-btn" class="secondary">Refrescar</button>
-        </div>
-        <div class="wd-list-wrap">
-          <table class="wd-table">
-            <thead>
-              <tr>
-                <th>NOMBRE</th>
-                <th>TAMAÑO</th>
-                <th>ACCIONES</th>
-              </tr>
-            </thead>
-            <tbody id="wd-files-body">
-              <tr><td colspan="3" class="muted">—</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="wd-note muted">
-          Solo <code>~/wardrive-sessions/</code>. Descargá handshakes para crackearlos offline
-          (con GPU) — nunca en la Pi. Borrar es permanente.
+      <div class="wd-session-block" id="wd-results-block">
+        <div class="wd-session-title">HANDSHAKES CAPTURADOS</div>
+        <div id="wd-results-list" class="wd-results-list">
+          <div class="muted">Sin capturas aún. Selecciona una red y pulsa Auditar.</div>
         </div>
       </div>
     </section>

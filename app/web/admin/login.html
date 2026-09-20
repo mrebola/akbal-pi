@@ -53,6 +53,16 @@
       padding: 28px 26px 24px;
       box-shadow: 0 0 24px rgba(80, 255, 120, 0.08), inset 0 0 40px rgba(80, 255, 120, 0.03);
     }
+    .avatar {
+      display: block;
+      width: 84px;
+      height: 84px;
+      border-radius: 14px;
+      object-fit: cover;
+      border: 1px solid var(--border);
+      box-shadow: 0 0 16px rgba(80, 255, 120, 0.15);
+      margin: 0 auto 12px;
+    }
     .prompt {
       font-size: 12px;
       color: var(--text-secondary);
@@ -128,6 +138,7 @@
 </head>
 <body>
   <form class="card" id="login-form" autocomplete="off">
+    <img class="avatar" src="/avatar/standing.gif" alt="Akbal" />
     <div class="prompt">root@akbal-pi:~$ ./acceso</div>
     <h1>AKBAL<span class="cursor"></span></h1>
     <p class="subtitle">Panel de control — acceso restringido</p>

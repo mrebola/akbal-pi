@@ -133,7 +133,9 @@ export class WebAdminServer {
 
   private sessionAuth() {
     return async (ctx: Koa.Context, next: Koa.Next) => {
-      if (PUBLIC_PATHS.has(ctx.path)) {
+      // /avatar/* is also public — the login page shows Akbal's idle GIF
+      // before there's any session to check.
+      if (PUBLIC_PATHS.has(ctx.path) || ctx.path.startsWith("/avatar/")) {
         await next();
         return;
       }

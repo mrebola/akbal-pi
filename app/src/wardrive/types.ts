@@ -51,7 +51,27 @@ export type WardriveStatus = {
 
 export type WardriveEventPayload =
   | { type: "status"; status: WardriveStatus }
-  | { type: "target-update"; bssid: string; status: WardriveTargetStatus; method: string; error: string };
+  | { type: "target-update"; bssid: string; status: WardriveTargetStatus; method: string; error: string }
+  | { type: "attack-progress"; bssid: string; step: AttackStep; message: string; command?: string; output?: string };
+
+// Step-by-step attack progress for the UI: explains what's happening and
+// shows the exact command being run + its output.
+export type AttackStep =
+  | "scan"      // 1. scanning for target channel/clients
+  | "lock"      // 2. locking radio to channel
+  | "capture"   // 3. airodump running
+  | "deauth"    // 4. sending deauth
+  | "validate"  // 5. checking for handshake
+  | "done";     // 6. final result
+
+export const ATTACK_STEPS: Record<AttackStep, string> = {
+  scan: "Escaneando red objetivo",
+  lock: "Fijando canal del adaptador",
+  capture: "Capturando tráfico (airodump-ng)",
+  deauth: "Enviando deauth a clientes",
+  validate: "Validando handshake capturado",
+  done: "Resultado final",
+};
 
 // Client-device view for the Deauth tab (wardrive/discovery.ts). One
 // entry per distinct client MAC the WIFIRADAR capture has seen talking.

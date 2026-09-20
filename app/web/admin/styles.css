@@ -864,6 +864,200 @@ button.secondary {
 
 .wd-download-btn:hover { opacity: 0.9; }
 
+/* ---- Attack progress modal ---- */
+
+.wd-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wd-modal-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(2px);
+}
+
+.wd-modal-content {
+  position: relative;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 90%;
+  max-width: 700px;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.wd-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.wd-modal-header span {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.wd-modal-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.wd-modal-actions button {
+  font-size: 16px;
+  padding: 4px 12px;
+  min-width: 36px;
+}
+
+.wd-progress-steps {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+}
+
+.wd-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  transition: all 0.2s;
+}
+
+.wd-step.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(80, 255, 120, 0.08);
+  box-shadow: 0 0 12px rgba(80, 255, 120, 0.15);
+}
+
+.wd-step.done {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.wd-step.done::before {
+  content: "✓";
+  margin-right: 2px;
+}
+
+.wd-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--border);
+  font-size: 10px;
+}
+
+.wd-step.active .wd-step-num {
+  background: var(--accent);
+  color: #000;
+}
+
+.wd-progress-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  background: var(--bg);
+}
+
+.wd-progress-log .log-entry {
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  border-left: 2px solid var(--border);
+  padding-left: 10px;
+}
+
+.wd-progress-log .log-entry.cmd {
+  border-left-color: var(--accent);
+  color: var(--accent);
+}
+
+.wd-progress-log .log-entry.output {
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.wd-progress-log .log-time {
+  color: var(--text-secondary);
+  opacity: 0.6;
+  font-size: 10px;
+  margin-right: 6px;
+}
+
+/* Minimized modal indicator (shows attack is still running) */
+.wd-progress-minimized {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 999;
+  background: var(--bg-raised);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.wd-progress-minimized:hover {
+  background: var(--bg);
+}
+  padding-left: 10px;
+}
+
+.wd-progress-log .log-entry.cmd {
+  border-left-color: var(--accent);
+  color: var(--accent);
+}
+
+.wd-progress-log .log-entry.output {
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.wd-progress-log .log-time {
+  color: var(--text-secondary);
+  opacity: 0.6;
+  font-size: 10px;
+  margin-right: 6px;
+}
+
 .wd-note code {
   background: var(--bg-raised);
   padding: 1px 5px;

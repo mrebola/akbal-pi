@@ -2,6 +2,7 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import fs from "fs";
 import path from "path";
+import { AttackStep } from "./types";
 
 const execFileAsync = promisify(execFile);
 
@@ -24,12 +25,22 @@ export type SessionTargetSnapshot = {
   files: string[];
 };
 
+// Step-by-step progress for UI reconnection: full history of what happened.
+export type AttackProgressEntry = {
+  ts: number;
+  step: AttackStep;
+  message: string;
+  command?: string;
+  output?: string;
+};
+
 export class WardriveSession {
   readonly id: string;
   readonly dir: string;
   readonly startedAt: number;
   endedAt: number | null = null;
   private targets = new Map<string, SessionTargetSnapshot>();
+  private progressLog = new Map<string, AttackProgressEntry[]>(); // bssid -> entries
 
   constructor() {
     this.startedAt = Date.now();
@@ -43,6 +54,33 @@ export class WardriveSession {
     this.dir = path.join(SESSIONS_ROOT, this.id);
     fs.mkdirSync(this.dir, { recursive: true });
     this.writeMeta();
+  }
+
+  // Record a step for UI reconnection. Written to progress-<bssid>.jsonl
+  // and kept in memory for the live session.
+  addProgress(bssid: string, step: AttackStep, message: string, command?: string, output?: string): void {
+    const entry: AttackProgressEntry = { ts: Date.now(), step, message, command, output };
+    const list = this.progressLog.get(bssid) || [];
+    list.push(entry);
+    this.progressLog.set(bssid, list);
+    // Persist as JSONL (one JSON object per line, append-only).
+    try {
+      const fname = path.join(this.dir, `progress-${bssid.replace(/:/g, "").toLowerCase()}.jsonl`);
+      fs.appendFileSync(fname, JSON.stringify(entry) + "\n");
+    } catch {
+      // Progress logs are nice-to-have, never fatal.
+    }
+  }
+
+  // Load persisted progress for a target (UI reopens mid-attack).
+  getProgress(bssid: string): AttackProgressEntry[] {
+    const fname = path.join(this.dir, `progress-${bssid.replace(/:/g, "").toLowerCase()}.jsonl`);
+    try {
+      const lines = fs.readFileSync(fname, "utf8").split("\n").filter(Boolean);
+      return lines.map((l) => JSON.parse(l));
+    } catch {
+      return this.progressLog.get(bssid) || [];
+    }
   }
 
   ensureTarget(bssid: string, ssid: string, channel: number): void {

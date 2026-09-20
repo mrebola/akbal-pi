@@ -1677,12 +1677,175 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+// ---- Attack progress modal ----
+
+const wdProgressModal = document.getElementById("wd-progress-modal");
+const wdProgressTitle = document.getElementById("wd-progress-title");
+const wdProgressSteps = document.getElementById("wd-progress-steps");
+const wdProgressLog = document.getElementById("wd-progress-log");
+const wdProgressMinimize = document.getElementById("wd-progress-minimize");
+const wdProgressClose = document.getElementById("wd-progress-close");
+
+let wdCurrentAttackBssid = null;
+let wdProgressTimer = null;
+let wdMinimizedIndicator = null;
+
+const ATTACK_STEPS = [
+  { key: "scan", label: "Escaneo" },
+  { key: "lock", label: "Canal" },
+  { key: "capture", label: "Captura" },
+  { key: "deauth", label: "Deauth" },
+  { key: "validate", label: "Validación" },
+  { key: "done", label: "Resultado" },
+];
+
+function wdShowProgress(bssid, ssid) {
+  wdCurrentAttackBssid = bssid;
+  wdProgressTitle.textContent = `Auditando: ${ssid || bssid}`;
+  wdProgressModal.classList.remove("hidden");
+  wdRemoveMinimizedIndicator();
+  wdRenderSteps([]);
+  wdProgressLog.innerHTML = '<div class="muted">Iniciando...</div>';
+  void wdLoadProgress(bssid);
+  // Poll for updates
+  if (wdProgressTimer) clearInterval(wdProgressTimer);
+  wdProgressTimer = setInterval(() => void wdLoadProgress(bssid), 1500);
+}
+
+function wdHideProgress() {
+  // Minimize instead of full close — attack keeps running.
+  wdProgressModal.classList.add("hidden");
+  if (wdCurrentAttackBssid) {
+    wdShowMinimizedIndicator(wdCurrentAttackBssid);
+  }
+  // Keep polling in background so we remember where we are.
+}
+
+function wdCloseProgress() {
+  // Full close: cancel polling and forget the attack.
+  wdProgressModal.classList.add("hidden");
+  wdCurrentAttackBssid = null;
+  wdRemoveMinimizedIndicator();
+  if (wdProgressTimer) {
+    clearInterval(wdProgressTimer);
+    wdProgressTimer = null;
+  }
+}
+
+// Minimized indicator: bottom-right badge you can click to reopen.
+function wdShowMinimizedIndicator(bssid) {
+  wdRemoveMinimizedIndicator();
+  wdMinimizedIndicator = document.createElement("div");
+  wdMinimizedIndicator.className = "wd-progress-minimized";
+  wdMinimizedIndicator.innerHTML = `
+    <span style="color: var(--accent);">●</span>
+    <span>Ataque en curso</span>
+    <button onclick="wdReopenProgress()" style="font-size: 11px; padding: 2px 8px;">Ver progreso</button>
+  `;
+  wdMinimizedIndicator.addEventListener("click", (e) => {
+    if (e.target.tagName !== "BUTTON") wdReopenProgress();
+  });
+  document.body.appendChild(wdMinimizedIndicator);
+}
+
+function wdRemoveMinimizedIndicator() {
+  if (wdMinimizedIndicator) {
+    wdMinimizedIndicator.remove();
+    wdMinimizedIndicator = null;
+  }
+}
+
+function wdReopenProgress() {
+  if (!wdCurrentAttackBssid) return;
+  wdProgressModal.classList.remove("hidden");
+  wdRemoveMinimizedIndicator();
+  // Resume polling.
+  if (wdProgressTimer) clearInterval(wdProgressTimer);
+  wdProgressTimer = setInterval(() => void wdLoadProgress(wdCurrentAttackBssid), 1500);
+  void wdLoadProgress(wdCurrentAttackBssid);
+}
+
+wdProgressMinimize.addEventListener("click", wdHideProgress);
+wdProgressClose.addEventListener("click", wdCloseProgress);
+
+function wdRenderSteps(currentStep) {
+  const stepsHtml = ATTACK_STEPS.map((s, i) => {
+    const cls = currentStep === s.key ? "active" : "";
+    const done = ATTACK_STEPS.findIndex((x) => x.key === currentStep) > i;
+    return `<div class="wd-step ${cls} ${done ? "done" : ""}">
+      <span class="wd-step-num">${i + 1}</span>
+      <span>${s.label}</span>
+    </div>`;
+  }).join("");
+  wdProgressSteps.innerHTML = stepsHtml;
+}
+
+async function wdLoadProgress(bssid) {
+  if (!bssid || bssid !== wdCurrentAttackBssid) return;
+  try {
+    const res = await fetch(`/api/wardrive/progress?bssid=${encodeURIComponent(bssid)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const entries = data.entries || [];
+    if (entries.length === 0) {
+      wdProgressLog.innerHTML = '<div class="muted">Esperando datos del ataque...</div>';
+      return;
+    }
+
+    // Update steps based on latest step
+    const latest = entries[entries.length - 1];
+    wdRenderSteps(latest.step);
+
+    // Render log
+    wdProgressLog.innerHTML = entries.map((e) => {
+      const time = new Date(e.ts).toLocaleTimeString();
+      let html = `<div class="log-entry"><span class="log-time">${time}</span>${escapeHtml(e.message)}</div>`;
+      if (e.command) {
+        html += `<div class="log-entry cmd"><span class="log-time">$</span>${escapeHtml(e.command)}</div>`;
+      }
+      if (e.output) {
+        html += `<div class="log-entry output">${escapeHtml(e.output)}</div>`;
+      }
+      return html;
+    }).join("");
+
+    // Auto-scroll to bottom
+    wdProgressLog.scrollTop = wdProgressLog.scrollHeight;
+
+    // Stop polling if done
+    if (latest.step === "done") {
+      if (wdProgressTimer) {
+        clearInterval(wdProgressTimer);
+        wdProgressTimer = null;
+      }
+    }
+  } catch (err) {
+    console.error("progress load failed:", err);
+  }
+}
+
+// Check if there's an ongoing attack on page load (reconnection case)
+function wdCheckOngoingAttack() {
+  if (!wdStatus?.session?.currentBssid) return;
+  const bssid = wdStatus.session.currentBssid;
+  const target = wdStatus.targets?.find((t) => t.bssid === bssid);
+  if (target) {
+    wdShowProgress(bssid, target.ssid);
+  }
+}
+
+// Make wdReopenProgress globally available for the onclick handler.
+window.wdReopenProgress = wdReopenProgress;
+
 wdTableBody.addEventListener("click", async (ev) => {
   const btn = ev.target.closest(".wd-audit-btn");
   if (!btn) return;
   const bssid = btn.dataset.bssid;
   const ssid = btn.dataset.ssid;
   wdError.textContent = "";
+
+  // Show progress panel
+  wdShowProgress(bssid, ssid);
 
   // Auto-authorize + attack in one go
   btn.disabled = true;
@@ -1694,6 +1857,7 @@ wdTableBody.addEventListener("click", async (ev) => {
     wdError.textContent = res.error;
     btn.disabled = false;
     btn.textContent = "Auditar";
+    wdHideProgress();
   }
   void wdRefresh();
 });
@@ -1712,7 +1876,11 @@ wdExitBtn.addEventListener("click", async () => {
   void wdRefresh();
 });
 
-wdScanBtn.addEventListener("click", () => void wdRefresh(true));
+wdScanBtn.addEventListener("click", async () => {
+  // Trigger the wardrive target refresh (iw scan fallback when the radar is stopped)
+  await wdApi("refresh");
+  void wdRefresh(true);
+});
 
 wdPauseBtn.addEventListener("click", () => {
   wdPaused = !wdPaused;
@@ -1741,6 +1909,10 @@ async function wdRefreshOnce() {
   if (res.ok) {
     wdStatus = await res.json();
     wdRender();
+    // Check if we should show progress for an ongoing attack
+    if (!wdCurrentAttackBssid && wdStatus?.session?.currentBssid) {
+      wdCheckOngoingAttack();
+    }
   }
 }
 

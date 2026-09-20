@@ -840,6 +840,27 @@ export class WebAdminServer {
       ctx.body = wardrive.cancelAttacks();
     });
 
+    // Step-by-step progress for the UI stepper. Returns full history so a
+    // reopened browser tab can show "where we are" without missing anything.
+    router.get("/api/wardrive/progress", (ctx) => {
+      const bssid = String(ctx.query.bssid || "");
+      if (!bssid) {
+        ctx.status = 400;
+        ctx.body = { error: "bssid requerido" };
+        return;
+      }
+      ctx.body = {
+        bssid,
+        entries: wardrive.getSession()?.getProgress(bssid) ?? [],
+      };
+    });
+
+    // Manual target list refresh (scan button in the UI).
+    router.post("/api/wardrive/refresh", async (ctx) => {
+      await wardrive.refreshTargets();
+      ctx.body = { ok: true };
+    });
+
     // ── WARDRIVE deauth tab ──
     // Client-directed deauth with its own authorization list. listDevices
     // is a read-only view (works even with wardriving off); any attack

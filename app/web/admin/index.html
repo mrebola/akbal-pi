@@ -245,6 +245,26 @@
           <div class="muted">Sin capturas aún. Selecciona una red y pulsa Auditar.</div>
         </div>
       </div>
+
+      <!-- Attack progress modal: shows step-by-step what's happening -->
+      <div id="wd-progress-modal" class="wd-modal hidden">
+        <div class="wd-modal-backdrop" onclick="wdHideProgress()"></div>
+        <div class="wd-modal-content">
+          <div class="wd-modal-header">
+            <span id="wd-progress-title">Auditando...</span>
+            <div class="wd-modal-actions">
+              <button id="wd-progress-minimize" class="secondary" title="Minimizar (sigue corriendo)">—</button>
+              <button id="wd-progress-close" class="secondary" title="Cerrar (cancelar ataque)">×</button>
+            </div>
+          </div>
+          <div class="wd-progress-steps" id="wd-progress-steps">
+            <!-- Steps injected here -->
+          </div>
+          <div class="wd-progress-log" id="wd-progress-log">
+            <div class="muted">Esperando inicio...</div>
+          </div>
+        </div>
+      </div>
     </section>
 
     <section id="tab-settings" class="tab-panel">

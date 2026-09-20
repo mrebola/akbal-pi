@@ -87,7 +87,8 @@ export class WardriveSession {
   // is the standard crack-ready format for later offline analysis; the
   // pcapng is kept as the raw evidence.
   async convertCapture(pcapngPath: string): Promise<{ hasCapture: boolean; hashFile: string | null }> {
-    const hashPath = pcapngPath.replace(/\.pcapng$/, ".hc22000");
+    // Accepts both hcxdumptool .pcapng and airodump-ng .cap inputs.
+    const hashPath = pcapngPath.replace(/\.(pcapng|cap)$/i, ".hc22000");
     try {
       const { stdout, stderr } = await execFileAsync("hcxpcapngtool", [
         "-o", hashPath,

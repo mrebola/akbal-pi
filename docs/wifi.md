@@ -11,8 +11,8 @@ agente. Esto agrega dos formas de gestionarla sin entrar por SSH:
    Pi en un punto de acceso (`akbal-pi`) para conectarse directo desde un
    celular sin necesitar internet ni la wifi de siempre — ver
    [`chat-flow/wifi-connect-mode.ts`](../app/src/core/chat-flow/wifi-connect-mode.ts)
-   y la sección de abajo. Un solo botón: click activa/desactiva, mantener
-   sale del menú.
+   y la sección de abajo. Un solo botón: click navega entre los dos QR
+   (wifi/web), mantener desactiva y sale.
 2. **Interfaz web** (ver [`web-ui.md`](./web-ui.md)): ver el estado actual,
    escanear y conectarse a redes (con contraseña si hace falta), "olvidar"
    redes guardadas, y activar/desactivar el mismo modo punto de acceso desde
@@ -40,6 +40,21 @@ Pensado para cuando no hay wifi conocida al alcance: conectate directo al
 dispositivo (escaneando el QR que muestra la pantalla, o a mano con el SSID/
 clave que también se ven ahí), abrí la web admin, y desde ahí sumá una red
 real — así no hace falta volver a este modo.
+
+La pantalla tiene dos QR, navegables con click:
+
+1. **Wifi** (el que se ve al entrar): `WIFI:T:WPA;S:...;P:...;;` — escanearlo
+   une el teléfono a la red `akbal-pi` directo, sin tipear nada.
+2. **Web**: apunta a `http://10.42.0.1:8090` — la propia IP del punto de
+   acceso, nunca el hostname de Tailscale ni la IP de LAN (`getApStatus()`
+   en `access-point.ts` arma esa URL a propósito así), porque el teléfono
+   recién conectado no tiene internet propio para resolver un hostname.
+
+En cuanto un teléfono se conecta (`getApClientCount()`, sondea `iw ... station
+dump` cada 2s), la pantalla salta sola del QR de wifi al de la web — no hace
+falta clickear. Si necesitás volver a mostrar el QR de wifi (para conectar un
+segundo dispositivo, por ejemplo), un click alterna entre los dos en
+cualquier momento.
 
 ## Por qué necesita `sudo` para `nmcli`
 
@@ -92,15 +107,16 @@ de que eso funcione:
 
 ## El menú físico (`chat-flow/wifi-connect-mode.ts`)
 
-Mismo click/mantener/doble-clic que el resto de los menús, pero con una sola
-acción posible en vez de una lista para recorrer:
+Mismo click/mantener/doble-clic que el resto de los menús:
 
 | Acción | Hace |
 |---|---|
-| Click | Activa el punto de acceso si estaba apagado, o lo desactiva si estaba prendido |
-| Mantener / doble clic | Sale del menú (deja el punto de acceso como esté) |
+| Click | Alterna entre el QR de wifi y el QR de la web |
+| Mantener (~0.9s) | Desactiva el punto de acceso y sale (vuelve a la wifi normal) |
+| Doble clic | Sale sin desactivar — el punto de acceso sigue andando |
 
-Mientras está activo, la pantalla muestra el SSID, la clave y un QR
-(`WIFI:T:WPA;S:...;P:...;;`) para unirse escaneando en vez de tipear. 60
-segundos sin tocar el botón cierran el menú y vuelven a reposo (más que el
-resto de los menús, para dar tiempo a escanear el QR).
+Entrar al menú activa el punto de acceso si estaba apagado (si ya había
+alguien conectado de una visita anterior, arranca directo en el QR de la
+web). 60 segundos sin tocar el botón cierran el menú y vuelven a reposo sin
+desactivar nada (más tiempo que el resto de los menús, para dar lugar a
+escanear el QR).

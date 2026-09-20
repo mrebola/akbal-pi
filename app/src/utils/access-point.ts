@@ -76,20 +76,51 @@ export const getApQrCodes = async (
   return { wifiQr, urlQr };
 };
 
-const DEVICE_QR_PATH = path.join(os.tmpdir(), "akbal-ap-wifi-qr.png");
+const DEVICE_WIFI_QR_PATH = path.join(os.tmpdir(), "akbal-ap-wifi-qr.png");
+const DEVICE_URL_QR_PATH = path.join(os.tmpdir(), "akbal-ap-url-qr.png");
 
 // Same "WIFI:...;;" payload as getApQrCodes' wifiQr, but rendered to a PNG
 // file instead of a data URL — the physical LCD (wifi-connect-mode.ts) reads
 // image files, unlike the web settings page's <img src>.
 export const generateApConnectQrFile = async (status: ApStatus): Promise<string> => {
   const wifiPayload = `WIFI:T:WPA;S:${status.ssid};P:${status.password};;`;
-  await QRCode.toFile(DEVICE_QR_PATH, wifiPayload, {
+  await QRCode.toFile(DEVICE_WIFI_QR_PATH, wifiPayload, {
     type: "png",
     width: 240,
     margin: 1,
     color: { dark: "#50ff78ff", light: "#0b0d0fff" },
   });
-  return DEVICE_QR_PATH;
+  return DEVICE_WIFI_QR_PATH;
+};
+
+// status.url is always the AP's own local address (http://10.42.0.1:8090),
+// never a LAN/Tailscale hostname — the whole point of this screen is
+// reaching the web admin with zero internet, so a phone that just joined the
+// hotspot (no internet of its own yet either) can still resolve/open it.
+export const generateApUrlQrFile = async (status: ApStatus): Promise<string> => {
+  await QRCode.toFile(DEVICE_URL_QR_PATH, status.url, {
+    type: "png",
+    width: 240,
+    margin: 1,
+    color: { dark: "#50ff78ff", light: "#0b0d0fff" },
+  });
+  return DEVICE_URL_QR_PATH;
+};
+
+// How many devices are currently associated with the AP — used to
+// auto-switch the device screen from "scan to join" to "scan to open the
+// web" once a phone actually connects (see wifi-connect-mode.ts). `iw` is
+// already in the passwordless sudoers rule the rest of wifi uses (see
+// docs/wifi.md), so this needs no new permission.
+export const getApClientCount = async (): Promise<number> => {
+  try {
+    const { stdout } = await execFileAsync("sudo", ["-n", "iw", "dev", AP_IFACE, "station", "dump"], {
+      timeout: 5000,
+    });
+    return (stdout.match(/^Station /gm) || []).length;
+  } catch {
+    return 0;
+  }
 };
 
 export const enableAp = async (): Promise<ApStatus> => {

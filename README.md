@@ -4,6 +4,35 @@
 
 El proyecto toma como base el repositorio [PiSugar/whisplay-ai-chatbot](https://github.com/PiSugar/whisplay-ai-chatbot), adaptándolo y extendiéndolo sobre el hardware descrito abajo.
 
+## Índice
+
+| | Sección | Contenido |
+|---|---|---|
+| **Instalación y referencia** | | |
+| — | [Hardware](#hardware) | Componentes y enlaces de compra |
+| — | [Sistema operativo](#sistema-operativo) | Qué OS corre el dispositivo |
+| — | [Stack de software](#stack-de-software-100-local) | Qué usa cada pieza (LLM, voz, wifi...) |
+| — | [Instalación desde cero](#instalación-cómo-montar-todo-desde-cero) | Los 10 pasos: armado → flasheo → drivers → app → systemd |
+| — | [Estructura del repo](#estructura-del-repo) | Qué vive en `app/`, `docs/`, `setup/` |
+| — | [Estado del proyecto](#estado) | Qué está probado y qué falta |
+| **Uso del dispositivo** | | |
+| — | [Conversación por voz](#conversación-por-voz-uso-principal) | El flujo principal: botón → hablar → respuesta |
+| — | [Comandos de voz](#comandos-de-voz-instantáneos-no-gastan-turno) | Atajos instantáneos ("ayuda", volumen, modelo...) |
+| — | [Menú rápido](#menú-rápido-click-corto-en-reposo) | Los 10 modos de la app física y sus gestos |
+| — | [WiFi Radar en pantalla](#wifi-radar-pantalla) | Radar de redes en la LCD física |
+| **Sitio web** (`http://<ip>:8090`) | | |
+| — | [Chat](#chat) | Chat escrito con el LLM local |
+| — | [WiFi](#wifi-pestaña-sub-pestañas-conexión-redes) | Conexión, redes, punto de acceso |
+| — | [WIFIRADAR 3D](#wifiradar-wifiradar-link-radar-wi-fi) | Radar 3D con toggle REAL/DEMO |
+| — | [Wardriving](#wardriving-pestaña) | Auditoría de handshakes (allowlist, ataques, sesiones) |
+| — | [OST](#ost-pestaña-música) | Jukebox de música |
+| — | [Dispositivos](#dispositivos-pestaña-usb) | USB, montaje, adaptadores WiFi |
+| — | [Ajustes](#ajustes) | Volumen, bocina Bluetooth, respaldos |
+| — | [API HTTP](#api-http-para-integraciones) | Endpoints para integraciones |
+| **Docs por archivo** | | |
+| — | [`docs/`](docs/) | Bitácora de instalación, fixes y decisiones (índice en [`docs/SETUP.md`](docs/SETUP.md)) |
+| — | [`app/AGENTS.md`](app/AGENTS.md) | Arquitectura interna de la app (para agentes/mantenedores) |
+
 ## Hardware
 
 | Cant. | Componente | Enlace |

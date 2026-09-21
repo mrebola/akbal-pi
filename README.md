@@ -50,7 +50,7 @@ chatbot respondiendo por voz. Asume una Raspberry Pi 5 nueva y acceso por SSH
    esta unidad el MCU de la PiSugar corrompe el bus I2C que comparte con el códec de
    audio del Whisplay HAT y la tarjeta de sonido nunca se registra; aislarlo lo
    resuelve conservando la batería (se pierde solo la lectura de nivel por software).
-   Diagrama de pines y diagnóstico completo en
+   Diagrama de pines, fotos del antes/después y diagnóstico completo en
    [`docs/whisplay-audio-fix.md`](docs/whisplay-audio-fix.md#qué-pines-se-tapan-diagrama).
 4. Monta el **Whisplay HAT** sobre el header GPIO de 40 pines, encima de todo el stack.
 5. Antes de encender, revisa la documentación oficial de cada componente por si hay detalles de tu revisión de hardware específica:

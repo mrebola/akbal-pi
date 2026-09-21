@@ -512,6 +512,21 @@ pin 1 (el más cercano a la ranura microSD / puerto USB-C):
   muestra `UU` en `0x1a` (driver bindeado) y nada en `0x57`/`0x68` (la
   PiSugar ya no está en el bus, que es la idea).
 
+Fotos de cómo quedó (cara inferior de la PiSugar 3 Plus, la que apoya
+contra la Pi; el bloque de pogo pins está en la esquina del extremo del
+pin 1 del header):
+
+| Antes | Después (como quedó funcionando) |
+|---|---|
+| ![PiSugar 3 Plus, cara de los pogo pins, sin cinta](img/pisugar3-pogo-pins-before.jpeg) | ![PiSugar 3 Plus con cinta sobre la columna de pogo pins de los pines impares](img/pisugar3-pogo-pins-taped.jpeg) |
+
+En el "después" la cinta cubre la **columna completa** de pogo pins del
+lado de los pines impares (1 = 3V3, 3 = SDA1, 5 = SCL1) y deja libre la
+columna de 5V/GND (2, 4, 6) y el pogo suelto de abajo. Tapar también el
+pin 1 resultó inofensivo (la PiSugar alimenta la Pi y el audio registra
+igual); si se quiere ser más fino, alcanza con los dos del medio y de
+abajo de esa columna (3 y 5).
+
 ### Recuperar la telemetría de la PiSugar: diagnóstico del MCU (2026-09-20)
 
 Objetivo: distinguir "MCU muerto" de "MCU desincronizado por el tráfico del

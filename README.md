@@ -292,20 +292,24 @@ regulares antes de llegar al LLM:
 
 ### Menú rápido (click corto en reposo)
 
-Carrusel navegable con los gestos descritos arriba:
+Carrusel navegable con los gestos descritos arriba. La app física completa es
+una máquina de estados ([`app/src/core/chat-flow/states.ts`](app/src/core/chat-flow/states.ts))
+con estos modos, cada uno con su propio control:
 
-| Ítem | Qué hace |
-|---|---|
-| **Modelo** | Elegir modelo de IA en pantalla: click recorre los modelos descargados en Ollama, mantener confirma (muestra spinner mientras carga). Cambiar de modelo no reinicia el servicio. |
-| **Modo** | Alterna entre "modo agente" (las respuestas las da un agente externo vía `whisplay-im`) y "modo local" (el LLM de la Pi). Confirma manteniendo presionado; queda persistido en `.env`. |
-| **Audio** | Cambiar la salida de sonido: bocina del Whisplay HAT o bocina Bluetooth emparejada (ver Ajustes → web para emparejarla). |
-| **Música** | Reproductor tipo jukebox de la OST de Cypher incluida: click avanza de canción, mantener reproduce/pausa (detalle abajo). |
-| **Ayuda** | Pantalla(s) con todos los comandos de voz y gestos. |
-| **Cámara** | Tomar una foto (solo si hay cámara configurada; el menú la oculta si no). |
-| **Volumen** | Cada click sube +10% en vivo; mantener sale del control. |
-| **Wifi connect** | Convierte la wifi de la Pi en un punto de acceso `akbal-pi` con QR en pantalla: escanéalo con un celular para conectarte directo (y abrir la web admin). Dos QR navegables con click: wifi y web. Mantener presionado desactiva el AP y sale. |
-| **Conexión web** | Muestra la IP LAN y de Tailscale del dispositivo + un QR para abrir el sitio web de administración. |
-| **WiFi Radar** | Versión de pantalla del radar WiFi (ver sección web abajo): discos de radar con puntos por red cercana, texto inferior con nombre + dBm. |
+| Ítem (pantalla) | Qué hace | Gestos dentro del modo |
+|---|---|---|
+| **Modelo** | Elegir modelo de IA entre los descargados en Ollama. Click recorre opciones, mantener confirma (spinner mientras Ollama carga el modelo), doble clic cancela sin cambiar. No reinicia el servicio. |
+| **Modo** | Alterna el origen de las respuestas: **"Modo agente"** (conversa vía OpenClaw, un agente externo puenteado por `whisplay-im`) o **"Modo local"** (el LLM corre en la propia Pi). Click navega, mantener confirma; queda persistido en `.env` y el top-bar de la pantalla lo indica (`agent`/`local`). |
+| **Audio** | Salida de sonido: **bocina de la Pi** (Whisplay HAT) o **bocina Bluetooth** emparejada (emparejar/eliminar desde Ajustes → web). Confirmación persiste en `.env`. |
+| **Música** | Reproductor dedicado del OST de Cypher con barra de progreso: **click** play/pausa · **doble clic** siguiente pista · **mantener** salir. Muestra título y progreso de la pista actual. |
+| **Ayuda** | Pantalla(s) de referencia con todos los comandos de voz y gestos del botón (a lo sumo 2 pantallas). |
+| **Cámara** | Abre el modo cámara del dispositivo (solo si hay cámara configurada; el menú la oculta si no): **click corto** captura la foto (se usa como contexto para el LLM si luego lo preguntas) · **mantener 2s** sale. La foto queda en `data/images/`. |
+| **Volumen** | Cada **click** sube +10% en vivo (barra de progreso en pantalla); **doble clic** sale sin cambios; mantener también sale. |
+| **Wifi connect** | Convierte la wifi de la Pi en un punto de acceso **`akbal-pi`** con QR en pantalla: escanéalo con un celular para conectarte directo (y abrir la web admin). Dos QR navegables con click: wifi y web. En cuanto un teléfono se conecta, salta solo al QR web. **Mantener** desactiva el AP y sale; **doble clic** sale dejándolo activo. |
+| **Conexión web** | Muestra la IP LAN y de Tailscale del dispositivo + QR apuntando a la web admin (`http://<ip>:8090`). Es la forma de saber a qué URL conectarse. |
+| **WiFi Radar** | Versión de pantalla del radar WiFi (detalle abajo): discos con puntos por red cercana, texto inferior rotando nombre + dBm. **Mantener** para salir. |
+
+El menú se cierra solo tras **60 segundos** sin tocar el botón.
 
 ### WiFi Radar (pantalla)
 

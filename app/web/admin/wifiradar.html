@@ -33,7 +33,10 @@
         <img id="avatar" class="avatar" src="/avatar/standing.gif" alt="Akbal" />
         <div class="brand">AKBAL</div>
       </div>
-      <nav class="tabs">
+      <button type="button" id="nav-toggle" class="nav-toggle" aria-label="Menú" aria-expanded="false" aria-controls="main-tabs">
+        <span></span><span></span><span></span>
+      </button>
+      <nav class="tabs" id="main-tabs">
         <a href="/#chat" class="tab-link">Chat</a>
         <span class="tab-link active">Radar Wi-Fi</span>
         <a href="/#wardrive" class="tab-link">Wardriving</a>
@@ -42,6 +45,8 @@
         <a href="/#wifi" class="tab-link">Wifi</a>
         <a href="/#settings" class="tab-link">Ajustes</a>
       </nav>
+      <div id="nav-backdrop" class="nav-backdrop hidden"></div>
+
       <div class="hdr-right">
         <button type="button" id="sys-toggle" class="hdr-summary" title="Estado del sistema">
           <span class="hdr-dot" id="hdr-online-dot"></span>

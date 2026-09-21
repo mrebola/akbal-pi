@@ -318,6 +318,7 @@ button.secondary {
   align-items: center;
   gap: 10px;
   margin: 10px 0;
+  flex-wrap: wrap;
 }
 
 .muted {
@@ -338,14 +339,22 @@ button.secondary {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 10px;
   background: var(--bg-raised);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 10px 14px;
 }
 
+.wifi-item > div:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .wifi-item-name {
   font-weight: 600;
+  overflow-wrap: break-word;
 }
 
 .wifi-item-name .active-dot {
@@ -433,6 +442,7 @@ button.secondary {
   align-items: center;
   gap: 10px;
   margin-bottom: 14px;
+  flex-wrap: wrap;
 }
 
 .logout-btn {
@@ -569,7 +579,13 @@ button.secondary {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+
+.usb-devices-list li > div {
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 
 .usb-devices-list .usb-item-meta {

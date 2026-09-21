@@ -108,6 +108,33 @@ async function loadTopbarStatus() {
   }
 }
 
+// Mobile nav hamburger (same behavior as the main app header — see the
+// 720px media query in styles.css and app.js's closeMobileNav/openMobileNav).
+(function () {
+  const toggle = document.getElementById("nav-toggle");
+  const tabs = document.getElementById("main-tabs");
+  const backdrop = document.getElementById("nav-backdrop");
+  if (!toggle || !tabs || !backdrop) return;
+  function close() {
+    tabs.classList.remove("open");
+    backdrop.classList.add("hidden");
+    toggle.setAttribute("aria-expanded", "false");
+  }
+  function open() {
+    tabs.classList.add("open");
+    backdrop.classList.remove("hidden");
+    toggle.setAttribute("aria-expanded", "true");
+  }
+  toggle.addEventListener("click", () => {
+    if (tabs.classList.contains("open")) close();
+    else open();
+  });
+  backdrop.addEventListener("click", close);
+  for (const link of tabs.querySelectorAll(".tab-link")) {
+    link.addEventListener("click", close);
+  }
+})();
+
 // System popover toggle (same behavior as the main app header).
 (function () {
   const toggle = document.getElementById("sys-toggle");

@@ -512,27 +512,118 @@ pin 1 (el más cercano a la ranura microSD / puerto USB-C):
   muestra `UU` en `0x1a` (driver bindeado) y nada en `0x57`/`0x68` (la
   PiSugar ya no está en el bus, que es la idea).
 
-### Si se quiere recuperar la telemetría de la PiSugar (no probado)
+### Recuperar la telemetría de la PiSugar: diagnóstico del MCU (2026-09-20)
 
-El MCU FM33LC023N de la PiSugar 3 no responde en I2C ni tras un reset duro,
-así que hoy **no se puede** leerle la versión de firmware ni reprogramarlo
-(`pisugar-programmer` necesita hablarle en `0x57`; ver
-[PiSugar#195](https://github.com/PiSugar/PiSugar/issues/195), mismo
-callejón). Queda una prueba barata para distinguir "MCU muerto" de "MCU
-desincronizado por el tráfico del HAT" (bug de firmware anterior a la
-protección de escritura de 1.24, que sí tendría arreglo):
+Objetivo: distinguir "MCU muerto" de "MCU desincronizado por el tráfico del
+HAT" (bug de firmware anterior a la protección de escritura de 1.24, que sí
+tendría arreglo por software) o "mal contacto de los pogo pins".
 
-1. Quitar la cinta, **desmontar el Whisplay HAT**, arrancar a batería solo
-   con la PiSugar en el bus.
-2. `sudo i2cdetect -y 1` → si aparecen `0x57` y `0x68`, el MCU está vivo y
-   solo se desincroniza con el HAT presente. Entonces:
-   `printf 'get firmware_version\n' | nc localhost 8423` y, si es < 1.4.0,
-   actualizar con el script oficial (`curl https://cdn.pisugar.com/release/PiSugarUpdate.sh | sudo bash`,
-   que baja `pisugar-3-application.bin` y corre `pisugar-programmer -r`;
-   hacerlo con batería cargada, no revisa nivel) y volver a probar con el
-   HAT y sin cinta.
-3. Si ni solo en el bus responde, el MCU está dañado: la cinta es la
-   solución definitiva (o RMA a PiSugar).
+**Prueba C — PiSugar sola en el bus (HAT desmontado, sin cinta, a batería):
+muda.** Sin ningún otro dispositivo generando tráfico:
+
+```
+$ sudo i2cdetect -y -a 1        # -a = las 128 direcciones, incl. 0x00-0x02 y 0x78-0x7f
+(todo "--")
+$ sudo i2cdetect -y -a -r 1     # modo lectura en vez de quick-write
+(todo "--")
+$ sudo i2cget -y 1 0x57 0x2a ; sudo i2cget -y 1 0x57 0xe2   # % batería, versión de fw
+Error: Read failed
+```
+
+Repetido 5 veces en 10 s (por si aparecía intermitente, como en
+[PiSugar#63](https://github.com/PiSugar/PiSugar/issues/63)): nada. Los
+rieles siguen perfectos (`EXT5V=4.99V`, sin USB-PD → alimenta la PiSugar).
+
+**Prueba D — bus bit-bang a 10 kHz: muda igual.** Por si el esclavo del
+MCU estuviera vivo pero demasiado lento/desincronizado para el controlador
+hardware del RP1, se reemplazó el controlador por `i2c-gpio` en los mismos
+pines, sin reboot:
+
+```
+sudo systemctl stop pisugar-server
+echo 1f00074000.i2c | sudo tee /sys/bus/platform/drivers/i2c_designware/unbind
+sudo pinctrl set 2,3 ip pu
+sudo dtoverlay i2c-gpio i2c_gpio_sda=2 i2c_gpio_scl=3 i2c_gpio_delay_us=50   # ~10 kHz
+sudo i2cdetect -l                    # aparece un adaptador nuevo (i2c-15 en este caso)
+sudo i2cdetect -y -a 15              # todo "--"; i2cget 0x57/0x68 → Read failed
+# volver atrás:
+sudo dtoverlay -r i2c-gpio; sudo pinctrl set 2,3 a3 pu
+echo 1f00074000.i2c | sudo tee /sys/bus/platform/drivers/i2c_designware/bind
+sudo systemctl start pisugar-server
+```
+
+**Descartado por el camino**: detectar la presencia eléctrica de la PiSugar
+midiendo pull-ups externos (`pinctrl set 2,3 ip pd` → siguen `hi`) **no
+sirve** en Pi 5: la placa trae pull-ups de 1.8 kΩ a 3.3 V en GPIO2/3, así
+que leen alto con o sin PiSugar. El journal no es persistente (solo el boot
+actual) y `chatbot.log` (desde 2026-09-19) nunca registró un valor de
+batería, así que no hay forma de fechar cuándo dejó de responder.
+
+**Conclusión hasta aquí**: el MCU no está en el bus en ninguna dirección, a
+ninguna velocidad, ni con reset duro. Quedan dos explicaciones, y las dos
+se resuelven con manos, no con software:
+
+1. **Mal contacto de los pogo pins de SDA/SCL** — es la causa #1 del
+   [FAQ oficial de PiSugar](https://docs.pisugar.com/docs/product-wiki/battery/faq)
+   para `I2C not connected`: restos de máscara de soldadura en los stubs
+   del header. Un SCL con contacto flojo también explicaría la corrupción
+   (el MCU ve datos con un reloj degradado, se desincroniza y mete ACKs a
+   destiempo). Procedimiento del fabricante: apagar, limpiar con alcohol
+   isopropílico los stubs de los pines 1–6 en la cara inferior de la Pi,
+   raspar suave con herramienta plástica la máscara de soldadura sobre los
+   puntos de los pines 3 y 5 hasta ver metal, limpiar las puntas de los
+   pogo pins, remontar bien asentada. Luego repetir la Prueba C.
+2. **MCU con el periférico I2C dañado** (o firmware corrupto sin
+   bootloader alcanzable, como en
+   [PiSugar#195](https://github.com/PiSugar/PiSugar/issues/195)). Sin I2C
+   no se puede leer versión ni reprogramar (`pisugar-programmer` habla por
+   `0x57`). Salidas: soporte/RMA de PiSugar, o reemplazar la PiSugar 3
+   Plus — y en ese caso **actualizar su firmware a 1.4.0 antes** de
+   montarla junto al HAT (`curl https://cdn.pisugar.com/release/PiSugarUpdate.sh | sudo bash`,
+   con batería cargada; el script no revisa nivel), para tener la
+   protección de escritura I2C desde el primer boot compartido.
+
+**Prueba E — limpieza de contactos según el FAQ: sin cambio.** Se limpiaron
+los stubs del header y los pogo pins (no estaban sucios) y se remontó sin
+HAT: el MCU sigue mudo en las 128 direcciones. Dato del dueño: la lectura
+de batería **funcionó durante semanas** y dejó de funcionar al mismo tiempo
+que apareció el fallo del WM8960 — son el mismo evento: el MCU se corrompió
+estando en el bus con el HAT (firmware sin la protección de escritura I2C
+que PiSugar agregó en 1.24).
+
+### Veredicto y opciones
+
+**El MCU de esta PiSugar 3 está corrupto y no es recuperable por software**
+(no habla I2C → no se puede leer versión ni reflashear; reprogramar el
+FM33LC023N por SWD requiere herramientas del fabricante).
+
+Preguntas frecuentes que ya se respondieron:
+
+- *¿Tapar un solo pin?* Alcanza para frenar la interferencia (con SCL tapado
+  el MCU no recibe reloj), pero I2C necesita los dos hilos: no da lectura.
+- *¿La cinta es lo que quita la lectura de batería?* No. Sin cinta, sin HAT,
+  contactos limpios, a 100 kHz y a 10 kHz, el MCU no contesta. La lectura
+  se perdió cuando el MCU se corrompió; la cinta solo protege al WM8960.
+- *¿Desactivarlo o arreglarlo por software?* No. Es otro chip con su propio
+  firmware, ya no acepta comandos, y la corrupción es eléctrica en el
+  cable: el kernel no puede ignorar a un esclavo que pisa SDA.
+
+Opciones para recuperar la telemetría, en orden recomendado:
+
+1. **Reemplazar la PiSugar (RMA o compra)** y, a la nueva, **actualizarle el
+   firmware a 1.4.0 antes de montarla con el HAT**
+   (`curl https://cdn.pisugar.com/release/PiSugarUpdate.sh | sudo bash`, con
+   batería cargada; el script no revisa nivel). Con la protección de
+   escritura I2C activa no hace falta cinta y vuelve la lectura.
+2. **DIY**: medidor de batería externo (p. ej. MAX17048) en un cable Y sobre
+   el JST de la batería, al I2C1 (ahora libre) por los stubs del header, más
+   un shim que responda `get battery` / `get battery_v` en el puerto 8423
+   para que la app no cambie. Requiere soldar.
+3. **Sin hardware nuevo no hay opción**: el PMIC de la Pi solo ve los 5 V
+   regulados de la PiSugar, no la celda.
+
+Mientras tanto, el estado recomendado sigue siendo: PiSugar montada con los
+pogo pins 3 y 5 aislados, batería funcionando, sin telemetría.
 
 ### Micrófono fijado al HAT (bocina Bluetooth ya no lo secuestra)
 

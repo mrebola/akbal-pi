@@ -21,7 +21,11 @@ Raspberry Pi OS 64-bit (Debian Trixie), conectando por SSH al hostname Tailscale
    (auto-detecta Raspberry Pi, compila el módulo de kernel `snd-soc-whisplay-soundcard`
    e instala el overlay de device-tree).
 2. **Bug de hardware encontrado y arreglado**: ver [`whisplay-audio-fix.md`](./whisplay-audio-fix.md).
-   Sin este fix, la tarjeta de sonido nunca se registraba.
+   Sin este fix, la tarjeta de sonido nunca se registraba. Tiene dos partes:
+   el overlay con el códec ES8389 deshabilitado (patch en `setup/`), y —la
+   causa raíz real, encontrada después— aislar con cinta los pogo-pins de
+   SDA/SCL (pines 3 y 5) de la PiSugar 3, cuyo MCU corrompe el bus I2C
+   compartido con el WM8960 del HAT.
 3. **Ollama**: instalado con el script oficial (`curl -fsSL https://ollama.com/install.sh | sh`),
    corre como servicio systemd. Modelo: `ollama pull qwen3:1.7b`.
 4. **whisplay-ai-chatbot**: clonado, `bash install_dependencies.sh` (Node 20 vía apt,

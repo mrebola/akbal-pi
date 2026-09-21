@@ -45,6 +45,13 @@ chatbot respondiendo por voz. Asume una Raspberry Pi 5 nueva y acceso por SSH
 1. Inserta la microSD en la Raspberry Pi 5 (se flashea en el paso 2, puede ir antes o después de armar).
 2. Monta el enfriador activo oficial sobre el SoC de la Pi 5 (pads térmicos + conector del ventilador al header `FAN`).
 3. Monta el **PiSugar 3 Plus** en la parte de abajo de la Pi (se conecta por pogo-pins, no ocupa el header GPIO) y conecta la batería 5000mAh al conector JST del PiSugar.
+   **Antes de montarlo**, tapa con un trocito de cinta aislante los dos pogo-pins que
+   tocan los pines **3 (SDA1) y 5 (SCL1)** del header — deja libres los de 5V/GND. En
+   esta unidad el MCU de la PiSugar corrompe el bus I2C que comparte con el códec de
+   audio del Whisplay HAT y la tarjeta de sonido nunca se registra; aislarlo lo
+   resuelve conservando la batería (se pierde solo la lectura de nivel por software).
+   Diagrama de pines y diagnóstico completo en
+   [`docs/whisplay-audio-fix.md`](docs/whisplay-audio-fix.md#qué-pines-se-tapan-diagrama).
 4. Monta el **Whisplay HAT** sobre el header GPIO de 40 pines, encima de todo el stack.
 5. Antes de encender, revisa la documentación oficial de cada componente por si hay detalles de tu revisión de hardware específica:
    - [Whisplay HAT — docs oficiales](https://docs.pisugar.com/docs/product-wiki/whisplay/intro)
@@ -111,6 +118,11 @@ bash pisugar-power-manager.sh -c release
 
 Esto instala `pisugar-server` (systemd) y habilita la lectura de batería que usa
 el chatbot para mostrarla en pantalla.
+
+**Nota:** si aislaste los pogo-pins de I2C de la PiSugar (paso 1.3),
+`pisugar-server` va a reportar `I2C not connected` y la pantalla no mostrará el
+nivel de batería. Es esperado e inofensivo; podés deshabilitarlo con
+`sudo systemctl disable --now pisugar-server` para que no llene el journal.
 
 ### 6. LLM local (Ollama)
 

@@ -15,7 +15,7 @@ Ya no usa el diálogo nativo de autenticación básica del navegador —
   **Cancelar** corta la generación de verdad (ver el incidente más abajo),
   y **Unload model** libera de la RAM del Pi todo lo que Ollama tenga
   cargado — sin cambiar cuál modelo está "seleccionado"; elegir un modelo
-  de nuevo (acá, por voz, o desde el menú físico) lo vuelve a cargar
+  de nuevo (aquí, por voz, o desde el menú físico) lo vuelve a cargar
   normalmente. El avatar de Akbal en la topbar solo "habla" mientras el
   texto de la respuesta se está imprimiendo, no mientras espera el primer
   token.
@@ -46,7 +46,7 @@ WEB_ADMIN_PASSWORD=akbal
 
 Prendida por defecto. **La contraseña por defecto es literalmente
 "akbal"** — está bien para probarla rápido, pero para dejarla así en un
-dispositivo real conviene cambiarla acá (nunca en el repo — mismo criterio
+dispositivo real conviene cambiarla aquí (nunca en el repo — mismo criterio
 que el resto de credenciales, ver [`wifi.md`](./wifi.md)).
 
 ## Arquitectura (`app/src/device/web-admin-server.ts`)
@@ -85,7 +85,7 @@ aparte, siempre corriendo (si `WEB_ADMIN_ENABLED` no está en `false`).
   código que usa el menú físico de modelo.
 - `GET/POST /api/wifi/*`: reusan `app/src/utils/wifi.ts` (ver
   [`wifi.md`](./wifi.md)) — mismo camino que el escaneo/conexión del menú
-  físico, con la diferencia de que acá sí se puede mandar una contraseña
+  físico, con la diferencia de que aquí sí se puede mandar una contraseña
   nueva y hay un botón "Olvidar".
 
 Archivos estáticos en `app/web/admin/` (HTML/CSS/JS planos, sin build step

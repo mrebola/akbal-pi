@@ -194,7 +194,7 @@ const MODEL_INTENT =
   /\b(cambia|cambiar|switch|change|usa|usar|use|pon|selecciona|elige)\b/;
 const MODEL_QUERY_INTENT =
   /\b(que|cuales|cual|lista|opciones|menu|which|list|options|tenemos|hay)\b/;
-// "qué modelo usás" / "qué modelo estás usando" — asks which model is
+// "qué modelo usas" / "qué modelo estás usando" — asks which model is
 // currently active, answered verbally, without touching it or opening the
 // menu. Checked before MODEL_INTENT/MODEL_QUERY_INTENT so it doesn't fall
 // through to "model_switch_failed" (none of these words name a model).

@@ -11,8 +11,8 @@ pantalla estés — nunca triple clic, nunca combinaciones raras:
 | **Menús** (modelo, modo, menú rápido, ayuda) | Pasa a la siguiente opción/página | Confirma lo resaltado (~0.9s) | Cancela, vuelve a reposo |
 | **Akbal pensando/hablando** | Corta la voz, vuelve a reposo | Interrumpe y empieza a hablar (push-to-talk) | — |
 
-En reposo, si soltás el botón antes de ~0.4s es un click (menú rápido); si lo
-mantenés más de eso ya cuenta como "mantener" y arranca a grabar — no hace
+En reposo, si sueltas el botón antes de ~0.4s es un click (menú rápido); si lo
+mantienes más de eso ya cuenta como "mantener" y arranca a grabar — no hace
 falta esperar a soltar. Mismo mecanismo, invertido, para pasar de página a
 confirmar en los menús.
 
@@ -23,14 +23,14 @@ Ayuda → Cámara → Volumen → Wifi connect → Conexión web → WiFi Radar*
 (cámara solo si `ENABLE_CAMERA=true`). Click pasa entre opciones, mantener
 ~0.9s confirma la resaltada y entra a esa pantalla — mismo mecanismo que el
 selector de modelo/modo de abajo. Reemplaza al doble clic que antes abría la
-cámara directo desde reposo; ahora todo pasa por acá. "Wifi connect" activa
+cámara directo desde reposo; ahora todo pasa por aquí. "Wifi connect" activa
 un punto de acceso directo en la propia Pi (SSID `akbal-pi`, con QR en
 pantalla) — ver [`wifi.md`](./wifi.md).
 
 ### Volumen desde el menú rápido
 
 Fallback físico para cuando la voz no es una opción confiable (cuarto
-ruidoso, o simplemente no querés hablar) — ver
+ruidoso, o simplemente no quieres hablar) — ver
 `app/src/core/chat-flow/volume-adjust-mode.ts`. A diferencia de
 modelo/modo/cámara, el volumen es un valor continuo, no "elegir una de N
 opciones", así que el gesto es distinto:
@@ -44,8 +44,8 @@ opciones", así que el gesto es distinto:
   que el resto).
 
 Entra mostrando el volumen actual (redondeado al 10% más cercano). No baja
-—si te pasaste, seguís haciendo click hasta dar la vuelta completa (0→10→
-…→100→0) — para bajar puntual usá la voz ("baja el volumen").
+—si te pasaste, sigues haciendo click hasta dar la vuelta completa (0→10→
+…→100→0) — para bajar puntual usa la voz ("baja el volumen").
 
 ## Lista rápida
 
@@ -59,7 +59,7 @@ las secciones de abajo):
 | Poner volumen exacto | "pon el volumen en 40", "volumen al 70%", "set the volume to 50" |
 | Abrir menú de modelo (sin elegir) | "cambia modelo", "cambiar modelo" |
 | Cambiar de modelo directo | "modelo 3", "cambia el modelo a 1", "usa el modelo deepseek", "cambia el modelo a qwen sin censura 2" |
-| Preguntar qué modelo está activo | "qué modelo usás", "qué modelo estás usando", "qué modelo tenés activo" |
+| Preguntar qué modelo está activo | "qué modelo usas", "qué modelo estás usando", "qué modelo tienes activo" |
 | Abrir menú de modo en "modo agente" | "activa modo agente", "modo agente" |
 | Abrir menú de modo en "modo local" | "activa modo local", "modo local", "desactiva modo agente" |
 | Abrir menú de modo (sin decir cuál) | "cambiar modo" |
@@ -128,8 +128,8 @@ activado un modelo peor sin que nadie lo pidiera (ver
 `docs/llm-model-selection.md`). Ahora simplemente abre el mismo menú visual
 para elegir a propósito.
 
-**Para preguntar cuál está activo sin cambiar nada:** "qué modelo usás",
-"qué modelo estás usando", "qué modelo tenés activo" — responde hablado
+**Para preguntar cuál está activo sin cambiar nada:** "qué modelo usas",
+"qué modelo estás usando", "qué modelo tienes activo" — responde hablado
 ("Estoy usando el modelo X") y no toca el menú ni el modelo.
 
 ### Menú visual (botón del Whisplay HAT)
@@ -140,7 +140,7 @@ es el que está corriendo, y la posición ("2 de 4").
 
 - **Click corto**: pasa al siguiente modelo del carrusel.
 - **Mantener presionado**: aparece un anillo de progreso real llenándose. Si
-  soltás antes de ~0.9 segundos, se cancela y te quedás viendo el mismo
+  sueltas antes de ~0.9 segundos, se cancela y te quedas viendo el mismo
   modelo — nada cambia. El texto de abajo dice **"Mantén presionado para
   activar"** cuando el modelo mostrado no es el activo (y no dice nada de
   eso si ya lo es — no hace falta invitarte a activar lo que ya está
@@ -152,7 +152,7 @@ es el que está corriendo, y la posición ("2 de 4").
   el texto `Modelo "..." listo para contestar.` y el flujo normal sigue
   (botón para hablar). **Si estabas en modo agente, elegir un modelo local
   te pasa a modo local** — elegir un modelo específico es una señal
-  explícita de que querés contestar con ese modelo, no que OpenClaw lo siga
+  explícita de que quieres contestar con ese modelo, no que OpenClaw lo siga
   ignorando.
 - **Doble clic**: cancela y vuelve directo al reposo sin cambiar nada — la
   forma explícita de salir del menú.

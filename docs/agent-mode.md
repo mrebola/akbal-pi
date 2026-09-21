@@ -119,4 +119,4 @@ haga falta cambiar de modo a mano.
 de Telegram) hay que generarlo uno mismo y pegarlo directo en el `.env` del
 Pi — nunca en este repo ni en el chat con el agente que edita el código. El
 token del bot de Telegram tampoco lo necesita este repo: vive en la config
-de OpenClaw, no acá.
+de OpenClaw, no aquí.

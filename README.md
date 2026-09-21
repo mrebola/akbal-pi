@@ -121,7 +121,7 @@ el chatbot para mostrarla en pantalla.
 
 **Nota:** si aislaste los pogo-pins de I2C de la PiSugar (paso 1.3),
 `pisugar-server` va a reportar `I2C not connected` y la pantalla no mostrará el
-nivel de batería. Es esperado e inofensivo; podés deshabilitarlo con
+nivel de batería. Es esperado e inofensivo; puedes deshabilitarlo con
 `sudo systemctl disable --now pisugar-server` para que no llene el journal.
 
 ### 6. LLM local (Ollama)
@@ -149,7 +149,7 @@ python3 -m piper.download_voices es_ES-davefx-medium   # hombre, español de Esp
 ```
 
 Estos dos paquetes no vienen en `python/requirements.txt` de la app: son
-opcionales según qué backend de ASR/TTS elijas en el `.env` (acá se usan los
+opcionales según qué backend de ASR/TTS elijas en el `.env` (aquí se usan los
 locales, sin depender de APIs de nube).
 
 ### 8. La app (Akbal)

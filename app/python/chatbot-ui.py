@@ -426,7 +426,7 @@ class RenderThread(threading.Thread):
         band carousels through the visible APs (name + dBm, set by Node);
         whichever dot that caption is currently naming gets a white
         outline ring, drawn via each point's "featured" flag. "unavailable"
-        is a plain message instead of the disc, for when no AR9271-class
+        is a plain message instead of the disc, for when no monitor-capable
         adapter is detected at all."""
         self.render_top_bar()
 
@@ -452,7 +452,7 @@ class RenderThread(threading.Thread):
             if mode == "unavailable":
                 self._draw_centered(draw, "Sin adaptador WiFi", self.model_ui_label_font, center_y - 32, center_x, TEXT_PRIMARY)
                 self._draw_centered(draw, "compatible", self.model_ui_label_font, center_y - 8, center_x, TEXT_PRIMARY)
-                self._draw_centered(draw, "Conectá un USB WiFi (AR9271)", self.model_ui_hint_font, center_y + 24, center_x, TEXT_SECONDARY)
+                self._draw_centered(draw, "Conectá un USB WiFi (modo monitor)", self.model_ui_hint_font, center_y + 24, center_x, TEXT_SECONDARY)
             else:
                 max_r = max(20, min(center_x, VIDEO_HEIGHT - center_y - 8, center_y - 24) - 4)
                 for ring_frac in (0.34, 0.67, 1.0):

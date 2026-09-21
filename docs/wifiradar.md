@@ -91,6 +91,39 @@ WEP, SSID duplicado, ráfaga de deauth, AP perdido) es exactamente la misma
 lógica en ambos casos, no una versión simulada aparte. La UI muestra un
 badge **DEMO** visible en la topbar cuando está en este modo.
 
+**Auto-recuperación**: el modo demo no es un estado final. Un retry cada
+15s (`app/src/wifiradar/service.ts`) vuelve a intentar la captura real —
+así enchufar el dongle (o sacar wardrive de la radio) restaura el modo
+live solo, sin reiniciar el servicio. Al pasar de demo a live el
+aggregator se resetea para que las redes sintéticas del demo no se
+mezclen con las reales. El retry se detiene mientras wardrive tiene la
+radio (`stopWifiRadarService()` lo cancela).
+
+### El dongle y NetworkManager
+
+NetworkManager gestiona por default toda interfaz wifi, incluido el
+dongle USB — y se pelea con el modo monitor/channel hopping (la
+interfaz "duerme", `setChannel` falla en cadena, la captura se vacía).
+Dos capas de defensa (ambas aplicadas en esta Pi):
+
+1. **Persistente**: `/etc/NetworkManager/conf.d/akbal-usb-wifi.conf`
+   marca el dongle como unmanaged por MAC:
+
+   ```ini
+   [keyfile]
+   unmanaged-devices=mac:9C:EF:D5:FC:8B:F7
+   ```
+
+   (la MAC es la del dongle de este dispositivo; cambiar si se usa otro).
+   Requiere `sudo systemctl reload NetworkManager` una vez tras crearlo —
+   en esta Pi eso pide password de sudo, alternativa sin password:
+   `sudo -n nmcli device set wlan1 managed no` (efectivo hasta reiniciar NM).
+
+2. **Código**: el escaneo wifi del admin (`app/src/utils/wifi.ts`) fija
+   `ifname wlan0` en todos los comandos nmcli — sin eso, nmcli puede
+   escanear/conectar por el dongle en vez de la radio interna, mostrando
+   listas incorrectas. Overridable con `WIFI_IFNAME` en `.env`.
+
 ### Privacidad
 
 - BSSID/MAC anonimizados por defecto: `AA:BB:CC:••:••:••`. Mostrar la MAC

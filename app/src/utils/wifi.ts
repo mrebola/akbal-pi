@@ -14,6 +14,13 @@ const execFileAsync = promisify(execFile);
 // `-n` fails fast instead of hanging if that rule isn't installed.
 const NMCLI = ["sudo", "-n", "nmcli"];
 
+// Pin every wifi command to the Pi's own interface (wlan0). Without this,
+// nmcli without `ifname` picks whichever wifi device it pleases — with the
+// USB dongle plugged in for WiFi Radar/wardriving it would scan or even
+// connect through it (a radio in monitor mode that the auditing tools own),
+// producing wrong/stale network lists. Overridable for other setups.
+const WIFI_IFNAME = process.env.WIFI_IFNAME || "wlan0";
+
 async function runNmcli(args: string[]): Promise<string> {
   const [cmd, ...rest] = [...NMCLI, ...args];
   const { stdout } = await execFileAsync(cmd, rest, { timeout: 25000 });
@@ -42,7 +49,7 @@ function splitTerseLine(line: string): string[] {
 
 export async function getWifiStatus(): Promise<WifiStatus> {
   try {
-    const output = await runNmcli(["-t", "-f", "active,ssid", "dev", "wifi"]);
+    const output = await runNmcli(["-t", "-f", "active,ssid", "dev", "wifi", "list", "ifname", WIFI_IFNAME]);
     for (const line of output.split("\n")) {
       const [active, ssid] = splitTerseLine(line);
       if (active === "yes" && ssid) {
@@ -63,13 +70,13 @@ export async function getWifiStatus(): Promise<WifiStatus> {
 // apart from "never seen before".
 export async function scanWifiNetworks(): Promise<WifiNetwork[]> {
   try {
-    await runNmcli(["dev", "wifi", "rescan"]).catch(() => {
+    await runNmcli(["dev", "wifi", "rescan", "ifname", WIFI_IFNAME]).catch(() => {
       // Rescan can fail if one just ran recently (NetworkManager rate-limits
       // it) — the list below still returns the last scan's results, so this
       // isn't fatal.
     });
     const [listOutput, profiles] = await Promise.all([
-      runNmcli(["-t", "-f", "active,ssid,signal,security", "dev", "wifi", "list"]),
+      runNmcli(["-t", "-f", "active,ssid,signal,security", "dev", "wifi", "list", "ifname", WIFI_IFNAME]),
       listWifiConnectionProfiles(),
     ]);
     // Matched by each profile's actual SSID (see listWifiConnectionProfiles),
@@ -141,7 +148,7 @@ function estimateDistanceMeters(dbm: number): number {
 // routers), each with its own real signal reading.
 export async function scanWifiNetworksDetailed(): Promise<WifiScanDetail[]> {
   try {
-    await runNmcli(["dev", "wifi", "rescan"]).catch(() => {});
+    await runNmcli(["dev", "wifi", "rescan", "ifname", WIFI_IFNAME]).catch(() => {});
     const output = await runNmcli([
       "-t",
       "-f",
@@ -149,6 +156,8 @@ export async function scanWifiNetworksDetailed(): Promise<WifiScanDetail[]> {
       "dev",
       "wifi",
       "list",
+      "ifname",
+      WIFI_IFNAME,
     ]);
     const results: WifiScanDetail[] = [];
     for (const line of output.split("\n")) {
@@ -213,7 +222,7 @@ export async function connectToWifi(
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     if (password) {
-      await runNmcli(["dev", "wifi", "connect", ssid, "password", password]);
+      await runNmcli(["dev", "wifi", "connect", ssid, "password", password, "ifname", WIFI_IFNAME]);
     } else {
       // No password given: try bringing up an already-saved connection
       // (open networks, or one already configured) before giving up —
@@ -224,10 +233,10 @@ export async function connectToWifi(
       const connectionName = await findWifiConnectionName(ssid);
       if (connectionName) {
         await runNmcli(["connection", "up", connectionName]).catch(() =>
-          runNmcli(["dev", "wifi", "connect", ssid]),
+          runNmcli(["dev", "wifi", "connect", ssid, "ifname", WIFI_IFNAME]),
         );
       } else {
-        await runNmcli(["dev", "wifi", "connect", ssid]);
+        await runNmcli(["dev", "wifi", "connect", ssid, "ifname", WIFI_IFNAME]);
       }
     }
     return { ok: true };

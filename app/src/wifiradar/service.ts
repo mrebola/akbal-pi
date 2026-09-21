@@ -8,6 +8,7 @@ import { DemoGenerator } from "./demo-mode";
 import { WifiRadarMode, WifiRadarSnapshot } from "./types";
 
 const SWEEP_INTERVAL_MS = 5_000;
+const RETRY_INTERVAL_MS = 15_000;
 
 // Orchestrates WIFIRADAR end to end: try the real AR9271 pipeline
 // (detect -> monitor mode -> channel hop -> tshark capture -> aggregator),
@@ -27,61 +28,97 @@ export class WifiRadarService extends EventEmitter {
   private hardware: string | null = null;
   private lastError: string | undefined;
   private started = false;
+  private retryTimer: ReturnType<typeof setInterval> | null = null;
+  private retrying = false;
 
   async start(): Promise<void> {
     if (this.started) return;
     this.started = true;
     this.sweepTimer = setInterval(() => this.aggregator.sweep(), SWEEP_INTERVAL_MS);
 
+    // One-shot: if the dongle is missing (unplugged, or wardriving still
+    // holding it) this falls back to demo and used to stay there forever —
+    // plugging the adapter back in never brought real capture back without a
+    // full service restart. The retry timer below recovers it automatically.
     try {
-      const info = await detectMonitorAdapter();
-      if (!info.present) {
-        throw new Error("No hay adaptador WiFi USB conectado");
-      }
-      if (!info.monitorSupported || !info.iface || !info.phy) {
-        throw new Error(`El adaptador ${info.description || "USB"} no es compatible con modo monitor`);
-      }
-      this.hardware = info.description;
-      const channels = await getAvailable24GhzChannels(info.phy);
-      if (channels.length === 0) {
-        throw new Error("El driver no reportó canales de 2.4GHz disponibles");
-      }
-      await enterMonitorMode(info.iface);
-      this.monitorIface = info.iface;
-
-      this.capture = new Ar9271Capture();
-      this.capture.on("frame", (frame) => this.aggregator.ingest(frame));
-      this.capture.on("error", (err) => {
-        console.warn("[wifiradar] capture process error, falling back to demo:", err?.message || err);
-        this.fallbackToDemo(String(err?.message || err));
-      });
-      this.capture.on("exit", ({ code, signal }) => {
-        if (this.mode === "live") {
-          console.warn(`[wifiradar] tshark exited unexpectedly (code=${code} signal=${signal}), falling back to demo`);
-          this.fallbackToDemo("tshark terminó inesperadamente");
-        }
-      });
-      this.capture.start(info.iface);
-
-      this.hopper = new ChannelHopper(info.iface, channels);
-      this.hopper.start();
-
-      this.mode = "live";
-      console.log(`[wifiradar] Live capture started on ${info.iface} (${info.phy}), ${channels.length} channels`);
+      await this.tryRealCapture();
     } catch (err: any) {
       console.warn("[wifiradar] Real capture unavailable, using DEMO MODE:", err?.message || err);
       this.fallbackToDemo(err?.message || String(err));
+      this.startRetryLoop();
     }
+  }
+
+  private startRetryLoop(): void {
+    if (this.retryTimer) return;
+    this.retryTimer = setInterval(() => {
+      if (this.mode === "live" || this.retrying) return;
+      this.retrying = true;
+      void this.tryRealCapture()
+        .then(() => {
+          // Live capture is back: purge everything the demo generator
+          // synthesized so the snapshot only shows real networks again.
+          if (this.retryTimer) clearInterval(this.retryTimer);
+          this.retryTimer = null;
+          this.aggregator.reset();
+        })
+        .catch(() => {})
+        .finally(() => {
+          this.retrying = false;
+        });
+    }, RETRY_INTERVAL_MS);
+  }
+
+  private async tryRealCapture(): Promise<void> {
+    const info = await detectMonitorAdapter();
+    if (!info.present) {
+      throw new Error("No hay adaptador WiFi USB conectado");
+    }
+    if (!info.monitorSupported || !info.iface || !info.phy) {
+      throw new Error(`El adaptador ${info.description || "USB"} no es compatible con modo monitor`);
+    }
+    this.hardware = info.description;
+    const channels = await getAvailable24GhzChannels(info.phy);
+    if (channels.length === 0) {
+      throw new Error("El driver no reportó canales de 2.4GHz disponibles");
+    }
+    await enterMonitorMode(info.iface);
+    this.monitorIface = info.iface;
+
+    this.capture = new Ar9271Capture();
+    this.capture.on("frame", (frame) => this.aggregator.ingest(frame));
+    this.capture.on("error", (err) => {
+      console.warn("[wifiradar] capture process error, falling back to demo:", err?.message || err);
+      this.fallbackToDemo(String(err?.message || err));
+      this.startRetryLoop();
+    });
+    this.capture.on("exit", ({ code, signal }) => {
+      if (this.mode === "live") {
+        console.warn(`[wifiradar] tshark exited unexpectedly (code=${code} signal=${signal}), falling back to demo`);
+        this.fallbackToDemo("tshark terminó inesperadamente");
+        this.startRetryLoop();
+      }
+    });
+    this.capture.start(info.iface);
+
+    this.hopper = new ChannelHopper(info.iface, channels);
+    this.hopper.start();
+
+    this.mode = "live";
+    this.lastError = undefined;
+    this.demo?.stop();
+    this.demo = null;
+    console.log(`[wifiradar] Live capture started on ${info.iface} (${info.phy}), ${channels.length} channels`);
   }
 
   private fallbackToDemo(reason: string): void {
     this.lastError = reason;
     void this.teardownRealCapture();
+    this.mode = "demo";
     if (!this.demo) {
       this.demo = new DemoGenerator(this.aggregator);
       this.demo.start();
     }
-    this.mode = "demo";
   }
 
   // Async and awaited by stop() (shutdown path) so the process doesn't
@@ -130,6 +167,13 @@ export class WifiRadarService extends EventEmitter {
     if (this.sweepTimer) {
       clearInterval(this.sweepTimer);
       this.sweepTimer = null;
+    }
+    // Wardrive calls stopWifiRadarService() to take the dongle; a live retry
+    // left running here would re-grab the adapter mid-session and fight
+    // wardrive's own capture for it.
+    if (this.retryTimer) {
+      clearInterval(this.retryTimer);
+      this.retryTimer = null;
     }
     this.demo?.stop();
     this.demo = null;

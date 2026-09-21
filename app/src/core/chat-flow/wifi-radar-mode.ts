@@ -4,7 +4,7 @@ import { AccessPoint } from "../../wifiradar/types";
 
 // Simplified physical-screen version of the web WIFIRADAR page — reads
 // from the same shared WifiRadarService (see wifiradar/service.ts), so
-// whatever the AR9271 is seeing shows up here too, live or demo, without a
+// whatever the USB adapter is seeing shows up here too, live or demo, without a
 // second capture competing for the interface. No 3D, no click-to-inspect
 // (single button, small screen) — just a radar disc with a dot per nearby
 // AP, refreshed on a timer while this screen is open. The bottom text band
@@ -105,10 +105,10 @@ function buildPoints(accessPoints: AccessPoint[], featuredAt: number) {
 
 function renderScreen(): void {
   const snapshot = getWifiRadarSnapshot();
-  // demo mode with no hardware string means detectAr9271() never found a
-  // compatible adapter at all (see wifiradar/service.ts) — the one case
-  // this screen calls out specifically, since it's actionable ("plug one
-  // in") rather than just "capture isn't live right now".
+  // demo mode with no hardware string means the adapter detector
+  // (wifiradar/adapter.ts) never found a monitor-capable USB dongle — the
+  // one case this screen calls out specifically, since it's actionable
+  // ("plug one in") rather than just "capture isn't live right now".
   if (snapshot.mode === "demo" && !snapshot.hardware) {
     display({
       model_ui: "",

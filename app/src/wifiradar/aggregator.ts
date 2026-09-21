@@ -61,6 +61,19 @@ export class Aggregator {
     this.channelFrameCounts.set(channel, arr);
   }
 
+  // Wipes all in-memory state. Used when the service switches frame source
+  // (demo -> live): without it, synthetic demo APs/devices would linger in
+  // the snapshot mixed in with real captured ones.
+  reset(): void {
+    this.aps.clear();
+    this.devices.clear();
+    this.apClients.clear();
+    this.events = [];
+    this.frameTimestamps = [];
+    this.channelFrameCounts.clear();
+    this.ssidToFirstBssid.clear();
+  }
+
   ingest(frame: RawFrameEvent): void {
     this.frameTimestamps.push(frame.timestamp);
     const cutoff = frame.timestamp - FRAME_RATE_WINDOW_MS;

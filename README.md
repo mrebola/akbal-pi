@@ -300,7 +300,7 @@ con estos modos, cada uno con su propio control:
 |---|---|---|
 | **Modelo** | Elegir modelo de IA entre los descargados en Ollama. Click recorre opciones, mantener confirma (spinner mientras Ollama carga el modelo), doble clic cancela sin cambiar. No reinicia el servicio. |
 | **Modo** | Alterna el origen de las respuestas: **"Modo agente"** (conversa vía OpenClaw, un agente externo puenteado por `whisplay-im`) o **"Modo local"** (el LLM corre en la propia Pi). Click navega, mantener confirma; queda persistido en `.env` y el top-bar de la pantalla lo indica (`agent`/`local`). |
-| **Audio** | Salida de sonido: **bocina de la Pi** (Whisplay HAT) o **bocina Bluetooth** emparejada (emparejar/eliminar desde Ajustes → web). Confirmación persiste en `.env`. |
+| **Audio** | Salida de sonido: **bocina de la Pi** (Whisplay HAT, ALSA directo) o **bocina externa Bluetooth** ya emparejada desde la web (Ajustes → Salida de audio — ahí se escanea, vincula y elimina). Al confirmar una BT el dispositivo la conecta y suelta cualquier otra; ver la sección Ajustes para el detalle. Persiste en `.env`. |
 | **Música** | Reproductor dedicado del OST de Cypher con barra de progreso: **click** play/pausa · **doble clic** siguiente pista · **mantener** salir. Muestra título y progreso de la pista actual. |
 | **Ayuda** | Pantalla(s) de referencia con todos los comandos de voz y gestos del botón (a lo sumo 2 pantallas). |
 | **Cámara** | Abre el modo cámara del dispositivo (solo si hay cámara configurada; el menú la oculta si no): **click corto** captura la foto (se usa como contexto para el LLM si luego lo preguntas) · **mantener 2s** sale. La foto queda en `data/images/`. |
@@ -391,8 +391,19 @@ radar/wardrive para decidir si pueden operar).
 ### Ajustes
 
 - **Volumen** del altavoz (0-100).
-- **Salida de audio**: bocina de la Pi o bocina Bluetooth (escaneo/emparejado/
-  eliminación de parlantes BT).
+- **Salida de audio**: bocina de la Pi (Whisplay HAT, ALSA directo) o bocina
+  externa Bluetooth. El emparejamiento de bocinas BT también vive aquí:
+  **"Vincular dispositivo"** escanea los parlantes alrededor que anuncian
+  A2DP (perfiles de audio), lista los encontrados y los ya emparejados, y
+  permite conectar/eliminar cada uno. Detalles que conviene saber:
+  - Al elegir una bocina BT, el dispositivo la conecta y desconecta
+    automáticamente cualquier otra — la radio BT de la Pi solo sostiene una
+    bocina A2DP a la vez.
+  - Una bocina con "Conectado: sí" pero sin perfil de audio (sink) activo
+    no se considera válida: el selector verifica que PipeWire haya creado el
+    sink de audio de verdad, no solo el canal de control, para que el
+    sonido nunca se pierda en silencio.
+  - El micrófono siempre es el del HAT: el BT es solo de salida.
 - **Wi-Fi**: conexión, redes guardadas, AP — mismo backend que la pestaña WiFi.
 - **Respaldos**: crear/descargar/restaurar/eliminar snapshots de configuración.
 - **Almacenamiento**: navegación de discos montados con subida/descarga/borrado.

@@ -2058,3 +2058,21 @@ body { font-family: var(--font-sans); }
 /* Modals must sit above the sticky topbar (z-index 100) so their header/close
    controls are always visible and clickable — matters for the tall file viewer. */
 .modal { z-index: 500; }
+
+/* Demo-source tag in the wardriving table (same visual as the radar's
+   DEMO badge, wifiradar.css — smaller inline variant here). */
+.wd-ssid .demo-badge {
+  font-size: 9px;
+  padding: 2px 6px;
+  margin-right: 4px;
+}
+
+/* SRC/REAL toggle buttons share the as-btn active style; make the demo
+   state visually loud so nobody mistakes synthetic data for real air. */
+#src-toggle-btn.active,
+#wd-src-btn.active {
+  color: #06140b;
+  background: var(--as-warning, #ffd166);
+  border-color: var(--as-warning, #ffd166);
+  box-shadow: 0 0 10px rgba(255, 209, 102, 0.5);
+}

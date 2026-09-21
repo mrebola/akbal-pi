@@ -12,6 +12,7 @@ const bootSub = document.getElementById("boot-sub");
 const demoBadge = document.getElementById("demo-badge");
 const searchInput = document.getElementById("search-input");
 const livePauseBtn = document.getElementById("live-pause-btn");
+const srcToggleBtn = document.getElementById("src-toggle-btn");
 const resetViewBtn = document.getElementById("reset-view-btn");
 const dimToggleBtn = document.getElementById("dim-toggle-btn");
 const qualitySelect = document.getElementById("quality-select");
@@ -163,11 +164,25 @@ window.addEventListener("resize", updateHeaderHeight);
 
 // ---- state ----
 let paused = false;
+// What the user asked for via the SRC toggle ("live"|"demo") vs what the
+// backend is actually doing (mode can stay "demo" while live is retried).
+let requestedMode = "live";
+let currentRadarMode = "starting";
 let is3D = true;
 let quality = "auto";
 let effectiveQuality = "medium";
 let selectedId = null;
 let searchTerm = "";
+
+async function apiPost(path, body) {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
 let latestSnapshot = null;
 const knownEventIds = new Set();
 let firstSnapshotApplied = false;
@@ -512,6 +527,11 @@ function updateHud(snapshot) {
   const alertCount = snapshot.events.filter((e) => e.severity === "alert").length;
   hudAlerts.textContent = String(alertCount);
   demoBadge.classList.toggle("hidden", !snapshot.demo);
+  // Backend is the source of truth — if capture died and fell back to demo
+  // while the user asked for live, the toggle stays on REAL but the badge
+  // shows DEMO (fallback in progress).
+  currentRadarMode = snapshot.mode;
+  renderSrcToggle();
 
   hudSpectrum.innerHTML = "";
   const maxFrames = Math.max(1, ...snapshot.channelActivity.map((c) => c.frames));
@@ -605,6 +625,47 @@ searchInput.addEventListener("input", (e) => {
 });
 
 // ---- toolbar controls ----
+// SRC toggle: real capture ("live") vs synthetic demo data — same toggle
+// drives the wardriving discovery source (POST /api/wifiradar/mode).
+async function applySourceToggle(mode) {
+  srcToggleBtn.disabled = true;
+  try {
+    const res = await apiPost("/api/wifiradar/mode", { mode });
+    if (res && res.ok) {
+      requestedMode = res.requested;
+      currentRadarMode = res.mode;
+    }
+  } catch { /* keep previous state */ }
+  renderSrcToggle();
+  srcToggleBtn.disabled = false;
+}
+
+function renderSrcToggle() {
+  const isDemo = requestedMode === "demo";
+  srcToggleBtn.textContent = isDemo ? "DEMO" : "REAL";
+  srcToggleBtn.classList.toggle("active", isDemo);
+  srcToggleBtn.title = isDemo
+    ? "Datos demo — click para volver a captura real"
+    : "Captura real — click para pasar a datos demo";
+}
+
+srcToggleBtn.addEventListener("click", () => {
+  applySourceToggle(requestedMode === "demo" ? "live" : "demo");
+});
+
+// Initial state (best-effort; the badge below corrects it on first snapshot).
+void (async () => {
+  try {
+    const res = await fetch("/api/wifiradar/mode");
+    if (res.ok) {
+      const data = await res.json();
+      requestedMode = data.requested || "live";
+      currentRadarMode = data.mode;
+    }
+  } catch { /* default live */ }
+  renderSrcToggle();
+})();
+
 livePauseBtn.addEventListener("click", () => {
   paused = !paused;
   livePauseBtn.textContent = paused ? "PAUSED" : "LIVE";

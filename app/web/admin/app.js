@@ -1557,6 +1557,7 @@ const wdEnterBtn = document.getElementById("wd-enter-btn");
 const wdExitBtn = document.getElementById("wd-exit-btn");
 const wdError = document.getElementById("wd-error");
 const wdScanBtn = document.getElementById("wd-scan-btn");
+const wdSrcBtn = document.getElementById("wd-src-btn");
 const wdPauseBtn = document.getElementById("wd-pause-btn");
 const wdCancelBtn = document.getElementById("wd-cancel-btn");
 const wdAttackStatus = document.getElementById("wd-attack-status");
@@ -1566,6 +1567,18 @@ const wdResultsList = document.getElementById("wd-results-list");
 let wdStatus = null;
 let wdMonitorCap = null;
 let wdPaused = false;
+let wdSource = "live";
+
+void (async () => {
+  try {
+    const res = await fetch("/api/wifiradar/mode");
+    if (res.ok) {
+      const data = await res.json();
+      wdSource = data.requested === "demo" ? "demo" : "live";
+      wdRenderSourceBtn();
+    }
+  } catch { /* default live */ }
+})();
 
 async function loadMonitorCap() {
   try {
@@ -1615,13 +1628,16 @@ function wdRender() {
         : "Listo para auditar";
 
   wdEnterBtn.classList.toggle("hidden", on);
-  wdEnterBtn.disabled = !on && !monitorReady;
+  // Demo source needs no adapter: entering is always allowed.
+  wdEnterBtn.disabled = !on && !monitorReady && wdSource !== "demo";
   wdExitBtn.classList.toggle("hidden", !on);
   wdScanBtn.classList.toggle("hidden", !on);
+  wdSrcBtn.classList.toggle("hidden", !on);
   wdPauseBtn.classList.toggle("hidden", !on);
   wdPauseBtn.textContent = wdPaused ? "Reanudar" : "Pausar";
   wdCancelBtn.classList.toggle("hidden", !attacking);
   wdAttackStatus.textContent = attacking ? "Auditoría en curso..." : "";
+  wdRenderSourceBtn();
 
   if (wdError.textContent && wdStatus.error) wdError.textContent = wdStatus.error;
 
@@ -1686,7 +1702,7 @@ function wdRender() {
         : `<button class="wd-audit-btn" data-bssid="${t.bssid}" data-ssid="${escapeHtml(t.ssid || "")}">Auditar</button>`;
 
     tr.innerHTML = `
-      <td class="wd-ssid">${escapeHtml(t.ssid || "(oculta)")}</td>
+      <td class="wd-ssid">${wdSource === "demo" ? '<span class="demo-badge">DEMO</span> ' : ""}${escapeHtml(t.ssid || "(oculta)")}</td>
       <td>${t.channel}</td>
       <td class="${wdDbmClass(t.rssi)}">${wdSignalBars(t.rssi)} ${t.rssi}</td>
       <td>${t.clients ?? 0}</td>
@@ -1907,6 +1923,37 @@ wdScanBtn.addEventListener("click", async () => {
   await wdApi("refresh");
   void wdRefresh(true);
 });
+
+// REAL/DEMO toggle for the wardrive discovery source (same preference as
+// the radar's SRC toggle — both call the same backend state).
+wdSrcBtn.addEventListener("click", async () => {
+  const next = wdSource === "demo" ? "live" : "demo";
+  wdSrcBtn.disabled = true;
+  try {
+    const res = await apiFetch("/api/wardrive/source", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source: next }),
+    });
+    const data = await res.json();
+    if (data?.ok) wdSource = data.source;
+  } catch { /* keep previous state */ }
+  wdRenderSourceBtn();
+  wdSrcBtn.disabled = false;
+  void wdRefresh();
+});
+
+function wdRenderSourceBtn() {
+  const isDemo = wdSource === "demo";
+  wdSrcBtn.textContent = isDemo ? "DEMO" : "REAL";
+  wdSrcBtn.classList.toggle("active", isDemo);
+  wdSrcBtn.title = isDemo
+    ? "Descubrimiento demo (sin radio) — click para volver a real"
+    : "Descubrimiento real — click para pasar a datos demo";
+  // With demo source, entering wardriving works without any adapter.
+  wdEnterBtn.disabled = wdStatus?.mode === "inactive" ? false : !wdStatus?.mode;
+  wdEnterBtn.disabled = false;
+}
 
 wdPauseBtn.addEventListener("click", () => {
   wdPaused = !wdPaused;

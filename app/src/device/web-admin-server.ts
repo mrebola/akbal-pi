@@ -9,7 +9,7 @@ import bodyParser from "koa-bodyparser";
 import serve from "koa-static";
 import axios from "axios";
 import { WebSocketServer, WebSocket } from "ws";
-import { getWifiRadarSnapshot } from "../wifiradar/service";
+import { getWifiRadarSnapshot, setWifiRadarMode, getWifiRadarMode, getWifiRadarRequestedMode } from "../wifiradar/service";
 import { detectMonitorAdapter } from "../wifiradar/adapter";
 import { getWardriveService } from "../wardrive/service";
 import {
@@ -845,8 +845,47 @@ export class WebAdminServer {
       }
     });
 
+    // Live/demo toggle for the WiFi Radar — also switches the wardrive
+    // discovery source (same radio, same preference). In demo mode the
+    // radar stops its capture process entirely and feeds synthetic data;
+    // requesting live re-attempts real capture immediately (with the
+    // service's own retry loop if the adapter isn't ready yet).
+    router.post("/api/wifiradar/mode", async (ctx) => {
+      const { mode } = (ctx.request.body as any) || {};
+      if (mode !== "demo" && mode !== "live") {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "mode debe ser 'demo' o 'live'" };
+        return;
+      }
+      const wardriveSvc = getWardriveService();
+      wardriveSvc.setSource(mode);
+      const applied = await setWifiRadarMode(mode);
+      ctx.body = { ok: true, mode: applied, requested: getWifiRadarRequestedMode() };
+    });
+
+    router.get("/api/wifiradar/mode", (ctx) => {
+      ctx.body = {
+        mode: getWifiRadarMode(),
+        requested: getWifiRadarRequestedMode(),
+      };
+    });
+
     router.get("/api/wardrive/status", (ctx) => {
       ctx.body = wardrive.getStatus();
+    });
+
+    // Live/demo discovery toggle. Applying it here (not in the service) also
+    // re-scans immediately so the target list reflects the new source.
+    router.post("/api/wardrive/source", async (ctx) => {
+      const { source } = (ctx.request.body as any) || {};
+      if (source !== "demo" && source !== "live") {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "source debe ser 'demo' o 'live'" };
+        return;
+      }
+      wardrive.setSource(source);
+      await wardrive.refreshTargets().catch(() => {});
+      ctx.body = { ok: true, source: wardrive.getSource() };
     });
 
     router.post("/api/wardrive/enter", async (ctx) => {

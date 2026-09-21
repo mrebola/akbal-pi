@@ -82,6 +82,7 @@ export class WardriveService extends EventEmitter {
   private deauthAllowlist = new Set<string>();
   private deauthRunnerByMac = new Map<string, DeauthRunner>();
   private discoveredTargets: WardriveTarget[] = [];
+  private source: "live" | "demo" = "live";
 
   getSession(): WardriveSession | null {
     return this.session;
@@ -123,13 +124,32 @@ export class WardriveService extends EventEmitter {
   }
 
   // Refresh the target list: WiFi Radar if running, otherwise iw scan.
-  // Called by the web admin on a timer while wardriving is active.
+  // Called by the web admin on a timer while wardriving is active. With
+  // source="demo" the list comes from the WIFIRADAR demo generator instead
+  // (UI toggle) — real attacks against demo targets are impossible because
+  // authorization still requires the BSSID allowlist and demo BSSIDs are
+  // never visible to a real radio, so an allowlist add would simply never
+  // find the target in the air ("ya no visible").
   async refreshTargets(): Promise<void> {
     if (this.mode === "inactive") {
       this.discoveredTargets = [];
       return;
     }
-    this.discoveredTargets = await discoverTargets();
+    this.discoveredTargets = await discoverTargets(this.source);
+  }
+
+  // Web toggle: "live" (default) discovers from the real radio, "demo" from
+  // the WIFIRADAR demo generator. Switching clears stale per-target state;
+  // if wardriving is active the caller should refreshTargets() afterwards.
+  setSource(source: "live" | "demo"): void {
+    if (this.source === source) return;
+    this.source = source;
+    this.targetMeta.clear();
+    this.broadcastStatus();
+  }
+
+  getSource(): "live" | "demo" {
+    return this.source;
   }
 
   private targetFiles(bssid: string): string[] {
@@ -322,6 +342,25 @@ export class WardriveService extends EventEmitter {
 
   async enter(): Promise<{ ok: boolean; error?: string }> {
     if (this.mode !== "inactive") return { ok: true };
+    // Demo source: the radio isn't needed. Keep the WIFIRADAR service
+    // running in demo mode (it synthesizes the AP pool discovery reads) —
+    // stopping it would leave getWifiRadarSnapshot() empty.
+    if (this.source === "demo") {
+      await setWifiRadarMode("demo").catch(() => {});
+      this.iface = null;
+      this.error = "";
+      this.mode = "ready";
+      this.session = new WardriveSession();
+      void this.refreshTargets();
+      // The demo generator populates its AP pool on its first tick (350ms)
+      // — a single immediate scan usually races it and shows "Escaneando
+      // redes..." forever until the next manual scan. One delayed re-scan
+      // covers that gap.
+      setTimeout(() => void this.refreshTargets(), 1500);
+      console.log("[wardrive] mode ON (source=demo, no radio)");
+      this.broadcastStatus();
+      return { ok: true };
+    }
     try {
       const info = await detectMonitorAdapter();
       if (!info.present) {
@@ -378,8 +417,13 @@ export class WardriveService extends EventEmitter {
     this.mode = "inactive";
     this.currentBssid = null;
     this.modelsUnloaded = false;
-    // Give the adapter back to the WiFi Radar.
-    startWifiRadarService();
+    // Give the adapter back to the WiFi Radar. In demo-source sessions the
+    // radar was switched to demo (not stopped) — return it to live.
+    if (this.source === "demo") {
+      void setWifiRadarMode("live").catch(() => {});
+    } else {
+      startWifiRadarService();
+    }
     this.broadcastStatus();
     console.log("[wardrive] mode OFF");
     return { ok: true };
@@ -397,7 +441,7 @@ export class WardriveService extends EventEmitter {
     if (!this.isAllowlisted(bssid)) {
       return { ok: false, error: "BSSID no autorizado — agrégalo a los objetivos del lab primero" };
     }
-    const target = (await discoverTargets()).find((t: WardriveTarget) => t.bssid === bssid);
+    const target = (await discoverTargets(this.source)).find((t: WardriveTarget) => t.bssid === bssid);
     if (!target) return { ok: false, error: "El objetivo no está visible en el aire ahora" };
 
     this.attackAbort = false;
@@ -428,7 +472,7 @@ export class WardriveService extends EventEmitter {
     this.attackAbort = false;
     this.mode = "attacking";
     this.broadcastStatus();
-    const targets = await discoverTargets();
+    const targets = await discoverTargets(this.source);
     for (const bssid of bssids) {
       if (this.attackAbort) break;
       if (this.targetMeta.get(bssid)?.status === "captured") continue;
@@ -834,4 +878,5 @@ import {
   getWifiRadarSnapshot,
   stopWifiRadarService,
   startWifiRadarService,
+  setWifiRadarMode,
 } from "../wifiradar/service";

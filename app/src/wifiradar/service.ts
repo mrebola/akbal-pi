@@ -30,6 +30,11 @@ export class WifiRadarService extends EventEmitter {
   private started = false;
   private retryTimer: ReturnType<typeof setInterval> | null = null;
   private retrying = false;
+  // User preference from the web toggle: "live" (default, auto-fallback to
+  // demo when the hardware isn't usable) or "demo" (forced synthetic data,
+  // no capture process at all). Auto-recovery only ever flips demo->live
+  // when the user asked for live.
+  private requestedMode: "live" | "demo" = "live";
 
   async start(): Promise<void> {
     if (this.started) return;
@@ -49,8 +54,51 @@ export class WifiRadarService extends EventEmitter {
     }
   }
 
+  // Web-admin toggle: force demo (synthetic feed, no radio) or go back to
+  // live capture. Returns the mode the service is in after settling.
+  async setMode(requested: "demo" | "live"): Promise<WifiRadarMode> {
+    if (requested === this.requestedMode) {
+      // Idempotent — but re-attempt live anyway in case the previous attempt
+      // failed and the retry hasn't landed yet.
+      if (requested === "live" && this.mode !== "live") {
+        await this.switchToLive();
+      }
+      return this.mode;
+    }
+    this.requestedMode = requested;
+    if (requested === "demo") {
+      this.fallbackToDemo("cambiado a demo manualmente");
+      // No auto-recovery while the user explicitly wants demo.
+      if (this.retryTimer) {
+        clearInterval(this.retryTimer);
+        this.retryTimer = null;
+      }
+    } else {
+      await this.switchToLive();
+    }
+    return this.mode;
+  }
+
+  private async switchToLive(): Promise<void> {
+    try {
+      // Purge whatever synthetic state preceded this — same rule as the
+      // retry loop's success path: demo and real data never mix.
+      this.aggregator.reset();
+      await this.tryRealCapture();
+      if (this.retryTimer) {
+        clearInterval(this.retryTimer);
+        this.retryTimer = null;
+      }
+    } catch (err: any) {
+      const message = err?.message || String(err);
+      console.warn("[wifiradar] live requested but unavailable, staying in demo:", message);
+      this.fallbackToDemo(message);
+      this.startRetryLoop();
+    }
+  }
+
   private startRetryLoop(): void {
-    if (this.retryTimer) return;
+    if (this.retryTimer || this.requestedMode === "demo") return;
     this.retryTimer = setInterval(() => {
       if (this.mode === "live" || this.retrying) return;
       this.retrying = true;
@@ -85,6 +133,11 @@ export class WifiRadarService extends EventEmitter {
     await enterMonitorMode(info.iface);
     this.monitorIface = info.iface;
 
+    // Every transition to live starts from a clean slate: any APs/devices
+    // accumulated while the source was demo (or a previous live run whose
+    // capture died) must not linger mixed with the new real frames.
+    this.aggregator.reset();
+
     this.capture = new Ar9271Capture();
     this.capture.on("frame", (frame) => this.aggregator.ingest(frame));
     this.capture.on("error", (err) => {
@@ -115,6 +168,7 @@ export class WifiRadarService extends EventEmitter {
     this.lastError = reason;
     void this.teardownRealCapture();
     this.mode = "demo";
+    this.aggregator.reset(); // synthetic data must not mix with stale real state
     if (!this.demo) {
       this.demo = new DemoGenerator(this.aggregator);
       this.demo.start();
@@ -180,6 +234,10 @@ export class WifiRadarService extends EventEmitter {
     await this.teardownRealCapture();
     this.started = false;
   }
+
+  getRequestedMode(): "live" | "demo" {
+    return this.requestedMode;
+  }
 }
 
 // Single shared instance — the AR9271 can only be captured by one thing at
@@ -205,4 +263,12 @@ export function getWifiRadarSnapshot(revealFullMac = false): WifiRadarSnapshot {
 
 export function getWifiRadarMode(): WifiRadarMode {
   return sharedWifiRadarService.getMode();
+}
+
+export async function setWifiRadarMode(requested: "demo" | "live"): Promise<WifiRadarMode> {
+  return sharedWifiRadarService.setMode(requested);
+}
+
+export function getWifiRadarRequestedMode(): "live" | "demo" {
+  return sharedWifiRadarService.getRequestedMode();
 }

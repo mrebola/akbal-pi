@@ -74,7 +74,31 @@ function parseIwScan(output: string): WardriveTarget[] {
   });
 }
 
-export async function discoverTargets(): Promise<WardriveTarget[]> {
+// Demo source for wardriving: reuses the WIFIRADAR demo generator's AP pool
+// so both features can be exercised without a monitor-capable dongle. Shapes
+// the synthetic APs into WardriveTargets the same way the real radar
+// snapshot path below does. Returns [] while the radar isn't actually in
+// demo mode — the caller (WardriveService.enter) switches it over first.
+function demoTargets(): WardriveTarget[] {
+  const snapshot = getWifiRadarSnapshot(true);
+  if (snapshot.mode !== "demo") return [];
+  return snapshot.accessPoints.map((ap) => ({
+    bssid: ap.bssidFull.toUpperCase(),
+    ssid: ap.ssid,
+    channel: ap.channel,
+    rssi: ap.rssi,
+    security: ap.security,
+    clients: ap.clients ?? 0,
+    distanceMeters: estimateDistanceMeters(ap.rssi),
+    inAllowlist: false,
+    attackable: ap.rssi >= USABLE_DBM,
+  }));
+}
+
+export async function discoverTargets(source?: "live" | "demo"): Promise<WardriveTarget[]> {
+  if (source === "demo") {
+    return demoTargets();
+  }
   const snapshot = getWifiRadarSnapshot(true);
   // If the radar is running (has APs), use it — it's richer (clients, OUI, etc).
   if (snapshot.accessPoints.length > 0) {

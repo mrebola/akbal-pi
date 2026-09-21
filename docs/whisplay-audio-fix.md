@@ -625,6 +625,60 @@ Opciones para recuperar la telemetría, en orden recomendado:
 Mientras tanto, el estado recomendado sigue siendo: PiSugar montada con los
 pogo pins 3 y 5 aislados, batería funcionando, sin telemetría.
 
+### Cierre de la investigación (2026-09-20, fin de la sesión 2)
+
+Estado final verificado con el equipo armado como va a quedar (HAT montado,
+PiSugar alimentando la Pi, pines 3 y 5 con cinta, USB-C desenchufado):
+
+```
+$ grep -i whisplay /proc/asound/cards
+ 2 [whisplaysound  ]: whisplaysound - Whisplay Sound
+$ sudo dmesg | grep -c 'lost arbitration'
+0
+$ sudo i2cdetect -y 1 | grep '^10:'
+10: -- -- -- -- -- -- -- -- -- -- UU -- -- -- -- --      # WM8960 bindeado; nada en 0x57/0x68
+$ vcgencmd pmic_read_adc | grep EXT5V_V
+     EXT5V_V volt(24)=5.01562000V                        # sin USB-PD → alimenta la PiSugar
+$ printf 'get battery\n' | nc localhost 8423
+battery: I2C not connected                              # esperado
+```
+
+Resumen en una línea: **el HAT nunca tuvo nada roto; la PiSugar 3 se
+corrompió compartiendo bus con él y desde entonces lo sabotea. Aislarla
+del bus lo arregla; recuperar su telemetría requiere reemplazarla.**
+
+Cambios que quedaron en la Pi durante esta sesión (además de la cinta):
+
+- `/boot/firmware/config.txt`: `[pi5] dtparam=cooling_fan=on` — fuerza el
+  driver `pwm-fan` del Active Cooler aunque el firmware no lo autodetecte
+  al arrancar. Ver [`SETUP.md`](./SETUP.md) (ventilador).
+- `pisugar-server` sigue habilitado; loguea `Poll error` cada segundo. Se
+  puede deshabilitar sin efectos secundarios (la app ya tolera la ausencia
+  de lectura).
+
+### Próximos pasos (para retomar después)
+
+1. **Conseguir una PiSugar 3 Plus de reemplazo** (o RMA citando este doc:
+   funcionó semanas, se corrompió compartiendo bus con el HAT, muda en las
+   128 direcciones incluso sola, a 100 kHz y 10 kHz, tras reset duro y
+   limpieza de contactos; mismo perfil que PiSugar#195).
+2. **Con la nueva, ANTES de montar el HAT**: arrancar solo con la PiSugar,
+   `sudo i2cdetect -y 1` debe mostrar `0x57` y `0x68`;
+   `printf 'get firmware_version\n' | nc localhost 8423`; si es < 1.4.0,
+   `curl https://cdn.pisugar.com/release/PiSugarUpdate.sh | sudo bash` con
+   la batería cargada (el script no revisa nivel). Verificar la versión
+   después.
+3. **Montar el HAT sin cinta** y arrancar a batería. Verificar en el mismo
+   boot: `whisplaysound` registrada, `dmesg | grep -c 'lost arbitration'`
+   = 0, y `get battery` con valor. Si conviven, la cinta queda como
+   historia. Dejar el equipo arrancando varias veces (el bug solo se
+   juega en el probe del boot) antes de darlo por bueno.
+4. Si no se consigue reemplazo: evaluar la opción DIY (MAX17048 en cable Y
+   sobre el JST de la batería + shim en el puerto 8423).
+5. Opcional, limpieza: `sudo systemctl disable --now pisugar-server`
+   mientras no haya PiSugar funcional en el bus, y quitar el
+   `whisplay-soundcard-warmup.service` de reintento (ya no aporta).
+
 ### Micrófono fijado al HAT (bocina Bluetooth ya no lo secuestra)
 
 Síntoma: con una bocina Bluetooth conectada y la salida en `bluetooth`, al

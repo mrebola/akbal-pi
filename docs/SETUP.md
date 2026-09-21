@@ -25,7 +25,21 @@ Raspberry Pi OS 64-bit (Debian Trixie), conectando por SSH al hostname Tailscale
    el overlay con el códec ES8389 deshabilitado (patch en `setup/`), y —la
    causa raíz real, encontrada después— aislar con cinta los pogo-pins de
    SDA/SCL (pines 3 y 5) de la PiSugar 3, cuyo MCU corrompe el bus I2C
-   compartido con el WM8960 del HAT.
+   compartido con el WM8960 del HAT. El MCU de esa PiSugar quedó
+   irrecuperable (sin lectura de batería); los próximos pasos para
+   reemplazarla están al final de ese doc.
+   - **Ventilador (Active Cooler) — pendiente (2026-09-20)**: el firmware
+     no lo autodetecta al arrancar (`cooling_fan` quedaba `disabled`, sin
+     `pwm-fan` ni `hwmon`). Se agregó `[pi5] dtparam=cooling_fan=on` a
+     `/boot/firmware/config.txt`: el driver ya toma el header (`cooling_fan`
+     = `okay`, GPIO45 en PWM, duty verificado conmutando), pero al forzar
+     100 % (`echo disabled > /sys/class/thermal/thermal_zone0/mode; echo 4 >
+     /sys/class/thermal/cooling_device0/cur_state`) el tacómetro reporta
+     `fan1_input = 0` RPM. La señal de control está bien; si el ventilador
+     no gira físicamente es 5V/conector/motor; si gira pero da 0 RPM es el
+     hilo de tacómetro. Probar también alimentando por USB-C con la PiSugar
+     en OFF para descartar el camino de energía. El `dtparam` es inofensivo
+     y se deja.
 3. **Ollama**: instalado con el script oficial (`curl -fsSL https://ollama.com/install.sh | sh`),
    corre como servicio systemd. Modelo: `ollama pull qwen3:1.7b`.
 4. **whisplay-ai-chatbot**: clonado, `bash install_dependencies.sh` (Node 20 vía apt,

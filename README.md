@@ -29,8 +29,9 @@ Raspberry Pi OS 64-bit, basado en Debian Trixie.
 | Orquestación | [whisplay-ai-chatbot](https://github.com/PiSugar/whisplay-ai-chatbot) |
 | Pantalla | UI propia minimalista: íconos de wifi/batería arriba, personaje animado (cara en primer plano) al medio, texto verde terminal abajo ([`docs/display-ui.md`](docs/display-ui.md)); pantalla dedicada estilo terminal para elegir/cargar modelo de LLM ([`docs/voice-commands.md`](docs/voice-commands.md)) |
 | Comandos de voz | Volumen, cambio/consulta de modelo de LLM y modo agente/local, resueltos por expresiones regulares antes de llegar al LLM — instantáneo, sin gastar un turno. Decir "ayuda" con el botón presionado muestra un resumen de todos estos comandos en pantalla ([`docs/voice-commands.md`](docs/voice-commands.md)) |
-| Wifi | Menú físico "Internet emergencia" (ver/escanear/conectar, sin poder tipear contraseñas nuevas) ([`docs/wifi.md`](docs/wifi.md)) + interfaz web con chat a los modelos locales, wifi completo (buscar, conectar con contraseña, olvidar redes), USB y batería/CPU/RAM en vivo en `http://<ip-del-dispositivo>:8090` ([`docs/web-ui.md`](docs/web-ui.md)) |
-| WIFIRADAR | Visualización 3D (Three.js) del espacio WiFi alrededor del Pi, capturado pasivamente con una tarjeta Qualcomm Atheros AR9271 en modo monitor — cae a un modo demo con datos simulados si no hay hardware conectado ([`docs/wifiradar.md`](docs/wifiradar.md)) |
+| Wifi | Menú físico "Wifi connect" (AP directo + QR, ver [`docs/wifi.md`](docs/wifi.md)) + interfaz web con chat a los modelos locales, wifi completo (buscar, conectar con contraseña, olvidar redes), USB y batería/CPU/RAM en vivo en `http://<ip-del-dispositivo>:8090` ([`docs/web-ui.md`](docs/web-ui.md)) |
+| WiFi Radar | Visualización 3D (Three.js) del espacio WiFi alrededor del Pi, capturado pasivamente con cualquier adaptador USB en modo monitor (detección genérica; probado con Atheros AR9271 y Ralink RT5372) — toggle real/demo y caída a demo con datos simulados si no hay hardware conectado ([`docs/wifiradar.md`](docs/wifiradar.md)) |
+| Wardriving | Captura de handshakes para laboratorio/tesis: allowlist explícita de BSSIDs como único mecanismo de autorización, ataques pmkid/deauth con aircrack-ng, sesiones con artifacts descargables desde la web |
 
 Detalle completo del setup en [`docs/SETUP.md`](docs/SETUP.md).
 
@@ -254,3 +255,151 @@ modelo a ciegas ante un comando mal reconocido (causó una regresión real:
 dejó activado un modelo con problemas de eco en respuestas cortas).
 
 Pendiente: wake word (activación por voz sin botón).
+
+---
+
+# Guía de uso: todas las features del dispositivo
+
+Qué es cada cosa, para qué sirve y cómo se usa. Dos superficies de control:
+el **dispositivo físico** (botón del Whisplay HAT + pantalla LCD) y el **sitio
+web de administración** (`http://<ip-del-dispositivo>:8090`, requiere sesión —
+usuario/clave configurados en `WEB_ADMIN_USER`/`WEB_ADMIN_PASSWORD` del `.env`).
+
+## En el dispositivo físico (botón + pantalla)
+
+El botón tiene tres gestos en reposo, y el mismo lenguaje en todos los menús:
+**click corto** avanza al siguiente elemento, **mantener ~0.9s** confirma/ejecuta,
+**doble clic** cancela/sale sin aplicar nada.
+
+### Conversación por voz (uso principal)
+
+1. Presiona el botón y mantenlo mientras hablas — el personaje cambia a "escuchando".
+2. Suelta: la frase se transcribe localmente (faster-whisper), el LLM local genera
+   la respuesta y Piper la habla por el altavoz.
+3. Mientras mantiene presionado, decir **"ayuda"** muestra en pantalla el
+   resumen de todos los comandos de voz.
+
+### Comandos de voz (instantáneos, no gastan turno)
+
+Dichos **mientras mantienes el botón presionado**; se resuelven por expresiones
+regulares antes de llegar al LLM:
+
+- **"sube el volumen" / "baja el volumen"** — ajusta el nivel de salida.
+- **"qué modelo estás usando"** — responde el modelo activo sin preguntarle al LLM.
+- **"cambia al modo agente" / "cambia al modo local"** — alterna entre responder
+  vía el bridge `whisplay-im` (agente externo) y el LLM local del dispositivo.
+- Otros atajos y detalles en [`docs/voice-commands.md`](docs/voice-commands.md).
+
+### Menú rápido (click corto en reposo)
+
+Carrusel navegable con los gestos descritos arriba:
+
+| Ítem | Qué hace |
+|---|---|
+| **Modelo** | Elegir modelo de IA en pantalla: click recorre los modelos descargados en Ollama, mantener confirma (muestra spinner mientras carga). Cambiar de modelo no reinicia el servicio. |
+| **Modo** | Alterna entre "modo agente" (las respuestas las da un agente externo vía `whisplay-im`) y "modo local" (el LLM de la Pi). Confirma manteniendo presionado; queda persistido en `.env`. |
+| **Audio** | Cambiar la salida de sonido: bocina del Whisplay HAT o bocina Bluetooth emparejada (ver Ajustes → web para emparejarla). |
+| **Música** | Reproductor tipo jukebox de la OST de Cypher incluida: click avanza de canción, mantener reproduce/pausa (detalle abajo). |
+| **Ayuda** | Pantalla(s) con todos los comandos de voz y gestos. |
+| **Cámara** | Tomar una foto (solo si hay cámara configurada; el menú la oculta si no). |
+| **Volumen** | Cada click sube +10% en vivo; mantener sale del control. |
+| **Wifi connect** | Convierte la wifi de la Pi en un punto de acceso `akbal-pi` con QR en pantalla: escanéalo con un celular para conectarte directo (y abrir la web admin). Dos QR navegables con click: wifi y web. Mantener presionado desactiva el AP y sale. |
+| **Conexión web** | Muestra la IP LAN y de Tailscale del dispositivo + un QR para abrir el sitio web de administración. |
+| **WiFi Radar** | Versión de pantalla del radar WiFi (ver sección web abajo): discos de radar con puntos por red cercana, texto inferior con nombre + dBm. |
+
+### WiFi Radar (pantalla)
+
+Detección pasiva de redes alrededor del Pi, mostradas como puntos en un radar
+(rotación/distanca por hash de BSSID y potencia de señal, respectivamente). La
+franja inferior rota entre las redes visibles. Si no hay adaptador USB con modo
+monitor conectado muestra "Sin adaptador WiFi compatible"; con el toggle global
+en demo muestra datos sintéticos con un prefijo "DEMO · ". Entra desde el menú
+rápido; mantener presionado para salir.
+
+## Sitio web de administración (`http://<ip>:8090`)
+
+Navegación por pestañas arriba. Mismo control por sesión (login con las
+credenciales del `.env`).
+
+### Chat
+
+Chat con el modelo de Ollama local del dispositivo, igual que la conversación
+por voz pero escrito. Sirve para probar el LLM sin el flujo de voz, para
+preguntas largas y para revisar el historial de la conversación actual.
+Modelo y modo agente/local también se cambian desde aquí (mismos efectos que
+el menú físico).
+
+### WiFi (pestaña, sub-pestañas Conexión / Redes)
+
+- **Conexión**: la red activa del dispositivo (SSID, señal) y el modo punto de
+  acceso (`akbal-pi`) — encenderlo/apagarlo sin tocar el menú físico.
+- **Redes**: escanear redes alrededor, conectarse (con contraseña), y "olvidar"
+  redes guardadas. Todo vía nmcli fijo a la radio interna de la Pi, así que con
+  el dongle USB de auditoría conectado el escaneo sigue saliendo de la radio
+  correcta.
+
+### WIFIRADAR (`/wifiradar`, link "Radar Wi-Fi")
+
+Visualización 3D fullscreen (Three.js) del espacio WiFi: un radar militar con
+puntos por AP cercano, estelas por RSSI, eventos en vivo (nuevo AP, red abierta,
+deauth...) y panel lateral al hacer click en un punto (SSID, BSSID, vendor,
+señal, clientes). **Real vs demo**: botón **SRC** arriba — REAL captura pasiva
+de beacons reales con el dongle USB en modo monitor; DEMO alimenta datos
+sintéticos (sin tocar la radio) para demostrar la interfaz. Si el adaptador se
+desconecta, cae a DEMO solo y se recupera solo cuando vuelve. Pausa el stream
+con **LIVE/PAUSED**, alterna 2D/3D con **3D**, RESET VIEW centra la cámara.
+Solo escucha: nunca transmite nada.
+
+### WARDRIVING (pestaña)
+
+Captura de handshakes para laboratorio/tesis, sobre la misma radio del radar.
+Flujo:
+
+1. **Entrar** (banner superior) toma la radio en modo monitor — el radar deja de
+   capturar hasta que salgas (se retoma solo al salir).
+2. La tabla lista las redes visibles (canal, señal, clientes, seguridad).
+3. **Autorizar** un BSSID lo agrega al allowlist — el único mecanismo de
+   autorización: sin allowlist no hay ataque, no existe el "atacar todo".
+4. **Auditar** corre el ataque contra esa red: escaneo → lock de canal →
+   captura con airodump-ng → deauth dirigida (si aplica) → validación de
+   handshake. El progreso paso a paso se muestra en un modal.
+5. Al capturar, los archivos (`.hc22000`, `.cap`) quedan listados abajo para
+   descarga desde la web. Todo vive en `~/wardrive-sessions/` en el dispositivo.
+6. **REAL/DEMO** (botón en la toolbar): el descubrimiento puede venir de la
+   radio real o del mismo generador demo del radar (útil para ensayar la
+   interfaz sin hardware; contra redes demo los ataques son inertes).
+7. Deauth dirigido: pestaña Deauth — lista dispositivos clientes vistos
+   hablando en el aire; cada uno requiere autorización individual de MAC.
+8. **Salir** restaura la radio a modo normal y devuelve el control al radar.
+
+### OST (pestaña Música)
+
+Jukebox del OST de Cypher: playlist fija local con play/pausa, siguiente/
+anterior y seek. Controla lo mismo que el ítem "Música" del menú físico.
+
+### Dispositivos (pestaña USB)
+
+Lista unidades USB conectadas (pendrives, discos), permite montarlas/expulsarlas
+de forma segura y explorar/descargar archivos que contengan. También muestra los
+adaptadores WiFi USB detectados y si soportan modo monitor (la fuente que usan
+radar/wardrive para decidir si pueden operar).
+
+### Ajustes
+
+- **Volumen** del altavoz (0-100).
+- **Salida de audio**: bocina de la Pi o bocina Bluetooth (escaneo/emparejado/
+  eliminación de parlantes BT).
+- **Wi-Fi**: conexión, redes guardadas, AP — mismo backend que la pestaña WiFi.
+- **Respaldos**: crear/descargar/restaurar/eliminar snapshots de configuración.
+- **Almacenamiento**: navegación de discos montados con subida/descarga/borrado.
+- **Sistema** (ícono ◉ arriba a la derecha, en cualquier pestaña): CPU, RAM,
+  disco y wifi en vivo, y logout.
+
+### API HTTP (para integraciones)
+
+Todo lo anterior también es accesible programáticamente bajo `/api/*` con la
+misma sesión de cookie: `/api/status`, `/api/chat`, `/api/wifi/scan`,
+`/api/wifiradar/snapshot` + `POST /api/wifiradar/mode`
+(`{"mode":"live"|"demo"}`), `/api/wardrive/*` (`enter`, `exit`, `source`,
+`allowlist`, `attack/one`, ...), `/api/music/*`, `/api/usb/*`, `/api/backup/*`.
+Ver `app/src/device/web-admin-server.ts` para la lista completa.

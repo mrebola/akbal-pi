@@ -1100,6 +1100,8 @@ button.secondary {
 .wd-progress-log .log-entry.cmd {
   border-left-color: var(--accent);
   color: var(--accent);
+  word-break: break-all;
+  white-space: pre-wrap;
 }
 
 .wd-progress-log .log-entry.output {
@@ -1134,26 +1136,6 @@ button.secondary {
 
 .wd-progress-minimized:hover {
   background: var(--bg);
-}
-  padding-left: 10px;
-}
-
-.wd-progress-log .log-entry.cmd {
-  border-left-color: var(--accent);
-  color: var(--accent);
-}
-
-.wd-progress-log .log-entry.output {
-  color: var(--text-secondary);
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
-.wd-progress-log .log-time {
-  color: var(--text-secondary);
-  opacity: 0.6;
-  font-size: 10px;
-  margin-right: 6px;
 }
 
 .wd-note code {

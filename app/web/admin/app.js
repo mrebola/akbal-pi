@@ -1822,6 +1822,9 @@ const wdProgressClose = document.getElementById("wd-progress-close");
 let wdCurrentAttackBssid = null;
 let wdProgressTimer = null;
 let wdMinimizedIndicator = null;
+// Force-scroll flag: set when the modal is (re)opened so the log always
+// lands on the latest entry after a tab switch or minimize/reopen.
+let wdForceScroll = true;
 
 const ATTACK_STEPS = [
   { key: "scan", label: "Escaneo" },
@@ -1839,6 +1842,7 @@ function wdShowProgress(bssid, ssid) {
   wdRemoveMinimizedIndicator();
   wdRenderSteps([]);
   wdProgressLog.innerHTML = '<div class="muted">Iniciando...</div>';
+  wdForceScroll = true;
   void wdLoadProgress(bssid);
   // Poll for updates
   if (wdProgressTimer) clearInterval(wdProgressTimer);
@@ -1892,6 +1896,7 @@ function wdReopenProgress() {
   if (!wdCurrentAttackBssid) return;
   wdProgressModal.classList.remove("hidden");
   wdRemoveMinimizedIndicator();
+  wdForceScroll = true;
   // Resume polling.
   if (wdProgressTimer) clearInterval(wdProgressTimer);
   wdProgressTimer = setInterval(() => void wdLoadProgress(wdCurrentAttackBssid), 1500);
@@ -1929,7 +1934,9 @@ async function wdLoadProgress(bssid) {
     const latest = entries[entries.length - 1];
     wdRenderSteps(latest.step);
 
-    // Render log
+    // Render log: full history, with the command each step runs highlighted
+    // and its raw output below it. The backend keeps appending to the same
+    // entries list, so a full re-render every 1.5s always shows everything.
     wdProgressLog.innerHTML = entries.map((e) => {
       const time = new Date(e.ts).toLocaleTimeString();
       let html = `<div class="log-entry"><span class="log-time">${time}</span>${escapeHtml(e.message)}</div>`;
@@ -1942,8 +1949,12 @@ async function wdLoadProgress(bssid) {
       return html;
     }).join("");
 
-    // Auto-scroll to bottom
-    wdProgressLog.scrollTop = wdProgressLog.scrollHeight;
+    // Auto-scroll to bottom (unless the user scrolled up to read)
+    const nearBottom = wdProgressLog.scrollHeight - wdProgressLog.scrollTop - wdProgressLog.clientHeight < 80;
+    if (nearBottom || wdForceScroll) {
+      wdProgressLog.scrollTop = wdProgressLog.scrollHeight;
+      wdForceScroll = false;
+    }
 
     // Stop polling if done
     if (latest.step === "done") {

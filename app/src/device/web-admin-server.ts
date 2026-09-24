@@ -1010,6 +1010,46 @@ export class WebAdminServer {
     // Read/list/download/delete over ~/wardrive-sessions/ only. Path
     // traversal is blocked by keeping every path relative to that root
     // (realpath check); downloads stream a single file, never a directory.
+    // Sessions listing: every folder = one session (folder name IS the
+    // date), with per-target summary so the UI can show what's inside
+    // without browsing files one by one.
+    router.get("/api/wardrive/sessions", (ctx) => {
+      const sessionsRoot = path.join(process.env.HOME || "/home/akbal", "wardrive-sessions");
+      let dirs: string[] = [];
+      try {
+        dirs = fs
+          .readdirSync(sessionsRoot, { withFileTypes: true })
+          .filter((e) => e.isDirectory())
+          .map((e) => e.name)
+          .sort()
+          .reverse(); // newest first
+      } catch {
+        ctx.body = { ok: true, sessions: [] };
+        return;
+      }
+      const sessions = dirs.map((id) => {
+        const dir = path.join(sessionsRoot, id);
+        let startedAt: number | null = null;
+        let targets: { bssid: string; ssid: string; status: string; method: string; verified: boolean }[] = [];
+        try {
+          const meta = JSON.parse(fs.readFileSync(path.join(dir, "session.json"), "utf8"));
+          startedAt = meta.startedAt || null;
+          targets = (meta.targets || []).map((t: any) => ({
+            bssid: t.bssid,
+            ssid: t.ssid,
+            status: t.status,
+            method: t.method,
+            verified: t.verified === true,
+          }));
+        } catch {
+          // no/corrupt session.json — still list the folder (files may exist)
+        }
+        const captured = targets.filter((t) => t.status === "captured").length;
+        return { id, startedAt, captured, targets };
+      });
+      ctx.body = { ok: true, sessions };
+    });
+
     router.get("/api/wardrive/files", (ctx) => {
       const relativePath = String(ctx.query.path || "");
       const resolved = wardrive.resolveSessionPath(relativePath);

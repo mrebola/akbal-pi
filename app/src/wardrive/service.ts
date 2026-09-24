@@ -88,6 +88,9 @@ export class WardriveService extends EventEmitter {
   // against a candidate password the operator provides. Verified state is
   // reported per target so the UI can show "VALIDADO" vs plain CAPTURADO.
   private verified = new Map<string, CrackResult>();
+  // The password that was last tried against each target (only in memory,
+  // but also written to the per-target info.txt for the lab record).
+  private lastValidatedPassword = new Map<string, string>();
 
   getSession(): WardriveSession | null {
     return this.session;
@@ -781,6 +784,7 @@ export class WardriveService extends EventEmitter {
       "aircrack-ng -w - -b " + bssid + " <prefix>-01.cap   (contraseña por stdin)");
     const result = await crackCheck(capPath, password, bssid);
     this.verified.set(bssid, result);
+    this.lastValidatedPassword.set(bssid, result.matched ? password : `${password} (no matchea)`);
     this.appendLog(bssid, `[validate] aircrack verdict=${result.verdict}`);
     if (result.matched) {
       this.progress(bssid, "done", "✓ Handshake VALIDADO — contraseña correcta (KEY FOUND)",
@@ -792,6 +796,7 @@ export class WardriveService extends EventEmitter {
       this.progress(bssid, "done", `Validación aircrack: ${result.verdict}`,
         undefined, result.output.slice(-600));
     }
+    this.session.writeTargetInfo(bssid, this.lastValidatedPassword.get(bssid));
   }
 
   // Associated client MAC from the live WIFIRADAR device table, if any —
@@ -821,6 +826,7 @@ export class WardriveService extends EventEmitter {
     this.session.updateTarget(bssid, { status: "captured", method, finishedAt: Date.now() });
     this.updateMeta(bssid, { status: "captured", method, error: "" });
     this.appendLog(bssid, `[done] handshake captured via ${method}`);
+    this.session.writeTargetInfo(bssid, this.lastValidatedPassword.get(bssid));
     this.broadcastStatus();
   }
 
@@ -859,7 +865,9 @@ export class WardriveService extends EventEmitter {
     this.appendLog(bssid, "[validate] aircrack-ng check with operator-provided password");
     const result = await crackCheck(capPath, password, bssid);
     this.verified.set(bssid, result);
+    this.lastValidatedPassword.set(bssid, result.matched ? password : `${password} (no matchea)`);
     this.appendLog(bssid, `[validate] verdict=${result.verdict}`);
+    this.session.writeTargetInfo(bssid, this.lastValidatedPassword.get(bssid));
     this.broadcastStatus();
     return { ok: true, result };
   }

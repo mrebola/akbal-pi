@@ -110,6 +110,69 @@ export class WardriveSession {
     this.writeMeta();
   }
 
+  // Per-target info.txt — a human-readable summary of what this handshake
+  // is, who it belongs to and what we have. Written on every target update
+  // so it stays current (captured/verified state, files present).
+  writeTargetInfo(bssid: string, passwordTested?: string): void {
+    const t = this.targets.get(bssid);
+    if (!t) return;
+    const lines: string[] = [];
+    lines.push("═══════════════════════════════════════════════");
+    lines.push(" WARDRIVE — resumen de auditoría");
+    lines.push(` Sesión: ${this.id}`);
+    lines.push(` Fecha:  ${new Date(t.startedAt || this.startedAt).toISOString()}`);
+    lines.push("═══════════════════════════════════════════════");
+    lines.push("");
+    lines.push("RED OBJETIVO");
+    lines.push(`  SSID:        ${t.ssid || "(oculta / no visto)"}`);
+    lines.push(`  BSSID (MAC): ${t.bssid}`);
+    lines.push(`  Canal:       ${t.channel}`);
+    lines.push(`  Seguridad:   WPA/WPA2 (handshake 4-way capturado)`);
+    lines.push("");
+    lines.push("RESULTADO");
+    lines.push(`  Estado:      ${t.status}`);
+    lines.push(`  Método:      ${t.method || "n/d"}`);
+    lines.push(`  Intentos:    ${t.attempts}`);
+    lines.push(`  Validado:    ${t.verified ? "SÍ — handshake completo y crackeable (KEY FOUND)" : "no verificado con contraseña"}`);
+    if (t.error) lines.push(`  Error:       ${t.error}`);
+    lines.push("");
+    lines.push("CONTRASEÑA PROBADA");
+    lines.push(`  ${passwordTested ? passwordTested : "(no se probó ninguna)"}`);
+    lines.push("");
+    lines.push("ARCHIVOS");
+    if (t.files.length === 0) {
+      lines.push("  (ninguno)");
+    } else {
+      for (const f of t.files) {
+        const base = path.basename(f);
+        const size = this.fileSize(path.join(this.dir, base));
+        lines.push(`  ${base}  (${size})`);
+      }
+    }
+    lines.push("");
+    lines.push("QUÉ ES ESTE HANDSHAKE");
+    lines.push("  Contiene los frames EAPOL M1-M4 del 4-way handshake WPA2");
+    lines.push("  entre el AP y un cliente que se reconectó tras un deauth.");
+    lines.push("  Es material crackeable offline: el .hc22000 es formato");
+    lines.push("  hashcat (-m 22000) y el .cap se puede procesar con aircrack-ng.");
+    lines.push("  NO es la contraseña de la red: solo la prueba de que dos");
+    lines.push("  pares de llaves se intercambiaron — cracking aparte.");
+    try {
+      fs.writeFileSync(path.join(this.dir, `${t.bssid.replace(/:/g, "").toLowerCase()}-info.txt`), lines.join("\n") + "\n");
+    } catch {
+      // Info file is nice-to-have, never fatal.
+    }
+  }
+
+  private fileSize(p: string): string {
+    try {
+      const s = fs.statSync(p).size;
+      return s > 1024 * 1024 ? `${(s / 1024 / 1024).toFixed(1)} MB` : `${Math.round(s / 1024)} KB`;
+    } catch {
+      return "?";
+    }
+  }
+
   addTargetFile(bssid: string, file: string): void {
     const t = this.targets.get(bssid);
     if (!t || t.files.includes(file)) return;

@@ -212,15 +212,19 @@
         <div id="wd-verify-list" class="wd-results-list"></div>
       </div>
 
-      <!-- Attack progress modal: shows step-by-step what's happening -->
+      <!-- Attack progress modal: shows step-by-step what's happening.
+           On finish it stays open with a download button; it never
+           auto-closes — the × is the only way out (attack keeps running
+           regardless). -->
       <div id="wd-progress-modal" class="wd-modal hidden">
         <div class="wd-modal-backdrop" onclick="wdHideProgress()"></div>
         <div class="wd-modal-content">
           <div class="wd-modal-header">
             <span id="wd-progress-title">Auditando...</span>
             <div class="wd-modal-actions">
+              <a id="wd-progress-download" class="hidden" href="#" download><button class="wd-download-btn">Descargar</button></a>
               <button id="wd-progress-minimize" class="secondary" title="Minimizar (sigue corriendo)">—</button>
-              <button id="wd-progress-close" class="secondary" title="Cerrar (cancelar ataque)">×</button>
+              <button id="wd-progress-close" class="secondary" title="Cerrar (el ataque sigue en background)">×</button>
             </div>
           </div>
           <div class="wd-progress-steps" id="wd-progress-steps">
@@ -229,6 +233,24 @@
           <div class="wd-progress-log" id="wd-progress-log">
             <div class="muted">Esperando inicio...</div>
           </div>
+        </div>
+      </div>
+
+      <!-- Past sessions browser: every folder is one session (date-named),
+           browse its files and download handshakes/hashes/info.txt. -->
+      <div class="wd-session-block" id="wd-sessions-block">
+        <div class="wd-session-title">SESIONES ANTERIORES</div>
+        <div id="wd-sessions-list" class="wd-sessions-list">
+          <div class="muted">—</div>
+        </div>
+        <div id="wd-session-files" class="wd-sessions-files hidden">
+          <div class="wd-session-title" id="wd-session-files-title" style="font-size:12px; margin-top:10px;"></div>
+          <table class="wd-table">
+            <thead>
+              <tr><th>Archivo</th><th>Tamaño</th><th></th></tr>
+            </thead>
+            <tbody id="wd-session-files-body"></tbody>
+          </table>
         </div>
       </div>
     </section>

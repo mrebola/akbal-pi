@@ -962,6 +962,42 @@ button.secondary {
 .wd-verify-badge.none { background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.4); }
 .wd-verify-badge.err { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4); }
 
+/* ---- Past sessions browser ---- */
+
+.wd-sessions-list { display: flex; flex-direction: column; gap: 6px; }
+
+.wd-session-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.wd-session-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wd-session-date { font-weight: 500; color: var(--text-primary); font-family: ui-monospace, monospace; font-size: 13px; }
+.wd-session-meta { font-size: 11px; color: var(--text-secondary); }
+
+.wd-session-open {
+  font-size: 12px;
+  padding: 5px 12px;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.wd-session-open:hover { background: rgba(255, 152, 0, 0.1); }
+
+.wd-sessions-files { margin-top: 8px; }
+.wd-sessions-files table { font-size: 12px; }
+.wd-sessions-files td, .wd-sessions-files th { padding: 6px 8px; }
+
 /* ---- Attack progress modal ---- */
 
 .wd-modal {

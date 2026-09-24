@@ -1918,6 +1918,28 @@ function wdRenderSteps(currentStep) {
   wdProgressSteps.innerHTML = stepsHtml;
 }
 
+// Show the download button in the modal header once the attack finished —
+// links straight to the .hc22000 (hash) or .cap for the audited target.
+function wdUpdateDownloadButton(bssid) {
+  const a = document.getElementById("wd-progress-download");
+  if (!a || !wdStatus?.session) return;
+  const t = (wdStatus.session.targets || []).find((x) => x.bssid === bssid);
+  const file = t?.files.find((f) => f.endsWith(".hc22000")) || t?.files.find((f) => /\.(cap|pcapng|txt)$/i.test(f));
+  const info = t?.files.find((f) => f.endsWith("-info.txt"));
+  if (!file) {
+    a.classList.add("hidden");
+    return;
+  }
+  const fname = file.split("/").pop();
+  // resolveSessionPath-style relative path: last two segments
+  // (session dir / filename) — same convention the results list uses.
+  const rel = file.split("/").slice(-2).join("/");
+  a.href = `/api/wardrive/files/download?path=${encodeURIComponent(rel)}`;
+  a.setAttribute("download", fname);
+  a.querySelector("button").textContent = `Descargar ${fname.endsWith(".hc22000") ? "hash" : fname.endsWith("-info.txt") ? "info" : "captura"}`;
+  a.classList.remove("hidden");
+}
+
 async function wdLoadProgress(bssid) {
   if (!bssid || bssid !== wdCurrentAttackBssid) return;
   try {
@@ -1956,12 +1978,14 @@ async function wdLoadProgress(bssid) {
       wdForceScroll = false;
     }
 
-    // Stop polling if done
+    // Stop polling if done — but leave the modal open with everything the
+    // attack did (full history + download button). Only stop the timer.
     if (latest.step === "done") {
       if (wdProgressTimer) {
         clearInterval(wdProgressTimer);
         wdProgressTimer = null;
       }
+      wdUpdateDownloadButton(bssid);
     }
   } catch (err) {
     console.error("progress load failed:", err);
@@ -1976,6 +2000,83 @@ function wdCheckOngoingAttack() {
   if (target) {
     wdShowProgress(bssid, target.ssid);
   }
+}
+
+// ---- Past sessions browser ----
+
+let wdSessionsTimer = null;
+
+async function wdLoadSessions() {
+  try {
+    const res = await fetch("/api/wardrive/sessions");
+    if (!res.ok) return;
+    const data = await res.json();
+    const list = document.getElementById("wd-sessions-list");
+    if (!list) return;
+    const sessions = data.sessions || [];
+    if (sessions.length === 0) {
+      list.innerHTML = '<div class="muted">Sin sesiones aún. Cada auditoría crea una carpeta con fecha.</div>';
+      return;
+    }
+    list.innerHTML = sessions
+      .map((s) => {
+        const date = s.startedAt ? new Date(s.startedAt).toLocaleString() : s.id;
+        const nets = s.targets
+          .map((t) => `${escapeHtml(t.ssid || t.bssid)}${t.verified ? " ✓" : ""}${t.status === "captured" ? "" : ` (${t.status})`}`)
+          .join(", ");
+        return `<div class="wd-session-row" data-id="${s.id}">
+          <div class="wd-session-info">
+            <span class="wd-session-date">${s.id}</span>
+            <span class="wd-session-meta">${s.captured} handshake(s) · ${escapeHtml(nets || "sin objetivos")}</span>
+          </div>
+          <button class="wd-session-open" data-id="${s.id}">Ver archivos</button>
+        </div>`;
+      })
+      .join("");
+  } catch { /* non-fatal */ }
+}
+
+document.getElementById("wd-sessions-list")?.addEventListener("click", async (ev) => {
+  const btn = ev.target.closest(".wd-session-open");
+  if (!btn) return;
+  const id = btn.dataset.id;
+  await wdOpenSessionFiles(id);
+});
+
+async function wdOpenSessionFiles(id) {
+  const filesBlock = document.getElementById("wd-session-files");
+  const filesTitle = document.getElementById("wd-session-files-title");
+  const filesBody = document.getElementById("wd-session-files-body");
+  if (!filesBlock || !filesTitle || !filesBody) return;
+  try {
+    const res = await fetch(`/api/wardrive/files?path=${encodeURIComponent(id)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    filesTitle.textContent = `Sesión ${id}`;
+    filesBody.innerHTML = data.items
+      .map((it) => {
+        const size = it.size > 1024 * 1024 ? `${(it.size / 1024 / 1024).toFixed(1)} MB` : `${Math.round(it.size / 1024)} KB`;
+        const dl = `/api/wardrive/files/download?path=${encodeURIComponent(it.path)}`;
+        return `<tr>
+          <td>${escapeHtml(it.name)}</td>
+          <td>${size}</td>
+          <td><a href="${dl}" download="${escapeHtml(it.name)}"><button class="wd-download-btn">Bajar</button></a></td>
+        </tr>`;
+      })
+      .join("");
+    filesBlock.classList.remove("hidden");
+  } catch { /* non-fatal */ }
+}
+
+// Refresh sessions list while the wardrive tab is active (same 2s timer
+// as the targets table — cheap local read).
+function wdStartSessionsTimer() {
+  if (wdSessionsTimer) return;
+  wdSessionsTimer = setInterval(() => {
+    const active = document.getElementById("tab-wardrive")?.classList.contains("active");
+    if (active) void wdLoadSessions();
+  }, 4000);
+  void wdLoadSessions();
 }
 
 // Make wdReopenProgress globally available for the onclick handler.
@@ -2097,6 +2198,7 @@ for (const btn of document.querySelectorAll(".tab-btn")) {
     btn.addEventListener("click", () => {
       void loadMonitorCap();
       void wdRefresh();
+      wdStartSessionsTimer();
       if (!wdTimer) wdTimer = setInterval(() => {
         if (wdPaused) return;
         const active = document.getElementById("tab-wardrive")?.classList.contains("active");
@@ -2112,6 +2214,7 @@ let wdTimer = null;
 if (window.location.hash === "#wardrive") {
   void loadMonitorCap();
   void wdRefresh();
+  wdStartSessionsTimer();
 }
 
 // ================= Reproductor de música (Cypher OST) =================

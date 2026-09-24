@@ -111,11 +111,28 @@
     <div class="side-panel-row"><span>RSSI</span><span id="sp-rssi">—</span></div>
     <div class="side-panel-row"><span>Channel</span><span id="sp-channel">—</span></div>
     <div class="side-panel-row"><span>Security</span><span id="sp-security">—</span></div>
+    <div class="side-panel-row"><span>Distancia aprox.</span><span id="sp-distance">—</span></div>
     <div class="side-panel-row"><span>First Seen</span><span id="sp-first">—</span></div>
     <div class="side-panel-row"><span>Last Seen</span><span id="sp-last">—</span></div>
     <div class="side-panel-row"><span>Frames</span><span id="sp-frames">—</span></div>
     <div class="side-panel-row"><span>Clients</span><span id="sp-clients">—</span></div>
+    <div class="side-panel-devices-head">// EQUIPOS CONECTADOS</div>
+    <div id="sp-device-list" class="side-panel-devices"></div>
+    <button id="sp-audit-btn" class="sp-audit-btn" title="Abrir la auditoría de wardriving sobre esta red">⚔ Auditar web</button>
+    <div class="side-panel-hint">Auditar abre el modo wardriving (toma la radio) con esta red como objetivo.</div>
   </aside>
+
+  <!-- Audit-locked mode: when "Auditar web" is clicked the scene freezes
+       on the selected node (camera centered, orbit disabled) and this
+       banner takes over the top of the screen. -->
+  <div id="audit-banner" class="audit-banner hidden">
+    <div class="audit-banner-text">
+      <span class="audit-banner-dot">●</span>
+      <span id="audit-banner-title">AUDITANDO</span>
+      <span id="audit-banner-status" class="muted">—</span>
+    </div>
+    <button id="audit-banner-close" class="secondary" title="Cerrar y volver al radar (la auditoría sigue en la pestaña Wardriving)">Cerrar auditoría</button>
+  </div>
 
   <div class="event-ticker" id="event-ticker"></div>
 

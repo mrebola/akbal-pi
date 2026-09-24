@@ -502,65 +502,68 @@ class RenderThread(threading.Thread):
 
     def render_wardrive_screen(self, text):
         """Physical-screen WARDRIVE overlay (chat-flow/wardrive-mode.ts).
-        Normal look = the SAME idle screen as always (Akbal character loop)
-        but with a red bottom band reading "MODO WARDRIVE" — the device
-        stays calm while the radio works. While an audit is actually
-        running (attacking), the character is replaced by the wardrive
-        attack animation (img/wardrive.gif) and the status text below it
-        says briefly what's happening ("revisando tráfico", "deauth",
-        "capturando handshake"...). Falls back to the status panel if the
-        animation file is missing."""
+        Normal look: the top bar reads "AKBAL" in green + " - " + "modo
+        wardriving" in red, the character plays its THINKING-style loop
+        (wardrive animation — the same asset used everywhere while an
+        audit runs), and a small status line under the animation says
+        briefly what's going on. All pushed by Node (wardrive-mode.ts);
+        this only renders."""
         self.render_top_bar()
 
         label = "MODO WARDRIVE"
         status_line = current_wardrive_status_text or "..."
         captured = current_wardrive_captured or 0
         total = current_wardrive_total or 0
-        attacking = "Atacando" in status_line or "Deauth:" in status_line or "PMKID:" in status_line
-        attacking = attacking or current_wardrive_label.lower().startswith("auditando") or "captur" in status_line.lower()
-        attacking = attacking or ("deauth" in status_line.lower()) or ("capturando" in status_line.lower()) or ("revisando" in status_line.lower())
+        # Auditing = the wardrive animation + a one-line action status under it.
+        s = status_line.lower()
+        attacking = (
+            current_wardrive_label.lower().startswith("auditando")
+            or "deauth" in s
+            or "capturando" in s
+            or "revisando" in s
+            or "handshake" in s
+            or "atacando" in s
+        )
+        self.wardrive_ui_cache_key = None  # animate continuously, no cache
 
         center_x = (VIDEO_WIDTH - SAFE_AREA_RIGHT_INSET) // 2
+        frames = self.gif_frames.get("wardrive") or []
 
-        if attacking:
-            # Attack in progress: the wardrive animation loops in place of
-            # the character (same frame loop as render_idle_screen), the
-            # short action status renders below it. No cache — this must
-            # animate continuously like the idle GIF does.
-            frames = self.gif_frames.get("wardrive") or []
-            if frames:
-                elapsed = time.time() - self.gif_start_time
-                frame_index = int(elapsed * GIF_FPS) % len(frames)
-                self.whisplay.draw_image(0, TOP_BAR_HEIGHT, VIDEO_WIDTH, VIDEO_HEIGHT, frames[frame_index])
-                self.last_drawn_gif_key = "wardrive"
-                self.last_drawn_frame_index = frame_index
-                # Action line: white text directly over the animation's
-                # bottom, on a translucent dark band for readability.
-                overlay = Image.new("RGBA", (VIDEO_WIDTH, 22), (0, 0, 0, 190))
-                odraw = ImageDraw.Draw(overlay)
-                self._draw_centered(odraw, status_line[:36], self.model_ui_label_font, 2, center_x, (255, 90, 70, 255))
-                rgb = ImageUtils.image_to_rgb565(overlay, VIDEO_WIDTH, 22)
-                self.whisplay.draw_image(0, TOP_BAR_HEIGHT + VIDEO_HEIGHT - 22, VIDEO_WIDTH, 22, rgb)
-            else:
-                # No animation file: dark background + counters as before.
-                self.wardrive_ui_cache_key = None  # redraw every call
-                frame = Image.new("RGBA", (VIDEO_WIDTH, VIDEO_HEIGHT), (0, 0, 0, 255))
-                draw = ImageDraw.Draw(frame)
-                self._draw_centered(draw, status_line[:34], self.model_ui_label_font, 120, center_x, TEXT_PRIMARY)
-                self._draw_centered(draw, f"Handshakes {captured}/{total}", self.model_ui_hint_font, 150, center_x, TEXT_SECONDARY)
-                rgb565_data = ImageUtils.image_to_rgb565(frame, VIDEO_WIDTH, VIDEO_HEIGHT)
-                self.whisplay.draw_image(0, TOP_BAR_HEIGHT, VIDEO_WIDTH, VIDEO_HEIGHT, rgb565_data)
+        if attacking and frames:
+            elapsed = time.time() - self.gif_start_time
+            frame_index = int(elapsed * GIF_FPS) % len(frames)
+            self.whisplay.draw_image(0, TOP_BAR_HEIGHT, VIDEO_WIDTH, VIDEO_HEIGHT, frames[frame_index])
+            self.last_drawn_gif_key = "wardrive"
+            self.last_drawn_frame_index = frame_index
+        elif frames:
+            # Idle wardriving: the animation runs anyway (it IS the
+            # "thinking" look for this mode) at a reduced visual weight —
+            # same screen either way, per the mode spec.
+            elapsed = time.time() - self.gif_start_time
+            frame_index = int(elapsed * GIF_FPS) % len(frames)
+            self.whisplay.draw_image(0, TOP_BAR_HEIGHT, VIDEO_WIDTH, VIDEO_HEIGHT, frames[frame_index])
+            self.last_drawn_gif_key = "wardrive"
+            self.last_drawn_frame_index = frame_index
         else:
-            # Idle wardriving (radio taken, waiting for a web order):
-            # the same calm Akbal standing loop as normal, red band below.
-            self.wardrive_ui_cache_key = None  # nothing cached — keep simple
-            self.render_bottom_text(text)
+            black = bytes(VIDEO_WIDTH * VIDEO_HEIGHT * 2)
+            self.whisplay.draw_image(0, TOP_BAR_HEIGHT, VIDEO_WIDTH, VIDEO_HEIGHT, black)
 
-        # The "MODO WARDRIVE" red band: replaces the normal black caption
-        # band while the mode is active.
+        # Small action text directly under the animation (inside the video
+        # area's bottom edge, over a dark band for readability).
+        band_h = 20
+        overlay = Image.new("RGBA", (VIDEO_WIDTH, band_h), (0, 0, 0, 200))
+        odraw = ImageDraw.Draw(overlay)
+        self._draw_centered(odraw, status_line[:36], self.model_ui_hint_font, 3, center_x, TEXT_PRIMARY)
+        rgb = ImageUtils.image_to_rgb565(overlay, VIDEO_WIDTH, band_h)
+        self.whisplay.draw_image(0, TOP_BAR_HEIGHT + VIDEO_HEIGHT - band_h, VIDEO_WIDTH, band_h, rgb)
+
+        # Bottom band: red "MODO WARDRIVE" (kept for scanability), plus
+        # handshake counters on the right.
         band = Image.new("RGBA", (VIDEO_WIDTH, TEXT_BAND_HEIGHT), (0, 0, 0, 255))
         bdraw = ImageDraw.Draw(band)
         self._draw_centered(bdraw, label, self.model_ui_label_font, 10, center_x, (255, 60, 40, 255))
+        counters = f"{captured}/{total} handshakes"
+        self._draw_centered(bdraw, counters, self.model_ui_hint_font, 34, center_x, TEXT_SECONDARY)
         rgb = ImageUtils.image_to_rgb565(band, VIDEO_WIDTH, TEXT_BAND_HEIGHT)
         self.whisplay.draw_image(0, TOP_BAR_HEIGHT + VIDEO_HEIGHT, VIDEO_WIDTH, TEXT_BAND_HEIGHT, rgb)
         return True  # keep looping so the animation keeps playing
@@ -600,9 +603,27 @@ class RenderThread(threading.Thread):
 
     def render_idle_screen(self, status, text):
         """Thin top bar (wifi/battery + LOCAL/AGENTE tag), full-width
-        looping GIF (standing / talking) in the middle, and a two-line
-        caption band at the bottom."""
+        looping GIF (standing / talking / wardrive) in the middle, and a
+        two-line caption band at the bottom. While a WiFi audit runs (the
+        wardrive service active — see current_wardrive_ui), the character
+        plays the wardrive animation EVERYWHERE, whatever the screen, so
+        the whole UI reads 'auditing right now'; it returns to normal the
+        moment the mode ends."""
         self.render_top_bar()
+
+        if current_wardrive_ui:
+            # Audit in progress: the wardrive loop replaces standing/talking
+            # on every screen (idle, thinking, answering — the whole chat UI).
+            frames = self.gif_frames.get("wardrive") or []
+            if frames:
+                elapsed = time.time() - self.gif_start_time
+                frame_index = int(elapsed * GIF_FPS) % len(frames)
+                if self.last_drawn_gif_key != "wardrive" or frame_index != self.last_drawn_frame_index:
+                    self.whisplay.draw_image(0, TOP_BAR_HEIGHT, VIDEO_WIDTH, VIDEO_HEIGHT, frames[frame_index])
+                    self.last_drawn_gif_key = "wardrive"
+                    self.last_drawn_frame_index = frame_index
+                self.render_bottom_text(text)
+                return True
 
         gif_key = "talking" if is_answering_status(status) else "standing"
         frames = self.gif_frames.get(gif_key) or []
@@ -741,6 +762,17 @@ class RenderThread(threading.Thread):
         bbox = draw.textbbox((0, 0), BRAND_LABEL, font=self.top_bar_mode_font)
         text_h = bbox[3] - bbox[1]
         draw.text((TOP_BAR_MARGIN_X + BRAND_LEFT_PADDING, (TOP_BAR_HEIGHT - text_h) // 2 - bbox[1]), BRAND_LABEL, font=self.top_bar_mode_font, fill=brand_color)
+
+        # In wardriving mode the brand line extends: "AKBAL - modo wardriving"
+        # — the dash separates them, wardriving in red right after the green
+        # AKBAL (mode spec: same line, small, impossible to miss).
+        if current_wardrive_ui:
+            extra = " - modo wardriving"
+            ex_bbox = draw.textbbox((0, 0), extra, font=self.top_bar_mode_font)
+            ex_w = ex_bbox[2] - ex_bbox[0]
+            ex_x = TOP_BAR_MARGIN_X + BRAND_LEFT_PADDING + (bbox[2] - bbox[0]) + 2
+            if ex_x + ex_w < cursor_x - TOP_BAR_MARGIN_X:  # only if it fits
+                draw.text((ex_x, (TOP_BAR_HEIGHT - text_h) // 2 - ex_bbox[1]), extra, font=self.top_bar_mode_font, fill=(255, 60, 40, 255))
 
         rgb565_data = ImageUtils.image_to_rgb565(bar, self.whisplay.LCD_WIDTH, TOP_BAR_HEIGHT)
         self.whisplay.draw_image(0, 0, self.whisplay.LCD_WIDTH, TOP_BAR_HEIGHT, rgb565_data)

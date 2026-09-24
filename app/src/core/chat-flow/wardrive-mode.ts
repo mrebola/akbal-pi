@@ -62,11 +62,12 @@ function paint(status: WardriveStatus): void {
   const total = status.session?.targets.length || 0;
   const attacking = status.mode === "attacking";
   const current = status.session?.targets.find((t) => t.bssid === status.session?.currentBssid);
-  // Brief action lines for the LCD (rendered over the attack animation):
-  // what the audit is doing right now, plain words.
+  // Brief action lines for the LCD (rendered as the small text under the
+  // animation): what the audit is doing right now, plain words. "Handshake
+  // capturado" shows whenever at least one capture exists this session.
   const statusText =
     status.mode === "scanning"
-      ? "Revisando el aire..."
+      ? "Revisando tráfico..."
       : attacking
         ? current
           ? current.method === "deauth"
@@ -74,8 +75,10 @@ function paint(status: WardriveStatus): void {
             : "Capturando handshake..."
           : "Revisando tráfico..."
         : status.mode === "ready"
-          ? "Esperando auditoría..."
-          : "Iniciando...";
+          ? captured > 0
+            ? "Handshake capturado"
+            : "Modo wardriving activo"
+          : "Modo wardriving activo";
   display({
     status: "wardrive",
     emoji: "📡",

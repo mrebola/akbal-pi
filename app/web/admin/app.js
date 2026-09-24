@@ -2235,16 +2235,25 @@ document.getElementById("wd-sessions-list")?.addEventListener("click", async (ev
     return;
   }
   if (delBtn) {
+    // In-app confirmation modal (same design as delete-all) — no native
+    // window.confirm.
     const id = delBtn.dataset.id;
-    if (!window.confirm(`¿Borrar la sesión ${id}? Se eliminan todos sus archivos (capturas, hashes, logs).`)) return;
-    const res = await apiFetch("/api/wardrive/sessions/delete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
-    const data = await res.json();
-    if (data?.error) wdError.textContent = data.error;
-    void wdLoadSessions();
+    const modal = document.getElementById("wd-deletesession-modal");
+    const title = document.getElementById("wd-deletesession-title");
+    if (!modal) return;
+    if (title) title.textContent = `Borrar sesión ${id}`;
+    modal.classList.remove("hidden");
+    document.getElementById("wd-deletesession-confirm").onclick = async () => {
+      modal.classList.add("hidden");
+      const res = await apiFetch("/api/wardrive/sessions/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json();
+      if (data?.error) wdError.textContent = data.error;
+      void wdLoadSessions();
+    };
   }
 });
 

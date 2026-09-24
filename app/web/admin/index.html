@@ -275,6 +275,26 @@
         </div>
       </div>
 
+      <!-- Delete-one-session confirmation: in-app modal, same design. -->
+      <div id="wd-deletesession-modal" class="wd-modal hidden">
+        <div class="wd-modal-backdrop" onclick="document.getElementById('wd-deletesession-modal').classList.add('hidden')"></div>
+        <div class="wd-modal-content" style="max-width: 420px;">
+          <div class="wd-modal-header">
+            <span id="wd-deletesession-title">Borrar sesión</span>
+            <div class="wd-modal-actions">
+              <button class="secondary" onclick="document.getElementById('wd-deletesession-modal').classList.add('hidden')">Cancelar</button>
+            </div>
+          </div>
+          <div style="padding: 16px 20px;">
+            <p style="font-size: 13px; line-height: 1.6; margin: 0 0 14px;">
+              Se eliminan <strong style="color:#ef4444">todos los archivos</strong> de esta sesión:
+              capturas, hashes, logs e info. Esta acción no se puede deshacer.
+            </p>
+            <button id="wd-deletesession-confirm" class="wd-danger" style="width: 100%;">Borrar sesión</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Delete-all confirmation: in-app modal (type-to-confirm), same
            design language as the attack progress modal. -->
       <div id="wd-deleteall-modal" class="wd-modal hidden">

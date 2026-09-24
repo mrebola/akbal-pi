@@ -968,6 +968,21 @@ export class WebAdminServer {
       ctx.body = wardrive.dictCrackStatus();
     });
 
+    // Cancel an in-flight password validation (aircrack killed mid-run).
+    router.post("/api/wardrive/validate/cancel", (ctx) => {
+      const { bssid } = (ctx.request.body as any) || {};
+      ctx.body = wardrive.cancelValidation(String(bssid || ""));
+    });
+
+    // The password that cracked a captured handshake (🔑 icon). Session-
+    // scoped, in-memory only (never written to disk by this endpoint); the
+    // UI masks it behind an eye toggle. Lab-only by design.
+    router.post("/api/wardrive/password", (ctx) => {
+      const { bssid } = (ctx.request.body as any) || {};
+      const data = wardrive.getFoundPassword(String(bssid || ""));
+      ctx.body = data;
+    });
+
     // Step-by-step progress for the UI stepper. Returns full history so a
     // reopened browser tab can show "where we are" without missing anything.
     router.get("/api/wardrive/progress", (ctx) => {

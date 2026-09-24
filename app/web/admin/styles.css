@@ -982,14 +982,42 @@ button.secondary {
   font-size: 11px;
   padding: 5px 10px;
   background: transparent;
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
+  color: var(--danger);
+  border: 1px solid var(--danger);
   border-radius: 6px;
   cursor: pointer;
   white-space: nowrap;
 }
 
-.wd-dict-btn:hover { color: var(--accent); border-color: var(--accent); }
+.wd-dict-btn:hover { background: rgba(239, 68, 68, 0.12); }
+
+/* Handshake-captured banner inside the progress modal */
+.wd-captured-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 16px 8px;
+  padding: 8px 12px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+}
+
+.wd-captured-text {
+  color: var(--danger);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  font-size: 12px;
+}
+
+.wd-captured-file {
+  color: var(--text-secondary);
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .wd-dict-progress { margin-top: 10px; }
 

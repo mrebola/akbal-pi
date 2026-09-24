@@ -5,6 +5,7 @@
 export type WardriveTarget = {
   bssid: string; // full MAC, uppercase — the allowlist key
   ssid: string;
+  vendor: string; // OUI lookup with Random-MAC detection (wifiradar/oui.ts)
   channel: number;
   rssi: number; // dBm, most recent reading
   security: string; // as reported by the discovery source

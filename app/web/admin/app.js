@@ -1652,11 +1652,18 @@ function wdRender() {
         const dl = hashFile || capFile;
         const fname = dl ? dl.split("/").pop() : "";
         const dlUrl = dl ? `/api/wardrive/files/download?path=${encodeURIComponent(dl.split("/").slice(-2).join("/"))}` : "";
+        // Found-password icon: shown when the target was verified (the
+        // handshake was cracked with a known password). Click → masked
+        // modal, eye inside → full reveal.
+        const pwdIcon = t.verified
+          ? `<button class="wd-pwd-icon" data-bssid="${t.bssid}" title="Ver contraseña encontrada">🔑</button>`
+          : "";
         return `<div class="wd-result-item">
           <div class="wd-result-info">
             <span class="wd-result-ssid">${escapeHtml(t.ssid || t.bssid)}</span>
             <span class="wd-result-meta">${t.method} · ${t.attempts} intento(s)${t.verified ? ' · <span style="color:#34d351">VALIDADO</span>' : ""}</span>
           </div>
+          ${pwdIcon}
           ${dl ? `<a href="${dlUrl}" download="${fname}"><button class="wd-download-btn">Descargar ${fname.endsWith(".hc22000") ? "hash" : "captura"}</button></a>` : ""}
         </div>`;
       }).join("");
@@ -1671,7 +1678,7 @@ function wdRender() {
     return;
   }
 
-  const targets = [...(wdStatus.targets || [])];
+  let targets = [...(wdStatus.targets || [])];
   const withHash = new Set((wdStatus.session?.targets || []).filter((t) => t.status === "captured").map((t) => t.bssid));
 
   if (targets.length === 0) {
@@ -1679,13 +1686,52 @@ function wdRender() {
     return;
   }
 
-  // Sort: captured first, then by signal
-  targets.sort((a, b) => {
-    const aCap = withHash.has(a.bssid) ? 0 : 1;
-    const bCap = withHash.has(b.bssid) ? 0 : 1;
-    if (aCap !== bCap) return aCap - bCap;
-    return b.rssi - a.rssi;
+  // Browser-side search filter (the full target list lives in the page —
+  // filtering here costs nothing and never re-queries the Pi).
+  const q = (document.getElementById("wd-search")?.value || "").trim().toLowerCase();
+  if (q) {
+    targets = targets.filter((t) =>
+      (t.ssid || "").toLowerCase().includes(q)
+      || t.bssid.toLowerCase().includes(q)
+      || String(t.channel).includes(q)
+      || (t.security || "").toLowerCase().includes(q),
+    );
+  }
+
+  // Sort: user column sort when set (asc/desc, click toggles), else the
+  // default "captured first, then by signal".
+  const sortKey = wdTableSort.key;
+  if (sortKey) {
+    const dir = wdTableSort.dir === "asc" ? 1 : -1;
+    targets.sort((a, b) => {
+      const av = a[sortKey] ?? "";
+      const bv = b[sortKey] ?? "";
+      if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
+      return String(av).localeCompare(String(bv), "es", { numeric: true }) * dir;
+    });
+  } else {
+    targets.sort((a, b) => {
+      const aCap = withHash.has(a.bssid) ? 0 : 1;
+      const bCap = withHash.has(b.bssid) ? 0 : 1;
+      if (aCap !== bCap) return aCap - bCap;
+      return b.rssi - a.rssi;
+    });
+  }
+
+  // Highlight the sorted column header (▲/▼ markers).
+  document.querySelectorAll("#wd-table-body, .wd-table th[data-sort]").forEach(() => {});
+  document.querySelectorAll(".wd-table th[data-sort]").forEach((th) => {
+    const active = th.dataset.sort === sortKey;
+    th.classList.toggle("sorted", Boolean(active));
+    const base = th.dataset.label || th.textContent.replace(/ [▲▼]$/, "");
+    th.dataset.base = base;
+    th.textContent = active ? `${base} ${wdTableSort.dir === "asc" ? "▲" : "▼"}` : base;
   });
+
+  if (targets.length === 0 && q) {
+    wdTableBody.innerHTML = `<tr><td colspan="7" class="muted">Ninguna red coincide con "${escapeHtml(q)}".</td></tr>`;
+    return;
+  }
 
   for (const t of targets) {
     const tr = document.createElement("tr");
@@ -1713,9 +1759,53 @@ function wdRender() {
       <td>${t.security}</td>
       <td>${statusBadge}</td>
       <td>${action}</td>`;
+    // Click anywhere on the row opens the same network info modal the radar
+    // uses (except clicks on the Auditar button itself).
+    tr.dataset.bssid = t.bssid;
+    tr.dataset.ssid = t.ssid || "";
+    tr.dataset.channel = t.channel;
+    tr.dataset.rssi = t.rssi;
+    tr.dataset.security = t.security;
+    tr.dataset.vendor = t.vendor || "—";
+    tr.dataset.clients = t.clients ?? 0;
+    tr.classList.add("wd-row-clickable");
     wdTableBody.appendChild(tr);
   }
 }
+
+// ---- Table search / sort / reset (browser-side, instant) ----
+
+const wdTableSort = { key: null, dir: "desc" };
+
+function wdResetTableFilters() {
+  const search = document.getElementById("wd-search");
+  if (search) search.value = "";
+  wdTableSort.key = null;
+  wdTableSort.dir = "asc";
+  void wdRefresh();
+}
+
+function wdInitTableControls() {
+  const search = document.getElementById("wd-search");
+  const reset = document.getElementById("wd-filters-reset");
+  search?.addEventListener("input", () => void wdRefresh());
+  reset?.addEventListener("click", wdResetTableFilters);
+  // Header click = sort by that column (click again toggles asc/desc).
+  document.querySelectorAll(".wd-table th[data-sort]").forEach((th) => {
+    th.style.cursor = "pointer";
+    th.addEventListener("click", () => {
+      const key = th.dataset.sort;
+      if (wdTableSort.key === key) {
+        wdTableSort.dir = wdTableSort.dir === "asc" ? "desc" : "asc";
+      } else {
+        wdTableSort.key = key;
+        wdTableSort.dir = "desc"; // first click: strongest/most first
+      }
+      void wdRefresh();
+    });
+  });
+}
+wdInitTableControls();
 
 function escapeHtml(text) {
   const div = document.createElement("div");
@@ -1752,12 +1842,15 @@ function wdRenderVerifyList(capturedTargets) {
   wdVerifyList.innerHTML = rows
     .map((t) => {
       const busy = wdVerifyBusy.has(t.bssid);
+      // Cancel button only while this row's validation is running.
+      const cancelBtn = busy ? `<button class="wd-verify-cancel" data-bssid="${t.bssid}" title="Cancelar aircrack">Cancelar</button>` : "";
       return `<div class="wd-verify-row" data-bssid="${t.bssid}">
         <span class="wd-result-ssid">${escapeHtml(t.ssid || t.bssid)}</span>
         ${wdVerifyBadgeHtml(t.verified)}
         <input type="password" placeholder="contraseña del lab" class="wd-verify-pass" autocomplete="off" value="${escapeHtml(prevPass.get(t.bssid) || "")}" />
         <button class="wd-verify-btn" ${busy ? "disabled" : ""}>${busy ? "Verificando..." : "Verificar"}</button>
-        <button class="wd-dict-btn" data-bssid="${t.bssid}" title="Probar con el diccionario rockyou (lento, cancelable)">Diccionario</button>
+        ${cancelBtn}
+        <button class="wd-dict-btn" data-bssid="${t.bssid}" title="Probar con el diccionario rockyou (lento, cancelable)">dictionary attack</button>
         <span class="wd-verify-verdict muted"></span>
       </div>`;
     })
@@ -1812,6 +1905,59 @@ wdVerifyList?.addEventListener("click", async (ev) => {
   wdVerifyBusy.delete(bssid);
   btn.disabled = false;
   btn.textContent = "Verificar";
+});
+
+// Cancel an in-flight password validation (row-level Cancel button).
+wdVerifyList?.addEventListener("click", async (ev) => {
+  const btn = ev.target.closest(".wd-verify-cancel");
+  if (!btn) return;
+  await wdApi("validate/cancel", { bssid: btn.dataset.bssid });
+  // The validate call resolves with the cancelled result and the row
+  // re-renders on the next status tick.
+});
+
+// Found-password icon (🔑): opens a modal with the password masked
+// ("abc•••••"), eye inside reveals it fully. The password never goes to
+// disk — it lives in the backend's memory for the session.
+let wdPwdRevealed = false;
+let wdPwdLastBssid = null;
+
+wdResultsList?.addEventListener("click", async (ev) => {
+  const btn = ev.target.closest(".wd-pwd-icon");
+  if (!btn) return;
+  const bssid = btn.dataset.bssid;
+  try {
+    const res = await apiFetch("/api/wardrive/password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bssid }),
+    });
+    const data = await res.json();
+    if (!data?.ok || !data.password) {
+      wdError.textContent = data?.error || "No hay contraseña registrada para ese objetivo";
+      return;
+    }
+    wdPwdLastBssid = bssid;
+    wdPwdRevealed = false;
+    const modal = document.getElementById("wd-pwd-modal");
+    const masked = data.password.length <= 3 ? "•".repeat(data.password.length) : data.password.slice(0, 3) + "•".repeat(Math.max(3, data.password.length - 3));
+    document.getElementById("wd-pwd-ssid").textContent = data.ssid || bssid;
+    document.getElementById("wd-pwd-value").textContent = masked;
+    const eye = document.getElementById("wd-pwd-eye");
+    eye.textContent = "🙈";
+    eye.onclick = () => {
+      wdPwdRevealed = !wdPwdRevealed;
+      document.getElementById("wd-pwd-value").textContent = wdPwdRevealed ? data.password : masked;
+      eye.textContent = wdPwdRevealed ? "👁" : "🙈";
+    };
+    modal.classList.remove("hidden");
+  } catch {
+    wdError.textContent = "No se pudo obtener la contraseña";
+  }
+});
+
+document.getElementById("wd-pwd-close")?.addEventListener("click", () => {
+  document.getElementById("wd-pwd-modal")?.classList.add("hidden");
 });
 
 // ---- Dictionary crack (rockyou) ----
@@ -2070,6 +2216,25 @@ async function wdLoadProgress(bssid) {
     // Update steps based on latest step
     const latest = entries[entries.length - 1];
     wdRenderSteps(latest.step);
+
+    // Handshake captured → loud red banner inside the modal with the value.
+    const capEntry = entries.find((e) => e.step === "done" && /handshake capturado/i.test(e.message))
+      || entries.find((e) => /¡Handshake capturado!|handshake capturado/i.test(e.message));
+    let banner = document.getElementById("wd-progress-captured-banner");
+    if (capEntry && !banner) {
+      banner = document.createElement("div");
+      banner.id = "wd-progress-captured-banner";
+      banner.className = "wd-captured-banner";
+      banner.innerHTML = `<span class="wd-captured-text">HANDSHAKE CAPTURADO</span>
+        <span class="wd-captured-file">${escapeHtml(String(capEntry.output || "").split("/").pop() || "handshake")}</span>`;
+      wdProgressTitle.insertAdjacentElement("afterend", banner);
+    }
+
+    // The Cancel button only makes sense while the attack is actually
+    // running — hide it as soon as the target leaves "running".
+    const sessTarget = wdStatus?.session?.targets?.find((t) => t.bssid === bssid);
+    const stillRunning = sessTarget ? sessTarget.status === "running" : latest.step !== "done";
+    wdCancelBtn.classList.toggle("hidden", !stillRunning);
 
     // Render log: full history, with the command each step runs highlighted
     // and its raw output below it. The backend keeps appending to the same
@@ -2334,6 +2499,46 @@ wdTableBody.addEventListener("click", async (ev) => {
   }
   void wdRefresh();
 });
+
+// Row click → network info modal (same detail card the radar uses).
+wdTableBody.addEventListener("click", (ev) => {
+  const tr = ev.target.closest("tr[data-bssid]");
+  if (!tr) return;
+  if (ev.target.closest(".wd-audit-btn")) return; // the button has its own handler
+  openWdNetInfoModal(tr.dataset);
+});
+
+function openWdNetInfoModal(d) {
+  const set = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+  };
+  document.getElementById("wd-netinfo-title").textContent = d.ssid || "(oculta)";
+  set("wdni-bssid", d.bssid);
+  set("wdni-vendor", d.vendor || "—");
+  set("wdni-security", SECURITY_LABELS[d.security] || d.security || "—");
+  set("wdni-channel", d.channel);
+  set("wdni-rssi", `${d.rssi} dBm`);
+  const dist = estimateDistanceMeters(Number(d.rssi));
+  set("wdni-distance", dist < 1 ? "<1 m" : dist < 50 ? `~${dist.toFixed(1)} m` : "~50+ m");
+  document.getElementById("wd-netinfo-modal").classList.remove("hidden");
+}
+
+// Shared with the radar: security enum → plain-language label.
+const SECURITY_LABELS = {
+  OPEN: "Red abierta (sin cifrado)",
+  WEP: "WEP — cifrado obsoleto, rompible",
+  WPA: "WPA (TKIP) — deprecated",
+  "WPA2/3": "WPA2/WPA3 (RSN) — cifrado moderno",
+  UNKNOWN: "Desconocido",
+};
+
+// RSSI→distance (same model as the radar and wardrive/discovery.ts).
+const RSSI_AT_1M_DBM = -40;
+const PATH_LOSS_EXPONENT = 2.7;
+function estimateDistanceMeters(dbm) {
+  return Math.pow(10, (RSSI_AT_1M_DBM - dbm) / (10 * PATH_LOSS_EXPONENT));
+}
 
 wdEnterBtn.addEventListener("click", async () => {
   wdError.textContent = "";

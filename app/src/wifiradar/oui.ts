@@ -58,3 +58,24 @@ export function lookupVendor(mac: string): string {
   const prefix = mac.toUpperCase().slice(0, 8);
   return OUI_TABLE[prefix] || "Desconocido";
 }
+
+// Locally-administered MAC → the second-least-significant bit of the first
+// octet set. Apple/Android/Windows randomize probe frames this way; when
+// set, an OUI lookup is meaningless (the prefix was random) — callers should
+// label the device "Random MAC" instead of showing a vendor that isn't real.
+export function isRandomizedMac(mac: string): boolean {
+  const first = parseInt(mac.split(":")[0] || "", 16);
+  if (Number.isNaN(first)) return false;
+  return Boolean(first & 0b10);
+}
+
+// Vendor label with randomization awareness: real OUI vendor, or the
+// "Random MAC" marker when the locally-administered bit is set (and the OUI
+// then says nothing useful about who made the device).
+export function lookupVendorOrRandom(mac: string): { vendor: string; random: boolean } {
+  if (isRandomizedMac(mac)) {
+    const vendor = lookupVendor(mac);
+    return { vendor: vendor !== "Desconocido" ? `${vendor} (Random MAC)` : "Random MAC", random: true };
+  }
+  return { vendor: lookupVendor(mac), random: false };
+}

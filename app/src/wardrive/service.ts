@@ -91,6 +91,12 @@ export class WardriveService extends EventEmitter {
   // The password that was last tried against each target (only in memory,
   // but also written to the per-target info.txt for the lab record).
   private lastValidatedPassword = new Map<string, string>();
+  // Active password validations (crackCheck handles) so the Cancel button
+  // can kill aircrack mid-run.
+  private activeValidation = new Map<string, () => void>();
+  // Passwords that actually cracked a handshake (only on verified match) —
+  // in-memory for the session, exposed to the UI behind a masked eye toggle.
+  private foundPasswords = new Map<string, { password: string; ssid: string }>();
   // Dictionary crack (rockyou) per target: at most ONE running at a time —
   // the Pi's CPU is precious and a second aircrack would just fight for it.
   private dictCrack: DictCrack | null = null;
@@ -125,6 +131,9 @@ export class WardriveService extends EventEmitter {
       const st = this.dictCrack?.getState();
       if (st?.result?.matched) {
         this.verified.set(bssid, st.result);
+        // The winning password is in aircrack's "KEY FOUND! [ ... ]" output.
+        const m = /KEY FOUND!\s*\[\s*(.*?)\s*\]/.exec(st.result.output || "");
+        if (m) this.foundPasswords.set(bssid, { password: m[1], ssid: this.targetMeta.get(bssid)?.ssid || "" });
         this.appendLog(bssid, "[dict] KEY FOUND — handshake validado con diccionario");
       } else {
         this.appendLog(bssid, `[dict] terminado: ${st?.result?.verdict} (${st?.progress.tried || 0} contraseñas)`);
@@ -867,10 +876,18 @@ export class WardriveService extends EventEmitter {
     if (!capPath) return;
     this.progress(bssid, "done", "Validando handshake con la contraseña del lab...",
       "aircrack-ng -w - -b " + bssid + " <prefix>-01.cap   (contraseña por stdin)");
-    const result = await crackCheck(capPath, password, bssid);
+    const { promise, cancel } = crackCheck(capPath, password, bssid);
+    this.activeValidation.set(bssid, cancel);
+    const result = await promise;
+    this.activeValidation.delete(bssid);
     this.verified.set(bssid, result);
     this.lastValidatedPassword.set(bssid, result.matched ? password : `${password} (no matchea)`);
-    this.appendLog(bssid, `[validate] aircrack verdict=${result.verdict}`);
+    if (result.matched) this.foundPasswords.set(bssid, { password, ssid: this.targetMeta.get(bssid)?.ssid || "" });
+    this.appendLog(bssid, `[validate] aircrack verdict=${result.verdict}${result.cancelled ? " (cancelado)" : ""}`);
+    if (result.cancelled) {
+      this.progress(bssid, "done", "Validación cancelada por el usuario");
+      return;
+    }
     if (result.matched) {
       this.progress(bssid, "done", "✓ Handshake VALIDADO — contraseña correcta (KEY FOUND)",
         undefined, result.output.slice(-600));
@@ -948,13 +965,38 @@ export class WardriveService extends EventEmitter {
       return { ok: false, error: "El objetivo capturado no tiene archivo .cap/.pcapng" };
     }
     this.appendLog(bssid, "[validate] aircrack-ng check with operator-provided password");
-    const result = await crackCheck(capPath, password, bssid);
+    const { promise, cancel } = crackCheck(capPath, password, bssid);
+    this.activeValidation.set(bssid, cancel);
+    const result = await promise;
+    this.activeValidation.delete(bssid);
     this.verified.set(bssid, result);
     this.lastValidatedPassword.set(bssid, result.matched ? password : `${password} (no matchea)`);
-    this.appendLog(bssid, `[validate] verdict=${result.verdict}`);
+    if (result.matched) this.foundPasswords.set(bssid, { password, ssid: target.ssid });
+    this.appendLog(bssid, `[validate] verdict=${result.verdict}${result.cancelled ? " (cancelado)" : ""}`);
     this.session.writeTargetInfo(bssid, this.lastValidatedPassword.get(bssid));
     this.broadcastStatus();
     return { ok: true, result };
+  }
+
+  // The password that cracked this target's handshake (🔑 icon in the UI).
+  // Session-scoped, in-memory only; null when none was found.
+  getFoundPassword(bssidRaw: string): { ok: boolean; error?: string; password?: string; ssid?: string } {
+    const bssid = WardriveService.clean(bssidRaw);
+    if (!bssid) return { ok: false, error: "BSSID inválido" };
+    const found = this.foundPasswords.get(bssid);
+    if (!found) return { ok: false, error: "Sin contraseña registrada para ese objetivo" };
+    return { ok: true, password: found.password, ssid: found.ssid };
+  }
+
+  // Cancel an in-flight password validation for one target (Cancel button).
+  cancelValidation(bssidRaw: string): { ok: boolean } {
+    const bssid = WardriveService.clean(bssidRaw);
+    const cancel = this.activeValidation.get(bssid);
+    if (cancel) {
+      cancel();
+      return { ok: true };
+    }
+    return { ok: true };
   }
 
   private stopRunners(): void {
@@ -967,7 +1009,9 @@ export class WardriveService extends EventEmitter {
     }
     this.deauthRunnerByMac.clear();
     // A dictionary crack must not outlive the session/exit — aircrack on a
-    // deleted .cap is wasted CPU.
+    // deleted .cap is wasted CPU. Same for in-flight password validations.
+    for (const [, cancel] of this.activeValidation) cancel();
+    this.activeValidation.clear();
     this.dictCrack?.stop();
     this.dictCrack = null;
     this.dictCrackBssid = null;

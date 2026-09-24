@@ -188,17 +188,20 @@
         <button id="wd-pause-btn" class="secondary hidden">Pausar</button>
         <button id="wd-cancel-btn" class="wd-danger hidden">Cancelar ataque</button>
         <span id="wd-attack-status" class="muted"></span>
+        <input id="wd-search" type="search" placeholder="Buscar red (SSID, BSSID, canal...)" autocomplete="off"
+               style="margin-left: auto; width: 220px; font-size: 12px; padding: 6px 10px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary);" />
+        <button id="wd-filters-reset" class="secondary" title="Limpiar búsqueda y orden">Borrar filtros</button>
       </div>
 
       <div class="wd-list-wrap">
         <table class="wd-table">
           <thead>
             <tr>
-              <th>Red</th>
-              <th>Canal</th>
-              <th>Señal</th>
-              <th>Clientes</th>
-              <th>Seguridad</th>
+              <th data-sort="ssid" data-label="Red">Red</th>
+              <th data-sort="channel" data-label="Canal">Canal</th>
+              <th data-sort="rssi" data-label="Señal">Señal</th>
+              <th data-sort="clients" data-label="Clientes">Clientes</th>
+              <th data-sort="security" data-label="Seguridad">Seguridad</th>
               <th>Estado</th>
               <th>Acción</th>
             </tr>
@@ -291,6 +294,47 @@
               capturas, hashes, logs e info. Esta acción no se puede deshacer.
             </p>
             <button id="wd-deletesession-confirm" class="wd-danger" style="width: 100%;">Borrar sesión</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Found password modal (🔑 icon): masked value, eye reveals. -->
+      <div id="wd-pwd-modal" class="wd-modal hidden">
+        <div class="wd-modal-backdrop" onclick="document.getElementById('wd-pwd-modal').classList.add('hidden')"></div>
+        <div class="wd-modal-content" style="max-width: 380px;">
+          <div class="wd-modal-header">
+            <span>Contraseña encontrada — <span id="wd-pwd-ssid">—</span></span>
+            <div class="wd-modal-actions">
+              <button id="wd-pwd-close" class="secondary">Cerrar</button>
+            </div>
+          </div>
+          <div style="padding: 18px 20px; display: flex; align-items: center; gap: 10px;">
+            <span id="wd-pwd-value" style="flex: 1; font-family: ui-monospace, monospace; font-size: 15px; letter-spacing: 0.06em; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px;">—</span>
+            <button id="wd-pwd-eye" class="secondary" style="font-size: 16px; min-width: 40px;">🙈</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Network info modal (row click): same detail card the radar uses. -->
+      <div id="wd-netinfo-modal" class="wd-modal hidden">
+        <div class="wd-modal-backdrop" onclick="document.getElementById('wd-netinfo-modal').classList.add('hidden')"></div>
+        <div class="wd-modal-content" style="max-width: 480px;">
+          <div class="wd-modal-header">
+            <span id="wd-netinfo-title">Red</span>
+            <div class="wd-modal-actions">
+              <button class="secondary" onclick="document.getElementById('wd-netinfo-modal').classList.add('hidden')">Cerrar</button>
+            </div>
+          </div>
+          <div style="padding: 16px 20px;">
+            <div class="apm-grid">
+              <div class="apm-row"><span>MAC Address (BSSID)</span><span id="wdni-bssid">—</span></div>
+              <div class="apm-row"><span>Marca / fabricante</span><span id="wdni-vendor">—</span></div>
+              <div class="apm-row"><span>Seguridad</span><span id="wdni-security">—</span></div>
+              <div class="apm-row"><span>Canal</span><span id="wdni-channel">—</span></div>
+              <div class="apm-row"><span>Potencia (RSSI)</span><span id="wdni-rssi">—</span></div>
+              <div class="apm-row"><span>Distancia aprox.</span><span id="wdni-distance">—</span></div>
+            </div>
+            <div class="muted" style="font-size: 11px;">Equipos conectados: ver el radar (WIFIRADAR) o la lista de dispositivos de esta sesión.</div>
           </div>
         </div>
       </div>

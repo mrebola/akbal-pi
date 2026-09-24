@@ -1,4 +1,5 @@
 import { getWifiRadarSnapshot } from "../wifiradar/service";
+import { lookupVendorOrRandom } from "../wifiradar/oui";
 import { WardriveTarget } from "./types";
 import { execFile } from "child_process";
 import { promisify } from "util";
@@ -58,6 +59,7 @@ function parseIwScan(output: string): WardriveTarget[] {
     targets.push({
       bssid,
       ssid: ssidMatch ? ssidMatch[1].trim() : "",
+      vendor: lookupVendorOrRandom(bssid).vendor,
       channel: chanMatch ? parseInt(chanMatch[1], 10) : 0,
       rssi,
       security: secMatch ? secMatch[1] : "UNKNOWN",
@@ -85,6 +87,7 @@ function demoTargets(): WardriveTarget[] {
   return snapshot.accessPoints.map((ap) => ({
     bssid: ap.bssidFull.toUpperCase(),
     ssid: ap.ssid,
+    vendor: ap.vendor || lookupVendorOrRandom(ap.bssidFull).vendor,
     channel: ap.channel,
     rssi: ap.rssi,
     security: ap.security,
@@ -105,6 +108,7 @@ export async function discoverTargets(source?: "live" | "demo"): Promise<Wardriv
     return snapshot.accessPoints.map((ap) => ({
       bssid: ap.bssidFull.toUpperCase(),
       ssid: ap.ssid,
+      vendor: ap.vendor || lookupVendorOrRandom(ap.bssidFull).vendor,
       channel: ap.channel,
       rssi: ap.rssi,
       security: ap.security,

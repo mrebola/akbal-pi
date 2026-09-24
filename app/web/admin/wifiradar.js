@@ -512,23 +512,43 @@ function selectNode(id) {
 }
 function deselectNode() {
   selectedId = null;
+  revealMacs = false;
   infoModal.classList.add("hidden");
 }
 
 // ---- Network info modal (click a node → detail card) ----
-// A proper modal with everything known about the network: identity, vendor,
-// signal/distance, security in plain language and the list of connected
-// devices (when the capture has seen them talking). Closable via ✕, the
-// backdrop, or Escape; clicking the same node again re-opens it.
+// Sensitive fields (BSSID, client MACs) render masked ("AA:BB:CC:••:••:••");
+// the eye button next to the close ✕ toggles full reveal. Vendors come from
+// the backend's OUI table with MAC-randomization detection (randomized MACs
+// are labeled "Random MAC" instead of a fake vendor).
 const infoModal = document.getElementById("ap-info-modal");
+let revealMacs = false;
+let infoModalAp = null; // last AP shown (to re-render on eye toggle)
+
+function maskMac(mac) {
+  // Already-anonymized strings pass through; full MACs get masked unless
+  // the eye is on.
+  if (revealMacs || !mac || mac.includes("••")) return mac;
+  const parts = mac.split(":");
+  if (parts.length !== 6) return mac;
+  return `${parts[0]}:${parts[1]}:${parts[2]}:••:••:••`;
+}
 
 function openApInfoModal(ap) {
+  infoModalAp = ap;
+  renderApInfoModal();
+  infoModal.classList.remove("hidden");
+}
+
+function renderApInfoModal() {
+  const ap = infoModalAp;
+  if (!ap) return;
   const set = (id, value) => {
     const el = document.getElementById(id);
     if (el) el.textContent = value;
   };
   set("apm-ssid", ap.ssid || "(oculta)");
-  set("apm-bssid", ap.bssid);
+  set("apm-bssid", maskMac(ap.bssidFull || ap.bssid));
   set("apm-vendor", ap.vendor || "—");
   set("apm-rssi", `${ap.rssi} dBm`);
   const dist = estimateDistanceMeters(ap.rssi);
@@ -538,6 +558,8 @@ function openApInfoModal(ap) {
   set("apm-first", new Date(ap.firstSeen).toLocaleTimeString());
   set("apm-last", new Date(ap.lastSeen).toLocaleTimeString());
   set("apm-frames", String(ap.frames));
+  // Devices list: vendor label already carries the "Random MAC" marker from
+  // the backend's OUI + locally-administered-bit check.
   const devices = (latestSnapshot?.devices || []).filter((d) => d.associatedBssid === ap.bssid);
   const devList = document.getElementById("apm-devices");
   if (devList) {
@@ -545,15 +567,24 @@ function openApInfoModal(ap) {
       ? '<div class="apm-devices-empty">Ningún equipo visto hablando con esta red (aparece cuando la captura ve tráfico de un cliente asociado).</div>'
       : devices
           .map((d) => `<div class="apm-device">
-              <span class="apm-dev-mac">${escapeHtml(d.mac)}</span>
+              <span class="apm-dev-mac">${escapeHtml(revealMacs ? (d.macFull || d.mac) : d.mac)}</span>
               <span class="apm-dev-vendor">${escapeHtml(d.vendor || "?")}</span>
               <span class="apm-dev-rssi">${d.rssi} dBm</span>
             </div>`)
           .join("");
   }
-  infoModal.classList.remove("hidden");
+  // Eye reflects state.
+  const eye = document.getElementById("ap-info-eye");
+  if (eye) eye.textContent = revealMacs ? "👁" : "🙈";
+  if (eye) eye.title = revealMacs ? "Ocultar datos sensibles" : "Mostrar datos completos (MAC reales)";
 }
 
+function toggleRevealMacs() {
+  revealMacs = !revealMacs;
+  renderApInfoModal();
+}
+
+document.getElementById("ap-info-eye")?.addEventListener("click", toggleRevealMacs);
 document.getElementById("ap-info-close")?.addEventListener("click", deselectNode);
 document.querySelector("#ap-info-modal .apm-backdrop")?.addEventListener("click", deselectNode);
 window.addEventListener("keydown", (e) => {
@@ -898,7 +929,10 @@ let ws = null;
 let reconnectDelay = 1000;
 function connectWs() {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  ws = new WebSocket(`${proto}//${location.host}/wifiradar/ws`);
+  // fullMac=1: the info modal has a reveal-MAC eye toggle, so the session
+  // (cookie-authenticated, same as the admin) receives the uncensored MACs;
+  // they stay masked in the UI until the eye is toggled.
+  ws = new WebSocket(`${proto}//${location.host}/wifiradar/ws?fullMac=1`);
   ws.addEventListener("open", () => {
     reconnectDelay = 1000;
     wsStatusEl.textContent = "";

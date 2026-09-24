@@ -510,7 +510,7 @@ class RenderThread(threading.Thread):
         this only renders."""
         self.render_top_bar()
 
-        label = "MODO AUDIT WIFI"
+        label = "AUDIT WIFI MODE"
         status_line = current_wardrive_status_text or "..."
         captured = current_wardrive_captured or 0
         total = current_wardrive_total or 0

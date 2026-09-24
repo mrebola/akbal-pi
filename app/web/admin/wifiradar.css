@@ -409,3 +409,14 @@ html, body {
   .as-search { display: none; }
   .apm-card { max-height: calc(100vh - 120px); }
 }
+
+/* Close + eye button group in the info modal */
+.apm-close-group {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 6px;
+}
+
+.apm-close-group .apm-close { position: static; }

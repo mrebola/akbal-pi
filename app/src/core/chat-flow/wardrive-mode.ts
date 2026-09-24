@@ -64,7 +64,8 @@ function paint(status: WardriveStatus): void {
   const current = status.session?.targets.find((t) => t.bssid === status.session?.currentBssid);
   // Brief action lines for the LCD (rendered as the small text under the
   // animation): what the audit is doing right now, plain words. "Handshake
-  // capturado" shows whenever at least one capture exists this session.
+  // capturado" shows the moment a capture lands (capturing AND after).
+  const sessionCaptured = status.session?.targets.some((t) => t.status === "captured") || captured > 0;
   const statusText =
     status.mode === "scanning"
       ? "Revisando tráfico..."
@@ -74,11 +75,11 @@ function paint(status: WardriveStatus): void {
             ? "Realizando deauth..."
             : "Capturando handshake..."
           : "Revisando tráfico..."
-        : status.mode === "ready"
-          ? captured > 0
-            ? "Handshake capturado"
-            : "Modo wardriving activo"
-          : "Modo wardriving activo";
+        : sessionCaptured
+          ? "Handshake capturado"
+          : status.mode === "ready"
+            ? "Audit wifi mode activo"
+            : "Audit wifi mode activo";
   display({
     status: "wardrive",
     emoji: "📡",
@@ -113,7 +114,7 @@ export function startWardriveDisplayMirror(): void {
         wardrive_ui: "",
         wardrive_label: "",
         wardrive_status_text: "",
-        text: "Saliendo del modo wardriving...",
+        text: "Saliendo del modo audit wifi...",
       });
       return;
     }

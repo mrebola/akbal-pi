@@ -30,6 +30,7 @@ export type CrackResult = {
   eapolPackets: number;
   handshakeHint: boolean; // aircrack's "handshake" mention in output
   output: string; // trimmed aircrack output for the UI log
+  cancelled?: boolean; // killed by the user before finishing
 };
 
 function parseAircrackOutput(text: string): { eapol: number; hint: boolean; found: boolean; clean: string } {
@@ -61,41 +62,70 @@ function parseAircrackOutput(text: string): { eapol: number; hint: boolean; foun
 // aircrack failure (missing file, bad cap) maps to verdict="error".
 // bssid disambiguates when a .cap holds several networks (airodump with no
 // --bssid or an hcxdumptool file) — pass the target's BSSID. "" = any AP.
-export async function crackCheck(capPath: string, password: string, bssid = ""): Promise<CrackResult> {
+// Returns a handle so the caller can cancel mid-run (the Cancel button).
+export function crackCheck(capPath: string, password: string, bssid = ""): { promise: Promise<CrackResult>; cancel: () => void } {
   const bssidArgs = bssid ? ["-b", bssid] : [];
   if (!password || !capPath || !fs.existsSync(capPath)) {
-    return { verdict: "error", matched: false, eapolPackets: 0, handshakeHint: false, output: "captura o contraseña vacía" };
-  }
-  try {
-    const { stdout, stderr } = await execFileAsync("aircrack-ng", ["-w", "-", ...bssidArgs, capPath], {
-      timeout: 120_000,
-      maxBuffer: 10 * 1024 * 1024,
-    });
-    const text = `${stdout}\n${stderr}`;
-    const parsed = parseAircrackOutput(text);
     return {
-      verdict: parsed.found ? "verified" : parsed.eapol > 0 ? "handshake_wrong_password" : "no_handshake",
-      matched: parsed.found,
-      eapolPackets: parsed.eapol,
-      handshakeHint: parsed.hint,
-      output: parsed.clean.slice(-4000),
+      promise: Promise.resolve({ verdict: "error", matched: false, eapolPackets: 0, handshakeHint: false, output: "captura o contraseña vacía" }),
+      cancel: () => {},
     };
-  } catch {
-    // execFile can't write the child's stdin (the password list) — run
-    // through spawn, which pipes the password and captures output itself.
-    return crackCheckSpawn(capPath, password, bssid);
   }
+  let child: import("child_process").ChildProcess | null = null;
+  let cancelled = false;
+  const cancel = () => {
+    cancelled = true;
+    if (child) {
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        /* already gone */
+      }
+    }
+  };
+  const promise = (async (): Promise<CrackResult> => {
+    try {
+      const { stdout, stderr } = await execFileAsync("aircrack-ng", ["-w", "-", ...bssidArgs, capPath], {
+        timeout: 120_000,
+        maxBuffer: 10 * 1024 * 1024,
+      });
+      const text = `${stdout}\n${stderr}`;
+      const parsed = parseAircrackOutput(text);
+      return {
+        verdict: parsed.found ? "verified" : parsed.eapol > 0 ? "handshake_wrong_password" : "no_handshake",
+        matched: parsed.found,
+        eapolPackets: parsed.eapol,
+        handshakeHint: parsed.hint,
+        output: parsed.clean.slice(-4000),
+      };
+    } catch {
+      // execFile can't write the child's stdin (the password list) — run
+      // through spawn, which pipes the password and captures output itself.
+      // The cancel() closure above sets `cancelled` directly; killRef routes
+      // it to the spawned aircrack (which only exists once we get here).
+      const result = await crackCheckSpawn(capPath, password, bssid, (c) => (child = c));
+      return result;
+    }
+  })();
+  return { promise, cancel };
 }
 
 // The real implementation: spawn so we can pipe the password to stdin.
-// (execFile cannot write to the child's stdin; the catch above routes here.)
-async function crackCheckSpawn(capPath: string, password: string, bssid = ""): Promise<CrackResult> {
+// (execFile cannot write to the child's stdin; the caller's cancel hook
+// reaches the spawned aircrack through the childRef indirection.)
+async function crackCheckSpawn(
+  capPath: string,
+  password: string,
+  bssid = "",
+  setChild?: (c: import("child_process").ChildProcess) => void,
+): Promise<CrackResult> {
   const { spawn } = await import("child_process");
   const bssidArgs = bssid ? ["-b", bssid] : [];
   return new Promise<CrackResult>((resolve) => {
     const child = spawn("aircrack-ng", ["-w", "-", ...bssidArgs, capPath], {
       stdio: ["pipe", "pipe", "pipe"],
     });
+    setChild?.(child);
     let out = "";
     const done = (result: CrackResult) => {
       try {
@@ -132,8 +162,32 @@ async function crackCheckSpawn(capPath: string, password: string, bssid = ""): P
         output: `aircrack-ng: ${err?.message || err}`,
       });
     });
-    child.on("close", () => {
+    child.on("close", (code) => {
       clearTimeout(timer);
+      if (code === null || code === 137) {
+        // Killed (SIGKILL from our cancel) — report as cancelled, not a
+        // verdict, unless the output already shows a KEY FOUND race.
+        const parsed = parseAircrackOutput(out);
+        if (parsed.found) {
+          done({
+            verdict: "verified",
+            matched: true,
+            eapolPackets: parsed.eapol,
+            handshakeHint: parsed.hint,
+            output: parsed.clean.slice(-4000),
+          });
+          return;
+        }
+        done({
+          verdict: "error",
+          matched: false,
+          eapolPackets: 0,
+          handshakeHint: false,
+          output: "cancelado por el usuario",
+          cancelled: true,
+        });
+        return;
+      }
       const parsed = parseAircrackOutput(out);
       done({
         verdict: parsed.found

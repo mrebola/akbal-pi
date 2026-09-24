@@ -247,10 +247,25 @@
           <div class="wd-session-title" id="wd-session-files-title" style="font-size:12px; margin-top:10px;"></div>
           <table class="wd-table">
             <thead>
-              <tr><th>Archivo</th><th>Tamaño</th><th></th></tr>
+              <tr><th>Archivo</th><th>Tamaño</th><th></th><th></th></tr>
             </thead>
             <tbody id="wd-session-files-body"></tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- Inline file preview: text files render as-is, binaries get a
+           hexdump head + note. -->
+      <div id="wd-preview-modal" class="wd-modal hidden">
+        <div class="wd-modal-backdrop" onclick="document.getElementById('wd-preview-modal').classList.add('hidden')"></div>
+        <div class="wd-modal-content">
+          <div class="wd-modal-header">
+            <span id="wd-preview-title">Archivo</span>
+            <div class="wd-modal-actions">
+              <button id="wd-preview-close" class="secondary">Cerrar</button>
+            </div>
+          </div>
+          <div id="wd-preview-body" class="wd-preview-body"></div>
         </div>
       </div>
     </section>

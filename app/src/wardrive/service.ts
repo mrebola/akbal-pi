@@ -432,7 +432,38 @@ export class WardriveService extends EventEmitter {
     }
     this.broadcastStatus();
     console.log("[wardrive] mode OFF");
+    // Sessions without any captured handshake are not worth keeping —
+    // "save everything that has a handshake, always; nothing that doesn't".
+    this.pruneEmptySessions();
     return { ok: true };
+  }
+
+  // On exit(): delete session folders that contain no capture artifacts
+  // (.cap/.pcapng/.hc22000). Keeps failed probes from piling up on the SD
+  // card while every session with a real handshake is preserved forever.
+  private pruneEmptySessions(): void {
+    const root = path.join(process.env.HOME || "/home/akbal", "wardrive-sessions");
+    let dirs: string[] = [];
+    try {
+      dirs = fs.readdirSync(root).filter((d) => {
+        const full = path.join(root, d);
+        return fs.statSync(full).isDirectory();
+      });
+    } catch {
+      return;
+    }
+    for (const dir of dirs) {
+      const full = path.join(root, dir);
+      try {
+        const hasCapture = fs.readdirSync(full).some((f) => /\.(cap|pcapng|hc22000)$/i.test(f));
+        if (!hasCapture) {
+          fs.rmSync(full, { recursive: true, force: true });
+          console.log(`[wardrive] pruned empty session ${dir} (no handshake)`);
+        }
+      } catch {
+        // never fatal
+      }
+    }
   }
 
   // ─── Attacks ────────────────────────────────────────────────────────────

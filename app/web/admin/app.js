@@ -2015,7 +2015,8 @@ async function wdLoadSessions() {
     if (!list) return;
     const sessions = data.sessions || [];
     if (sessions.length === 0) {
-      list.innerHTML = '<div class="muted">Sin sesiones aún. Cada auditoría crea una carpeta con fecha.</div>';
+      list.innerHTML = '<div class="muted">Sin sesiones aún. Cada auditoría con handshake crea una carpeta con fecha.</div>';
+      wdSessionsDeleteAllBtn.classList.add("hidden");
       return;
     }
     list.innerHTML = sessions
@@ -2029,19 +2030,20 @@ async function wdLoadSessions() {
             <span class="wd-session-date">${s.id}</span>
             <span class="wd-session-meta">${s.captured} handshake(s) · ${escapeHtml(nets || "sin objetivos")}</span>
           </div>
-          <button class="wd-session-open" data-id="${s.id}">Ver archivos</button>
+          <div class="wd-session-actions">
+            <button class="wd-session-open" data-id="${s.id}">Ver archivos</button>
+            <button class="wd-session-del" data-id="${s.id}" title="Borrar esta sesión">🗑</button>
+          </div>
         </div>`;
       })
       .join("");
+    wdSessionsDeleteAllBtn.classList.toggle("hidden", sessions.length === 0);
   } catch { /* non-fatal */ }
 }
 
-document.getElementById("wd-sessions-list")?.addEventListener("click", async (ev) => {
-  const btn = ev.target.closest(".wd-session-open");
-  if (!btn) return;
-  const id = btn.dataset.id;
-  await wdOpenSessionFiles(id);
-});
+// Session file viewer: inline preview (text files render, binaries get a
+// hexdump head) + download. Kept open until "Cerrar".
+let wdOpenSessionId = null;
 
 async function wdOpenSessionFiles(id) {
   const filesBlock = document.getElementById("wd-session-files");
@@ -2052,6 +2054,7 @@ async function wdOpenSessionFiles(id) {
     const res = await fetch(`/api/wardrive/files?path=${encodeURIComponent(id)}`);
     if (!res.ok) return;
     const data = await res.json();
+    wdOpenSessionId = id;
     filesTitle.textContent = `Sesión ${id}`;
     filesBody.innerHTML = data.items
       .map((it) => {
@@ -2060,6 +2063,7 @@ async function wdOpenSessionFiles(id) {
         return `<tr>
           <td>${escapeHtml(it.name)}</td>
           <td>${size}</td>
+          <td><button class="wd-preview-btn" data-path="${escapeHtml(it.path)}" data-name="${escapeHtml(it.name)}">Ver</button></td>
           <td><a href="${dl}" download="${escapeHtml(it.name)}"><button class="wd-download-btn">Bajar</button></a></td>
         </tr>`;
       })
@@ -2067,6 +2071,79 @@ async function wdOpenSessionFiles(id) {
     filesBlock.classList.remove("hidden");
   } catch { /* non-fatal */ }
 }
+
+// Inline preview modal (shared, minimal): text shows as-is, binary shows a
+// hexdump of its head + a note explaining what it is.
+function wdShowPreview(name, data) {
+  const modal = document.getElementById("wd-preview-modal");
+  const title = document.getElementById("wd-preview-title");
+  const body = document.getElementById("wd-preview-body");
+  if (!modal || !title || !body) return;
+  title.textContent = name;
+  let html = "";
+  if (data.note) html += `<div class="wd-preview-note">${escapeHtml(data.note)}</div>`;
+  html += `<pre class="wd-preview-content">${escapeHtml(data.content)}</pre>`;
+  body.innerHTML = html;
+  modal.classList.remove("hidden");
+}
+
+document.getElementById("wd-session-files-body")?.addEventListener("click", async (ev) => {
+  const btn = ev.target.closest(".wd-preview-btn");
+  if (!btn) return;
+  try {
+    const res = await fetch(`/api/wardrive/files/preview?path=${encodeURIComponent(btn.dataset.path)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    wdShowPreview(btn.dataset.name, data);
+  } catch { /* non-fatal */ }
+});
+
+document.getElementById("wd-preview-close")?.addEventListener("click", () => {
+  document.getElementById("wd-preview-modal")?.classList.add("hidden");
+});
+
+// Delete: per-session (confirm dialog) or all (type-to-confirm dialog).
+const wdSessionsDeleteAllBtn = document.createElement("button");
+wdSessionsDeleteAllBtn.id = "wd-sessions-delete-all";
+wdSessionsDeleteAllBtn.className = "wd-session-del-all secondary hidden";
+wdSessionsDeleteAllBtn.textContent = "Borrar todas";
+document.getElementById("wd-sessions-block")?.insertBefore(wdSessionsDeleteAllBtn, document.getElementById("wd-sessions-list"));
+
+document.getElementById("wd-sessions-list")?.addEventListener("click", async (ev) => {
+  const openBtn = ev.target.closest(".wd-session-open");
+  const delBtn = ev.target.closest(".wd-session-del");
+  if (openBtn) {
+    await wdOpenSessionFiles(openBtn.dataset.id);
+    return;
+  }
+  if (delBtn) {
+    const id = delBtn.dataset.id;
+    if (!window.confirm(`¿Borrar la sesión ${id}? Se eliminan todos sus archivos (capturas, hashes, logs).`)) return;
+    const res = await apiFetch("/api/wardrive/sessions/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    const data = await res.json();
+    if (data?.error) wdError.textContent = data.error;
+    void wdLoadSessions();
+  }
+});
+
+wdSessionsDeleteAllBtn.addEventListener("click", () => {
+  const answer = prompt("Esto BORRA TODAS las sesiones y sus handshakes en el dispositivo. Escribe DELETE ALL para confirmar:");
+  if (answer !== "DELETE ALL") return;
+  void (async () => {
+    const res = await apiFetch("/api/wardrive/sessions/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: "ALL", confirm: "DELETE ALL" }),
+    });
+    const data = await res.json();
+    if (data?.error) wdError.textContent = data.error;
+    void wdLoadSessions();
+  })();
+});
 
 // Refresh sessions list while the wardrive tab is active (same 2s timer
 // as the targets table — cheap local read).

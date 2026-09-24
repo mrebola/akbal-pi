@@ -1114,6 +1114,110 @@ export class WebAdminServer {
       ctx.body = fs.createReadStream(resolved);
     });
 
+    // Inline preview: text files (info/log/progress) render as-is, binary
+    // captures get a human-readable summary + a hexdump-style head so the
+    // user can confirm what a file is before downloading it. Same path
+    // traversal rules as /files.
+    router.get("/api/wardrive/files/preview", (ctx) => {
+      const relativePath = String(ctx.query.path || "");
+      const resolved = wardrive.resolveSessionPath(relativePath);
+      if (!resolved || !fs.statSync(resolved).isFile()) {
+        ctx.status = 404;
+        ctx.body = { ok: false, error: "No encontrado" };
+        return;
+      }
+      const name = path.basename(resolved);
+      if (/\.(txt|json|jsonl|csv|log)$/i.test(name)) {
+        // Text: read up to 64KB — enough for any info/log excerpt.
+        const text = fs.readFileSync(resolved, "utf8").slice(0, 64 * 1024);
+        ctx.body = { ok: true, kind: "text", name, content: text };
+        return;
+      }
+      if (/\.hc22000$/i.test(name)) {
+        // Hash lines are printable text too — show them (they're the point
+        // of the file) with a warning about what they are.
+        const text = fs.readFileSync(resolved, "utf8").slice(0, 16 * 1024);
+        ctx.body = { ok: true, kind: "text", name, content: text, note: "hash WPA (hashcat -m 22000) — crack offline aparte" };
+        return;
+      }
+      // Binary (.cap/.pcapng): hexdump the first 4KB + file size summary.
+      const stat = fs.statSync(resolved);
+      const head = fs.readFileSync(resolved).subarray(0, 4096);
+      const lines: string[] = [];
+      for (let i = 0; i < head.length; i += 16) {
+        const chunk = head.subarray(i, i + 16);
+        const hex = [...chunk].map((b) => b.toString(16).padStart(2, "0")).join(" ");
+        const ascii = [...chunk].map((b) => (b >= 32 && b < 127 ? String.fromCharCode(b) : ".")).join("");
+        lines.push(`${i.toString(16).padStart(8, "0")}  ${hex.padEnd(47)}  ${ascii}`);
+      }
+      ctx.body = {
+        ok: true,
+        kind: "binary",
+        name,
+        size: stat.size,
+        content: lines.join("\n"),
+        note: "captura binaria — vista parcial (primeros 4KB). Descargá el archivo para analizarlo.",
+      };
+    });
+
+    // Delete one session folder (or all of them). The UI must confirm —
+    // "all" is only honored when the body carries confirm:"DELETE ALL",
+    // a literal type-to-confirm string, so a stray click can't wipe
+    // every handshake on the device.
+    router.post("/api/wardrive/sessions/delete", (ctx) => {
+      const { id } = (ctx.request.body as any) || {};
+      const confirm = String(((ctx.request.body as any) || {}).confirm || "");
+      const sessionsRoot = path.join(process.env.HOME || "/home/akbal", "wardrive-sessions");
+      if (id === "ALL") {
+        if (confirm !== "DELETE ALL") {
+          ctx.body = { ok: false, error: "confirmación requerida: confirm='DELETE ALL'" };
+          return;
+        }
+        if (wardrive.getStatus().mode !== "inactive") {
+          ctx.body = { ok: false, error: "Salí del modo wardriving antes de borrar sesiones" };
+          return;
+        }
+        let n = 0;
+        try {
+          for (const d of fs.readdirSync(sessionsRoot)) {
+            const full = path.join(sessionsRoot, d);
+            if (fs.statSync(full).isDirectory()) {
+              fs.rmSync(full, { recursive: true, force: true });
+              n++;
+            }
+          }
+        } catch (err: any) {
+          ctx.body = { ok: false, error: err?.message || String(err) };
+          return;
+        }
+        ctx.body = { ok: true, deleted: n };
+        return;
+      }
+      const cleaned = String(id || "").trim();
+      if (!/^20\d{6}-\d{6}$/.test(cleaned)) {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "id de sesión inválido" };
+        return;
+      }
+      if (wardrive.getStatus().mode !== "inactive") {
+        ctx.body = { ok: false, error: "Salí del modo wardriving antes de borrar la sesión" };
+        return;
+      }
+      const full = path.join(sessionsRoot, cleaned);
+      const resolvedReal = fs.existsSync(full) ? fs.realpathSync(full) : "";
+      if (!resolvedReal || !resolvedReal.startsWith(fs.realpathSync(sessionsRoot) + path.sep)) {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "Sesión no encontrada" };
+        return;
+      }
+      try {
+        fs.rmSync(resolvedReal, { recursive: true, force: true });
+        ctx.body = { ok: true };
+      } catch (err: any) {
+        ctx.body = { ok: false, error: err?.message || String(err) };
+      }
+    });
+
     router.post("/api/wardrive/files/delete", (ctx) => {
       const { path: relativePath } = (ctx.request.body as any) || {};
       const resolved = wardrive.resolveSessionPath(String(relativePath || ""));

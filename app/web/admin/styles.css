@@ -994,6 +994,77 @@ button.secondary {
 
 .wd-session-open:hover { background: rgba(255, 152, 0, 0.1); }
 
+.wd-session-actions { display: flex; gap: 6px; align-items: center; }
+
+.wd-session-del {
+  font-size: 13px;
+  padding: 5px 9px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+
+.wd-session-del:hover { color: #ef4444; border-color: #ef4444; }
+
+.wd-session-del-all {
+  font-size: 12px;
+  padding: 5px 12px;
+  margin-bottom: 8px;
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  border-radius: 6px;
+  cursor: pointer;
+  background: transparent;
+}
+
+.wd-session-del-all:hover { background: rgba(239, 68, 68, 0.1); }
+
+.wd-preview-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.wd-preview-btn:hover { background: rgba(255, 152, 0, 0.1); }
+
+.wd-preview-body {
+  padding: 12px 16px;
+  overflow: auto;
+  max-height: 70vh;
+}
+
+.wd-preview-note {
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-bottom: 10px;
+}
+
+.wd-preview-content {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 55vh;
+  overflow: auto;
+  margin: 0;
+}
+
 .wd-sessions-files { margin-top: 8px; }
 .wd-sessions-files table { font-size: 12px; }
 .wd-sessions-files td, .wd-sessions-files th { padding: 6px 8px; }

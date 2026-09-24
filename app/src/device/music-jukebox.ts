@@ -269,6 +269,26 @@ class Jukebox {
       loop: this.loop,
     };
   }
+
+  // Lyrics: a track's lyrics live in a sibling .txt with the same base name
+  // ("01 - Zero or One.mp3" -> "01 - Zero or One.txt", deployed alongside
+  // the mp3s in the library dir). Plain text, sections like [Verse]/[Chorus]
+  // kept as-is for a simple scrollable reader. null = no lyrics file.
+  getLyrics(trackIndex: number): string | null {
+    const tracks = this.getTracks();
+    const track = tracks[trackIndex];
+    if (!track) return null;
+    const txtPath = track.file.replace(/\.[^.]+$/, ".txt");
+    try {
+      const raw = fs.readFileSync(txtPath, "utf8");
+      // Trim the "Lyrics <title>" header line some docs carry, and collapse
+      // runs of >2 blank lines (docx artifacts) without touching the text.
+      const lines = raw.split("\n").filter((l) => !/^lyrics\b/i.test(l.trim()));
+      return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+    } catch {
+      return null;
+    }
+  }
 }
 
 export const jukebox = new Jukebox();

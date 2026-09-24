@@ -2451,6 +2451,7 @@ const mpVisual = document.getElementById("mp-visual");
 const mpSeek = document.getElementById("mp-seek");
 const mpSeekKnob = document.getElementById("mp-seek-knob");
 let musicDurationMs = 0;
+let lastMusicStatus = null;
 
 let musicPollTimer = null;
 let musicTracksLoaded = false;
@@ -2500,6 +2501,7 @@ async function loadMusicTracks() {
 
 function renderMusicStatus(s) {
   if (!mpTitle) return;
+  lastMusicStatus = s;
   const stateClass = !s.playing ? "stopped" : s.paused ? "paused" : "playing";
   if (mpVisual) mpVisual.className = `mx-visual ${stateClass}`;
   musicDurationMs = s.durationMs || 0;
@@ -2519,6 +2521,7 @@ function renderMusicStatus(s) {
   for (const li of mpList ? mpList.querySelectorAll("li[data-index]") : []) {
     li.classList.toggle("active", s.playing && Number(li.dataset.index) === s.index);
   }
+  syncLyrics(s.positionMs);
 }
 
 async function pollMusicStatus() {
@@ -2527,6 +2530,60 @@ async function pollMusicStatus() {
     renderMusicStatus(await res.json());
   } catch {
     /* ignore */
+  }
+}
+
+// ---- Lyrics (letra sincronizada con la pista en reproducción) ----
+
+let mpLyricsForIndex = -2; // -2 = not loaded yet, -1 = no track
+
+async function loadLyricsFor(index) {
+  const panel = document.getElementById("mp-lyrics");
+  if (!panel) return;
+  if (index === mpLyricsForIndex) return; // already showing this track
+  mpLyricsForIndex = index;
+  if (index < 0) {
+    panel.innerHTML = '<div class="mp-lyrics-hint">Reproduce una pista para ver su letra.</div>';
+    return;
+  }
+  try {
+    const res = await apiFetch(`/api/music/lyrics?index=${encodeURIComponent(index)}`);
+    const data = await res.json();
+    if (data.ok && data.lyrics) {
+      panel.innerHTML = data.lyrics
+        .split("\n")
+        .map((l) => {
+          const section = /^\[(.+)\]\s*$/.exec(l.trim());
+          if (section) return `<div class="mp-lyrics-section">${escapeHtml(section[1])}</div>`;
+          return l.trim() === "" ? '<div class="mp-lyrics-gap"></div>' : `<div class="mp-lyrics-line">${escapeHtml(l)}</div>`;
+        })
+        .join("");
+    } else {
+      panel.innerHTML = '<div class="mp-lyrics-hint">Esta pista no tiene letra disponible.</div>';
+    }
+  } catch {
+    panel.innerHTML = '<div class="mp-lyrics-hint">No se pudo cargar la letra.</div>';
+  }
+}
+
+// Keep the lyrics panel in sync with the player: reload when the track
+// changes, and follow the playing position (scroll the text slowly so the
+// current verse stays visible — a plain proportional scroll, good enough
+// for following along without timestamps).
+function syncLyrics(positionMs) {
+  const panel = document.getElementById("mp-lyrics");
+  if (!panel) return;
+  const status = lastMusicStatus;
+  if (!status) return;
+  void loadLyricsFor(status.playing || status.paused ? status.index : -1);
+  if (status.durationMs > 0 && panel.scrollHeight > panel.clientHeight) {
+    const frac = Math.max(0, Math.min(1, positionMs / status.durationMs));
+    const target = frac * (panel.scrollHeight - panel.clientHeight);
+    // Only scroll forward in small steps — avoid fighting the user's own
+    // scrolling while they read.
+    if (panel.scrollTop < target - 12) {
+      panel.scrollTop += Math.min(3, target - panel.scrollTop);
+    }
   }
 }
 

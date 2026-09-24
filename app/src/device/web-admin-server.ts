@@ -511,6 +511,13 @@ export class WebAdminServer {
     router.post("/api/music/prev", async (ctx) => {
       ctx.body = await jukebox.prev();
     });
+    // Lyrics for one track (by playlist index): plain text from the sibling
+    // .txt in the library dir. {ok:false} when the track has no lyrics.
+    router.get("/api/music/lyrics", async (ctx) => {
+      const index = Number(ctx.query.index);
+      const lyrics = jukebox.getLyrics(Number.isFinite(index) ? index : -1);
+      ctx.body = { ok: lyrics !== null, index, lyrics };
+    });
 
     // ---- Unified file manager (internal storage + USB) ----
     router.get("/api/storage/roots", async (ctx) => {

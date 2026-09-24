@@ -102,3 +102,30 @@ beacons: `SecurityKind = "WEP"` en app/src/wifiradar/types.ts).
   actualizar la tabla de arriba.
 - Reset de fábrica del AP (botón ~10s) lo devuelve a defaults y borra esta
   config — repetir el proceso de "Cómo configurar el AP" de arriba.
+
+## Hallazgos probados (24/09/2026, RT5372 + TL-WA730RE)
+
+Pipeline end-to-end **validado** contra `akbal_lab` (WPA2-PSK, contraseña
+conocida):
+
+1. `airodump-ng` (canal fijo 1, `.cap`) + `aireplay-ng --deauth` dirigida al
+   cliente de prueba → **4-way handshake M1-M4 completo capturado** y
+   verificado con aircrack: `KEY FOUND! [ <contraseña-del-lab> ]`.
+2. El cliente de prueba (celular) tarda varios segundos en reconectar tras
+   la deauth — la ventana `DEAUTH_SETTLE_MS=12s` alcanza pero conviene
+   cliente con reconexión rápida; tras deauths masivos el celular entra en
+   cooldown y hay que reconectarlo manualmente al SSID.
+3. `hcxdumptool` **no funciona contra este AP**: rechaza sus associations
+   (0 handshakes de `akbal_lab`, aunque sí captura de redes vecinas) y con
+   `-c 1b` no recibe ni beacons (bug/quirk del driver rt2800usb con canal
+   fijo — sin `-c` sí captura). Conclusión: para este AP el pipeline
+   clásico airodump+aireplay es el único que funciona; el runner hcx
+   (`PmkidRunner`) quedó para otros APs.
+4. hcxpcapngtool 6.3.5 imprime "EAPOL **pairs** written to 22000 hash
+   file...: N" (no "EAPOL packets") — el parser del backend matchea ambos
+   formatos (session.ts).
+5. aircrack-ng (Debian arm64) lee `.cap`/`.pcap` pero **no** `.pcapng`:
+   mantener la captura en formato cap de airodump para poder validar.
+6. La validación automática con `WARDRIVE_LAB_PASSWORD` en `.env` del
+   dispositivo verifica cada captura al momento (`aircrack verdict=verified`
+   en el log del target).

@@ -937,6 +937,14 @@ export class WebAdminServer {
       ctx.body = wardrive.cancelAttacks();
     });
 
+    // Handshake validation (v2 lab workflow): run aircrack-ng against the
+    // captured .cap with the operator-provided password (stdin, never
+    // stored). Proves the handshake is complete, not just EAPOL present.
+    router.post("/api/wardrive/validate", async (ctx) => {
+      const { bssid, password } = (ctx.request.body as any) || {};
+      ctx.body = await wardrive.validateHandshake(String(bssid || ""), String(password || ""));
+    });
+
     // Step-by-step progress for the UI stepper. Returns full history so a
     // reopened browser tab can show "where we are" without missing anything.
     router.get("/api/wardrive/progress", (ctx) => {

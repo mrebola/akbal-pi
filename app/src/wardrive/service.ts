@@ -19,6 +19,7 @@ import {
 } from "./types";
 import { registerShutdownHook } from "../device/display";
 import { unloadModel } from "../cloud-api/local/ollama-llm";
+import { crackCheck, resolveCapPath, type CrackResult } from "./crack";
 
 // ─── Policy constants ────────────────────────────────────────────────────
 // Scope: thesis/lab capture only. The allowlist below IS the security
@@ -83,9 +84,18 @@ export class WardriveService extends EventEmitter {
   private deauthRunnerByMac = new Map<string, DeauthRunner>();
   private discoveredTargets: WardriveTarget[] = [];
   private source: "live" | "demo" = "live";
+  // Per-target handshake validation (v2 lab workflow): aircrack verdict
+  // against a candidate password the operator provides. Verified state is
+  // reported per target so the UI can show "VALIDADO" vs plain CAPTURADO.
+  private verified = new Map<string, CrackResult>();
 
   getSession(): WardriveSession | null {
     return this.session;
+  }
+
+  getVerified(bssid: string): CrackResult | null {
+    const clean = WardriveService.clean(bssid);
+    return this.verified.get(clean) || null;
   }
 
   getStatus(): WardriveStatus {
@@ -115,6 +125,7 @@ export class WardriveService extends EventEmitter {
               finishedAt: null,
               error: meta.error,
               files: this.targetFiles(bssid),
+              verified: this.verified.get(bssid)?.matched === true,
             })),
           }
         : null,
@@ -342,29 +353,21 @@ export class WardriveService extends EventEmitter {
 
   async enter(): Promise<{ ok: boolean; error?: string }> {
     if (this.mode !== "inactive") return { ok: true };
-    // Demo source: the radio isn't needed. Keep the WIFIRADAR service
-    // running in demo mode (it synthesizes the AP pool discovery reads) —
-    // stopping it would leave getWifiRadarSnapshot() empty.
+    // v2: wardriving is live-only. The whole point is capturing a handshake
+    // from a real radio — no adapter, no mode. The UI toggle for the radar
+    // (REAL/DEMO) still exists for WIFIRADAR, but wardrive enter() refuses
+    // demo: pointing this workflow at synthetic data would be misleading
+    // for the lab validation it exists for.
     if (this.source === "demo") {
-      await setWifiRadarMode("demo").catch(() => {});
-      this.iface = null;
-      this.error = "";
-      this.mode = "ready";
-      this.session = new WardriveSession();
-      void this.refreshTargets();
-      // The demo generator populates its AP pool on its first tick (350ms)
-      // — a single immediate scan usually races it and shows "Escaneando
-      // redes..." forever until the next manual scan. One delayed re-scan
-      // covers that gap.
-      setTimeout(() => void this.refreshTargets(), 1500);
-      console.log("[wardrive] mode ON (source=demo, no radio)");
+      const error = "Modo DEMO no disponible para wardriving v2 — conectá el adaptador USB";
+      this.error = error;
       this.broadcastStatus();
-      return { ok: true };
+      return { ok: false, error };
     }
     try {
       const info = await detectMonitorAdapter();
       if (!info.present) {
-        this.error = "No hay adaptador WiFi USB conectado";
+        this.error = "No hay adaptador WiFi USB conectado — enchufá el dongle para auditar";
         this.broadcastStatus();
         return { ok: false, error: this.error };
       }
@@ -374,7 +377,7 @@ export class WardriveService extends EventEmitter {
         return { ok: false, error: this.error };
       }
       this.iface = info.iface;
-      // The WiFi Radar holds the same AR9271; release it so wardriving can own
+      // The WiFi Radar holds the same radio; release it so wardriving can own
       // the adapter for a fixed-channel capture (resumed on exit()).
       await stopWifiRadarService().catch(() => {});
       await enterMonitorMode(info.iface);
@@ -694,6 +697,7 @@ export class WardriveService extends EventEmitter {
     if (captured) {
       this.markCaptured(bssid, "deauth", capFile);
       this.progress(bssid, "done", "Handshake WPA2 capturado correctamente", undefined, capFile);
+      await this.autoValidate(bssid);
       return;
     }
 
@@ -707,6 +711,7 @@ export class WardriveService extends EventEmitter {
     if (captured) {
       this.markCaptured(bssid, "pmkid", capFile);
       this.progress(bssid, "done", "PMKID capturado correctamente", undefined, capFile);
+      await this.autoValidate(bssid);
       return;
     }
 
@@ -716,6 +721,7 @@ export class WardriveService extends EventEmitter {
     if (finalCheck.hasCapture) {
       this.markCaptured(bssid, "deauth", capFile);
       this.progress(bssid, "done", "Handshake capturado (validación final)", undefined, capFile);
+      await this.autoValidate(bssid);
       return;
     }
 
@@ -752,6 +758,29 @@ export class WardriveService extends EventEmitter {
       await sleep(1_000);
     }
     return false;
+  }
+
+  // Post-capture auto-validation (v2): when a lab password is configured
+  // (WARDRIVE_LAB_PASSWORD in .env), the capture is checked with aircrack
+  // right after being marked captured — "captured" from hcxpcapngtool only
+  // proves EAPOL material exists, aircrack proves the handshake is complete
+  // and crackable. Verified verdict is surfaced in the UI.
+  private async autoValidate(bssid: string): Promise<void> {
+    const password = process.env.WARDRIVE_LAB_PASSWORD || "";
+    if (!password || !this.session) return;
+    const capPath = resolveCapPath(this.session.dir, this.targetFiles(bssid));
+    if (!capPath) return;
+    this.progress(bssid, "done", "Validando handshake con la contraseña del lab...");
+    const result = await crackCheck(capPath, password, bssid);
+    this.verified.set(bssid, result);
+    this.appendLog(bssid, `[validate] aircrack verdict=${result.verdict}`);
+    if (result.matched) {
+      this.progress(bssid, "done", "✓ Handshake VALIDADO — contraseña correcta (KEY FOUND)");
+    } else if (result.verdict === "handshake_wrong_password") {
+      this.progress(bssid, "done", "Handshake completo pero la contraseña del lab no matchea");
+    } else {
+      this.progress(bssid, "done", `Validación aircrack: ${result.verdict}`);
+    }
   }
 
   // Associated client MAC from the live WIFIRADAR device table, if any —
@@ -795,6 +824,33 @@ export class WardriveService extends EventEmitter {
     } catch {
       // Log failures never break an attack.
     }
+  }
+
+  // ─── Handshake validation (v2 lab workflow) ────────────────────────────
+  // The operator knows the lab password; running aircrack-ng with it proves
+  // the captured handshake is complete and crackable (a plain "captured"
+  // from hcxpcapngtool can be a bare PMKID/half EAPOL — not equivalent).
+  // The password is piped to aircrack's stdin (crack.ts) and never stored.
+  async validateHandshake(bssidRaw: string, password: string): Promise<{ ok: boolean; error?: string; result?: CrackResult }> {
+    const bssid = WardriveService.clean(bssidRaw);
+    if (!bssid) return { ok: false, error: "BSSID inválido" };
+    const target = this.targetMeta.get(bssid);
+    if (!target || target.status !== "captured") {
+      return { ok: false, error: "No hay captura para ese objetivo — audítalo primero" };
+    }
+    if (!this.session) {
+      return { ok: false, error: "Sin sesión de wardrive activa" };
+    }
+    const capPath = resolveCapPath(this.session.dir, this.targetFiles(bssid));
+    if (!capPath) {
+      return { ok: false, error: "El objetivo capturado no tiene archivo .cap/.pcapng" };
+    }
+    this.appendLog(bssid, "[validate] aircrack-ng check with operator-provided password");
+    const result = await crackCheck(capPath, password, bssid);
+    this.verified.set(bssid, result);
+    this.appendLog(bssid, `[validate] verdict=${result.verdict}`);
+    this.broadcastStatus();
+    return { ok: true, result };
   }
 
   private stopRunners(): void {

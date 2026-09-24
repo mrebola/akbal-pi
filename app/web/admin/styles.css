@@ -913,6 +913,55 @@ button.secondary {
 
 .wd-download-btn:hover { opacity: 0.9; }
 
+/* ---- Handshake validation (v2): password field + verdict badge ---- */
+
+.wd-verify-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+
+.wd-verify-row input[type="password"] {
+  flex: 1;
+  min-width: 140px;
+  font-size: 12px;
+  padding: 6px 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+}
+
+.wd-verify-btn {
+  font-size: 12px;
+  padding: 6px 14px;
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.wd-verify-btn:disabled { opacity: 0.5; cursor: wait; }
+
+.wd-verify-badge {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.wd-verify-badge.ok { background: rgba(52, 211, 153, 0.15); color: #34d351; border: 1px solid rgba(52, 211, 153, 0.4); }
+.wd-verify-badge.wrong { background: rgba(251, 146, 60, 0.15); color: #fb923c; border: 1px solid rgba(251, 146, 60, 0.4); }
+.wd-verify-badge.none { background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.4); }
+.wd-verify-badge.err { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4); }
+
 /* ---- Attack progress modal ---- */
 
 .wd-modal {

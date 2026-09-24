@@ -27,6 +27,7 @@ export type WardriveSessionTarget = {
   finishedAt: number | null;
   error: string;
   files: string[]; // capture artifacts for this target, relative to the session dir
+  verified: boolean; // handshake validated with aircrack against a known password (v2)
 };
 
 export type WardriveMode = "inactive" | "ready" | "scanning" | "attacking";

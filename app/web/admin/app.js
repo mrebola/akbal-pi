@@ -1563,6 +1563,7 @@ const wdCancelBtn = document.getElementById("wd-cancel-btn");
 const wdAttackStatus = document.getElementById("wd-attack-status");
 const wdTableBody = document.getElementById("wd-table-body");
 const wdResultsList = document.getElementById("wd-results-list");
+const wdVerifyList = document.getElementById("wd-verify-list");
 
 let wdStatus = null;
 let wdMonitorCap = null;
@@ -1654,11 +1655,14 @@ function wdRender() {
         return `<div class="wd-result-item">
           <div class="wd-result-info">
             <span class="wd-result-ssid">${escapeHtml(t.ssid || t.bssid)}</span>
-            <span class="wd-result-meta">${t.method} · ${t.attempts} intento(s)</span>
+            <span class="wd-result-meta">${t.method} · ${t.attempts} intento(s)${t.verified ? ' · <span style="color:#34d351">VALIDADO</span>' : ""}</span>
           </div>
           ${dl ? `<a href="${dlUrl}" download="${fname}"><button class="wd-download-btn">Descargar ${fname.endsWith(".hc22000") ? "hash" : "captura"}</button></a>` : ""}
         </div>`;
       }).join("");
+
+  // Validation rows (v2): one per captured target without a verified verdict.
+  wdRenderVerifyList(captured);
 
   // Networks table
   wdTableBody.innerHTML = "";
@@ -1718,6 +1722,93 @@ function escapeHtml(text) {
   div.textContent = String(text ?? "");
   return div.innerHTML;
 }
+
+// ---- Handshake validation (v2 lab workflow) ----
+
+let wdVerifyBusy = new Set();
+
+function wdVerifyBadgeHtml(verified) {
+  if (verified === true) return '<span class="wd-verify-badge ok">✓ Handshake válido</span>';
+  return "";
+}
+
+function wdRenderVerifyList(capturedTargets) {
+  if (!wdVerifyList) return;
+  const rows = capturedTargets.filter((t) => !t.verified);
+  if (rows.length === 0) {
+    wdVerifyList.innerHTML = "";
+    return;
+  }
+  // Preserve typed passwords across the 2s status re-render — the table is
+  // rebuilt from scratch each tick and would otherwise wipe the input
+  // mid-typing.
+  const prevPass = new Map(
+    [...wdVerifyList.querySelectorAll(".wd-verify-row")].map((r) => [
+      r.dataset.bssid,
+      r.querySelector(".wd-verify-pass")?.value || "",
+    ]),
+  );
+  wdVerifyList.innerHTML = rows
+    .map((t) => {
+      const busy = wdVerifyBusy.has(t.bssid);
+      return `<div class="wd-verify-row" data-bssid="${t.bssid}">
+        <span class="wd-result-ssid">${escapeHtml(t.ssid || t.bssid)}</span>
+        ${wdVerifyBadgeHtml(t.verified)}
+        <input type="password" placeholder="contraseña del lab" class="wd-verify-pass" autocomplete="off" value="${escapeHtml(prevPass.get(t.bssid) || "")}" />
+        <button class="wd-verify-btn" ${busy ? "disabled" : ""}>${busy ? "Verificando..." : "Verificar"}</button>
+        <span class="wd-verify-verdict muted"></span>
+      </div>`;
+    })
+    .join("");
+}
+
+wdVerifyList?.addEventListener("click", async (ev) => {
+  const btn = ev.target.closest(".wd-verify-btn");
+  if (!btn || btn.disabled) return;
+  const row = btn.closest(".wd-verify-row");
+  if (!row) return;
+  const bssid = row.dataset.bssid;
+  const passInput = row.querySelector(".wd-verify-pass");
+  const verdictEl = row.querySelector(".wd-verify-verdict");
+  const password = passInput?.value || "";
+  if (!password) {
+    verdictEl.textContent = "Escribe la contraseña de la red";
+    return;
+  }
+  wdVerifyBusy.add(bssid);
+  btn.disabled = true;
+  btn.textContent = "Verificando...";
+  verdictEl.textContent = "";
+  try {
+    const res = await wdApi("validate", { bssid, password });
+    if (res?.error) {
+      verdictEl.textContent = res.error;
+    } else if (res?.result) {
+      const v = res.result.verdict;
+      const cls = v === "verified" ? "ok" : v === "handshake_wrong_password" ? "wrong" : v === "no_handshake" ? "none" : "err";
+      const msg =
+        v === "verified"
+          ? "✓ contraseña correcta — handshake válido"
+          : v === "handshake_wrong_password"
+            ? "handshake presente, contraseña incorrecta"
+            : v === "no_handshake"
+              ? "sin EAPOL usable en la captura"
+              : "error ejecutando aircrack-ng";
+      verdictEl.innerHTML = `<span class="wd-verify-badge ${cls}">${escapeHtml(msg)}</span>`;
+      if (v === "verified") {
+        // Refresh so the result list shows the VALIDADO state.
+        wdVerifyBusy.delete(bssid);
+        void wdRefresh(true);
+        return;
+      }
+    }
+  } catch {
+    verdictEl.textContent = "Fallo la verificación";
+  }
+  wdVerifyBusy.delete(bssid);
+  btn.disabled = false;
+  btn.textContent = "Verificar";
+});
 
 // ---- Attack progress modal ----
 

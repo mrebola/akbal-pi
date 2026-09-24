@@ -1,9 +1,36 @@
-# WARDRIVE v1 — captura de handshakes para laboratorio/tesis
+# WARDRIVE v2 — captura de handshakes para laboratorio/tesis
 
 Módulo de captura de material WPA (handshakes 4-way y PMKID) sobre la misma
 radio del WiFi Radar. Es una función de **uso de laboratorio/tesis**: solo
 opera contra redes que el operador autorizó explícitamente, una por una.
 Documenta la implementación vigente (app/src/wardrive/).
+
+## Novedades v2
+
+- **Modo live-only**: `enter()` exige un adaptador USB en modo monitor. Sin
+  dongle el modo no se activa ("No hay adaptador WiFi USB conectado") — la
+  fuente demo del WIFIRADAR ya no aplica a wardriving (capturar handshakes
+  de datos sintéticos no tendría sentido).
+- **Validación real del handshake** (v2): "capturado" de hcxpcapngtool solo
+  prueba que hay material EAPOL (un M1 suelto o un PMKID cuentan como
+  "escrito"). La v2 agrega `crack.ts`: corre `aircrack-ng` contra el `.cap`
+  con una contraseña candidata y solo `KEY FOUND` prueba que el 4-way
+  handshake está completo y crackeable.
+  - Validación **automática**: con `WARDRIVE_LAB_PASSWORD=<pass>` en
+    `.env`, todo objetivo capturado se verifica solo al capturarse
+    (`autoValidate`, service.ts) — el status muestra `verified: true`.
+  - Validación **manual** desde la UI: cada resultado capturado muestra un
+    campo de contraseña + botón "Verificar" (`POST /api/wardrive/validate`).
+    La contraseña va por stdin a aircrack, nunca en argv ni a disco.
+- **Fix de conversión**: el regex de `convertCapture` ahora matchea el
+  formato real de hcxpcapngtool 6.3.5 ("EAPOL pairs written to 22000 hash
+  file...: N") — antes no matcheaba nada y toda captura válida terminaba
+  marcada como failed.
+- **Hallazgo del lab**: contra el TL-WA730RE, `hcxdumptool` no consigue
+  handshake (el AP rechaza sus associations); el pipeline clásico
+  `airodump-ng` + `aireplay-ng` con deauth dirigida a clientes reales
+  captura el 4-way completo de forma confiable. Ver
+  [`lab-wireless.md`](./lab-wireless.md).
 
 ## Modelo de seguridad (el allowlist ES la frontera)
 
@@ -164,7 +191,7 @@ Cada entrada al modo crea `~/wardrive-sessions/<YYYYMMDD-HHMMSS>/`
 (fuera del árbol git, en el dispositivo — session.ts:13):
 
 ```
-~/wardrive-sessions/20260919-024533/
+~/wardrive-sessions/20260924-191732/
 ├── session.json                        # metadatos + estado por objetivo
 ├── <bssid-sin-dos-puntos>.log          # log de texto del ataque
 ├── progress-<bssid>.jsonl              # progreso paso a paso (reconexión UI)
@@ -180,19 +207,47 @@ Cada entrada al modo crea `~/wardrive-sessions/<YYYYMMDD-HHMMSS>/`
   `resolveSessionPath()` — no hay escape del root ni path traversal
   (realpath check, service.ts:824).
 
+## Validación del handshake (v2, crack.ts)
+
+`crackCheck(capPath, password, bssid)` corre:
+
+```bash
+aircrack-ng -w - -b <BSSID> <prefix>-01.cap   # la contraseña entra por stdin
+```
+
+Y clasifica:
+
+| Verdict | Significado |
+|---|---|
+| `verified` | `KEY FOUND` — handshake completo y crackeable con esa contraseña |
+| `handshake_wrong_password` | handshake real presente, contraseña no matchea |
+| `no_handshake` | el `.cap` no tiene pares EAPOL utilizables |
+| `error` | aircrack falló (timeout, archivo corrupto, etc.) |
+
+- La contraseña viaja **por stdin** (`-w -`, wordlist de stdin), nunca en
+  argv (visible en `ps`) ni en archivos temporales.
+- `verified` se reporta por target en el status (`verified: true`) y en la
+  UI como "VALIDADO".
+- El `.cap` de airodump es el formato que aircrack lee directo — los
+  `.pcapng` de hcxdumptool NO los acepta este build de aircrack (Debian),
+  por eso la captura del ciclo es siempre `.cap`.
+- Output de aircrack se limpia de escapes ANSI (redibuja pantalla curses)
+  antes de mostrarse en el log de la UI.
+
 ## API HTTP (bajo sesión de cookie del admin)
 
 ```
 GET  /api/wardrive/status               # estado completo + targets + allowlist
-POST /api/wardrive/enter                # toma la radio, modo monitor
+POST /api/wardrive/enter                # toma la radio, modo monitor (live-only v2)
 POST /api/wardrive/exit                 # restaura radio, devuelve control al radar
-POST /api/wardrive/source               # {"source":"live"|"demo"}
+POST /api/wardrive/source               # {"source":"live"|"demo"} (radar only)
 POST /api/wardrive/refresh              # re-escaneo de objetivos
 POST /api/wardrive/allowlist            # {"bssid":"AA:BB:..."} — AUTORIZACIÓN
 POST /api/wardrive/allowlist/remove
 POST /api/wardrive/attack/one           # {"bssid":"..."} — un objetivo
 POST /api/wardrive/attack/many          # {"bssids":[...]} — secuenciales
 POST /api/wardrive/attack/cancel
+POST /api/wardrive/validate             # {"bssid":"...","password":"..."} — v2: valida handshake con aircrack
 GET  /api/wardrive/progress?bssid=...   # historial del stepper
 GET  /api/wardrive/devices              # clientes vistos (Deauth tab)
 POST /api/wardrive/deauth/authorize | deauthorize | attack | stop

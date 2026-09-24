@@ -23,6 +23,7 @@ export type SessionTargetSnapshot = {
   finishedAt: number | null;
   error: string;
   files: string[];
+  verified: boolean; // handshake validated with aircrack (v2 lab workflow)
 };
 
 // Step-by-step progress for UI reconnection: full history of what happened.
@@ -96,6 +97,7 @@ export class WardriveSession {
         finishedAt: null,
         error: "",
         files: [],
+        verified: false,
       });
       this.writeMeta();
     }
@@ -133,13 +135,18 @@ export class WardriveSession {
         pcapngPath,
       ]);
       const text = `${stdout}\n${stderr}`;
-      // hcxpcapngtool prints "written" counts; 0 EAPOL messages means the
-      // capture ran but nothing usable was in it.
-      const eapolWritten = /(\d+)\s+EAPOL packets written|EAPOL packets written to .+: (\d+)/i.exec(text);
+      // hcxpcapngtool wording (6.3.5, verified on the device):
+      //   "EAPOL pairs written to 22000 hash file...: 2 (RC checked)"
+      //   "PMKID written to 22000 hash file...: 1 (RC checked)"
+      // Older builds print "EAPOL packets written ..." — kept for compat.
+      const eapolWritten = /EAPOL pairs written to .+?:\s*(\d+)/i.exec(text)
+        || /(\d+)\s+EAPOL packets written/i.exec(text)
+        || /EAPOL packets written to .+?:\s*(\d+)/i.exec(text);
       const written = eapolWritten
         ? parseInt(eapolWritten[1] || eapolWritten[2] || "0", 10)
         : 0;
-      const hasCapture = written > 0 || /PMKID.*written\s*:\s*[1-9]/i.test(text);
+      const pmkidWritten = /PMKID written to .+?:\s*(\d+)/i.exec(text);
+      const hasCapture = written > 0 || (pmkidWritten ? parseInt(pmkidWritten[1], 10) > 0 : false);
       return { hasCapture, hashFile: hasCapture ? path.basename(hashPath) : null };
     } catch {
       return { hasCapture: false, hashFile: null };

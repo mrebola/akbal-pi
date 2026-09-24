@@ -386,7 +386,8 @@ Solo escucha: nunca transmite nada.
 ### WARDRIVING (pestaña)
 
 Captura de handshakes para laboratorio/tesis, sobre la misma radio del radar.
-Flujo:
+Flujo, ciclo de ataque con comandos exactos, modelo de allowlist y sesiones:
+ver [`docs/wardrive.md`](./docs/wardrive.md). Resumen:
 
 1. **Entrar** (banner superior) toma la radio en modo monitor — el radar deja de
    capturar hasta que salgas (se retoma solo al salir).

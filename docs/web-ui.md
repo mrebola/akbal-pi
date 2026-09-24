@@ -30,6 +30,8 @@ Ya no usa el diálogo nativo de autenticación básica del navegador —
   imágenes, descarga de todo lo demás).
 - **WIFIRADAR**: visualización 3D del espacio WiFi con Three.js — página
   aparte, ver [`wifiradar.md`](./wifiradar.md).
+- **WARDRIVING**: captura de handshakes de laboratorio con allowlist
+  explícita — ver [`wardrive.md`](./wardrive.md).
 - Indicadores en la topbar: batería (%, carga), CPU/RAM/disco del Pi —
   todos se refrescan solos cada 60s sin recargar la página.
 

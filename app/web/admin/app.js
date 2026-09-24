@@ -1708,8 +1708,8 @@ function wdRender() {
     tr.innerHTML = `
       <td class="wd-ssid">${wdSource === "demo" ? '<span class="demo-badge">DEMO</span> ' : ""}${escapeHtml(t.ssid || "(oculta)")}</td>
       <td>${t.channel}</td>
-      <td class="${wdDbmClass(t.rssi)}">${wdSignalBars(t.rssi)} ${t.rssi}</td>
-      <td>${t.clients ?? 0}</td>
+      <td class="wd-signal-col ${wdDbmClass(t.rssi)}">${wdSignalBars(t.rssi)} ${t.rssi}</td>
+      <td class="wd-clients-col">${t.clients ?? 0}</td>
       <td>${t.security}</td>
       <td>${statusBadge}</td>
       <td>${action}</td>`;
@@ -1737,6 +1737,7 @@ function wdRenderVerifyList(capturedTargets) {
   const rows = capturedTargets.filter((t) => !t.verified);
   if (rows.length === 0) {
     wdVerifyList.innerHTML = "";
+    wdRenderDictCrack();
     return;
   }
   // Preserve typed passwords across the 2s status re-render — the table is
@@ -1756,10 +1757,13 @@ function wdRenderVerifyList(capturedTargets) {
         ${wdVerifyBadgeHtml(t.verified)}
         <input type="password" placeholder="contraseña del lab" class="wd-verify-pass" autocomplete="off" value="${escapeHtml(prevPass.get(t.bssid) || "")}" />
         <button class="wd-verify-btn" ${busy ? "disabled" : ""}>${busy ? "Verificando..." : "Verificar"}</button>
+        <button class="wd-dict-btn" data-bssid="${t.bssid}" title="Probar con el diccionario rockyou (lento, cancelable)">Diccionario</button>
         <span class="wd-verify-verdict muted"></span>
       </div>`;
     })
     .join("");
+  // Dict progress lives below the rows, driven by /dict/status.
+  wdRenderDictProgress();
 }
 
 wdVerifyList?.addEventListener("click", async (ev) => {
@@ -1810,6 +1814,87 @@ wdVerifyList?.addEventListener("click", async (ev) => {
   btn.textContent = "Verificar";
 });
 
+// ---- Dictionary crack (rockyou) ----
+// One running at a time; progress: tried/total + fps + elapsed. Cancellable.
+
+async function wdRenderDictProgress() {
+  try {
+    const res = await fetch("/api/wardrive/dict/status");
+    if (!res.ok) return;
+    const data = await res.json();
+    wdRenderDictCrack(data);
+  } catch { /* non-fatal */ }
+}
+
+async function wdRenderDictCrack(statusData) {
+  let data = statusData;
+  if (!data) {
+    try {
+      const res = await fetch("/api/wardrive/dict/status");
+      if (!res.ok) return;
+      data = await res.json();
+    } catch { return; }
+  }
+  const block = document.getElementById("wd-dict-progress");
+  if (!block) return;
+  if (!data?.bssid || !data?.state) {
+    block.innerHTML = "";
+    if (wdDictTimer) {
+      clearInterval(wdDictTimer);
+      wdDictTimer = null;
+    }
+    return;
+  }
+  const { bssid, state } = data;
+  const p = state.progress;
+  const pct = p.total > 0 ? Math.min(100, (p.tried / p.total) * 100) : 0;
+  const targetSsid = wdStatus?.session?.targets?.find((t) => t.bssid === bssid)?.ssid
+    || wdStatus?.targets?.find((t) => t.bssid === bssid)?.ssid || bssid;
+  const resultMsg = state.result
+    ? state.result.matched
+      ? '<span class="wd-verify-badge ok">✓ ENCONTRADA — la contraseña del diccionario valida el handshake</span>'
+      : state.result.verdict === "handshake_wrong_password"
+        ? '<span class="wd-verify-badge wrong">Diccionario agotado — contraseña no está en rockyou</span>'
+        : `<span class="wd-verify-badge err">${escapeHtml(state.result.output || "cancelado")}</span>`
+    : "";
+  block.innerHTML = `
+    <div class="wd-dict-head">
+      <span>Diccionario (rockyou) · <strong>${escapeHtml(targetSsid)}</strong></span>
+      ${state.running ? '<button class="wd-dict-stop">Cancelar</button>' : ""}
+    </div>
+    <div class="wd-dict-bar"><div class="wd-dict-bar-fill" style="width:${pct.toFixed(1)}%"></div></div>
+    <div class="wd-dict-meta muted">${p.tried.toLocaleString()} / ${p.total.toLocaleString()} contraseñas · ${p.fps.toFixed(1)} pass/s · ${p.elapsedSec}s ${state.running ? "· corriendo..." : state.result ? "· terminado" : "· cancelado"}</div>
+    <div class="wd-dict-result">${resultMsg}</div>
+  `;
+  if (state.running) {
+    if (!wdDictTimer) {
+      wdDictTimer = setInterval(() => void wdRenderDictProgress(), 2000);
+    }
+  } else if (wdDictTimer) {
+    clearInterval(wdDictTimer);
+    wdDictTimer = null;
+  }
+}
+
+let wdDictTimer = null;
+
+document.getElementById("wd-dict-progress")?.addEventListener("click", async (ev) => {
+  if (!ev.target.closest(".wd-dict-stop")) return;
+  await apiFetch("/api/wardrive/dict/stop", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+  void wdRenderDictProgress();
+});
+
+document.getElementById("wd-verify-list")?.addEventListener("click", async (ev) => {
+  const btn = ev.target.closest(".wd-dict-btn");
+  if (!btn) return;
+  const res = await wdApi("dict/start", { bssid: btn.dataset.bssid });
+  if (res?.error) {
+    wdError.textContent = res.error;
+    return;
+  }
+  void wdRenderDictProgress();
+});
+
 // ---- Attack progress modal ----
 
 const wdProgressModal = document.getElementById("wd-progress-modal");
@@ -1825,6 +1910,9 @@ let wdMinimizedIndicator = null;
 // Force-scroll flag: set when the modal is (re)opened so the log always
 // lands on the latest entry after a tab switch or minimize/reopen.
 let wdForceScroll = true;
+// Last target the modal was opened for — keeps the reopen button working
+// even after a full close (the progress history lives on the backend).
+let wdLastAuditedBssid = null;
 
 const ATTACK_STEPS = [
   { key: "scan", label: "Escaneo" },
@@ -1837,6 +1925,7 @@ const ATTACK_STEPS = [
 
 function wdShowProgress(bssid, ssid) {
   wdCurrentAttackBssid = bssid;
+  wdLastAuditedBssid = bssid;
   wdProgressTitle.textContent = `Auditando: ${ssid || bssid}`;
   wdProgressModal.classList.remove("hidden");
   wdRemoveMinimizedIndicator();
@@ -1859,29 +1948,55 @@ function wdHideProgress() {
 }
 
 function wdCloseProgress() {
-  // Full close: cancel polling and forget the attack.
+  // Full close: forget which attack the modal was showing, BUT keep a
+  // reopen button in the toolbar whenever the attack/session is still
+  // there — the log lives on the backend, so the modal can always come
+  // back with the full history of the last audit.
   wdProgressModal.classList.add("hidden");
+  const lastBssid = wdCurrentAttackBssid || wdStatus?.session?.currentBssid || wdLastAuditedBssid;
   wdCurrentAttackBssid = null;
   wdRemoveMinimizedIndicator();
   if (wdProgressTimer) {
     clearInterval(wdProgressTimer);
     wdProgressTimer = null;
   }
+  wdUpdateReopenButton(lastBssid);
 }
 
-// Minimized indicator: bottom-right badge you can click to reopen.
+// Toolbar button that brings the progress modal back for the last audited
+// target — always visible while there's something to show, not just while
+// the attack is running (fixes "closed the modal and can't reopen it").
+function wdUpdateReopenButton(bssid) {
+  const btn = document.getElementById("wd-reopen-progress-btn");
+  if (!btn) return;
+  if (!bssid) {
+    btn.classList.add("hidden");
+    return;
+  }
+  btn.classList.remove("hidden");
+  btn.onclick = () => {
+    const target = wdStatus?.targets?.find((t) => t.bssid === bssid)
+      || wdStatus?.session?.targets?.find((t) => t.bssid === bssid);
+    wdCurrentAttackBssid = bssid;
+    wdShowProgress(bssid, target?.ssid || bssid);
+    btn.classList.add("hidden");
+  };
+}
+
+// Minimized indicator: bottom-right badge you can click to reopen. It used
+// to vanish forever after the first use — now it lives INSIDE the wardrive
+// tab (fixed bottom-right of the viewport) and reappears on every
+// wdHideProgress while an attack exists.
 function wdShowMinimizedIndicator(bssid) {
   wdRemoveMinimizedIndicator();
   wdMinimizedIndicator = document.createElement("div");
   wdMinimizedIndicator.className = "wd-progress-minimized";
   wdMinimizedIndicator.innerHTML = `
     <span style="color: var(--accent);">●</span>
-    <span>Ataque en curso</span>
-    <button onclick="wdReopenProgress()" style="font-size: 11px; padding: 2px 8px;">Ver progreso</button>
+    <span>Auditoría</span>
+    <button style="font-size: 11px; padding: 2px 8px;">Ver progreso</button>
   `;
-  wdMinimizedIndicator.addEventListener("click", (e) => {
-    if (e.target.tagName !== "BUTTON") wdReopenProgress();
-  });
+  wdMinimizedIndicator.addEventListener("click", () => wdReopenProgress());
   document.body.appendChild(wdMinimizedIndicator);
 }
 
@@ -1992,14 +2107,17 @@ async function wdLoadProgress(bssid) {
   }
 }
 
-// Check if there's an ongoing attack on page load (reconnection case)
+// Check if there's an ongoing attack on page load (reconnection case).
+// Also arms the reopen button for the last session target so a closed
+// modal is always recoverable — even across page reloads.
 function wdCheckOngoingAttack() {
-  if (!wdStatus?.session?.currentBssid) return;
-  const bssid = wdStatus.session.currentBssid;
-  const target = wdStatus.targets?.find((t) => t.bssid === bssid);
-  if (target) {
-    wdShowProgress(bssid, target.ssid);
-  }
+  const bssid = wdStatus?.session?.currentBssid
+    || wdStatus?.session?.targets?.filter((t) => t.status === "captured" || t.status === "running").slice(-1)[0]?.bssid;
+  if (!bssid) return;
+  wdLastAuditedBssid = bssid;
+  // Don't force the modal open on every 2s refresh if the user closed it
+  // on purpose — the toolbar reopen button covers recovery instead.
+  wdUpdateReopenButton(bssid);
 }
 
 // ---- Past sessions browser ----
@@ -2131,8 +2249,32 @@ document.getElementById("wd-sessions-list")?.addEventListener("click", async (ev
 });
 
 wdSessionsDeleteAllBtn.addEventListener("click", () => {
-  const answer = prompt("Esto BORRA TODAS las sesiones y sus handshakes en el dispositivo. Escribe DELETE ALL para confirmar:");
-  if (answer !== "DELETE ALL") return;
+  // In-app confirm modal (same design language as the rest of the panel) —
+  // type DELETE ALL in the styled input; no browser prompt.
+  const modal = document.getElementById("wd-deleteall-modal");
+  const input = document.getElementById("wd-deleteall-input");
+  const err = document.getElementById("wd-deleteall-error");
+  if (!modal) return;
+  if (input) input.value = "";
+  if (err) err.textContent = "";
+  modal.classList.remove("hidden");
+  input?.focus();
+});
+
+document.getElementById("wd-deleteall-cancel")?.addEventListener("click", () => {
+  document.getElementById("wd-deleteall-modal")?.classList.add("hidden");
+});
+
+document.getElementById("wd-deleteall-confirm")?.addEventListener("click", () => {
+  const modal = document.getElementById("wd-deleteall-modal");
+  const input = document.getElementById("wd-deleteall-input");
+  const err = document.getElementById("wd-deleteall-error");
+  const value = (input?.value || "").trim();
+  if (value !== "DELETE ALL") {
+    if (err) err.textContent = 'Escribe DELETE ALL (exactamente) para confirmar.';
+    return;
+  }
+  modal?.classList.add("hidden");
   void (async () => {
     const res = await apiFetch("/api/wardrive/sessions/delete", {
       method: "POST",

@@ -798,6 +798,21 @@ button.secondary {
   white-space: nowrap;
 }
 
+/* Row hover: makes it obvious which values belong to which row when
+   scanning the table. */
+.wd-table tbody tr { transition: background 0.12s ease; }
+.wd-table tbody tr:hover {
+  background: rgba(255, 152, 0, 0.08);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.wd-table tbody tr:hover td { color: var(--text-primary); }
+
+/* Signal + clients columns are narrow — the signal bar + dBm text and the
+   client count used to overlap on smaller widths. Compact font + padding
+   and fixed min-widths keep each column on its own lane. */
+.wd-table .wd-signal-col { min-width: 74px; }
+.wd-table .wd-clients-col { min-width: 44px; text-align: center; }
+
 .wd-table .wd-ssid { color: var(--accent); }
 .wd-table .wd-bssid { color: var(--text-secondary); }
 .wd-strong { color: var(--accent); }
@@ -851,12 +866,13 @@ button.secondary {
 
 .wd-signal {
   display: inline-block;
-  height: 6px;
+  height: 5px;
   border-radius: 3px;
   background: currentColor;
   opacity: 0.7;
-  margin-right: 6px;
+  margin-right: 4px;
   vertical-align: middle;
+  max-width: 26px;
 }
 
 .wd-badge {
@@ -961,6 +977,60 @@ button.secondary {
 .wd-verify-badge.wrong { background: rgba(251, 146, 60, 0.15); color: #fb923c; border: 1px solid rgba(251, 146, 60, 0.4); }
 .wd-verify-badge.none { background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.4); }
 .wd-verify-badge.err { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4); }
+
+.wd-dict-btn {
+  font-size: 11px;
+  padding: 5px 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.wd-dict-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+.wd-dict-progress { margin-top: 10px; }
+
+.wd-dict-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.wd-dict-stop {
+  font-size: 11px;
+  padding: 4px 12px;
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.wd-dict-stop:hover { background: rgba(239, 68, 68, 0.1); }
+
+.wd-dict-bar {
+  height: 6px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.wd-dict-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.5s ease;
+}
+
+.wd-dict-meta { font-size: 11px; margin-bottom: 6px; }
+.wd-dict-result { font-size: 12px; }
 
 /* ---- Past sessions browser ---- */
 

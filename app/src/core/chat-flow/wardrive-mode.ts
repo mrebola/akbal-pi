@@ -1,41 +1,80 @@
-import { display } from "../../device/display";
+import { display, onButtonDown, onButtonUp } from "../../device/display";
 import { getWardriveService } from "../../wardrive/service";
 import { WardriveStatus } from "../../wardrive/types";
 
 // Physical-screen companion of the web "Wardriving" tab. NOT a button-driven
-// flow state: entering/leaving wardriving is a web-admin action (the radio
-// gets held for the whole session), so this module only mirrors the live
-// WardriveService status onto the LCD while the mode is active — plus a
-// "WARDRIVE" badge and a distinct RGB so it's obvious at a glance the
-// device is not running as Akbal right now. The LLM is unloaded by the
-// service itself on enter (wardrive/service.ts), so nothing else needed
-// here for "quita los modelos de ia de memoria".
+// flow state: entering/leaving wardriving is normally a web-admin action
+// (the radio gets held for the whole session). While the mode is active the
+// physical button gets a dedicated escape hatch — a HOLD (~1.2s, long press)
+// exits wardriving and returns the device to normal Akbal; short clicks are
+// ignored (the radio is busy, no menu). This is the physical escape hatch —
+// the web can always cancel the session itself via POST /api/wardrive/exit.
 //
-// The screen shows: big WARDRIVE title, one-line status ("Escaneando" /
-// "PMKID <ssid>" / "Deauth <ssid>"), and captured/total handshake counters
-// for the current session. Exiting wardriving from the web triggers
-// status.mode === "inactive", which clears the overlay automatically —
-// there's no physical button interaction to worry about.
+// Screen: idle look — the same calm Akbal standing loop — but with a red
+// "MODO WARDRIVE" band (rendered by chatbot-ui.py's render_wardrive_screen).
+// While an audit is running the character is replaced by the wardrive
+// attack animation and the brief action status ("deauth", "capturando
+// handshake"...) renders over it. The service itself unloads the LLM on
+// enter (wardrive/service.ts).
 
 let statusListener: ((payload: any) => void) | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+// Physical-button exit: press-and-hold while in wardriving mode. Timestamps
+// come from the display's button press/release callbacks — registered here
+// (not in states.ts) so the gesture works no matter which chat-flow state
+// the device is in.
+let buttonPressedAt: number | null = null;
+let holdCheckTimer: ReturnType<typeof setInterval> | null = null;
 
 const POLL_MS = 2000;
+const HOLD_EXIT_MS = 1200;
+
+function handleButtonPress(): void {
+  buttonPressedAt = Date.now();
+  if (!holdCheckTimer) {
+    holdCheckTimer = setInterval(() => {
+      if (buttonPressedAt !== null && Date.now() - buttonPressedAt >= 1000) {
+        const st = getWardriveService().getStatus();
+        if (st.mode !== "inactive") {
+          console.log("[wardrive] physical hold detected — leaving wardriving");
+          buttonPressedAt = null;
+          if (holdCheckTimer) {
+            clearInterval(holdCheckTimer);
+            holdCheckTimer = null;
+          }
+          void getWardriveService().exit();
+        }
+      }
+    }, 200);
+  }
+}
+
+function handleButtonRelease(): void {
+  buttonPressedAt = null;
+  if (holdCheckTimer) {
+    clearInterval(holdCheckTimer);
+    holdCheckTimer = null;
+  }
+}
 
 function paint(status: WardriveStatus): void {
   const captured = status.session?.targets.filter((t) => t.status === "captured").length || 0;
   const total = status.session?.targets.length || 0;
   const attacking = status.mode === "attacking";
   const current = status.session?.targets.find((t) => t.bssid === status.session?.currentBssid);
+  // Brief action lines for the LCD (rendered over the attack animation):
+  // what the audit is doing right now, plain words.
   const statusText =
     status.mode === "scanning"
-      ? "Escaneando el aire..."
+      ? "Revisando el aire..."
       : attacking
         ? current
-          ? `${current.method === "deauth" ? "Deauth" : "PMKID"}: ${current.ssid || current.bssid}`
-          : "Preparando ataque..."
+          ? current.method === "deauth"
+            ? "Realizando deauth..."
+            : "Capturando handshake..."
+          : "Revisando tráfico..."
         : status.mode === "ready"
-          ? "Listo. Esperando orden."
+          ? "Esperando auditoría..."
           : "Iniciando...";
   display({
     status: "wardrive",
@@ -78,6 +117,10 @@ export function startWardriveDisplayMirror(): void {
     paint(st);
   };
   service.on("status", statusListener);
+  // Physical hold-to-exit: registered once, independent of chat-flow state —
+  // the check inside the handler only acts while wardriving is active.
+  onButtonDown(handleButtonPress);
+  onButtonUp(handleButtonRelease);
   // Poll as a fallback (e.g. missed events after a rebuild/restart while
   // the mode stayed active).
   pollTimer = setInterval(() => {

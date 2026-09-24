@@ -19,7 +19,7 @@ import {
 } from "./types";
 import { registerShutdownHook } from "../device/display";
 import { unloadModel } from "../cloud-api/local/ollama-llm";
-import { crackCheck, resolveCapPath, type CrackResult } from "./crack";
+import { crackCheck, resolveCapPath, DictCrack, type CrackResult, type DictCrackState } from "./crack";
 
 // ─── Policy constants ────────────────────────────────────────────────────
 // Scope: thesis/lab capture only. The allowlist below IS the security
@@ -91,6 +91,60 @@ export class WardriveService extends EventEmitter {
   // The password that was last tried against each target (only in memory,
   // but also written to the per-target info.txt for the lab record).
   private lastValidatedPassword = new Map<string, string>();
+  // Dictionary crack (rockyou) per target: at most ONE running at a time —
+  // the Pi's CPU is precious and a second aircrack would just fight for it.
+  private dictCrack: DictCrack | null = null;
+  private dictCrackBssid: string | null = null;
+  // rockyou on the device (~/wordlists/rockyou.txt) — overridable for tests.
+  private dictWordlist(): string {
+    return process.env.WARDRIVE_WORDLIST || path.join(process.env.HOME || "/home/akbal", "wordlists", "rockyou.txt");
+  }
+
+  // Start a dictionary crack against a captured target. One at a time;
+  // progress is polled by the UI via dictStatus().
+  async startDictCrack(bssidRaw: string): Promise<{ ok: boolean; error?: string }> {
+    const bssid = WardriveService.clean(bssidRaw);
+    if (!bssid) return { ok: false, error: "BSSID inválido" };
+    if (this.dictCrack?.getState().running) {
+      return { ok: false, error: `Ya hay un crack en curso (${this.dictCrackBssid}) — cancelalo primero` };
+    }
+    const target = this.targetMeta.get(bssid);
+    if (!target || target.status !== "captured") {
+      return { ok: false, error: "No hay captura para ese objetivo — audítalo primero" };
+    }
+    if (!this.session) return { ok: false, error: "Sin sesión de wardrive activa" };
+    const capPath = resolveCapPath(this.session.dir, this.targetFiles(bssid));
+    if (!capPath) return { ok: false, error: "El objetivo no tiene archivo .cap" };
+    const wordlist = this.dictWordlist();
+    if (!fs.existsSync(wordlist)) {
+      return { ok: false, error: `Diccionario no encontrado: ${wordlist}` };
+    }
+    this.dictCrack = new DictCrack(capPath, bssid, wordlist);
+    this.dictCrackBssid = bssid;
+    this.dictCrack.on("done", () => {
+      const st = this.dictCrack?.getState();
+      if (st?.result?.matched) {
+        this.verified.set(bssid, st.result);
+        this.appendLog(bssid, "[dict] KEY FOUND — handshake validado con diccionario");
+      } else {
+        this.appendLog(bssid, `[dict] terminado: ${st?.result?.verdict} (${st?.progress.tried || 0} contraseñas)`);
+      }
+      this.broadcastStatus();
+    });
+    this.dictCrack.start();
+    this.appendLog(bssid, `[dict] aircrack started with ${wordlist}`);
+    return { ok: true };
+  }
+
+  stopDictCrack(): { ok: boolean } {
+    this.dictCrack?.stop();
+    return { ok: true };
+  }
+
+  dictCrackStatus(): { bssid: string | null; state: DictCrackState | null } {
+    if (!this.dictCrack) return { bssid: null, state: null };
+    return { bssid: this.dictCrackBssid, state: this.dictCrack.getState() };
+  }
 
   getSession(): WardriveSession | null {
     return this.session;
@@ -912,6 +966,11 @@ export class WardriveService extends EventEmitter {
       runner.stop();
     }
     this.deauthRunnerByMac.clear();
+    // A dictionary crack must not outlive the session/exit — aircrack on a
+    // deleted .cap is wasted CPU.
+    this.dictCrack?.stop();
+    this.dictCrack = null;
+    this.dictCrackBssid = null;
   }
 
   private clearTimers(): void {

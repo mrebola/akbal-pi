@@ -1,5 +1,6 @@
-import { execFile } from "child_process";
+import { execFile, spawn } from "child_process";
 import { promisify } from "util";
+import { EventEmitter } from "events";
 import fs from "fs";
 import path from "path";
 
@@ -183,4 +184,145 @@ export function resolveHashPath(sessionDir: string, files: string[]): string | n
     }
   }
   return null;
+}
+
+// ─── Dictionary crack (rockyou) ────────────────────────────────────────────
+// aircrack-ng -w <wordlist> streams its progress line to stdout every ~2s:
+//   "PROGRESS: 1234 (10.23%) 0.5 fps" (older) or
+//   "[00:00:02] 1234/14344391 keys tested (10.5)..." on newer builds.
+// We spawn it detached-ish (killable at any moment), parse the running
+// counts, and surface { tried, total, fps } for the UI. Cancelling = kill
+// the process group — same detached+group-kill pattern as the capture
+// runners.
+export type DictProgress = {
+  tried: number;
+  total: number;
+  fps: number;
+  elapsedSec: number;
+};
+
+export type DictCrackState = {
+  running: boolean;
+  progress: DictProgress;
+  result: CrackResult | null;
+};
+
+export class DictCrack extends EventEmitter {
+  private proc: any = null; // ChildProcess
+  private running = false;
+  private state: DictCrackState = {
+    running: false,
+    progress: { tried: 0, total: 0, fps: 0, elapsedSec: 0 },
+    result: null,
+  };
+
+  constructor(
+    private capPath: string,
+    private bssid: string,
+    private wordlist: string,
+  ) {
+    super();
+  }
+
+  getState(): DictCrackState {
+    return { ...this.state, progress: { ...this.state.progress } };
+  }
+
+  start(): void {
+    if (this.running) return;
+    this.running = true;
+    this.state = {
+      running: true,
+      progress: { tried: 0, total: 0, fps: 0, elapsedSec: 0 },
+      result: null,
+    };
+    const startedAt = Date.now();
+    const child = spawn("aircrack-ng", ["-w", this.wordlist, "-b", this.bssid, "-p", "2", this.capPath], {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    this.proc = child;
+    let out = "";
+    child.stdout?.on("data", (chunk: Buffer) => {
+      out += chunk.toString("utf8");
+      this.parseProgress(out, startedAt);
+    });
+    child.stderr?.on("data", (chunk: Buffer) => {
+      out += chunk.toString("utf8");
+    });
+    child.on("error", (err) => {
+      this.running = false;
+      this.state.running = false;
+      this.state.result = { verdict: "error", matched: false, eapolPackets: 0, handshakeHint: false, output: `aircrack-ng: ${err?.message || err}` };
+      this.emit("done", this.state);
+    });
+    child.on("close", (code) => {
+      this.running = false;
+      this.state.running = false;
+      this.state.progress.elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+      const parsed = parseAircrackOutput(out);
+      if (parsed.found) {
+        this.state.result = {
+          verdict: "verified",
+          matched: true,
+          eapolPackets: parsed.eapol,
+          handshakeHint: parsed.hint,
+          output: parsed.clean.slice(-4000),
+        };
+      } else if (this.dictExhausted(out)) {
+        // Full run, no match.
+        this.state.result = {
+          verdict: "handshake_wrong_password",
+          matched: false,
+          eapolPackets: parsed.eapol,
+          handshakeHint: parsed.hint,
+          output: parsed.clean.slice(-4000),
+        };
+      } else {
+        // Cancelled mid-run: keep partial info, no final verdict.
+        this.state.result = {
+          verdict: "error",
+          matched: false,
+          eapolPackets: parsed.eapol,
+          handshakeHint: parsed.hint,
+          output: `cancelado tras ${this.state.progress.tried} contraseñas`,
+        };
+      }
+      this.emit("done", this.state);
+    });
+  }
+
+  // "KEY NOT FOUND" + reaching the end of the wordlist = exhausted. A SIGTERM
+  // kill leaves no such summary — that's how cancelled runs are told apart.
+  private dictExhausted(text: string): boolean {
+    return /KEY NOT FOUND|not in dictionary|passphrase not in/i.test(text) || /(\d+) keys tested/i.test(text);
+  }
+
+  stop(): void {
+    if (this.proc?.pid) {
+      try {
+        this.proc.kill("SIGTERM");
+      } catch {
+        /* already gone */
+      }
+    }
+  }
+
+  // aircrack progress lines look like:
+  //   "[00:00:02] 1234/14344391 keys tested (12.34 fps)"
+  // or the PROGRESS: variant. Grab the LAST match.
+  private parseProgress(text: string, startedAt: number): void {
+    const matches = [...text.matchAll(/\[(\d+):(\d+):(\d+)\]\s+(\d+)\/(\d+)\s+keys tested.*?\(([\d.]+)\s*fps\)/g)];
+    if (matches.length > 0) {
+      const m = matches[matches.length - 1];
+      const elapsed = parseInt(m[1], 10) * 3600 + parseInt(m[2], 10) * 60 + parseInt(m[3], 10);
+      this.state.progress = {
+        tried: parseInt(m[4], 10),
+        total: parseInt(m[5], 10),
+        fps: parseFloat(m[6]),
+        elapsedSec: elapsed,
+      };
+    } else {
+      this.state.progress.elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+    }
+  }
 }

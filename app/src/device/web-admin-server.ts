@@ -945,6 +945,22 @@ export class WebAdminServer {
       ctx.body = await wardrive.validateHandshake(String(bssid || ""), String(password || ""));
     });
 
+    // Dictionary crack (rockyou) against a captured target — one at a time,
+    // progress polled via /dict-status, cancellable. Runs at low priority
+    // (nice +2 threads) so the Pi keeps responding while it runs.
+    router.post("/api/wardrive/dict/start", async (ctx) => {
+      const { bssid } = (ctx.request.body as any) || {};
+      ctx.body = await wardrive.startDictCrack(String(bssid || ""));
+    });
+
+    router.post("/api/wardrive/dict/stop", (ctx) => {
+      ctx.body = wardrive.stopDictCrack();
+    });
+
+    router.get("/api/wardrive/dict/status", (ctx) => {
+      ctx.body = wardrive.dictCrackStatus();
+    });
+
     // Step-by-step progress for the UI stepper. Returns full history so a
     // reopened browser tab can show "where we are" without missing anything.
     router.get("/api/wardrive/progress", (ctx) => {

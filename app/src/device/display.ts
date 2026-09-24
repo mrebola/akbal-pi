@@ -401,6 +401,11 @@ export class WhisplayDisplay {
     this.buttonReleasedCallback = callback;
   }
 
+  // Extra edge listeners fanned out inside handleButtonPressed/ReleasedEvent —
+  // modules outside the chat flow (wardrive hold-to-exit) subscribe through
+  // the module-level onButtonDown/onButtonUp helpers below, which register
+  // here.
+
   onButtonDoubleClick(callback: (() => void) | null): void {
     this.buttonDoubleClickCallback = callback || null;
   }
@@ -635,6 +640,13 @@ export class WhisplayDisplay {
     this.buttonPressTimeArray.push(Date.now());
     console.log("emit pressed");
     this.buttonPressedCallback();
+    for (const listener of buttonDownListenersModule) {
+      try {
+        listener();
+      } catch {
+        // listener errors never break the display pipeline
+      }
+    }
   }
 
   private handleButtonReleasedEvent(): void {
@@ -643,6 +655,13 @@ export class WhisplayDisplay {
     console.log("emit released");
     this.buttonReleasedCallback();
     this.maybeEmitDoubleClick();
+    for (const listener of buttonUpListenersModule) {
+      try {
+        listener();
+      } catch {
+        // listener errors never break the display pipeline
+      }
+    }
   }
 
   isButtonDown(): boolean {
@@ -705,6 +724,20 @@ export class WhisplayDisplay {
 const displayInstance = new WhisplayDisplay();
 
 export const display = displayInstance.display.bind(displayInstance);
+
+// Physical-button edge callbacks for code outside the chat-flow state
+// machine (e.g. wardrive-mode's hold-to-exit gesture). Fan-out lists live
+// at module level and are wired into the instance's handlers.
+const buttonDownListenersModule: (() => void)[] = [];
+const buttonUpListenersModule: (() => void)[] = [];
+
+export function onButtonDown(listener: () => void): void {
+  buttonDownListenersModule.push(listener);
+}
+
+export function onButtonUp(listener: () => void): void {
+  buttonUpListenersModule.push(listener);
+}
 export const getCurrentStatus =
   displayInstance.getCurrentStatus.bind(displayInstance);
 export const onButtonPressed =

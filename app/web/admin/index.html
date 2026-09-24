@@ -180,6 +180,7 @@
       <div class="wd-toolbar">
         <button id="wd-scan-btn">Escanear redes</button>
         <button id="wd-src-btn" class="secondary" title="Alternar descubrimiento real / datos demo">REAL</button>
+        <button id="wd-reopen-progress-btn" class="secondary hidden" title="Reabrir el modal de la última auditoría">Ver auditoría</button>
         <button id="wd-pause-btn" class="secondary hidden">Pausar</button>
         <button id="wd-cancel-btn" class="wd-danger hidden">Cancelar ataque</button>
         <span id="wd-attack-status" class="muted"></span>
@@ -210,6 +211,7 @@
           <div class="muted">Sin capturas aún. Selecciona una red y pulsa Auditar.</div>
         </div>
         <div id="wd-verify-list" class="wd-results-list"></div>
+        <div id="wd-dict-progress" class="wd-dict-progress"></div>
       </div>
 
       <!-- Attack progress modal: shows step-by-step what's happening.
@@ -266,6 +268,30 @@
             </div>
           </div>
           <div id="wd-preview-body" class="wd-preview-body"></div>
+        </div>
+      </div>
+
+      <!-- Delete-all confirmation: in-app modal (type-to-confirm), same
+           design language as the attack progress modal. -->
+      <div id="wd-deleteall-modal" class="wd-modal hidden">
+        <div class="wd-modal-backdrop" onclick="document.getElementById('wd-deleteall-modal').classList.add('hidden')"></div>
+        <div class="wd-modal-content" style="max-width: 460px;">
+          <div class="wd-modal-header">
+            <span>Borrar todas las sesiones</span>
+            <div class="wd-modal-actions">
+              <button id="wd-deleteall-cancel" class="secondary">Cancelar</button>
+            </div>
+          </div>
+          <div style="padding: 16px 20px;">
+            <p style="font-size: 13px; line-height: 1.6; margin: 0 0 12px;">
+              Esto <strong style="color:#ef4444">borra TODAS las sesiones</strong> del dispositivo:
+              capturas, hashes, logs e info. Los handshakes no se pueden recuperar.
+            </p>
+            <input id="wd-deleteall-input" type="text" placeholder="Escribe DELETE ALL" autocomplete="off"
+                   style="width: 100%; font-size: 13px; padding: 8px 12px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary);" />
+            <div id="wd-deleteall-error" class="error" style="margin-top: 8px;"></div>
+            <button id="wd-deleteall-confirm" class="wd-danger" style="margin-top: 12px; width: 100%;">Borrar todo</button>
+          </div>
         </div>
       </div>
     </section>

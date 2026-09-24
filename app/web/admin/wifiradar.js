@@ -22,22 +22,8 @@ const hudChannel = document.getElementById("hud-channel");
 const hudFpm = document.getElementById("hud-fpm");
 const hudAlerts = document.getElementById("hud-alerts");
 const hudSpectrum = document.getElementById("hud-spectrum");
-const sidePanel = document.getElementById("side-panel");
-const sidePanelClose = document.getElementById("side-panel-close");
 const eventTicker = document.getElementById("event-ticker");
 const wsStatusEl = document.getElementById("ws-status");
-const sp = {
-  ssid: document.getElementById("sp-ssid"),
-  bssid: document.getElementById("sp-bssid"),
-  vendor: document.getElementById("sp-vendor"),
-  rssi: document.getElementById("sp-rssi"),
-  channel: document.getElementById("sp-channel"),
-  security: document.getElementById("sp-security"),
-  first: document.getElementById("sp-first"),
-  last: document.getElementById("sp-last"),
-  frames: document.getElementById("sp-frames"),
-  clients: document.getElementById("sp-clients"),
-};
 
 // ---- shared topbar (same markup/classes as index.html's — see
 // wifiradar.html) — kept live here too instead of just a static "back"
@@ -406,32 +392,6 @@ function ensureApNode(ap) {
   return node;
 }
 
-// Audit-locked look: while active, the audited node pulses bright and every
-// other node dims — applied on top of each material's security color.
-function applyAuditDimming() {
-  for (const [id, node] of apNodes) {
-    const locked = auditLock && (node.data.bssidFull === auditLock.bssid || node.data.bssid === auditLock.bssid);
-    const base = securityColor(node.data.security);
-    if (auditLock) {
-      if (locked) {
-        node.mesh.material.emissiveIntensity = 1.6 + Math.sin(performance.now() / 180) * 0.4;
-        node.mesh.material.color.setHex(base);
-        node.mesh.material.opacity = 1;
-      } else {
-        node.mesh.material.emissiveIntensity = 0.15;
-        node.mesh.material.color.setHex(base);
-        node.mesh.material.opacity = 0.25;
-      }
-      node.mesh.material.transparent = !locked;
-    } else {
-      node.mesh.material.emissiveIntensity = 0.9;
-      node.mesh.material.color.setHex(base);
-      node.mesh.material.transparent = false;
-      node.mesh.material.opacity = 1;
-    }
-  }
-}
-
 function pruneApNodes(currentIds) {
   for (const [id, node] of apNodes) {
     if (!currentIds.has(id)) {
@@ -548,177 +508,61 @@ function selectNode(id) {
     deselectNode();
     return;
   }
-  const ap = node.data;
-  sp.ssid.textContent = ap.ssid || "(oculta)";
-  sp.bssid.textContent = ap.bssid;
-  sp.vendor.textContent = ap.vendor;
-  sp.rssi.textContent = `${ap.rssi} dBm`;
-  sp.channel.textContent = String(ap.channel);
-  sp.security.textContent = SECURITY_LABEL[ap.security] || ap.security;
-  const dist = estimateDistanceMeters(ap.rssi);
-  sp.distance.textContent = dist < 1 ? "<1 m" : dist < 50 ? `~${dist.toFixed(1)} m` : "~50+ m";
-  sp.first.textContent = new Date(ap.firstSeen).toLocaleTimeString();
-  sp.last.textContent = new Date(ap.lastSeen).toLocaleTimeString();
-  sp.frames.textContent = String(ap.frames);
-  sp.clients.textContent = String(ap.clients);
-  // Connected devices: every device whose associatedBssid matches this AP's
-  // (anonymized) BSSID string. MACs are anonymized by default; full MAC only
-  // when the server sent it (fullMac sessions).
-  const devices = (latestSnapshot?.devices || []).filter((d) => d.associatedBssid === ap.bssid);
-  const devList = document.getElementById("sp-device-list");
-  if (devList) {
-    devList.innerHTML = devices.length === 0
-      ? '<div class="side-panel-devices-empty">Ningún equipo visto hablando con esta red.</div>'
-      : devices
-          .map((d) => `<div class="side-panel-device">
-              <span class="sp-dev-mac">${escapeHtml(d.mac)}</span>
-              <span class="sp-dev-vendor">${escapeHtml(d.vendor || "?")}</span>
-              <span class="sp-dev-rssi">${d.rssi} dBm</span>
-            </div>`)
-          .join("");
-  }
-  // Audit button only makes sense for real networks.
-  const auditBtn = document.getElementById("sp-audit-btn");
-  if (auditBtn) auditBtn.classList.toggle("hidden", Boolean(latestSnapshot?.demo));
-  sidePanel.classList.remove("hidden");
+  openApInfoModal(node.data);
 }
 function deselectNode() {
   selectedId = null;
-  sidePanel.classList.add("hidden");
+  infoModal.classList.add("hidden");
 }
-sidePanelClose.addEventListener("click", deselectNode);
 
-// ---- Auditar web (radar-driven wardriving) ----
-// Clicking "Auditar web" on a selected AP: 1) enters wardriving mode
-// (POST /api/wardrive/enter, takes the radio), 2) authorizes the BSSID
-// (allowlist), 3) locks the scene on this node — camera centered, orbit
-// frozen, everything else dimmed — and shows a live progress card with
-// the same step-by-step log the wardriving tab uses. The attack starts
-// immediately. "Cerrar auditoría" leaves the mode and unfreezes.
-let auditLock = null; // { bssid, ssid } while locked
+// ---- Network info modal (click a node → detail card) ----
+// A proper modal with everything known about the network: identity, vendor,
+// signal/distance, security in plain language and the list of connected
+// devices (when the capture has seen them talking). Closable via ✕, the
+// backdrop, or Escape; clicking the same node again re-opens it.
+const infoModal = document.getElementById("ap-info-modal");
 
-const auditBanner = document.getElementById("audit-banner");
-
-async function startAuditFromRadar(id) {
-  const node = apNodes.get(id);
-  if (!node) return;
-  const ap = node.data;
-  const bssid = ap.bssidFull || ap.bssid;
-  if (latestSnapshot?.demo) return;
-  try {
-    const enter = await apiPost("/api/wardrive/enter", {});
-    if (enter?.error) {
-      alert(`No se pudo entrar al modo wardriving: ${enter.error}`);
-      return;
-    }
-    await apiPost("/api/wardrive/allowlist", { bssid });
-    await apiPost("/api/wardrive/attack/one", { bssid });
-    enterAuditLock(id);
-  } catch (err) {
-    alert(`Error iniciando la auditoría: ${err.message}`);
+function openApInfoModal(ap) {
+  const set = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+  };
+  set("apm-ssid", ap.ssid || "(oculta)");
+  set("apm-bssid", ap.bssid);
+  set("apm-vendor", ap.vendor || "—");
+  set("apm-rssi", `${ap.rssi} dBm`);
+  const dist = estimateDistanceMeters(ap.rssi);
+  set("apm-distance", dist < 1 ? "<1 m" : dist < 50 ? `~${dist.toFixed(1)} m` : "~50+ m");
+  set("apm-channel", String(ap.channel));
+  set("apm-security", SECURITY_LABEL[ap.security] || ap.security);
+  set("apm-first", new Date(ap.firstSeen).toLocaleTimeString());
+  set("apm-last", new Date(ap.lastSeen).toLocaleTimeString());
+  set("apm-frames", String(ap.frames));
+  const devices = (latestSnapshot?.devices || []).filter((d) => d.associatedBssid === ap.bssid);
+  const devList = document.getElementById("apm-devices");
+  if (devList) {
+    devList.innerHTML = devices.length === 0
+      ? '<div class="apm-devices-empty">Ningún equipo visto hablando con esta red (aparece cuando la captura ve tráfico de un cliente asociado).</div>'
+      : devices
+          .map((d) => `<div class="apm-device">
+              <span class="apm-dev-mac">${escapeHtml(d.mac)}</span>
+              <span class="apm-dev-vendor">${escapeHtml(d.vendor || "?")}</span>
+              <span class="apm-dev-rssi">${d.rssi} dBm</span>
+            </div>`)
+          .join("");
   }
+  infoModal.classList.remove("hidden");
 }
 
-function enterAuditLock(id) {
-  const node = apNodes.get(id);
-  if (!node) return;
-  auditLock = { bssid: node.data.bssidFull || node.data.bssid, ssid: node.data.ssid };
-  // Center the camera on the node, freeze the controls: locked view.
-  const pos = node.mesh.position.clone();
-  controls.target.copy(pos);
-  camera.position.set(pos.x + 4, pos.y + 5, pos.z + 6);
-  controls.enabled = false;
-  document.getElementById("audit-banner")?.classList.remove("hidden");
-  document.getElementById("audit-banner-title").textContent = `AUDITANDO: ${node.data.ssid || node.data.bssid}`;
-  auditBanner.classList.remove("hidden");
-  // Open the process card (same stepper the wardriving tab polls).
-  openAuditProgress(auditLock.bssid, auditLock.ssid);
-}
-
-function exitAuditLock() {
-  auditLock = null;
-  controls.enabled = true;
-  auditBanner.classList.add("hidden");
-  closeAuditProgress();
-  void apiPost("/api/wardrive/exit", {}).catch(() => {});
-}
-
-document.getElementById("sp-audit-btn")?.addEventListener("click", () => {
-  if (selectedId) void startAuditFromRadar(selectedId);
+document.getElementById("ap-info-close")?.addEventListener("click", deselectNode);
+document.querySelector("#ap-info-modal .apm-backdrop")?.addEventListener("click", deselectNode);
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !infoModal.classList.contains("hidden")) deselectNode();
 });
 
-document.getElementById("audit-banner-close")?.addEventListener("click", () => {
-  exitAuditLock();
-});
-
-// While locked, snapshots must not move/replace the audited node out from
-// under the camera: applySnapshot keeps updating data but the position of
-// the locked node stays fixed (checked inside the mesh update loop via
-// auditLock). Non-locked nodes still animate normally.
-
-// ---- Audit progress card (live steps, same data the Wardriving tab shows) ----
-let auditCardEl = null;
-let auditTimer = null;
-
-function openAuditProgress(bssid, ssid) {
-  closeAuditProgress();
-  auditCardEl = document.createElement("div");
-  auditCardEl.className = "audit-progress-card";
-  auditCardEl.innerHTML = `
-    <div class="audit-progress-title">Proceso de auditoría — ${escapeHtml(ssid || bssid)}</div>
-    <div class="audit-progress-steps">
-      ${["scan", "lock", "capture", "deauth", "validate", "done"].map((s, i) => `<div class="audit-step" data-step="${s}"><span class="audit-step-num">${i + 1}</span><span>${{ scan: "Escaneo", lock: "Canal", capture: "Captura", deauth: "Deauth", validate: "Validación", done: "Resultado" }[s]}</span></div>`).join("")}
-    </div>
-    <div class="audit-progress-log"><div class="muted">Iniciando...</div></div>
-    <div class="audit-progress-footer muted">La auditoría continúa aunque cierres este panel — ver pestaña Wardriving.</div>
-  `;
-  document.body.appendChild(auditCardEl);
-  const log = auditCardEl.querySelector(".audit-progress-log");
-  log.scrollTop = log.scrollHeight;
-  auditTimer = setInterval(() => void pollAuditProgress(bssid), 1500);
-  void pollAuditProgress(bssid);
-}
-
-async function pollAuditProgress(bssid) {
-  if (!auditCardEl || !auditLock || auditLock.bssid !== bssid) return;
-  try {
-    const res = await fetch(`/api/wardrive/progress?bssid=${encodeURIComponent(bssid)}`);
-    if (!res.ok) return;
-    const data = await res.json();
-    const entries = data.entries || [];
-    const log = auditCardEl.querySelector(".audit-progress-log");
-    const latest = entries[entries.length - 1];
-    if (!latest) return;
-    // Steps highlight
-    const order = ["scan", "lock", "capture", "deauth", "validate", "done"];
-    const idx = order.indexOf(latest.step);
-    auditCardEl.querySelectorAll(".audit-step").forEach((el, i) => {
-      el.classList.toggle("active", i === idx);
-      el.classList.toggle("done", idx > i);
-    });
-    log.innerHTML = entries
-      .map((e) => {
-        const time = new Date(e.ts).toLocaleTimeString();
-        let html = `<div class="log-entry"><span class="log-time">${time}</span>${escapeHtml(e.message)}</div>`;
-        if (e.command) html += `<div class="log-entry cmd"><span class="log-time">$</span>${escapeHtml(e.command)}</div>`;
-        if (e.output) html += `<div class="log-entry output">${escapeHtml(e.output)}</div>`;
-        return html;
-      })
-      .join("");
-    log.scrollTop = log.scrollHeight;
-    // Keep the banner status fresh too.
-    document.getElementById("audit-banner-status").textContent = latest.message.slice(0, 80);
-  } catch { /* keep polling */ }
-}
-
-function closeAuditProgress() {
-  if (auditTimer) {
-    clearInterval(auditTimer);
-    auditTimer = null;
-  }
-  auditCardEl?.remove();
-  auditCardEl = null;
-}
+// The modal re-opens whenever the same node is clicked again (selectNode
+// runs on every node click), and it refreshes live while open: the 2s
+// snapshot handler re-renders it for the current selection.
 
 // ---- HUD / event ticker ----
 function updateHud(snapshot) {
@@ -806,7 +650,7 @@ function applySnapshot(snapshot) {
   }
 
   applySearchFilter();
-  if (selectedId) selectNode(selectedId); // refresh side panel with fresh data
+  if (selectedId && !infoModal.classList.contains("hidden")) selectNode(selectedId); // keep the info modal fresh while open
   firstSnapshotApplied = true;
   bootOverlay.classList.add("hidden");
 }
@@ -1028,17 +872,6 @@ function animate(now) {
   }
 
   // Audit-locked visuals run every frame (the audited node pulses).
-  if (auditLock) {
-    applyAuditDimming();
-    // Keep the audited node exactly where the camera looks — no drift.
-    const lockedNode = [...apNodes.values()].find(
-      (n) => n.data.bssidFull === auditLock.bssid || n.data.bssid === auditLock.bssid,
-    );
-    if (lockedNode) {
-      lockedNode.mesh.position.copy(lockedNode.targetPos);
-      controls.target.copy(lockedNode.mesh.position);
-    }
-  }
 
   for (let i = 0; i < deviceOrbitState.length; i++) {
     const st = deviceOrbitState[i];

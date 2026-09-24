@@ -89,7 +89,7 @@ function paint(status: WardriveStatus): void {
     help_ui: "",
     radar_ui: "",
     wardrive_ui: "view",
-    wardrive_label: status.iface ? `WARDRIVE ${status.iface.toUpperCase()}` : "WARDRIVE",
+    wardrive_label: status.iface ? `AUDIT WIFI ${status.iface.toUpperCase()}` : "AUDIT WIFI",
     wardrive_status_text: statusText,
     wardrive_captured: captured,
     wardrive_total: total,

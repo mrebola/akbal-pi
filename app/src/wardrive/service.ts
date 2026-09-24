@@ -339,7 +339,7 @@ export class WardriveService extends EventEmitter {
     if (this.mode !== "ready" && this.mode !== "scanning") {
       return {
         ok: false,
-        error: this.mode === "attacking" ? "Hay una captura en curso — cancelala primero" : "Activá el modo wardriving para usar deauth",
+        error: this.mode === "attacking" ? "Hay una captura en curso — cancelala primero" : "Activá el modo Audit WiFi para usar deauth",
       };
     }
     const snapshot = getWifiRadarSnapshot(true);

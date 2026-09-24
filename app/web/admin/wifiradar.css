@@ -221,59 +221,141 @@ html, body {
   line-height: 1.3;
 }
 
-/* ---- side panel ---- */
+/* ---- network info modal (click a node → detail card) ---- */
 
-.side-panel {
+.apm {
   position: fixed;
-  top: calc(var(--header-height, 130px) + 10px);
-  right: 16px;
-  bottom: 96px;
-  width: 280px;
-  z-index: 15;
-  background: var(--as-panel);
-  border: 1px solid var(--as-border);
-  border-radius: 8px;
-  padding: 16px;
-  overflow-y: auto;
-  font-family: "Courier New", Courier, monospace;
-  box-shadow: 0 0 30px rgba(80, 255, 120, 0.06);
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.side-panel-close {
+.apm.hidden { display: none; }
+
+.apm-backdrop {
   position: absolute;
-  top: 10px;
-  right: 10px;
+  inset: 0;
+  background: rgba(2, 6, 4, 0.72);
+  backdrop-filter: blur(3px);
+}
+
+.apm-card {
+  position: relative;
+  z-index: 1;
+  width: min(480px, calc(100vw - 32px));
+  max-height: calc(100vh - 160px);
+  overflow-y: auto;
+  background: var(--as-panel);
+  border: 1px solid var(--as-accent);
+  border-radius: 12px;
+  padding: 20px 22px;
+  font-family: "Courier New", Courier, monospace;
+  box-shadow: 0 0 40px rgba(80, 255, 120, 0.12), 0 20px 60px rgba(0, 0, 0, 0.6);
+  animation: apm-in 0.18s ease;
+}
+
+@keyframes apm-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.apm-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
   background: transparent;
-  border: none;
+  border: 1px solid var(--as-border);
+  border-radius: 6px;
   color: var(--as-text-dim);
   cursor: pointer;
-  font-size: 14px;
+  font-size: 12px;
+  padding: 4px 8px;
 }
 
-.side-panel-close:hover { color: var(--as-accent); }
+.apm-close:hover { color: var(--as-accent); border-color: var(--as-accent); }
 
-.side-panel-title {
-  font-size: 16px;
+.apm-head { margin-bottom: 14px; }
+
+.apm-title {
+  font-size: 20px;
   color: var(--as-accent);
-  margin: 0 24px 12px 0;
+  text-shadow: 0 0 10px rgba(80, 255, 120, 0.45);
   word-break: break-word;
-  text-shadow: 0 0 8px rgba(80, 255, 120, 0.4);
+  padding-right: 28px;
 }
 
-.side-panel-row {
+.apm-sub {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--as-text-dim);
+  margin-top: 4px;
+}
+
+.apm-grid { margin-bottom: 14px; }
+
+.apm-row {
   display: flex;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
   font-size: 12px;
-  padding: 6px 0;
+  padding: 7px 0;
   border-bottom: 1px solid rgba(80, 255, 120, 0.1);
   color: var(--as-text-dim);
 }
 
-.side-panel-row span:last-child {
+.apm-row span:last-child {
   color: var(--as-text);
   text-align: right;
   word-break: break-word;
+}
+
+.apm-devices-head {
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  color: var(--as-accent);
+  margin: 12px 0 8px;
+}
+
+.apm-devices {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 170px;
+  overflow-y: auto;
+}
+
+.apm-device {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  padding: 6px 8px;
+  background: rgba(80, 255, 120, 0.05);
+  border: 1px solid rgba(80, 255, 120, 0.14);
+  border-radius: 6px;
+}
+
+.apm-dev-mac { color: var(--as-text); }
+.apm-dev-vendor { color: var(--as-text-dim); flex: 1; text-align: left; }
+.apm-dev-rssi { color: var(--as-text-dim); font-size: 10px; }
+
+.apm-devices-empty {
+  font-size: 11px;
+  color: var(--as-text-dim);
+  font-style: italic;
+  line-height: 1.5;
+}
+
+.apm-hint {
+  margin-top: 12px;
+  font-size: 10px;
+  color: var(--as-text-dim);
+  line-height: 1.5;
+  border-top: 1px solid var(--as-border);
+  padding-top: 10px;
 }
 
 /* ---- event ticker ---- */
@@ -325,214 +407,5 @@ html, body {
 
 @media (max-width: 720px) {
   .as-search { display: none; }
-  .side-panel { width: 220px; }
-}
-
-/* ---- Info panel extras: devices + audit button ---- */
-
-.side-panel-devices-head {
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  color: var(--as-accent);
-  margin: 12px 0 6px;
-}
-
-.side-panel-devices {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 150px;
-  overflow-y: auto;
-}
-
-.side-panel-device {
-  display: flex;
-  justify-content: space-between;
-  gap: 6px;
-  font-size: 11px;
-  font-family: "Courier New", Courier, monospace;
-  padding: 4px 6px;
-  background: rgba(80, 255, 120, 0.05);
-  border: 1px solid rgba(80, 255, 120, 0.12);
-  border-radius: 4px;
-}
-
-.sp-dev-mac { color: var(--as-text); }
-.sp-dev-vendor { color: var(--as-text-dim); flex: 1; text-align: left; }
-.sp-dev-rssi { color: var(--as-text-dim); }
-
-.side-panel-devices-empty {
-  font-size: 11px;
-  color: var(--as-text-dim);
-  font-style: italic;
-}
-
-.sp-audit-btn {
-  margin-top: 12px;
-  width: 100%;
-  padding: 9px 12px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #0a0f0a;
-  background: var(--as-accent);
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  letter-spacing: 0.03em;
-}
-
-.sp-audit-btn:hover { filter: brightness(1.15); }
-
-.side-panel-hint {
-  margin-top: 8px;
-  font-size: 10px;
-  color: var(--as-text-dim);
-  line-height: 1.4;
-}
-
-/* ---- Audit-locked mode banner ---- */
-
-.audit-banner {
-  position: fixed;
-  top: calc(var(--header-height, 130px) + 10px);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 10px 16px;
-  background: var(--as-panel);
-  border: 1px solid var(--as-alert);
-  border-radius: 8px;
-  box-shadow: 0 0 24px rgba(255, 77, 94, 0.25);
-}
-
-.audit-banner-text {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-family: "Courier New", Courier, monospace;
-  font-size: 13px;
-}
-
-.audit-banner-dot {
-  color: var(--as-alert);
-  animation: audit-blink 1s infinite;
-}
-
-@keyframes audit-blink {
-  50% { opacity: 0.3; }
-}
-
-#audit-banner-title {
-  color: var(--as-alert);
-  font-weight: 600;
-}
-
-#audit-banner-status {
-  color: var(--as-text-dim);
-  font-size: 11px;
-  max-width: 340px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* ---- Audit progress card (radar-driven attack steps) ---- */
-
-.audit-progress-card {
-  position: fixed;
-  bottom: 20px;
-  left: 20px;
-  z-index: 20;
-  width: 400px;
-  max-height: 45vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--as-panel);
-  border: 1px solid var(--as-accent);
-  border-radius: 10px;
-  padding: 14px 16px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
-}
-
-.audit-progress-title {
-  font-size: 12px;
-  color: var(--as-accent);
-  font-family: "Courier New", Courier, monospace;
-  margin-bottom: 10px;
-  letter-spacing: 0.04em;
-}
-
-.audit-progress-steps {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 10px;
-}
-
-.audit-step {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  flex: 1;
-  padding: 6px 2px;
-  border: 1px solid var(--as-border);
-  border-radius: 6px;
-  font-size: 9px;
-  color: var(--as-text-dim);
-  text-align: center;
-}
-
-.audit-step-num {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: 1px solid var(--as-border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-}
-
-.audit-step.active {
-  border-color: var(--as-accent);
-  color: var(--as-accent);
-  background: rgba(80, 255, 120, 0.08);
-}
-
-.audit-step.active .audit-step-num {
-  border-color: var(--as-accent);
-  color: var(--as-accent);
-}
-
-.audit-step.done {
-  border-color: rgba(80, 255, 120, 0.4);
-  color: rgba(80, 255, 120, 0.7);
-}
-
-.audit-step.done .audit-step-num { border-color: rgba(80, 255, 120, 0.4); }
-
-.audit-progress-log {
-  flex: 1;
-  min-height: 100px;
-  overflow-y: auto;
-  font-family: "Courier New", Courier, monospace;
-  font-size: 11px;
-  line-height: 1.5;
-  border: 1px solid var(--as-border);
-  border-radius: 6px;
-  padding: 8px 10px;
-  background: rgba(0, 0, 0, 0.35);
-}
-
-.audit-progress-log .log-entry { margin-bottom: 4px; color: var(--as-text-dim); }
-.audit-progress-log .log-entry.cmd { color: var(--as-accent); word-break: break-all; }
-.audit-progress-log .log-entry.output { color: var(--as-text-dim); opacity: 0.8; white-space: pre-wrap; word-break: break-all; }
-.audit-progress-log .log-time { opacity: 0.5; margin-right: 6px; font-size: 10px; }
-
-.audit-progress-footer {
-  margin-top: 8px;
-  font-size: 10px;
+  .apm-card { max-height: calc(100vh - 120px); }
 }

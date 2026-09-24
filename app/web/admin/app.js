@@ -1545,7 +1545,7 @@ void loadModels();
 // reload needed to see the % move.
 setInterval(() => void loadStatus(), 60000);
 
-// ---- Wardriving (simplified) ----
+// ---- Audit WiFi (mode; internal API paths stay /api/wardrive/*) ----
 // Flow: enter mode → see networks → click "Auditar" → handshake captured →
 // download .cap/.hc22000 for offline cracking. That's it.
 
@@ -1667,7 +1667,7 @@ function wdRender() {
   // Networks table
   wdTableBody.innerHTML = "";
   if (!on) {
-    wdTableBody.innerHTML = '<tr><td colspan="7" class="muted">Entra al modo wardriving para escanear</td></tr>';
+    wdTableBody.innerHTML = '<tr><td colspan="7" class="muted">Entra al modo Audit WiFi para escanear</td></tr>';
     return;
   }
 

@@ -103,35 +103,33 @@
     <div class="hud-note">actividad observada · no es un analizador RF real</div>
   </div>
 
-  <aside id="side-panel" class="side-panel hidden">
-    <button id="side-panel-close" class="side-panel-close">✕</button>
-    <div class="side-panel-title" id="sp-ssid">—</div>
-    <div class="side-panel-row"><span>BSSID</span><span id="sp-bssid">—</span></div>
-    <div class="side-panel-row"><span>Vendor</span><span id="sp-vendor">—</span></div>
-    <div class="side-panel-row"><span>RSSI</span><span id="sp-rssi">—</span></div>
-    <div class="side-panel-row"><span>Channel</span><span id="sp-channel">—</span></div>
-    <div class="side-panel-row"><span>Security</span><span id="sp-security">—</span></div>
-    <div class="side-panel-row"><span>Distancia aprox.</span><span id="sp-distance">—</span></div>
-    <div class="side-panel-row"><span>First Seen</span><span id="sp-first">—</span></div>
-    <div class="side-panel-row"><span>Last Seen</span><span id="sp-last">—</span></div>
-    <div class="side-panel-row"><span>Frames</span><span id="sp-frames">—</span></div>
-    <div class="side-panel-row"><span>Clients</span><span id="sp-clients">—</span></div>
-    <div class="side-panel-devices-head">// EQUIPOS CONECTADOS</div>
-    <div id="sp-device-list" class="side-panel-devices"></div>
-    <button id="sp-audit-btn" class="sp-audit-btn" title="Abrir la auditoría de wardriving sobre esta red">⚔ Auditar web</button>
-    <div class="side-panel-hint">Auditar abre el modo wardriving (toma la radio) con esta red como objetivo.</div>
-  </aside>
-
-  <!-- Audit-locked mode: when "Auditar web" is clicked the scene freezes
-       on the selected node (camera centered, orbit disabled) and this
-       banner takes over the top of the screen. -->
-  <div id="audit-banner" class="audit-banner hidden">
-    <div class="audit-banner-text">
-      <span class="audit-banner-dot">●</span>
-      <span id="audit-banner-title">AUDITANDO</span>
-      <span id="audit-banner-status" class="muted">—</span>
+  <!-- Network info modal: click a node → detail card (SSID, MAC, vendor,
+       signal/distance, security, connected devices). Closable via ✕,
+       backdrop or Escape; clicking the node again re-opens it. The radar
+       is display-only — auditing lives in the "Audit WiFi" tab. -->
+  <div id="ap-info-modal" class="apm hidden">
+    <div class="apm-backdrop"></div>
+    <div class="apm-card">
+      <button id="ap-info-close" class="apm-close">✕</button>
+      <div class="apm-head">
+        <div class="apm-title" id="apm-ssid">—</div>
+        <div class="apm-sub">Detalles de la red</div>
+      </div>
+      <div class="apm-grid">
+        <div class="apm-row"><span>MAC Address (BSSID)</span><span id="apm-bssid">—</span></div>
+        <div class="apm-row"><span>Marca / fabricante</span><span id="apm-vendor">—</span></div>
+        <div class="apm-row"><span>Seguridad</span><span id="apm-security">—</span></div>
+        <div class="apm-row"><span>Canal</span><span id="apm-channel">—</span></div>
+        <div class="apm-row"><span>Potencia (RSSI)</span><span id="apm-rssi">—</span></div>
+        <div class="apm-row"><span>Distancia aprox.</span><span id="apm-distance">—</span></div>
+        <div class="apm-row"><span>Frames capturados</span><span id="apm-frames">—</span></div>
+        <div class="apm-row"><span>Primera vez visto</span><span id="apm-first">—</span></div>
+        <div class="apm-row"><span>Última vez visto</span><span id="apm-last">—</span></div>
+      </div>
+      <div class="apm-devices-head">// EQUIPOS CONECTADOS A ESTA RED</div>
+      <div id="apm-devices" class="apm-devices"></div>
+      <div class="apm-hint">Para auditar (handshake/deauth) usá la pestaña <strong>Audit WiFi</strong> — este radar es solo observación.</div>
     </div>
-    <button id="audit-banner-close" class="secondary" title="Cerrar y volver al radar (la auditoría sigue en la pestaña Wardriving)">Cerrar auditoría</button>
   </div>
 
   <div class="event-ticker" id="event-ticker"></div>

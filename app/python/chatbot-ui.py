@@ -510,7 +510,7 @@ class RenderThread(threading.Thread):
         this only renders."""
         self.render_top_bar()
 
-        label = "MODO WARDRIVE"
+        label = "MODO AUDIT WIFI"
         status_line = current_wardrive_status_text or "..."
         captured = current_wardrive_captured or 0
         total = current_wardrive_total or 0
@@ -763,11 +763,11 @@ class RenderThread(threading.Thread):
         text_h = bbox[3] - bbox[1]
         draw.text((TOP_BAR_MARGIN_X + BRAND_LEFT_PADDING, (TOP_BAR_HEIGHT - text_h) // 2 - bbox[1]), BRAND_LABEL, font=self.top_bar_mode_font, fill=brand_color)
 
-        # In wardriving mode the brand line extends: "AKBAL - modo wardriving"
+        # In audit-wifi mode the brand line extends: "AKBAL - audit wifi"
         # — the dash separates them, wardriving in red right after the green
         # AKBAL (mode spec: same line, small, impossible to miss).
         if current_wardrive_ui:
-            extra = " - modo wardriving"
+            extra = " - audit wifi"
             ex_bbox = draw.textbbox((0, 0), extra, font=self.top_bar_mode_font)
             ex_w = ex_bbox[2] - ex_bbox[0]
             ex_x = TOP_BAR_MARGIN_X + BRAND_LEFT_PADDING + (bbox[2] - bbox[0]) + 2

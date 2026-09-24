@@ -31,7 +31,9 @@ Ya no usa el diálogo nativo de autenticación básica del navegador —
 - **WIFIRADAR**: visualización 3D del espacio WiFi con Three.js — página
   aparte, ver [`wifiradar.md`](./wifiradar.md).
 - **WARDRIVING**: captura de handshakes de laboratorio con allowlist
-  explícita — ver [`wardrive.md`](./wardrive.md).
+  explícita — ver [`wardrive.md`](./wardrive.md). Para las pruebas reales
+  se usa un AP dedicado (SSID `akbal_lab`), ver
+  [`lab-wireless.md`](./lab-wireless.md).
 - Indicadores en la topbar: batería (%, carga), CPU/RAM/disco del Pi —
   todos se refrescan solos cada 60s sin recargar la página.
 

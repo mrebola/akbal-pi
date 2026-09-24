@@ -32,6 +32,8 @@ akbal-pi/
 │   ├── cli/               # CLI bash (bin/whisplay)
 │   └── dist/              # Compilado (no commitear)
 ├── docs/                  # Bitácora: SETUP.md, fixes de hardware, decisiones
+│                          # docs/lab-wireless.md = AP de pruebas dedicado
+│                          # (SSID akbal_lab, red AUTORIZADA para auditoría)
 └── setup/                 # Patches, env de referencia SIN secretos, videos fuente
 ```
 

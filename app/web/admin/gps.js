@@ -22,7 +22,15 @@ setInterval(() => void refresh(), POLL_MS);
 
 function initMap() {
   const el = document.getElementById("gps-map");
-  if (!el || typeof L === "undefined") return;
+  if (!el || typeof L === "undefined") {
+    // Leaflet failed to load — make it visible instead of a silent black map.
+    const err = document.getElementById("gps-error");
+    if (err) {
+      err.textContent = "No se pudo cargar el motor de mapas (vendor/leaflet) — revisá el deploy.";
+      err.classList.remove("hidden");
+    }
+    return;
+  }
   map = L.map(el, {
     center: [WORLD_VIEW.lat, WORLD_VIEW.lon],
     zoom: WORLD_VIEW.zoom,
@@ -31,13 +39,25 @@ function initMap() {
     worldCopyJump: true, // panning past ±180° keeps the marker visible
   });
   // CARTO basemap: light, high-contrast world — very visual without
-  // overwhelming the HUD overlays.
+  // overwhelming the HUD overlays. Tiles are the only external resource;
+  // if CARTO is unreachable the position HUD still works.
   const tiles = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
     subdomains: "abcd",
     maxZoom: 19,
+    crossOrigin: true,
   });
   tiles.addTo(map);
+  // Slow tiles (weak connectivity) shouldn't look like a broken map.
+  tiles.on("tileerror", () => {
+    const err = document.getElementById("gps-error");
+    if (err && err.classList.contains("hidden")) {
+      err.textContent = "Los tiles del mapa (CARTO) no cargan — sin salida a internet desde la Pi. La posición del HUD sigue siendo válida.";
+      err.classList.remove("hidden");
+      clearTimeout(tiles._akbalErrTimer);
+      tiles._akbalErrTimer = setTimeout(() => err.classList.add("hidden"), 8000);
+    }
+  });
 }
 
 // ---- Position marker ----

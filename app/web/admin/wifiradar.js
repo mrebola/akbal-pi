@@ -160,6 +160,16 @@ let effectiveQuality = "medium";
 let selectedId = null;
 let searchTerm = "";
 
+// Security visibility filter: which AP security classes are shown on the
+// radar. OPEN/WEP are their own class; WPA groups WPA, WPA2/3 (and anything
+// else encrypted). All on by default — the toggles dim what you hide.
+const securityVisible = { OPEN: true, WEP: true, WPA: true };
+function securityClass(security) {
+  if (security === "OPEN") return "OPEN";
+  if (security === "WEP") return "WEP";
+  return "WPA"; // WPA, WPA2/3, UNKNOWN-ish encrypted variants
+}
+
 async function apiPost(path, body) {
   const res = await fetch(path, {
     method: "POST",
@@ -597,8 +607,16 @@ window.addEventListener("keydown", (e) => {
 
 // ---- HUD / event ticker ----
 function updateHud(snapshot) {
-  hudAps.textContent = String(snapshot.accessPoints.length);
-  hudDevices.textContent = String(snapshot.devices.length);
+  // "APs" counts what's on the radar — filtered when the security toggles
+  // hide classes (the HUD reflects the scene, not the raw capture).
+  const shownAps = snapshot.accessPoints.filter((ap) => securityVisible[securityClass(ap.security)]).length;
+  const hiddenDevices = snapshot.devices.filter((d) => {
+    if (!d.associatedBssid) return false;
+    const ap = snapshot.accessPoints.find((a) => a.bssid === d.associatedBssid);
+    return ap && !securityVisible[securityClass(ap.security)];
+  }).length;
+  hudAps.textContent = `${shownAps}${shownAps < snapshot.accessPoints.length ? `/${snapshot.accessPoints.length}` : ""}`;
+  hudDevices.textContent = String(snapshot.devices.length - hiddenDevices);
   hudChannel.textContent = snapshot.currentChannel ? String(snapshot.currentChannel) : "—";
   hudFpm.textContent = String(snapshot.framesPerMinute);
   const alertCount = snapshot.events.filter((e) => e.severity === "alert").length;
@@ -639,15 +657,22 @@ function applySnapshot(snapshot) {
   latestSnapshot = snapshot;
   updateHud(snapshot);
 
-  const currentIds = new Set(snapshot.accessPoints.slice(0, MAX_APS).map((ap) => ap.id));
-  for (const ap of snapshot.accessPoints.slice(0, MAX_APS)) {
+  // Security filter first: hidden APs are pruned like any other missing
+  // node, and their orbiting devices vanish with them (devices anchor to
+  // their AP node below — no AP node, no anchor, not rendered).
+  const visibleAps = snapshot.accessPoints.filter((ap) => securityVisible[securityClass(ap.security)]);
+  const currentIds = new Set(visibleAps.slice(0, MAX_APS).map((ap) => ap.id));
+  for (const ap of visibleAps.slice(0, MAX_APS)) {
     ensureApNode(ap);
   }
   pruneApNodes(currentIds);
 
-  // Devices: pick up to MAX_DEVICES, distributed as small orbiting
-  // instances around their associated AP node (or the core if unassigned).
-  const devices = snapshot.devices.slice(0, MAX_DEVICES);
+  // Devices: pick up to MAX_DEVICES among devices whose AP is visible (or
+  // unassociated — those anchor to the core), orbiting their AP node.
+  const visibleBssids = new Set(visibleAps.map((ap) => ap.bssid));
+  const devices = snapshot.devices
+    .filter((d) => !d.associatedBssid || visibleBssids.has(d.associatedBssid))
+    .slice(0, MAX_DEVICES);
   deviceMesh.count = devices.length;
   deviceOrbitState = devices.map((d, i) => {
     const prior = deviceOrbitState[i];
@@ -699,6 +724,19 @@ function applySearchFilter() {
 searchInput.addEventListener("input", (e) => {
   searchTerm = e.target.value;
   applySearchFilter();
+});
+
+// ---- security visibility toggles (OPEN/WEP/WPA) ----
+// Toggling off prunes those APs (and their orbiting devices) on the next
+// snapshot; re-render from the latest snapshot immediately so the change
+// feels instant, without waiting for the 2s tick.
+document.querySelectorAll(".as-sec").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const sec = btn.dataset.sec;
+    securityVisible[sec] = !securityVisible[sec];
+    btn.classList.toggle("active", securityVisible[sec]);
+    if (latestSnapshot) applySnapshot(latestSnapshot);
+  });
 });
 
 // ---- toolbar controls ----

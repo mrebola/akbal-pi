@@ -137,6 +137,30 @@ html, body {
   gap: 8px;
 }
 
+/* Security filter group (OPEN/WEP/WPA): each button tinted like its node
+   color; "off" state dims the button instead of removing it, so the
+   group's layout never jumps. */
+.as-sec-group {
+  display: flex;
+  gap: 4px;
+}
+
+.as-sec {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.as-sec.active {
+  opacity: 1;
+  text-decoration: none;
+  color: var(--as-text);
+  background: var(--bg, #0b0d0f);
+}
+
+.as-sec[data-sec="OPEN"].active { color: #ffd166; border-color: rgba(255, 209, 102, 0.55); }
+.as-sec[data-sec="WEP"].active { color: #ff8a4d; border-color: rgba(255, 138, 77, 0.55); }
+.as-sec[data-sec="WPA"].active { color: #38e0ff; border-color: rgba(56, 224, 255, 0.55); }
+
 .as-btn, .as-select {
   background: var(--bg, #0b0d0f);
   border: 1px solid var(--as-border);

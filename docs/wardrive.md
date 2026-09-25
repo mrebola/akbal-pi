@@ -66,6 +66,13 @@ AR9271 (wlan1) — la misma radio del WiFi Radar, exclusión mutua por diseño
   snapshot vivo del WiFi Radar (misma foto del aire). Fallback: un
   `iw dev wlan0 scan` de un solo tiro si el radar está parado. Modo demo:
   lee el pool del generador demo del radar.
+- `app/src/wifiradar/oui.ts` (compartido con el radar) — etiqueta de
+  fabricante por BSSID: registro IEEE local (ieee-data) → tabla curada →
+  API macvendors.com si `MACVENDORS_API_KEY` está en `.env` (ver
+  [`wifiradar.md`](./wifiradar.md), "Resolución de fabricantes"). En el
+  refresh de targets, los prefijos desconocidos se resuelven async contra
+  la API (cacheada, con rate-limit) y se parchea la lista en memoria —
+  los MACs aleatorizadas se etiquetan "Random MAC" sin consultar nada.
 - `app/src/wardrive/attack.ts` — runners de procesos externos
   (`PmkidRunner`, `AirodumpCapture`, `DeauthRunner`, `scanTarget`), cada
   uno mata su grupo de procesos al parar (mismo patrón detached+group-kill
@@ -285,6 +292,10 @@ sudo apt-get install -y aircrack-ng hcxtools iw
   el flujo v1 de runTarget).
 - El usuario del servicio ya tiene `sudo -n` completo (ver
   [`wifi.md`](./wifi.md)); no hay regla de sudoers adicional.
+- `ieee-data` (recomendado, compartido con el radar) — registro OUI local;
+  con `MACVENDORS_API_KEY` en `.env` los prefijos que falten se resuelven
+  contra macvendors.com (key gratis propia, ver
+  [`wifiradar.md`](./wifiradar.md)).
 
 ## Cómo usarlo (desde el admin web)
 
@@ -293,14 +304,19 @@ sudo apt-get install -y aircrack-ng hcxtools iw
 2. Botón **Entrar** — la radio pasa a wardrive (el radar se detiene, el
    LCD del dispositivo muestra la pantalla WARDRIVE).
 3. **Escanear** lista las redes visibles; **Autorizar** agrega el BSSID al
-   allowlist (paso obligatorio, es el security boundary).
-4. **Auditar** corre el ciclo completo contra ese BSSID con progreso paso
+   allowlist (paso obligatorio, es el security boundary). La tabla tiene
+   buscador (SSID/BSSID/canal/seguridad) y columnas ordenables (click en
+   el encabezado alterna asc/desc).
+4. **Click en una fila** abre el modal de detalles de la red (mismo estilo
+   de tarjeta que el radar): SSID, BSSID, fabricante, seguridad, canal,
+   RSSI y distancia aproximada.
+5. **Auditar** corre el ciclo completo contra ese BSSID con progreso paso
    a paso en un modal (scan → lock → capture → deauth → validate → done).
    "Todo" lanza la secuencia sobre todos los autorizados visibles.
-5. Los archivos capturados se listan abajo y se descargan desde la web.
-6. Botón **REAL/DEMO** cambia la fuente de descubrimiento (ensayo sin
+6. Los archivos capturados se listan abajo y se descargan desde la web.
+7. Botón **REAL/DEMO** cambia la fuente de descubrimiento (ensayo sin
    hardware).
-7. **Salir** restaura la radio y devuelve el control al radar.
+8. **Salir** restaura la radio y devuelve el control al radar.
 
 Verificación por log:
 

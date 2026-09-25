@@ -33,7 +33,10 @@ Ya no usa el diálogo nativo de autenticación básica del navegador —
 - **WARDRIVING**: captura de handshakes de laboratorio con allowlist
   explícita — ver [`wardrive.md`](./wardrive.md). Para las pruebas reales
   se usa un AP dedicado (SSID `akbal_lab`), ver
-  [`lab-wireless.md`](./lab-wireless.md).
+  [`lab-wireless.md`](./lab-wireless.md). Las redes visibles se listan en
+  una tabla con buscador y columnas ordenables; click en una fila abre el
+  modal de detalles de la red (BSSID enmascarado `AA:BB:CC:••:••:••`, con
+  botón 👁 para revelar — el mismo toggle del radar).
 - Indicadores en la topbar: batería (%, carga), CPU/RAM/disco del Pi —
   todos se refrescan solos cada 60s sin recargar la página.
 

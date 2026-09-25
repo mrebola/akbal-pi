@@ -78,6 +78,19 @@ whisplay-ai-chatbot/
 │   │   ├── web-display.ts        # Web-based display sim
 │   │   ├── web-admin-server.ts   # LAN chat + wifi admin UI (docs/web-ui.md)
 │   │   └── ...
+│   ├── wifiradar/                # WiFi Radar 3D: passive capture + aggregation (docs/wifiradar.md)
+│   │   ├── capture.ts            # dumpcap|tshark pipeline → RawFrameEvent
+│   │   ├── aggregator.ts         # in-memory state, events, pruning
+│   │   ├── oui.ts                # vendor lookup: ieee-data → curated → macvendors API
+│   │   ├── ar9271.ts             # dongle detection by kernel driver (ath9k_htc)
+│   │   ├── monitor-control.ts    # in-place monitor mode + channel hopping
+│   │   └── demo-mode.ts          # synthetic APs/devices for demo source
+│   ├── wardrive/                 # Lab handshake capture (docs/wardrive.md)
+│   │   ├── service.ts            # orchestrator: allowlist security boundary
+│   │   ├── discovery.ts          # targets from radar snapshot / iw scan
+│   │   ├── attack.ts             # airodump/aireplay/hcxdumptool runners
+│   │   ├── crack.ts              # aircrack-ng handshake validation
+│   │   └── session.ts            # ~/wardrive-sessions persistence
 │   ├── plugin/                   # Plugin system
 │   │   ├── types.ts              # Plugin interface definitions
 │   │   ├── registry.ts           # Plugin registry
@@ -207,6 +220,10 @@ whisplay index-knowledge
 3. **Plugin development**: Always read config from `ctx.env`, never `process.env` directly
 4. **Error handling**: Use try-catch with meaningful error messages; hardware errors should be non-fatal where possible
 5. **Logging**: Use `console.log/time/timeEnd` for debugging; Python side uses print with prefixes like `[Server]`, `[Camera]`
+6. **API keys/tokens**: never hardcoded, never committed — always read from `.env`
+   (e.g. `MACVENDORS_API_KEY` in `src/wifiradar/oui.ts`). Templates
+   (`.env.template`, `setup/akbal.env.example`) carry placeholders only, with a
+   note telling each user to get their own key.
 
 ## Plugin System Architecture
 

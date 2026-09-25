@@ -126,11 +126,11 @@ Dos capas de defensa (ambas aplicadas en esta Pi):
 
 ### Privacidad
 
-- BSSID/MAC anonimizados por defecto: `AA:BB:CC:••:••:••`. Mostrar la MAC
-  completa requiere pasar `?fullMac=1` explícitamente al conectar el
-  WebSocket — no hay ninguna opción en la UI actual para activarlo (se
-  dejó el soporte del lado del servidor por si se agrega un toggle más
-  adelante).
+- BSSID/MAC anonimizados por defecto: `AA:BB:CC:••:••:••`. El modal de
+  info (click en un nodo) muestra las MAC enmascaradas y trae un botón
+  🙈/👁 junto al ✕ que revela las MAC reales — al activarlo la sesión
+  WebSocket pide `?fullMac=1` y el backend deja de enmascarar; al cerrar
+  el modal vuelve al modo enmascarado.
 - Cada AP/dispositivo también lleva un `id` — un hash de una sola vía
   (SHA-256, primeros 12 caracteres) de la MAC real. Existe porque
   anonimizar a solo el prefijo de vendor puede hacer que dos dispositivos
@@ -143,6 +143,40 @@ Dos capas de defensa (ambas aplicadas en esta Pi):
   vive en memoria del proceso Node y se poda automáticamente (AP sin
   beacon en 60s → evento "AP perdido"; sin actividad 5 min → se elimina de
   memoria del todo).
+
+### Resolución de fabricantes (vendor)
+
+Tres capas, de local a remoto (`app/src/wifiradar/oui.ts`):
+
+1. **`ieee-data`** (local, recomendado) — el registro completo del IEEE
+   (~35k fabricantes MA-L) en `/usr/share/ieee-data/oui.csv`, cargado una
+   sola vez al primer lookup (~0.1s, unos MB de RAM) y luego dict lookup
+   puro. Los nombres legales se acortan para lectura
+   ("TP-LINK TECHNOLOGIES CO.,LTD." → "Tp-Link Technologies").
+2. **Tabla curada** (~50 entradas) — fallback cuando `ieee-data` no está
+   instalado: los fabricantes comunes en un entorno doméstico/SOHO.
+3. **macvendors.com API** (remoto, opt-in) — solo cuando el prefijo no
+   aparece en ninguna fuente local Y `MACVENDORS_API_KEY` está definida en
+   `.env` (key gratis de macvendors.com, cada usuario la suya — nunca
+   commitear la real). Detalles del fallback:
+   - Cache por prefijo OUI: 24h los hits, 1h los 404 (el dueño de un
+     prefijo no cambia) — N MACs del mismo fabricante cuestan 1 consulta.
+   - Requests serializados con separación mínima de 1.2s; ante 429 (free
+     plan) backoff de 30s, ante cualquier otro error/offline 10s — nunca
+     bloquea ni satura.
+   - MACs aleatorizadas (bit locally-administered) jamás se consultan al
+     API: se etiquetan "Random MAC" sin intentar resolverlas.
+   - Timeout de 5s; sin internet cae silenciosamente a "Desconocido".
+   - El pipeline de captura del radar NUNCA consulta la API (es síncrono
+     por frame); la capa remota se usa en rutas ya async, como el refresh
+     de targets del wardriving.
+
+### MAC aleatorizadas
+
+Apple/Android/Windows randomizan las MAC de sus probe frames (bit
+locally-administered del primer octeto seteado). `isRandomizedMac()`
+(`oui.ts`) las detecta por bit — un lookup OUI sobre ese prefijo diría una
+marca falsa — y la UI muestra "Random MAC" en su lugar.
 
 ## Perfil de recursos (medido en este dispositivo, Pi 5 8GB)
 
@@ -179,7 +213,8 @@ sudo apt-get install -y iw tshark ieee-data
   backend lo carga una sola vez al arrancar y lo usa para resolver la
   marca de cada AP/dispositivo; sin él cae a una tabla corta curada a mano
   (~50 entradas) y muchas redes muestran "Desconocido". No añade
-  subprocessos ni costo por consulta (dict lookup en memoria).
+  subprocessos ni costo por consulta (dict lookup en memoria). Ver
+  "Resolución de fabricantes" más arriba para el orden completo de capas.
 - El usuario que corre `chatbot.service` (`akbal` en este dispositivo) ya
   tiene sudo sin contraseña completo (`(ALL:ALL) ALL`, ver
   [`wifi.md`](./wifi.md)) — no hace falta una regla de sudoers adicional
@@ -235,9 +270,9 @@ navegar directo a `/wifiradar`).
 ### Controles
 
 - **drag**: rotar cámara · **wheel**: zoom
-- **click** en un nodo: panel lateral con SSID, BSSID (anonimizado),
-  vendor, RSSI, canal, seguridad, primera/última vez visto, frames y
-  clientes observados
+- **click** en un nodo: panel lateral con SSID, BSSID (anonimizado hasta
+  activar el 👁), vendor, RSSI, canal, seguridad, primera/última vez
+  visto, frames y clientes observados
 - **buscar** por SSID/BSSID: atenúa todo lo que no matchea
 - **LIVE/PAUSE**: pausa la aplicación de nuevos snapshots (la escena sigue
   animada, los datos se congelan)

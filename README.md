@@ -59,7 +59,7 @@ Raspberry Pi OS 64-bit, basado en Debian Trixie.
 | Pantalla | UI propia minimalista: íconos de wifi/batería arriba, personaje animado (cara en primer plano) al medio, texto verde terminal abajo ([`docs/display-ui.md`](docs/display-ui.md)); pantalla dedicada estilo terminal para elegir/cargar modelo de LLM ([`docs/voice-commands.md`](docs/voice-commands.md)) |
 | Comandos de voz | Volumen, cambio/consulta de modelo de LLM y modo agente/local, resueltos por expresiones regulares antes de llegar al LLM — instantáneo, sin gastar un turno. Decir "ayuda" con el botón presionado muestra un resumen de todos estos comandos en pantalla ([`docs/voice-commands.md`](docs/voice-commands.md)) |
 | Wifi | Menú físico "Wifi connect" (AP directo + QR, ver [`docs/wifi.md`](docs/wifi.md)) + interfaz web con chat a los modelos locales, wifi completo (buscar, conectar con contraseña, olvidar redes), USB y batería/CPU/RAM en vivo en `http://<ip-del-dispositivo>:8090` ([`docs/web-ui.md`](docs/web-ui.md)) |
-| WiFi Radar | Visualización 3D (Three.js) del espacio WiFi alrededor del Pi, capturado pasivamente con cualquier adaptador USB en modo monitor (detección genérica; probado con Atheros AR9271 y Ralink RT5372) — toggle real/demo y caída a demo con datos simulados si no hay hardware conectado ([`docs/wifiradar.md`](docs/wifiradar.md)) |
+| WiFi Radar | Visualización 3D (Three.js) del espacio WiFi alrededor del Pi, capturado pasivamente con cualquier adaptador USB en modo monitor (detección genérica; probado con Atheros AR9271 y Ralink RT5372) — toggle real/demo y caída a demo con datos simulados si no hay hardware conectado. Fabricantes resueltos del registro IEEE local (ieee-data), con fallback opcional a la API de macvendors.com ([`docs/wifiradar.md`](docs/wifiradar.md)) |
 | Wardriving | Captura de handshakes para laboratorio/tesis: allowlist explícita de BSSIDs como único mecanismo de autorización, ataques pmkid/deauth con aircrack-ng, sesiones con artifacts descargables desde la web — probado contra un AP de laboratorio dedicado ([`docs/wardrive.md`](docs/wardrive.md), [`docs/lab-wireless.md`](docs/lab-wireless.md)) |
 
 Detalle completo del setup en [`docs/SETUP.md`](docs/SETUP.md).
@@ -102,7 +102,7 @@ Con [Raspberry Pi Imager](https://www.raspberrypi.com/software/):
 ```bash
 ssh <usuario>@<host-o-ip-de-la-pi>
 sudo apt-get update && sudo apt-get install -y nodejs npm git ffmpeg alsa-utils \
-    python3-pip python3-venv build-essential
+    python3-pip python3-venv build-essential ieee-data
 ```
 
 ### 4. Driver del Whisplay HAT (audio + pantalla + botón)
@@ -383,6 +383,14 @@ desconecta, cae a DEMO solo y se recupera solo cuando vuelve. Pausa el stream
 con **LIVE/PAUSED**, alterna 2D/3D con **3D**, RESET VIEW centra la cámara.
 Solo escucha: nunca transmite nada.
 
+El fabricante de cada red/dispositivo se resuelve en tres capas: registro IEEE
+local (`ieee-data`), tabla curada interna y — solo si `MACVENDORS_API_KEY` está
+en el `.env` — la API de macvendors.com como último recurso (cacheada y con
+rate-limit; cada usuario debe poner su propia key gratis). Las MAC aleatorizadas
+de teléfonos/laptops modernos se etiquetan "Random MAC" sin intentar resolverlas.
+En el modal de detalles, las MAC van enmascaradas (`AA:BB:CC:••:••:••`) con un
+botón 👁 para revelarlas.
+
 ### WARDRIVING (pestaña)
 
 Captura de handshakes para laboratorio/tesis, sobre la misma radio del radar.
@@ -391,7 +399,9 @@ ver [`docs/wardrive.md`](./docs/wardrive.md). Resumen:
 
 1. **Entrar** (banner superior) toma la radio en modo monitor — el radar deja de
    capturar hasta que salgas (se retoma solo al salir).
-2. La tabla lista las redes visibles (canal, señal, clientes, seguridad).
+2. La tabla lista las redes visibles (canal, señal, clientes, seguridad),
+   con buscador y columnas ordenables; click en una fila abre el modal de
+   detalles de la red.
 3. **Autorizar** un BSSID lo agrega al allowlist — el único mecanismo de
    autorización: sin allowlist no hay ataque, no existe el "atacar todo".
 4. **Auditar** corre el ataque contra esa red: escaneo → lock de canal →

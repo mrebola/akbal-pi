@@ -338,6 +338,16 @@ export async function getGpsStatus(): Promise<GpsStatus> {
   const satellites = [...state.satellites.values()].sort(
     (a, b) => Number(b.used) - Number(a.used) || b.snr - a.snr,
   );
+  // Some receivers (u-blox 7) never emit GSA, so no satellite is flagged
+  // `used`. GGA's sats-used count is authoritative: mark the top-SNR GSV
+  // satellites as part of the fix up to that count.
+  const satellitesUsed = gga?.satellitesUsed ?? 0;
+  if (satellitesUsed > 0 && !satellites.some((s) => s.used)) {
+    const bySnr = [...satellites].sort((a, b) => b.snr - a.snr);
+    for (const s of bySnr.slice(0, satellitesUsed)) {
+      if (s.snr > 0) s.used = true;
+    }
+  }
   const satellitesInView = satellites.filter((s) => s.elevation >= 0 || s.snr > 0).length;
 
   const error = hasFix
@@ -356,7 +366,7 @@ export async function getGpsStatus(): Promise<GpsStatus> {
     speedKmh: state.lastRmc?.speedKmh ?? null,
     headingDeg: state.lastRmc?.headingDeg ?? null,
     hdop: gga?.hdop ?? null,
-    satellitesUsed: gga?.satellitesUsed ?? 0,
+    satellitesUsed,
     satellitesInView,
     satellitesNeeded: MIN_SATS_FOR_FIX,
     satellites,

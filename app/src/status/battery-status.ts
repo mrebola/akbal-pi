@@ -33,12 +33,17 @@ export function startBatteryStatus(): Battery {
   return battery;
 }
 
-export function getBatteryReading(): { level: number; charging: boolean | null; connected: boolean } {
+export function getBatteryReading(): { level: number | null; charging: boolean | null; connected: boolean } {
   if (!sharedBattery) {
-    return { level: 0, charging: null, connected: false };
+    return { level: null, charging: null, connected: false };
   }
+  // level: null = unreadable (no PiSugar daemon, or the daemon can't reach
+  // the I2C chip). Zero is NOT a valid "unreadable" marker — a real 0%
+  // battery is plausible — so treat the initial/never-updated 0 the same
+  // as garbage: the web UI renders null as "N/A".
+  const level = sharedBattery.getBatteryLevel();
   return {
-    level: sharedBattery.getBatteryLevel(),
+    level: Number.isFinite(level) && level > 0 ? level : null,
     charging: sharedBattery.getBatteryCharging(),
     connected: sharedBattery.isConnected(),
   };

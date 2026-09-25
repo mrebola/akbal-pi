@@ -64,8 +64,10 @@ function setAvatarTalking(isTalking) {
 }
 
 function updateBatteryIndicator(battery) {
-  if (!battery || !battery.connected) {
-    batteryPct.textContent = "—";
+  // "N/A" when there's no usable reading: no PiSugar daemon, or the daemon
+  // can't reach the chip (backend sends level: null).
+  if (!battery || !battery.connected || battery.level == null) {
+    batteryPct.textContent = "N/A";
     batteryIcon.textContent = "🔋";
     batteryIndicator.classList.remove("low", "charging");
     return;
@@ -203,7 +205,7 @@ function updateSettingsOverview(data) {
   const sys = data.system;
   setText("ov-model", data.model || "—");
   setText("ov-wifi", data.wifi?.connected ? data.wifi.ssid : "sin wifi");
-  setText("ov-battery", data.battery?.connected ? `${data.battery.level}%` : "—");
+  setText("ov-battery", data.battery && data.battery.level != null ? `${data.battery.level}%` : "N/A");
   setText("ia-model-name", data.model || "—");
   if (data.deviceMode) renderModeToggle(data.deviceMode);
   if (sys) {

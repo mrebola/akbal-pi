@@ -35,8 +35,15 @@ class PiSugarBattery extends EventEmitter {
         const message = data.toString();
         if (message.startsWith("battery:")) {
           const level = parseInt(message.split(":")[1], 10);
-          this.batteryLevel = level;
-          this.emit("batteryLevel", level);
+          // The PiSugar daemon answers even on hardware failure (e.g.
+          // "battery: I2C not connected") — parseInt gives NaN there. Keep
+          // the last good reading instead of poisoning the cache with NaN
+          // (JSON.stringify turns NaN into null and the web UI renders
+          // "null%").
+          if (!Number.isNaN(level)) {
+            this.batteryLevel = level;
+            this.emit("batteryLevel", level);
+          }
         } else if (message.startsWith("battery_charging:")) {
           const charging = message.split(":")[1].trim() === "true";
           this.batteryCharging = charging;

@@ -372,9 +372,9 @@ function applyState(data) {
   led.style.boxShadow = `0 0 24px ${ledColor}`;
   ledText.textContent = ledColor;
 
-  const batteryLevel = typeof data.battery_level === "number" ? data.battery_level : null;
+  const batteryLevel = typeof data.battery_level === "number" && Number.isFinite(data.battery_level) ? data.battery_level : null;
   if (batteryLevel === null) {
-    batteryText.textContent = "--%";
+    batteryText.textContent = "N/A";
     batteryFill.style.width = "0%";
   } else {
     batteryText.textContent = `${batteryLevel}%`;

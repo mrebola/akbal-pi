@@ -44,8 +44,9 @@ logoutBtn.addEventListener("click", async () => {
 });
 
 function updateBatteryIndicator(battery) {
-  if (!battery || !battery.connected) {
-    batteryPct.textContent = "—";
+  // "N/A" when there's no usable reading (level: null from the backend).
+  if (!battery || !battery.connected || battery.level == null) {
+    batteryPct.textContent = "N/A";
     batteryIcon.textContent = "🔋";
     batteryIndicator.classList.remove("low", "charging");
     return;

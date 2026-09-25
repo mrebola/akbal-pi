@@ -351,6 +351,7 @@ async function main() {
   // ─── Render loop ──────────────────────────────────────────────────────────
   const clock = new THREE.Clock();
   let loopRunning = false;
+  let globeActive = false;
   function animate() {
     if (!globeActive) {
       loopRunning = false;

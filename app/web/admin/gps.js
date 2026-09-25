@@ -46,7 +46,6 @@ function setView(next) {
   const mapEl = document.getElementById("gps-map");
   const globeEl = document.getElementById("gps-globe");
   const hint = document.getElementById("gps-globe-hint");
-  const satPanel = document.getElementById("gps-sat-panel");
   const toggle = document.getElementById("gps-view-toggle");
   toggle?.classList.toggle("on", isGlobe);
   toggle?.setAttribute("aria-checked", isGlobe ? "true" : "false");
@@ -55,8 +54,8 @@ function setView(next) {
   mapEl?.classList.toggle("hidden", isGlobe);
   globeEl?.classList.toggle("hidden", !isGlobe);
   hint?.classList.toggle("hidden", !isGlobe);
-  // The flat sky plot duplicates what the globe shows — hide it in globe view.
-  satPanel?.classList.toggle("hidden", isGlobe);
+  // Sky plot stays visible in both views — it's the compact readout of the
+  // same satellites the globe renders in 3D.
   if (isGlobe) {
     if (map) map.invalidateSize({ animate: false });
     window.__akbalGlobe?.setActive?.(true);

@@ -170,10 +170,13 @@
     </section>
 
     <section id="tab-wardrive" class="tab-panel">
+      <!-- Compact one-line mode banner: state dot + iface + status + action -->
       <div class="wd-mode-banner" id="wd-mode-banner">
+        <span class="wd-mode-dot" id="wd-mode-dot"></span>
         <div class="wd-banner-text">
-          <div class="wd-banner-title">MODO AUDIT WIFI <span id="wd-iface" class="wd-iface"></span></div>
-          <div id="wd-banner-status" class="wd-banner-status">—</div>
+          <span class="wd-banner-title">MODO AUDIT WIFI<span id="wd-iface" class="wd-iface"></span></span>
+          <span class="wd-banner-sep">·</span>
+          <span id="wd-banner-status" class="wd-banner-status">—</span>
         </div>
         <button id="wd-exit-btn" class="secondary hidden">Salir</button>
         <button id="wd-enter-btn" class="hidden">Entrar</button>
@@ -181,44 +184,78 @@
 
       <div id="wd-error" class="error"></div>
 
-      <div class="wd-toolbar">
-        <button id="wd-scan-btn">Escanear redes</button>
-        <button id="wd-src-btn" class="secondary" title="Alternar descubrimiento real / datos demo">REAL</button>
-        <button id="wd-reopen-progress-btn" class="secondary hidden" title="Reabrir el modal de la última auditoría">Ver auditoría</button>
-        <button id="wd-pause-btn" class="secondary hidden">Pausar</button>
-        <button id="wd-cancel-btn" class="wd-danger hidden">Cancelar ataque</button>
-        <span id="wd-attack-status" class="muted"></span>
-        <input id="wd-search" type="search" placeholder="Buscar red (SSID, BSSID, canal...)" autocomplete="off"
-               style="margin-left: auto; width: 220px; font-size: 12px; padding: 6px 10px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary);" />
-        <button id="wd-filters-reset" class="secondary" title="Limpiar búsqueda y orden">Borrar filtros</button>
-      </div>
+      <!-- Subtabs: same language as Ajustes → Wifi -->
+      <nav class="wd-subtabs" id="wd-subtabs">
+        <button class="wd-subtab active" data-wd-sub="scan">1 · Redes</button>
+        <button class="wd-subtab" data-wd-sub="captures">2 · Capturas</button>
+        <button class="wd-subtab" data-wd-sub="sessions">3 · Sesiones</button>
+      </nav>
 
-      <div class="wd-list-wrap">
-        <table class="wd-table">
-          <thead>
-            <tr>
-              <th data-sort="ssid" data-label="Red">Red</th>
-              <th data-sort="channel" data-label="Canal">Canal</th>
-              <th data-sort="rssi" data-label="Señal">Señal</th>
-              <th data-sort="clients" data-label="Clientes">Clientes</th>
-              <th data-sort="security" data-label="Seguridad">Seguridad</th>
-              <th>Estado</th>
-              <th>Acción</th>
-            </tr>
-          </thead>
-          <tbody id="wd-table-body">
-            <tr><td colspan="7" class="muted">—</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="wd-session-block" id="wd-results-block">
-        <div class="wd-session-title">HANDSHAKES CAPTURADOS</div>
-        <div id="wd-results-list" class="wd-results-list">
-          <div class="muted">Sin capturas aún. Selecciona una red y pulsa Auditar.</div>
+      <!-- ============ SUB-TAB 1: REDES / ESCANEAR ============ -->
+      <div class="wd-subpanel active" data-wd-panel="scan">
+        <div class="wd-toolbar">
+          <button id="wd-scan-btn">Escanear redes</button>
+          <button id="wd-src-btn" class="secondary wd-src-chip" title="Alternar descubrimiento real / datos demo">REAL</button>
+          <span class="wd-toolbar-state">
+            <button id="wd-reopen-progress-btn" class="secondary hidden" title="Reabrir el modal de la última auditoría">Ver auditoría</button>
+            <button id="wd-pause-btn" class="secondary hidden">Pausar</button>
+            <button id="wd-cancel-btn" class="wd-danger hidden">Cancelar ataque</button>
+            <span id="wd-attack-status" class="muted"></span>
+          </span>
+          <input id="wd-search" type="search" placeholder="Buscar red (SSID, BSSID, canal...)" autocomplete="off" class="wd-search-input" />
+          <button id="wd-filters-reset" class="secondary" title="Limpiar búsqueda y orden">Borrar filtros</button>
         </div>
-        <div id="wd-verify-list" class="wd-results-list"></div>
-        <div id="wd-dict-progress" class="wd-dict-progress"></div>
+
+        <div class="wd-list-wrap">
+          <table class="wd-table">
+            <thead>
+              <tr>
+                <th data-sort="ssid" data-label="Red">Red</th>
+                <th data-sort="channel" data-label="Canal">Canal</th>
+                <th data-sort="rssi" data-label="Señal">Señal</th>
+                <th data-sort="clients" data-label="Clientes">Clientes</th>
+                <th data-sort="security" data-label="Seguridad">Seguridad</th>
+                <th>Estado</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody id="wd-table-body">
+              <tr><td colspan="7" class="muted">—</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ============ SUB-TAB 2: CAPTURAS ============ -->
+      <div class="wd-subpanel" data-wd-panel="captures">
+        <div id="wd-captures-empty" class="wd-session-block">
+          <div class="muted">Sin capturas aún. Audita una red desde <strong>1 · Redes</strong>; si el handshake es válido aparece aquí.</div>
+        </div>
+        <div class="wd-session-block hidden" id="wd-results-block">
+          <div class="wd-session-title">HANDSHAKES CAPTURADOS</div>
+          <div id="wd-results-list" class="wd-results-list"></div>
+          <div id="wd-verify-list" class="wd-results-list"></div>
+          <div id="wd-dict-progress" class="wd-dict-progress"></div>
+        </div>
+      </div>
+
+      <!-- ============ SUB-TAB 3: SESIONES ============ -->
+      <div class="wd-subpanel" data-wd-panel="sessions">
+        <div class="wd-session-block" id="wd-sessions-block">
+          <div class="wd-session-title">SESIONES ANTERIORES</div>
+          <div id="wd-sessions-list" class="wd-sessions-list">
+            <div class="muted">—</div>
+          </div>
+          <div id="wd-session-files" class="wd-sessions-files hidden">
+            <div class="wd-session-title" id="wd-session-files-title" style="font-size:12px; margin-top:10px;"></div>
+            <table class="wd-table">
+              <thead>
+                <tr><th>Archivo</th><th>Tamaño</th><th></th><th></th></tr>
+              </thead>
+              <tbody id="wd-session-files-body"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <!-- Attack progress modal: shows step-by-step what's happening.
@@ -242,24 +279,6 @@
           <div class="wd-progress-log" id="wd-progress-log">
             <div class="muted">Esperando inicio...</div>
           </div>
-        </div>
-      </div>
-
-      <!-- Past sessions browser: every folder is one session (date-named),
-           browse its files and download handshakes/hashes/info.txt. -->
-      <div class="wd-session-block" id="wd-sessions-block">
-        <div class="wd-session-title">SESIONES ANTERIORES</div>
-        <div id="wd-sessions-list" class="wd-sessions-list">
-          <div class="muted">—</div>
-        </div>
-        <div id="wd-session-files" class="wd-sessions-files hidden">
-          <div class="wd-session-title" id="wd-session-files-title" style="font-size:12px; margin-top:10px;"></div>
-          <table class="wd-table">
-            <thead>
-              <tr><th>Archivo</th><th>Tamaño</th><th></th><th></th></tr>
-            </thead>
-            <tbody id="wd-session-files-body"></tbody>
-          </table>
         </div>
       </div>
 

@@ -1617,8 +1617,15 @@ function wdRender() {
   if (!wdStatus) return;
   const on = wdStatus.mode !== "inactive";
   const attacking = wdStatus.mode === "attacking";
+  // Compact banner: state dot + one-line status. Title color only flips on
+  // (kept as a class for the small color cue; the dot is the primary signal).
   wdBannerTitle.classList.toggle("on", on);
-  wdIface.textContent = wdStatus.iface ? `· ${wdStatus.iface.toUpperCase()}` : "";
+  wdIface.textContent = wdStatus.iface ? ` ${wdStatus.iface.toUpperCase()}` : "";
+  const dot = document.getElementById("wd-mode-dot");
+  if (dot) {
+    dot.classList.toggle("on", on);
+    dot.classList.toggle("off", !on);
+  }
   const cap = wdMonitorCap;
   const monitorReady = !cap || cap.monitorSupported;
 
@@ -1646,8 +1653,20 @@ function wdRender() {
 
   // Results: handshakes captured (from session targets with status=captured)
   const captured = (wdStatus.session?.targets || []).filter((t) => t.status === "captured");
+  // Captures sub-tab: show block only when there's something; empty state shows a hint.
+  const resultsBlock = document.getElementById("wd-results-block");
+  const capturesEmpty = document.getElementById("wd-captures-empty");
+  if (resultsBlock && capturesEmpty) {
+    resultsBlock.classList.toggle("hidden", captured.length === 0);
+    capturesEmpty.classList.toggle("hidden", captured.length !== 0);
+  }
+  // Badge on the Captures sub-tab with the count (hidden at 0).
+  const capTab = document.querySelector('.wd-subtab[data-wd-sub="captures"]');
+  if (capTab) {
+    capTab.textContent = captured.length > 0 ? `2 · Capturas (${captured.length})` : "2 · Capturas";
+  }
   wdResultsList.innerHTML = captured.length === 0
-    ? '<div class="muted">Sin capturas aún. Selecciona una red y pulsa Auditar.</div>'
+    ? ""
     : captured.map((t) => {
         const hashFile = t.files.find((f) => f.endsWith(".hc22000"));
         const capFile = t.files.find((f) => f.endsWith(".cap") || f.endsWith(".pcapng"));
@@ -1808,6 +1827,23 @@ function wdInitTableControls() {
   });
 }
 wdInitTableControls();
+
+// ---- Subtabs (1·Redes / 2·Capturas / 3·Sesiones) ----
+// Same pattern as Ajustes → Wifi subtabs: click swaps .active on buttons
+// and .wd-subpanel panels. Purely presentational — all data keeps polling.
+(function wdInitSubtabs() {
+  const nav = document.getElementById("wd-subtabs");
+  if (!nav) return;
+  const buttons = nav.querySelectorAll(".wd-subtab");
+  const panels = document.querySelectorAll("#tab-wardrive .wd-subpanel");
+  for (const btn of buttons) {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.wdSub;
+      for (const b of buttons) b.classList.toggle("active", b === btn);
+      for (const p of panels) p.classList.toggle("active", p.dataset.wdPanel === key);
+    });
+  }
+})();
 
 function escapeHtml(text) {
   const div = document.createElement("div");

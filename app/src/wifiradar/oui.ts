@@ -149,3 +149,110 @@ export function lookupVendorOrRandom(mac: string): { vendor: string; random: boo
   }
   return { vendor: lookupVendorFull(mac), random: false };
 }
+
+// ─── macvendors.com API (last-resort remote fallback) ─────────────────────
+// Order of resolution: ieee-data registry → curated table → macvendors API.
+// The API covers prefixes the local sources miss (e.g. an outdated on-device
+// ieee-data). Opt-in via MACVENDORS_API_KEY in .env — without the key this
+// layer is inert and lookups stay 100% local/offline. Key belongs to whoever
+// deploys the device (free plan at macvendors.com); it is never hardcoded.
+const MACVENDORS_URL = "https://api.macvendors.com/v1/lookup/";
+const MACVENDORS_TTL_MS = 24 * 60 * 60 * 1000; // prefixes never change owner
+const MACVENDORS_NEG_TTL_MS = 60 * 60 * 1000; // remember 404s for 1h
+const MACVENDORS_MIN_INTERVAL_MS = 1200; // free plan ~1 req/s, stay under it
+
+const apiCache = new Map<string, { vendor: string | null; at: number }>();
+let apiBackoffUntil = 0;
+let apiLastRequestAt = 0;
+const apiInflight = new Map<string, Promise<string | null>>();
+
+function getMacvendorsKey(): string | undefined {
+  const key = process.env.MACVENDORS_API_KEY?.trim();
+  return key ? key : undefined;
+}
+
+async function fetchMacvendors(cleanMac: string): Promise<string | null> {
+  const key = getMacvendorsKey();
+  if (!key) return null;
+  const now = Date.now();
+
+  const cached = apiCache.get(cleanMac);
+  if (cached) {
+    const ttl = cached.vendor === null ? MACVENDORS_NEG_TTL_MS : MACVENDORS_TTL_MS;
+    if (now - cached.at < ttl) return cached.vendor;
+    apiCache.delete(cleanMac);
+  }
+  if (now < apiBackoffUntil) return null;
+
+  // Serialize requests: the free plan throttles hard (429 within a second),
+  // so space calls out instead of hammering from concurrent lookups.
+  const gap = now - apiLastRequestAt;
+  if (gap < MACVENDORS_MIN_INTERVAL_MS) {
+    await new Promise((r) => setTimeout(r, MACVENDORS_MIN_INTERVAL_MS - gap));
+  }
+
+  const existing = apiInflight.get(cleanMac);
+  if (existing) return existing;
+  const job = (async () => {
+    apiLastRequestAt = Date.now();
+    try {
+      const res = await fetch(`${MACVENDORS_URL}${cleanMac}`, {
+        headers: { Authorization: `Bearer ${key}`, Accept: "application/json" },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (res.status === 429) {
+        apiBackoffUntil = Date.now() + 30_000;
+        return null;
+      }
+      if (res.status === 404) {
+        apiCache.set(cleanMac, { vendor: null, at: Date.now() });
+        return null;
+      }
+      if (!res.ok) {
+        apiBackoffUntil = Date.now() + 10_000;
+        return null;
+      }
+      const body = (await res.json()) as { data?: { organization_name?: string } };
+      const org = body.data?.organization_name?.trim();
+      const vendor = org ? prettifyOrg(org) : null;
+      apiCache.set(cleanMac, { vendor, at: Date.now() });
+      return vendor;
+    } catch {
+      // offline / timeout / bad JSON — back off briefly, stay silent
+      apiBackoffUntil = Date.now() + 10_000;
+      return null;
+    } finally {
+      apiInflight.delete(cleanMac);
+    }
+  })();
+  apiInflight.set(cleanMac, job);
+  return job;
+}
+
+// lookupVendorFullAsync: like lookupVendorFull, but when local sources miss
+// and MACVENDORS_API_KEY is set, queries the API (cached, rate-limited).
+// Callers that already run async (wardrive target refresh, web handlers)
+// should prefer this so unknown vendors resolve over time.
+export async function lookupVendorFullAsync(mac: string): Promise<string> {
+  const local = lookupVendorFull(mac);
+  if (local !== "Desconocido") return local;
+  if (!getMacvendorsKey()) return local;
+  if (isRandomizedMac(mac)) return local; // a remote lookup is just as fake
+  const clean = mac.replace(/[:\-]/g, "").toUpperCase();
+  if (clean.length < 6) return local;
+  const remote = await fetchMacvendors(clean.slice(0, 6));
+  return remote ?? local;
+}
+
+export function macvendorsEnabled(): boolean {
+  return Boolean(getMacvendorsKey());
+}
+
+// Randomization-aware async variant (mirrors lookupVendorOrRandom).
+export async function lookupVendorOrRandomAsync(mac: string): Promise<{ vendor: string; random: boolean }> {
+  const vendor = await lookupVendorFullAsync(mac);
+  if (isRandomizedMac(mac)) {
+    return { vendor: vendor !== "Desconocido" ? `${vendor} (Random MAC)` : "Random MAC", random: true };
+  }
+  return { vendor, random: false };
+}

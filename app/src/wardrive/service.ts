@@ -20,6 +20,7 @@ import {
 import { registerShutdownHook } from "../device/display";
 import { unloadModel } from "../cloud-api/local/ollama-llm";
 import { crackCheck, resolveCapPath, DictCrack, type CrackResult, type DictCrackState } from "./crack";
+import { lookupVendorOrRandomAsync, macvendorsEnabled } from "../wifiradar/oui";
 
 // ─── Policy constants ────────────────────────────────────────────────────
 // Scope: thesis/lab capture only. The allowlist below IS the security
@@ -213,6 +214,18 @@ export class WardriveService extends EventEmitter {
       return;
     }
     this.discoveredTargets = await discoverTargets(this.source);
+    // Local OUI missed some prefixes and a MACVENDORS_API_KEY is configured:
+    // resolve those over the API (cached, rate-limited) and patch the labels
+    // in place. Fire-and-forget per target, bounded by the discover list.
+    if (macvendorsEnabled()) {
+      await Promise.all(
+        this.discoveredTargets.map(async (t) => {
+          if (t.vendor && t.vendor !== "Desconocido") return;
+          const { vendor } = await lookupVendorOrRandomAsync(t.bssid);
+          if (vendor && vendor !== "Desconocido") t.vendor = vendor;
+        }),
+      );
+    }
   }
 
   // Web toggle: "live" (default) discovers from the real radio, "demo" from

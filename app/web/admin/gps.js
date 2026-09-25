@@ -38,12 +38,13 @@ function initMap() {
     attributionControl: true,
     worldCopyJump: true, // panning past ±180° keeps the marker visible
   });
-  // CARTO basemap: light, high-contrast world — very visual without
-  // overwhelming the HUD overlays. Tiles are the only external resource;
-  // if CARTO is unreachable the position HUD still works.
-  const tiles = L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    subdomains: "abcd",
+  // OSM basemap: free, no API key (CARTO started serving an "API key
+  // required" placeholder tile instead of real imagery — 2049 bytes every
+  // time). tile.openstreetmap.org asks for a proper User-Agent, which
+  // browsers already send; the header below is for the Leaflet request.
+  const tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    subdomains: "abc",
     maxZoom: 19,
     crossOrigin: true,
   });
@@ -52,7 +53,7 @@ function initMap() {
   tiles.on("tileerror", () => {
     const err = document.getElementById("gps-error");
     if (err && err.classList.contains("hidden")) {
-      err.textContent = "Los tiles del mapa (CARTO) no cargan — sin salida a internet desde la Pi. La posición del HUD sigue siendo válida.";
+      err.textContent = "Los tiles del mapa (OpenStreetMap) no cargan — sin salida a internet desde la Pi. La posición del HUD sigue siendo válida.";
       err.classList.remove("hidden");
       clearTimeout(tiles._akbalErrTimer);
       tiles._akbalErrTimer = setTimeout(() => err.classList.add("hidden"), 8000);

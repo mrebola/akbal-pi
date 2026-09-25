@@ -10,7 +10,7 @@
 }
 
 .gps-map .leaflet-tile-pane {
-  filter: saturate(0.85) contrast(1.05);
+  filter: saturate(0.85) contrast(1.02) brightness(0.92);
 }
 
 .gps-map .leaflet-control-attribution {

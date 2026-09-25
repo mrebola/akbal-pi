@@ -1635,7 +1635,7 @@ function wdRender() {
   wdEnterBtn.disabled = !on && !monitorReady && wdSource !== "demo";
   wdExitBtn.classList.toggle("hidden", !on);
   wdScanBtn.classList.toggle("hidden", !on);
-  wdSrcBtn.classList.toggle("hidden", !on);
+  // The src button/switch are always visible (mode applies before entering).
   wdPauseBtn.classList.toggle("hidden", !on);
   wdPauseBtn.textContent = wdPaused ? "Reanudar" : "Pausar";
   wdCancelBtn.classList.toggle("hidden", !attacking);
@@ -2014,6 +2014,10 @@ async function wdRenderDictCrack(statusData) {
     <div class="wd-dict-meta muted">${p.tried.toLocaleString()} / ${p.total.toLocaleString()} contraseñas · ${p.fps.toFixed(1)} pass/s · ${p.elapsedSec}s ${state.running ? "· corriendo..." : state.result ? "· terminado" : "· cancelado"}</div>
     <div class="wd-dict-result">${resultMsg}</div>
   `;
+  // Mirror the progress into the past-sessions block (dict attacks started
+  // from the "dictionary attack" session button render there too).
+  const sessionBlock = document.getElementById("wd-sessions-dict-progress");
+  if (sessionBlock) sessionBlock.innerHTML = block.innerHTML;
   if (state.running) {
     if (!wdDictTimer) {
       wdDictTimer = setInterval(() => void wdRenderDictProgress(), 2000);
@@ -2027,6 +2031,13 @@ async function wdRenderDictCrack(statusData) {
 let wdDictTimer = null;
 
 document.getElementById("wd-dict-progress")?.addEventListener("click", async (ev) => {
+  if (!ev.target.closest(".wd-dict-stop")) return;
+  await apiFetch("/api/wardrive/dict/stop", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+  void wdRenderDictProgress();
+});
+
+// Stop works from the mirrored block in the sessions browser too.
+document.getElementById("wd-sessions-dict-progress")?.addEventListener("click", async (ev) => {
   if (!ev.target.closest(".wd-dict-stop")) return;
   await apiFetch("/api/wardrive/dict/stop", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
   void wdRenderDictProgress();
@@ -2310,12 +2321,29 @@ async function wdLoadSessions() {
         const nets = s.targets
           .map((t) => `${escapeHtml(t.ssid || t.bssid)}${t.verified ? " ✓" : ""}${t.status === "captured" ? "" : ` (${t.status})`}`)
           .join(", ");
+        // Eye icon per cracked network (SSID + masked password, eye reveals).
+        const eyeBtns = (s.found || [])
+          .map((f) => `<button class="wd-session-eye" data-id="${s.id}" data-bssid="${f.bssid}" title="Ver contraseña de ${escapeHtml(f.ssid || f.bssid)}">👁</button>`)
+          .join("");
+        // Handshake download: first .cap/.pcapng/.hc22000 of any captured target.
+        const hsTarget = (s.targets || []).find((t) => t.status === "captured");
+        const hsBtn = hsTarget
+          ? `<button class="wd-session-hs" data-id="${s.id}" data-bssid="${hsTarget.bssid}" title="Descargar el handshake capturado">handshake</button>`
+          : "";
+        // Dictionary attack button only on a captured, non-verified target.
+        const dictTarget = (s.targets || []).find((t) => t.status === "captured" && !t.verified);
+        const dictBtn = dictTarget
+          ? `<button class="wd-session-dict" data-id="${s.id}" data-bssid="${dictTarget.bssid}" title="Ataque de diccionario (rockyou) contra este handshake">dictionary attack</button>`
+          : "";
         return `<div class="wd-session-row" data-id="${s.id}">
           <div class="wd-session-info">
             <span class="wd-session-date">${s.id}</span>
             <span class="wd-session-meta">${s.captured} handshake(s) · ${escapeHtml(nets || "sin objetivos")}</span>
           </div>
           <div class="wd-session-actions">
+            ${eyeBtns}
+            ${hsBtn}
+            ${dictBtn}
             <button class="wd-session-open" data-id="${s.id}">Ver archivos</button>
             <button class="wd-session-del" data-id="${s.id}" title="Borrar esta sesión">🗑</button>
           </div>
@@ -2329,6 +2357,108 @@ async function wdLoadSessions() {
 // Session file viewer: inline preview (text files render, binaries get a
 // hexdump head) + download. Kept open until "Cerrar".
 let wdOpenSessionId = null;
+
+// ── Past-session password (👁) ──
+// SSID + masked password; the eye inside the modal reveals it fully.
+function wdMaskPassword(password) {
+  return password.length <= 3
+    ? "•".repeat(password.length)
+    : password.slice(0, 3) + "•".repeat(Math.max(3, password.length - 3));
+}
+
+async function wdShowSessionPassword(sessionId, bssid) {
+  try {
+    // The password lives in <session>/<bssid>-info.txt (CONTRASEÑA ENCONTRADA).
+    const res = await fetch(`/api/wardrive/files/preview?path=${encodeURIComponent(`${sessionId}/${bssid.replace(/:/g, "").toLowerCase()}-info.txt`)}`);
+    if (!res.ok) throw new Error("no info");
+    const data = await res.json();
+    if (data?.kind !== "text") throw new Error("no info");
+    const m = /^  (.+)$/m.exec((data.content || "").split("CONTRASEÑA ENCONTRADA")[1] || "");
+    const password = m?.[1]?.trim() || "";
+    if (!password || password.startsWith("(")) throw new Error("no password");
+    const modal = document.getElementById("wd-session-pwd-modal");
+    const masked = wdMaskPassword(password);
+    document.getElementById("wd-session-pwd-value").textContent = masked;
+    document.getElementById("wd-session-pwd-value").dataset.full = password;
+    document.getElementById("wd-session-pwd-value").dataset.masked = masked;
+    const eye = document.getElementById("wd-session-pwd-eye");
+    eye.textContent = "🙈";
+    eye.onclick = () => {
+      const valueEl = document.getElementById("wd-session-pwd-value");
+      const revealed = valueEl.textContent !== masked;
+      valueEl.textContent = revealed ? masked : password;
+      eye.textContent = revealed ? "🙈" : "👁";
+    };
+    // SSID from the session list entry (data attr on the row) or BSSID.
+    const row = document.querySelector(`.wd-session-row[data-id="${sessionId}"]`);
+    const ssid = row?.dataset?.ssid || bssid;
+    document.getElementById("wd-session-pwd-ssid").textContent = ssid;
+    modal.classList.remove("hidden");
+  } catch {
+    wdError.textContent = "No hay contraseña registrada para esa red en la sesión";
+  }
+}
+
+// ── Past-session handshake download (button "handshake") ──
+async function wdDownloadSessionHandshake(sessionId, bssid) {
+  try {
+    const prefix = bssid.replace(/:/g, "").toLowerCase();
+    const res = await fetch(`/api/wardrive/files?path=${encodeURIComponent(sessionId)}`);
+    if (!res.ok) throw new Error("no files");
+    const data = await res.json();
+    const files = (data.items || []).filter((it) => it.type === "file" && /\.(cap|pcapng|hc22000)$/i.test(it.name));
+    const preferred = files.find((f) => f.name.startsWith(prefix) && f.name.endsWith(".hc22000"))
+      || files.find((f) => f.name.startsWith(prefix) && /\.(cap|pcapng)$/i.test(f.name))
+      || files.find((f) => /\.(cap|pcapng|hc22000)$/i.test(f.name));
+    if (!preferred) {
+      wdError.textContent = "Esta sesión no tiene un archivo de handshake descargable";
+      return;
+    }
+    const url = `/api/wardrive/files/download?path=${encodeURIComponent(preferred.path)}`;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = preferred.name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch {
+    wdError.textContent = "No se pudo descargar el handshake";
+  }
+}
+
+// ── Past-session dictionary attack (rockyou) ──
+// Resolves the .cap inside the old session folder, then reuses the same
+// one-at-a-time DictCrack backend; progress renders in the sessions block.
+async function wdStartSessionDictAttack(sessionId, bssid) {
+  const block = document.getElementById("wd-sessions-dict-progress");
+  try {
+    const prefix = bssid.replace(/:/g, "").toLowerCase();
+    const res = await fetch(`/api/wardrive/files?path=${encodeURIComponent(sessionId)}`);
+    if (!res.ok) throw new Error("no files");
+    const data = await res.json();
+    const cap = (data.items || []).find((it) => it.type === "file" && it.name.startsWith(prefix) && /\.(cap|pcapng)$/i.test(it.name))
+      || (data.items || []).find((it) => it.type === "file" && /\.(cap|pcapng)$/i.test(it.name));
+    if (!cap) {
+      wdError.textContent = "Esta sesión no tiene archivo .cap para el ataque de diccionario";
+      return;
+    }
+    const start = await apiFetch("/api/wardrive/dict/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bssid, cap: cap.path }),
+    });
+    const sdata = await start.json();
+    if (!sdata?.ok) {
+      wdError.textContent = sdata?.error || "No se pudo iniciar el ataque de diccionario";
+      return;
+    }
+    wdError.textContent = "";
+    if (block) block.innerHTML = '<div class="muted">Iniciando ataque de diccionario...</div>';
+    void wdRenderDictProgress();
+  } catch {
+    wdError.textContent = "No se pudo iniciar el ataque de diccionario";
+  }
+}
 
 async function wdOpenSessionFiles(id) {
   const filesBlock = document.getElementById("wd-session-files");
@@ -2397,8 +2527,23 @@ document.getElementById("wd-sessions-block")?.insertBefore(wdSessionsDeleteAllBt
 document.getElementById("wd-sessions-list")?.addEventListener("click", async (ev) => {
   const openBtn = ev.target.closest(".wd-session-open");
   const delBtn = ev.target.closest(".wd-session-del");
+  const eyeBtn = ev.target.closest(".wd-session-eye");
+  const hsBtn = ev.target.closest(".wd-session-hs");
+  const dictBtn = ev.target.closest(".wd-session-dict");
   if (openBtn) {
     await wdOpenSessionFiles(openBtn.dataset.id);
+    return;
+  }
+  if (eyeBtn) {
+    await wdShowSessionPassword(eyeBtn.dataset.id, eyeBtn.dataset.bssid);
+    return;
+  }
+  if (hsBtn) {
+    await wdDownloadSessionHandshake(hsBtn.dataset.id, hsBtn.dataset.bssid);
+    return;
+  }
+  if (dictBtn) {
+    await wdStartSessionDictAttack(dictBtn.dataset.id, dictBtn.dataset.bssid);
     return;
   }
   if (delBtn) {
@@ -2564,9 +2709,11 @@ wdScanBtn.addEventListener("click", async () => {
 
 // REAL/DEMO toggle for the wardrive discovery source (same preference as
 // the radar's SRC toggle — both call the same backend state).
-wdSrcBtn.addEventListener("click", async () => {
-  const next = wdSource === "demo" ? "live" : "demo";
+async function wdSetSource(next) {
+  const srcToggleInput = document.getElementById("wd-src-toggle-input");
   wdSrcBtn.disabled = true;
+  const toggle = document.getElementById("wd-src-toggle");
+  if (toggle) toggle.style.opacity = "0.6";
   try {
     const res = await apiFetch("/api/wardrive/source", {
       method: "POST",
@@ -2578,11 +2725,41 @@ wdSrcBtn.addEventListener("click", async () => {
   } catch { /* keep previous state */ }
   wdRenderSourceBtn();
   wdSrcBtn.disabled = false;
+  if (toggle) toggle.style.opacity = "";
   void wdRefresh();
+}
+
+wdSrcBtn.addEventListener("click", async () => {
+  await wdSetSource(wdSource === "demo" ? "live" : "demo");
+});
+
+// iOS switch: click (label wraps the checkbox) or keyboard.
+document.getElementById("wd-src-toggle")?.addEventListener("click", (ev) => {
+  // The label toggles the native checkbox before this handler runs; read
+  // the NEW state off the input.
+  const input = document.getElementById("wd-src-toggle-input");
+  if (!input) return;
+  ev.preventDefault(); // avoid double-toggle from label + handler
+  const next = input.checked ? "live" : "demo";
+  input.checked = !input.checked; // reflect real state only after backend ack
+  void wdSetSource(next);
 });
 
 function wdRenderSourceBtn() {
   const isDemo = wdSource === "demo";
+  // iOS-style switch state (the REAL button stays hidden — the switch
+  // replaced it; keep the button logic for compatibility).
+  const srcToggle = document.getElementById("wd-src-toggle");
+  const srcToggleInput = document.getElementById("wd-src-toggle-input");
+  if (srcToggleInput) srcToggleInput.checked = isDemo;
+  if (srcToggle) {
+    srcToggle.classList.toggle("demo", isDemo);
+    srcToggle.setAttribute("aria-checked", isDemo ? "true" : "false");
+    srcToggle.title = isDemo
+      ? "Descubrimiento demo (sin radio) — click para volver a live"
+      : "Descubrimiento real — click para pasar a datos demo";
+  }
+  wdSrcBtn.classList.add("hidden"); // replaced by the iOS switch
   wdSrcBtn.textContent = isDemo ? "DEMO" : "REAL";
   wdSrcBtn.classList.toggle("active", isDemo);
   wdSrcBtn.title = isDemo

@@ -1119,6 +1119,136 @@ button.secondary {
 
 .wd-session-del-all:hover { background: rgba(239, 68, 68, 0.1); }
 
+/* ---- Past-session action buttons (eye / handshake / dictionary) ---- */
+
+.wd-session-eye {
+  font-size: 13px;
+  padding: 5px 9px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  line-height: 1;
+}
+
+.wd-session-eye:hover {
+  color: #ffd166;
+  border-color: #ffd166;
+  background: rgba(255, 209, 102, 0.1);
+}
+
+.wd-session-hs,
+.wd-session-dict {
+  font-size: 11px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+}
+
+.wd-session-hs:hover {
+  color: #34d351;
+  border-color: rgba(52, 211, 153, 0.6);
+  background: rgba(52, 211, 153, 0.1);
+}
+
+.wd-session-dict:hover {
+  color: #fb923c;
+  border-color: rgba(251, 146, 60, 0.6);
+  background: rgba(251, 146, 60, 0.1);
+}
+
+/* ---- iOS-style live/demo switch (wardrive toolbar, top right) ---- */
+
+.wd-src-switch {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.wd-src-switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.wd-src-switch-track {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 148px;
+  height: 26px;
+  border-radius: 13px;
+  background: rgba(148, 163, 184, 0.18);
+  border: 1px solid var(--border);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.wd-src-switch-labels {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  font-size: 10.5px;
+  font-family: ui-monospace, monospace;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+}
+
+.wd-src-switch-labels span {
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
+}
+
+.wd-src-switch-labels span:first-child { margin-right: 34px; }
+
+.wd-src-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 44px;
+  height: 20px;
+  border-radius: 10px;
+  background: #34d351;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  transition: transform 0.2s ease, background 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wd-src-switch input:checked + .wd-src-switch-track {
+  background: rgba(251, 146, 60, 0.16);
+  border-color: rgba(251, 146, 60, 0.5);
+}
+
+.wd-src-switch input:checked + .wd-src-switch-track .wd-src-switch-knob {
+  transform: translateX(100px);
+  background: #fb923c;
+}
+
+.wd-src-switch input:checked + .wd-src-switch-track .wd-src-switch-labels span:last-child {
+  color: #fb923c;
+  font-weight: 600;
+}
+
+.wd-src-switch input:not(:checked) + .wd-src-switch-track .wd-src-switch-labels span:first-child {
+  color: #34d351;
+  font-weight: 600;
+}
+
+.wd-src-switch:focus-within .wd-src-switch-track {
+  box-shadow: 0 0 0 2px rgba(255, 209, 102, 0.35);
+}
+
 .wd-preview-btn {
   font-size: 12px;
   padding: 4px 10px;

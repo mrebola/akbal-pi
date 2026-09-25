@@ -24,6 +24,10 @@ export type SessionTargetSnapshot = {
   error: string;
   files: string[];
   verified: boolean; // handshake validated with aircrack (v2 lab workflow)
+  // The password that cracked this handshake (only written on a verified
+  // aircrack match) — surfaced in the past-sessions browser behind the eye
+  // toggle. Device-local (~/wardrive-sessions, outside the git tree).
+  password?: string;
 };
 
 // Step-by-step progress for UI reconnection: full history of what happened.
@@ -98,6 +102,7 @@ export class WardriveSession {
         error: "",
         files: [],
         verified: false,
+        password: undefined,
       });
       this.writeMeta();
     }
@@ -139,6 +144,9 @@ export class WardriveSession {
     lines.push("CONTRASEÑA PROBADA");
     lines.push(`  ${passwordTested ? passwordTested : "(no se probó ninguna)"}`);
     lines.push("");
+    lines.push("CONTRASEÑA ENCONTRADA");
+    lines.push(`  ${t.password ? t.password : "(ninguna — handshake no crackeado aún)"}`);
+    lines.push("");
     lines.push("ARCHIVOS");
     if (t.files.length === 0) {
       lines.push("  (ninguno)");
@@ -178,6 +186,24 @@ export class WardriveSession {
     if (!t || t.files.includes(file)) return;
     t.files.push(file);
     this.writeMeta();
+  }
+
+  // Record the password that actually cracked this handshake. Only called
+  // on an aircrack KEY FOUND, so the field's existence = verified crack.
+  setFoundPassword(bssid: string, password: string): void {
+    const t = this.targets.get(bssid);
+    if (!t) return;
+    t.password = password;
+    this.writeMeta();
+  }
+
+  // Passwords per target for the /sessions endpoint (past-session browser).
+  foundPasswords(): { bssid: string; ssid: string; password: string }[] {
+    const out: { bssid: string; ssid: string; password: string }[] = [];
+    for (const t of this.targets.values()) {
+      if (t.password && t.status === "captured") out.push({ bssid: t.bssid, ssid: t.ssid, password: t.password });
+    }
+    return out;
   }
 
   hasCaptured(bssid: string): boolean {

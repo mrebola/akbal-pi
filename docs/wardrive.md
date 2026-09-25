@@ -5,6 +5,32 @@ radio del WiFi Radar. Es una función de **uso de laboratorio/tesis**: solo
 opera contra redes que el operador autorizó explícitamente, una por una.
 Documenta la implementación vigente (app/src/wardrive/).
 
+## Novedades v3 (sesiones anteriores + UX)
+
+- **Contraseña persistida por sesión**: en cada `KEY FOUND` (validación con
+  contraseña o dictionary crack) la contraseña ganadora se escribe en el
+  `session.json` del target (campo `password`, solo con crack verificado) y
+  en el `info.txt` (sección "CONTRASEÑA ENCONTRADA"). Vive solo en el
+  dispositivo, fuera del árbol git (`~/wardrive-sessions/`).
+- **Ojo 👁 en el listado de SESIONES ANTERIORES**: cada red crackeada de una
+  sesión pasada muestra un botón ojo → modal con SSID + contraseña
+  enmascarada (`abc•••••`); un click en el ojo la revela completa.
+- **Botón "handshake" por sesión**: descarga el `.hc22000` (o el `.cap`)
+  del handshake capturado de esa sesión, directo del file browser.
+- **Botón "dictionary attack" por sesión**: lanza aircrack+rockyou contra el
+  `.cap` de una sesión anterior (`POST /api/wardrive/dict/start` con `cap`,
+  ruta resuelta por `resolveSessionPath` — sin path traversal). La barra de
+  progreso (probadas/total, pass/s, cancelable) se espeja dentro del bloque
+  de sesiones. Si la encuentra, la persiste en la `session.json`/`info.txt`
+  de esa sesión vieja (`persistPastSessionPassword`, service.ts) y pasa a
+  ser visible con el ojo.
+- **Toggle iOS live/demo**: el botón REAL/DEMO fue reemplazado por un
+  switch estilo iOS arriba a la derecha del toolbar (`mode: live` verde ↔
+  `mode: demo` naranja). Mismo endpoint (`POST /api/wardrive/source`).
+- **Política deauth 1+1**: un round de deauth basta — si produce handshake
+  el ataque termina ahí (`DEAUTH_MAX_ATTEMPTS = 2`): primera ronda y, si no
+  hubo handshake, exactamente UN reintento antes del fallback PMKID pasivo.
+
 ## Novedades v2
 
 - **Modo live-only**: `enter()` exige un adaptador USB en modo monitor. Sin
@@ -123,8 +149,10 @@ sudo -n airodump-ng --bssid <BSSID> -c <canal> -w <prefix> --output-format pcap,
 
 ### 4. Ráfagas de deauth dirigidas (aireplay-ng)
 
-Hasta `DEAUTH_MAX_ATTEMPTS = 5` intentos; en cada uno deauth dirigido a
-cada cliente asociado **más una ráfaga broadcast**:
+`DEAUTH_MAX_ATTEMPTS = 2` (política v3: un deauth bien dirigido suele
+alcanzar; si el primero no produce handshake corre UN segundo intento y
+el ciclo termina). En cada intento, deauth dirigido a cada cliente asociado
+**más una ráfaga broadcast**:
 
 ```bash
 sudo -n aireplay-ng --deauth 64 -a <BSSID> -c <MAC_CLIENTE> -D wlan1   # dirigida
@@ -133,7 +161,8 @@ sudo -n aireplay-ng --deauth 64 -a <BSSID> -D wlan1                    # broadca
 
 - `DEAUTH_BURST = 64` por ráfaga, `DEAUTH_SETTLE_MS = 12s` de ventana tras
   cada ráfaga esperando el reconect del cliente (doble si no hay clientes
-  detectados). Pausa de 2s entre intentos.
+  detectados). Con handshake capturado el proceso termina en el acto —
+  no hay intentos extra.
 - `-D` evita esperar el trigger ARP/ap-request: empuja de inmediato.
 - Sin clientes reales, se usa el snapshot del radar como fuente (`pickClientFor`).
 
@@ -168,7 +197,7 @@ cliente). Si tampoco: validación final y marca de "failed" con motivo.
 | `PMKID_POLL_MS` | 3s | polling de validación |
 | `DEAUTH_SETTLE_MS` | 12s | ventana de reconexión tras ráfaga |
 | `DEAUTH_BURST` | 64 | deauths por ráfaga |
-| `DEAUTH_MAX_ATTEMPTS` | 5 | intentos del ciclo deauth |
+| `DEAUTH_MAX_ATTEMPTS` | 2 | intentos del ciclo deauth (1 + 1 reintento) |
 | `PMKID_PASSIVE_MS` | 20s | ventana pasiva de fallback |
 | `BETWEEN_TARGETS_MS` | 1.5s | pausa entre objetivos secuenciales |
 
@@ -200,7 +229,9 @@ Cada entrada al modo crea `~/wardrive-sessions/<YYYYMMDD-HHMMSS>/`
 ```
 ~/wardrive-sessions/20260924-191732/
 ├── session.json                        # metadatos + estado por objetivo
+│                                       #   (+ password en targets[] si hubo KEY FOUND)
 ├── <bssid-sin-dos-puntos>.log          # log de texto del ataque
+├── <bssid-sin-dos-puntos>-info.txt    # resumen humano (incluye CONTRASEÑA ENCONTRADA)
 ├── progress-<bssid>.jsonl              # progreso paso a paso (reconexión UI)
 ├── <bssid>.cap                         # captura cruda (airodump-ng)
 ├── <bssid>.hc22000                     # hash convertido (formato hashcat 22000)
@@ -255,6 +286,10 @@ POST /api/wardrive/attack/one           # {"bssid":"..."} — un objetivo
 POST /api/wardrive/attack/many          # {"bssids":[...]} — secuenciales
 POST /api/wardrive/attack/cancel
 POST /api/wardrive/validate             # {"bssid":"...","password":"..."} — v2: valida handshake con aircrack
+POST /api/wardrive/dict/start           # {"bssid":"..."} — rockyou; con {"cap":"<sesión>/<file>.cap"} ataca una sesión anterior
+POST /api/wardrive/dict/stop            # corta el dictionary crack en curso
+GET  /api/wardrive/dict/status          # progreso {tried,total,fps,elapsed}
+POST /api/wardrive/password             # {"bssid":"..."} — password crackeada de la sesión activa (🔑)
 GET  /api/wardrive/progress?bssid=...   # historial del stepper
 GET  /api/wardrive/devices              # clientes vistos (Deauth tab)
 POST /api/wardrive/deauth/authorize | deauthorize | attack | stop
@@ -262,6 +297,10 @@ GET  /api/wardrive/files?path=...       # file browser
 GET  /api/wardrive/files/download?path=...
 POST /api/wardrive/files/delete
 ```
+
+`GET /api/wardrive/sessions` (listado de SESIONES ANTERIORES) además
+incluye `found: [{bssid, ssid, password}]` por cada red crackeada — es lo
+que alimenta el ojo 👁 del listado.
 
 ## Exclusión mutua con el WiFi Radar
 
@@ -314,9 +353,14 @@ sudo apt-get install -y aircrack-ng hcxtools iw
    a paso en un modal (scan → lock → capture → deauth → validate → done).
    "Todo" lanza la secuencia sobre todos los autorizados visibles.
 6. Los archivos capturados se listan abajo y se descargan desde la web.
-7. Botón **REAL/DEMO** cambia la fuente de descubrimiento (ensayo sin
-   hardware).
-8. **Salir** restaura la radio y devuelve el control al radar.
+7. El **switch live/demo** (arriba a la derecha, estilo iOS) cambia la
+   fuente de descubrimiento (ensayo sin hardware).
+8. **SESIONES ANTERIORES** lista cada sesión con fecha; por sesión:
+   👁 (contraseña de redes crackeadas, enmascarada hasta revelar),
+   **handshake** (descarga el `.cap`/`.hc22000`) y **dictionary attack**
+   (rockyou contra esa captura, con progreso y cancelación). "Ver archivos"
+   abre el file browser de la carpeta.
+9. **Salir** restaura la radio y devuelve el control al radar.
 
 Verificación por log:
 

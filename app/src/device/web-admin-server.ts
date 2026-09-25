@@ -956,8 +956,10 @@ export class WebAdminServer {
     // progress polled via /dict-status, cancellable. Runs at low priority
     // (nice +2 threads) so the Pi keeps responding while it runs.
     router.post("/api/wardrive/dict/start", async (ctx) => {
-      const { bssid } = (ctx.request.body as any) || {};
-      ctx.body = await wardrive.startDictCrack(String(bssid || ""));
+      const { bssid, cap } = (ctx.request.body as any) || {};
+      // `cap` targets a past session's capture (path relative to the
+      // sessions root, traversal-checked in the service).
+      ctx.body = await wardrive.startDictCrack(String(bssid || ""), cap ? String(cap) : undefined);
     });
 
     router.post("/api/wardrive/dict/stop", (ctx) => {
@@ -1068,7 +1070,7 @@ export class WebAdminServer {
       const sessions = dirs.map((id) => {
         const dir = path.join(sessionsRoot, id);
         let startedAt: number | null = null;
-        let targets: { bssid: string; ssid: string; status: string; method: string; verified: boolean }[] = [];
+        let targets: { bssid: string; ssid: string; status: string; method: string; verified: boolean; password?: string }[] = [];
         try {
           const meta = JSON.parse(fs.readFileSync(path.join(dir, "session.json"), "utf8"));
           startedAt = meta.startedAt || null;
@@ -1078,12 +1080,19 @@ export class WebAdminServer {
             status: t.status,
             method: t.method,
             verified: t.verified === true,
+            // Cracked password, if any — the UI masks it behind the eye
+            // toggle. Never logged by this endpoint.
+            ...(typeof t.password === "string" && t.password ? { password: t.password } : {}),
           }));
         } catch {
           // no/corrupt session.json — still list the folder (files may exist)
         }
         const captured = targets.filter((t) => t.status === "captured").length;
-        return { id, startedAt, captured, targets };
+        // Eye icon in the session list: targets with a recovered password.
+        const found = targets
+          .filter((t) => t.status === "captured" && t.password)
+          .map((t) => ({ bssid: t.bssid, ssid: t.ssid, password: t.password as string }));
+        return { id, startedAt, captured, targets, found };
       });
       ctx.body = { ok: true, sessions };
     });

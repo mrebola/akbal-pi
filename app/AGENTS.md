@@ -89,8 +89,8 @@ whisplay-ai-chatbot/
 │   │   ├── service.ts            # orchestrator: allowlist security boundary
 │   │   ├── discovery.ts          # targets from radar snapshot / iw scan
 │   │   ├── attack.ts             # airodump/aireplay/hcxdumptool runners
-│   │   ├── crack.ts              # aircrack-ng handshake validation
-│   │   └── session.ts            # ~/wardrive-sessions persistence
+│   │   ├── crack.ts              # aircrack-ng handshake validation + rockyou dict crack
+│   │   └── session.ts            # ~/wardrive-sessions persistence (incl. cracked passwords)
 │   ├── plugin/                   # Plugin system
 │   │   ├── types.ts              # Plugin interface definitions
 │   │   ├── registry.ts           # Plugin registry

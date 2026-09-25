@@ -60,7 +60,7 @@ Raspberry Pi OS 64-bit, basado en Debian Trixie.
 | Comandos de voz | Volumen, cambio/consulta de modelo de LLM y modo agente/local, resueltos por expresiones regulares antes de llegar al LLM — instantáneo, sin gastar un turno. Decir "ayuda" con el botón presionado muestra un resumen de todos estos comandos en pantalla ([`docs/voice-commands.md`](docs/voice-commands.md)) |
 | Wifi | Menú físico "Wifi connect" (AP directo + QR, ver [`docs/wifi.md`](docs/wifi.md)) + interfaz web con chat a los modelos locales, wifi completo (buscar, conectar con contraseña, olvidar redes), USB y batería/CPU/RAM en vivo en `http://<ip-del-dispositivo>:8090` ([`docs/web-ui.md`](docs/web-ui.md)) |
 | WiFi Radar | Visualización 3D (Three.js) del espacio WiFi alrededor del Pi, capturado pasivamente con cualquier adaptador USB en modo monitor (detección genérica; probado con Atheros AR9271 y Ralink RT5372) — toggle real/demo y caída a demo con datos simulados si no hay hardware conectado. Fabricantes resueltos del registro IEEE local (ieee-data), con fallback opcional a la API de macvendors.com ([`docs/wifiradar.md`](docs/wifiradar.md)) |
-| Wardriving | Captura de handshakes para laboratorio/tesis: allowlist explícita de BSSIDs como único mecanismo de autorización, ataques pmkid/deauth con aircrack-ng, sesiones con artifacts descargables desde la web — probado contra un AP de laboratorio dedicado ([`docs/wardrive.md`](docs/wardrive.md), [`docs/lab-wireless.md`](docs/lab-wireless.md)) |
+| Wardriving | Captura de handshakes para laboratorio/tesis: allowlist explícita de BSSIDs como único mecanismo de autorización, ataques pmkid/deauth con aircrack-ng, sesiones con artifacts descargables desde la web, contraseñas crackeadas visibles por sesión (ojo con revelado) y dictionary attack (rockyou) desde el listado de sesiones — probado contra un AP de laboratorio dedicado ([`docs/wardrive.md`](docs/wardrive.md), [`docs/lab-wireless.md`](docs/lab-wireless.md)) |
 
 Detalle completo del setup en [`docs/SETUP.md`](docs/SETUP.md).
 
@@ -405,16 +405,22 @@ ver [`docs/wardrive.md`](./docs/wardrive.md). Resumen:
 3. **Autorizar** un BSSID lo agrega al allowlist — el único mecanismo de
    autorización: sin allowlist no hay ataque, no existe el "atacar todo".
 4. **Auditar** corre el ataque contra esa red: escaneo → lock de canal →
-   captura con airodump-ng → deauth dirigida (si aplica) → validación de
-   handshake. El progreso paso a paso se muestra en un modal.
+   captura con airodump-ng → deauth dirigida (una ronda suele bastar; un
+   reintento si no hubo handshake) → validación de handshake. El progreso
+   paso a paso se muestra en un modal.
 5. Al capturar, los archivos (`.hc22000`, `.cap`) quedan listados abajo para
    descarga desde la web. Todo vive en `~/wardrive-sessions/` en el dispositivo.
-6. **REAL/DEMO** (botón en la toolbar): el descubrimiento puede venir de la
-   radio real o del mismo generador demo del radar (útil para ensayar la
-   interfaz sin hardware; contra redes demo los ataques son inertes).
+6. **Toggle live/demo** (switch iOS arriba a la derecha): el descubrimiento
+   puede venir de la radio real o del mismo generador demo del radar (útil
+   para ensayar la interfaz sin hardware; contra redes demo los ataques son
+   inertes).
 7. Deauth dirigido: pestaña Deauth — lista dispositivos clientes vistos
    hablando en el aire; cada uno requiere autorización individual de MAC.
-8. **Salir** restaura la radio a modo normal y devuelve el control al radar.
+8. **SESIONES ANTERIORES**: cada sesión con fecha lista botones por red
+   crackeada — 👁 (ver la contraseña encontrada, enmascarada hasta revelar),
+   **handshake** (descarga el `.cap`/`.hc22000`) y **dictionary attack**
+   (rockyou contra esa captura, con barra de progreso y cancelación).
+9. **Salir** restaura la radio a modo normal y devuelve el control al radar.
 
 ### OST (pestaña Música)
 

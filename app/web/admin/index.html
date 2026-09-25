@@ -181,10 +181,17 @@
 
       <div id="wd-error" class="error"></div>
 
-      <div class="wd-toolbar">
+      <div class="wd-toolbar" style="position: relative;">
+        <!-- iOS-style live/demo switch, pinned top right -->
+        <label class="wd-src-switch" id="wd-src-toggle" title="Modo de descubrimiento: red real (live) o datos demo"
+               style="position: absolute; top: -14px; right: 0;">
+          <input type="checkbox" id="wd-src-toggle-input" aria-label="Modo demo" />
+          <span class="wd-src-switch-track">
+            <span class="wd-src-switch-labels"><span>mode: live</span><span>mode: demo</span></span>
+            <span class="wd-src-switch-knob"></span>
+          </span>
+        </label>
         <button id="wd-scan-btn">Escanear redes</button>
-        <button id="wd-src-btn" class="secondary" title="Alternar descubrimiento real / datos demo">REAL</button>
-        <button id="wd-reopen-progress-btn" class="secondary hidden" title="Reabrir el modal de la última auditoría">Ver auditoría</button>
         <button id="wd-pause-btn" class="secondary hidden">Pausar</button>
         <button id="wd-cancel-btn" class="wd-danger hidden">Cancelar ataque</button>
         <span id="wd-attack-status" class="muted"></span>
@@ -252,6 +259,8 @@
         <div id="wd-sessions-list" class="wd-sessions-list">
           <div class="muted">—</div>
         </div>
+        <!-- Dictionary attack progress for a past-session handshake -->
+        <div id="wd-sessions-dict-progress" class="wd-dict-progress"></div>
         <div id="wd-session-files" class="wd-sessions-files hidden">
           <div class="wd-session-title" id="wd-session-files-title" style="font-size:12px; margin-top:10px;"></div>
           <table class="wd-table">
@@ -311,6 +320,24 @@
           <div style="padding: 18px 20px; display: flex; align-items: center; gap: 10px;">
             <span id="wd-pwd-value" style="flex: 1; font-family: ui-monospace, monospace; font-size: 15px; letter-spacing: 0.06em; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px;">—</span>
             <button id="wd-pwd-eye" class="secondary" style="font-size: 16px; min-width: 40px;">🙈</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Past-session password viewer (👁): SSID + masked password, eye
+           reveals. Mirrors the live 🔑 modal but reads the session folder. -->
+      <div id="wd-session-pwd-modal" class="wd-modal hidden">
+        <div class="wd-modal-backdrop" onclick="document.getElementById('wd-session-pwd-modal').classList.add('hidden')"></div>
+        <div class="wd-modal-content" style="max-width: 380px;">
+          <div class="wd-modal-header">
+            <span>Contraseña de la sesión — <span id="wd-session-pwd-ssid">—</span></span>
+            <div class="wd-modal-actions">
+              <button id="wd-session-pwd-close" class="secondary">Cerrar</button>
+            </div>
+          </div>
+          <div style="padding: 18px 20px; display: flex; align-items: center; gap: 10px;">
+            <span id="wd-session-pwd-value" style="flex: 1; font-family: ui-monospace, monospace; font-size: 15px; letter-spacing: 0.06em; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px;">—</span>
+            <button id="wd-session-pwd-eye" class="secondary" style="font-size: 16px; min-width: 40px;">🙈</button>
           </div>
         </div>
       </div>

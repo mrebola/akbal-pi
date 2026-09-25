@@ -1,0 +1,271 @@
+/* GPS page (docs/gps.md): fullscreen world map + HUD overlays. Same design
+   language as wifiradar.css — dark theme, monospace HUD, green accents. */
+
+/* The map fills the viewport; the header floats above it. */
+.gps-map {
+  position: fixed;
+  inset: 0;
+  background: #0b1020;
+  z-index: 0;
+}
+
+.gps-map .leaflet-tile-pane {
+  filter: saturate(0.85) contrast(1.05);
+}
+
+.gps-map .leaflet-control-attribution {
+  background: rgba(11, 16, 32, 0.7);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 10px;
+}
+
+.gps-map .leaflet-control-attribution a { color: rgba(120, 200, 255, 0.8); }
+
+.gps-map .leaflet-bar a {
+  background: rgba(11, 16, 32, 0.9);
+  color: #e8eefc;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Header sits above the map */
+#gps-header {
+  position: relative;
+  z-index: 1000;
+  background: rgba(11, 16, 32, 0.92);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ---- Position marker (Leaflet divIcon) ---- */
+
+.gps-marker-wrap { background: transparent; border: none; }
+
+.gps-marker {
+  position: relative;
+  width: 28px;
+  height: 28px;
+}
+
+.gps-marker-dot {
+  position: absolute;
+  inset: 9px;
+  border-radius: 50%;
+  background: #34d351;
+  border: 2px solid #0b1020;
+  box-shadow: 0 0 10px rgba(52, 211, 153, 0.9);
+}
+
+.gps-marker-pulse {
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  border: 2px solid rgba(52, 211, 153, 0.7);
+  animation: gps-pulse 2s ease-out infinite;
+}
+
+@keyframes gps-pulse {
+  0% { transform: scale(0.5); opacity: 1; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+/* ---- Position HUD (top left) ---- */
+
+.gps-hud {
+  position: fixed;
+  top: calc(var(--header-height, 64px) + 12px);
+  left: 14px;
+  z-index: 900;
+  min-width: 250px;
+  max-width: 320px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(11, 16, 32, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(6px);
+  color: #e8eefc;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.45);
+  transition: opacity 0.3s ease;
+}
+
+.gps-hud.dim,
+.gps-sat-panel.dim { opacity: 0.55; }
+
+.gps-hud-title,
+.gps-sat-title {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: rgba(255, 255, 255, 0.55);
+  margin-bottom: 8px;
+  font-family: ui-monospace, monospace;
+}
+
+.gps-coords {
+  font-size: 15px;
+  color: #34d351;
+  margin-bottom: 10px;
+  letter-spacing: 0.02em;
+}
+
+.gps-hud-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 14px;
+  margin-bottom: 8px;
+}
+
+.gps-hud-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.gps-hud-item .k { color: rgba(255, 255, 255, 0.5); }
+.gps-hud-item .v { color: #e8eefc; }
+
+.gps-fix-msg {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: rgba(255, 209, 102, 0.95);
+  margin-top: 6px;
+}
+
+.gps-fix-msg:empty { display: none; }
+
+.gps-fix-msg.warn { color: #ffd166; }
+
+/* ---- Satellite panel (bottom left) ---- */
+
+.gps-sat-panel {
+  position: fixed;
+  left: 14px;
+  bottom: 14px;
+  z-index: 900;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(11, 16, 32, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(6px);
+  color: #e8eefc;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.45);
+  transition: opacity 0.3s ease;
+}
+
+.gps-sat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.gps-sat-counters {
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+}
+
+.gps-sat-counter { white-space: nowrap; }
+.gps-sat-counter.used { color: #34d351; }
+.gps-sat-counter.view { color: #7ab7ff; }
+
+/* Sky plot: circles + N marker */
+.gps-sat-plot {
+  position: relative;
+  width: 148px;
+  height: 148px;
+  margin-top: 10px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+}
+
+.gps-sat-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.gps-sat-ring.r1 { inset: 33%; }   /* elev 60° */
+.gps-sat-ring.r2 { inset: 16.5%; } /* elev 30° */
+.gps-sat-ring.r3 { inset: 0; border-color: rgba(255, 255, 255, 0.2); } /* horizon */
+
+.gps-sat-cross {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Vertical + horizontal hairlines */
+.gps-sat-cross::before,
+.gps-sat-cross::after {
+  content: "";
+  position: absolute;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.gps-sat-cross::before { left: 50%; top: 0; bottom: 0; width: 1px; }
+.gps-sat-cross::after { top: 50%; left: 0; right: 0; height: 1px; }
+
+.gps-sat-n {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.5);
+  font-family: ui-monospace, monospace;
+}
+
+#gps-sat-dots { position: absolute; inset: 0; }
+
+.sat-dot {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  border-radius: 50%;
+  background: var(--sat-strength, #64748b);
+  border: 1px solid rgba(0, 0, 0, 0.55);
+  box-shadow: 0 0 6px var(--sat-strength, #64748b);
+}
+
+.sat-dot.used {
+  outline: 2px solid rgba(52, 211, 153, 0.7);
+  outline-offset: 1.5px;
+}
+
+.sat-dot.idle { opacity: 0.4; }
+
+.gps-sat-note {
+  margin-top: 8px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* ---- Error banner ---- */
+
+.gps-error {
+  position: fixed;
+  top: calc(var(--header-height, 64px) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 950;
+  padding: 10px 18px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #ef4444;
+  font-size: 12.5px;
+}
+
+/* ---- Responsive: stack panels on narrow screens ---- */
+
+@media (max-width: 640px) {
+  .gps-hud {
+    max-width: calc(100vw - 28px);
+    top: auto;
+    bottom: 190px;
+  }
+  .gps-sat-panel { bottom: 10px; }
+  .gps-error { top: 74px; width: calc(100vw - 28px); text-align: center; }
+}

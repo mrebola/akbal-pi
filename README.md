@@ -61,6 +61,7 @@ Raspberry Pi OS 64-bit, basado en Debian Trixie.
 | Wifi | Menú físico "Wifi connect" (AP directo + QR, ver [`docs/wifi.md`](docs/wifi.md)) + interfaz web con chat a los modelos locales, wifi completo (buscar, conectar con contraseña, olvidar redes), USB y batería/CPU/RAM en vivo en `http://<ip-del-dispositivo>:8090` ([`docs/web-ui.md`](docs/web-ui.md)) |
 | WiFi Radar | Visualización 3D (Three.js) del espacio WiFi alrededor del Pi, capturado pasivamente con cualquier adaptador USB en modo monitor (detección genérica; probado con Atheros AR9271 y Ralink RT5372) — toggle real/demo y caída a demo con datos simulados si no hay hardware conectado. Fabricantes resueltos del registro IEEE local (ieee-data), con fallback opcional a la API de macvendors.com ([`docs/wifiradar.md`](docs/wifiradar.md)) |
 | Wardriving | Captura de handshakes para laboratorio/tesis: allowlist explícita de BSSIDs como único mecanismo de autorización, ataques pmkid/deauth con aircrack-ng, sesiones con artifacts descargables desde la web, contraseñas crackeadas visibles por sesión (ojo con revelado) y dictionary attack (rockyou) desde el listado de sesiones — probado contra un AP de laboratorio dedicado ([`docs/wardrive.md`](docs/wardrive.md), [`docs/lab-wireless.md`](docs/lab-wireless.md)) |
+| GPS | Mapa mundial con la posición en vivo del dongle GPS USB: marcador, precisión, sky plot de satélites (en fix / visibles / necesarios) — [`docs/gps.md`](docs/gps.md) |
 
 Detalle completo del setup en [`docs/SETUP.md`](docs/SETUP.md).
 
@@ -421,6 +422,15 @@ ver [`docs/wardrive.md`](./docs/wardrive.md). Resumen:
    **handshake** (descarga el `.cap`/`.hc22000`) y **dictionary attack**
    (rockyou contra esa captura, con barra de progreso y cancelación).
 9. **Salir** restaura la radio a modo normal y devuelve el control al radar.
+
+### GPS (página /gps)
+
+Mapa mundial fullscreen con la posición en vivo del dongle GPS USB de la Pi:
+marcador pulsante con círculo de precisión, HUD con coordenadas/altitud/
+velocidad/rumbo/HDOP y un panel de satélites con sky plot (en fix N/4,
+visibles M/total, coloreados por SNR). Sin fix indica cuántos satélites hay
+y cuántos faltan. Funciona con u-blox y clones (`ttyACM*`/`ttyUSB*`), con o
+sin `gpsd` — ver [`docs/gps.md`](docs/gps.md).
 
 ### OST (pestaña Música)
 

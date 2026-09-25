@@ -100,7 +100,8 @@ whisplay-ai-chatbot/
 │   │   ├── llm-config.ts         # LLM configuration
 │   │   ├── llm-tools.ts          # Tool definitions
 │   │   └── custom-tools/         # Custom tool templates
-│   ├── utils/                    # Utility functions (incl. wifi.ts — nmcli wrapper, docs/wifi.md)
+│   ├── utils/                    # Utility functions (incl. wifi.ts — nmcli wrapper, docs/wifi.md,
+│   │                             #   gps.ts — USB GPS dongle NMEA reader, docs/gps.md)
 │   └── type/                     # Global TypeScript types
 ├── python/                       # Python hardware interface
 │   ├── whisplay.py               # Hardware board abstraction (GPIO, SPI, LCD)

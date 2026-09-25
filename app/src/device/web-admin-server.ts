@@ -75,6 +75,7 @@ import {
   listUsbWifiAdapters,
   resolveFilePath,
 } from "../utils/usb";
+import { getGpsStatus } from "../utils/gps";
 
 const SESSION_COOKIE = "akbal_session";
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days — a LAN admin
@@ -244,6 +245,19 @@ export class WebAdminServer {
       ctx.body = fs.createReadStream(path.resolve(__dirname, "../..", "web", "admin", "wifiradar.html"));
     });
 
+    // GPS — fullscreen world map with the dongle's live position (docs/gps.md).
+    // Own page like /wifiradar (a map deserves the whole viewport); position
+    // and satellite data come from /api/gps/status (polled by gps.js).
+    router.get("/gps", (ctx) => {
+      ctx.set("Cache-Control", "no-store");
+      ctx.type = "text/html";
+      ctx.body = fs.createReadStream(path.resolve(__dirname, "../..", "web", "admin", "gps.html"));
+    });
+
+    router.get("/api/gps/status", async (ctx) => {
+      ctx.body = await getGpsStatus();
+    });
+
     router.get("/api/wifiradar/snapshot", (ctx) => {
       const revealFullMac = ctx.query.fullMac === "1";
       ctx.body = getWifiRadarSnapshot(revealFullMac);
@@ -263,6 +277,19 @@ export class WebAdminServer {
         wifi,
         battery: getBatteryReading(),
         system,
+      };
+    });
+
+    // Compact GPS summary for header indicators (full payload: /api/gps/status).
+    router.get("/api/gps/summary", async (ctx) => {
+      const gps = await getGpsStatus();
+      ctx.body = {
+        present: gps.present,
+        hasFix: gps.hasFix,
+        satellitesUsed: gps.satellitesUsed,
+        satellitesInView: gps.satellitesInView,
+        satellitesNeeded: gps.satellitesNeeded,
+        error: gps.error,
       };
     });
 

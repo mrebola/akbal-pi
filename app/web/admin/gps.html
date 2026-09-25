@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Akbal · GPS</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="gps.css" />
+</head>
+<body>
+  <div id="gps-map" class="gps-map"></div>
+
+  <!-- Same topbar as the rest of the admin UI (see index.html) -->
+  <div id="gps-header">
+    <header class="topbar">
+      <div class="brand-group">
+        <img id="avatar" class="avatar" src="/avatar/standing.gif" alt="Akbal" />
+        <div class="brand">AKBAL</div>
+      </div>
+      <button type="button" id="nav-toggle" class="nav-toggle" aria-label="Menú" aria-expanded="false" aria-controls="main-tabs">
+        <span></span><span></span><span></span>
+      </button>
+      <nav class="tabs" id="main-tabs">
+        <a href="/#chat" class="tab-link">Chat</a>
+        <a href="/wifiradar" class="tab-link">Radar Wi-Fi</a>
+        <a href="/#wardrive" class="tab-link">Audit WiFi</a>
+        <span class="tab-link active">GPS</span>
+        <a href="/#music" class="tab-link">OST</a>
+        <a href="/#usb" class="tab-link">Dispositivos</a>
+        <a href="/#wifi" class="tab-link">Wifi</a>
+        <a href="/#settings" class="tab-link">Ajustes</a>
+      </nav>
+      <div id="nav-backdrop" class="nav-backdrop hidden"></div>
+
+      <div class="hdr-right">
+        <button type="button" id="sys-toggle" class="hdr-summary" title="Estado del sistema">
+          <span class="hdr-dot" id="hdr-online-dot"></span>
+          <span class="hdr-model" id="hdr-model">—</span>
+          <span class="battery-indicator" id="battery-indicator" title="Batería">
+            <span id="battery-icon">🔋</span>
+            <span id="battery-pct">—</span>
+          </span>
+          <span class="hdr-gear">◉</span>
+        </button>
+        <div id="sys-popover" class="popover hidden" role="menu">
+          <div class="popover-title">Sistema</div>
+          <div class="metric-row"><span class="metric-key">CPU</span><span class="metric-val mono" id="stat-cpu">—</span></div>
+          <div class="metric-row"><span class="metric-key">RAM</span><span class="metric-val mono" id="stat-ram">—</span></div>
+          <div class="metric-row"><span class="metric-key">Disco</span><span class="metric-val mono" id="stat-disk">—</span></div>
+          <div class="metric-row"><span class="metric-key">Wi-Fi</span><span class="metric-val" id="hdr-wifi">—</span></div>
+          <div class="metric-row"><span class="metric-key">Modelo</span><span class="metric-val mono" id="hdr-model-full">—</span></div>
+          <div class="popover-sep"></div>
+          <button id="logout-btn" class="btn btn-tertiary btn-block" title="Cerrar sesión">Cerrar sesión</button>
+        </div>
+      </div>
+      <span id="status-pill" class="hidden">—</span>
+    </header>
+  </div>
+
+  <!-- Position HUD: coords, altitude, speed, heading, HDOP -->
+  <div class="gps-hud" id="gps-hud">
+    <div class="gps-hud-title">POSICIÓN</div>
+    <div class="gps-coords mono" id="gps-coords">— , —</div>
+    <div class="gps-hud-grid">
+      <div class="gps-hud-item"><span class="k">Alt</span><span class="v mono" id="gps-alt">—</span></div>
+      <div class="gps-hud-item"><span class="k">Vel</span><span class="v mono" id="gps-speed">—</span></div>
+      <div class="gps-hud-item"><span class="k">Rumbo</span><span class="v mono" id="gps-heading">—</span></div>
+      <div class="gps-hud-item"><span class="k">HDOP</span><span class="v mono" id="gps-hdop">—</span></div>
+      <div class="gps-hud-item"><span class="k">Hora fix</span><span class="v mono" id="gps-time">—</span></div>
+      <div class="gps-hud-item"><span class="k">Dongle</span><span class="v mono" id="gps-device">—</span></div>
+    </div>
+    <div id="gps-fix-msg" class="gps-fix-msg">Buscando satélites…</div>
+  </div>
+
+  <!-- Satellite sky plot + counters -->
+  <div class="gps-sat-panel" id="gps-sat-panel">
+    <div class="gps-sat-head">
+      <div class="gps-sat-title">SATÉLITES</div>
+      <div class="gps-sat-counters">
+        <span class="gps-sat-counter used"><span id="gps-sat-used">0</span>/<span id="gps-sat-need">4</span> en fix</span>
+        <span class="gps-sat-counter view"><span id="gps-sat-view">0</span>/<span id="gps-sat-total">—</span> visibles</span>
+      </div>
+    </div>
+    <div class="gps-sat-plot" id="gps-sat-plot">
+      <div class="gps-sat-ring r1"></div>
+      <div class="gps-sat-ring r2"></div>
+      <div class="gps-sat-ring r3"></div>
+      <div class="gps-sat-cross"></div>
+      <div class="gps-sat-n">N</div>
+      <div id="gps-sat-dots"></div>
+    </div>
+    <div class="gps-sat-note">anillo exterior = horizonte · centro = cenit</div>
+  </div>
+
+  <div id="gps-error" class="gps-error hidden"></div>
+
+  <script src="gps.js"></script>
+</body>
+</html>

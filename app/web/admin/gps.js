@@ -14,11 +14,64 @@ let marker = null;
 let accuracyCircle = null;
 let firstFixSeen = false;
 let lastHadFix = false;
+let lastSnapshot = null; // forwarded to the globe view when it's active
+let view = "map"; // "map" | "globe"
 
 initMap();
 initHeader();
+initViewToggle();
 void refresh();
 setInterval(() => void refresh(), POLL_MS);
+
+// ---- View toggle (MAPA / GLOBO 3D) ----
+
+function initViewToggle() {
+  const toggle = document.getElementById("gps-view-toggle");
+  if (!toggle) return;
+  const activate = () => {
+    setView(view === "map" ? "globe" : "map");
+  };
+  toggle.addEventListener("click", activate);
+  toggle.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      activate();
+    }
+  });
+}
+
+function setView(next) {
+  view = next;
+  const isGlobe = view === "globe";
+  const mapEl = document.getElementById("gps-map");
+  const globeEl = document.getElementById("gps-globe");
+  const hint = document.getElementById("gps-globe-hint");
+  const satPanel = document.getElementById("gps-sat-panel");
+  const toggle = document.getElementById("gps-view-toggle");
+  toggle?.classList.toggle("on", isGlobe);
+  toggle?.setAttribute("aria-checked", isGlobe ? "true" : "false");
+  document.getElementById("gps-view-label-map")?.classList.toggle("active", !isGlobe);
+  document.getElementById("gps-view-label-globe")?.classList.toggle("active", isGlobe);
+  mapEl?.classList.toggle("hidden", isGlobe);
+  globeEl?.classList.toggle("hidden", !isGlobe);
+  hint?.classList.toggle("hidden", !isGlobe);
+  // The flat sky plot duplicates what the globe shows — hide it in globe view.
+  satPanel?.classList.toggle("hidden", isGlobe);
+  if (isGlobe) {
+    if (map) map.invalidateSize({ animate: false });
+    window.__akbalGlobe?.setActive?.(true);
+    if (lastSnapshot) forwardToGlobe(lastSnapshot);
+  } else {
+    window.__akbalGlobe?.setActive?.(false);
+    if (map) setTimeout(() => map.invalidateSize(), 60);
+  }
+}
+
+function forwardToGlobe(snapshot) {
+  const lat = snapshot.hasFix ? snapshot.latitude : null;
+  const lon = snapshot.hasFix ? snapshot.longitude : null;
+  window.__akbalGlobe?.update?.(lat, lon, snapshot.satellites || []);
+}
 
 function initMap() {
   const el = document.getElementById("gps-map");
@@ -123,7 +176,9 @@ async function refresh() {
   } catch {
     return;
   }
+  lastSnapshot = data;
   render(data);
+  if (view === "globe") forwardToGlobe(data);
 }
 
 function fmt(n, digits = 5) {

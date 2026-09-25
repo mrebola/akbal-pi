@@ -1,11 +1,36 @@
 # GPS — posición del dispositivo en un mapa mundial
 
 Página fullscreen `http://<ip-del-dispositivo>:8090/gps` (link **GPS** en la
-nav, al lado de Audit WiFi): un mapa mundial visual (Leaflet + tiles CARTO)
-centrado en la posición actual del dongle GPS conectado a la Raspberry Pi,
-con marcador pulsante, círculo de precisión y un panel de satélites en vivo.
-Documenta la implementación vigente (`app/src/utils/gps.ts`,
-`app/web/admin/gps.*`).
+nav, al lado de Audit WiFi): un mapa mundial visual (Leaflet + tiles
+OpenStreetMap) centrado en la posición actual del dongle GPS conectado a la
+Raspberry Pi, con marcador pulsante, círculo de precisión y un panel de
+satélites en vivo — y un toggle **MAPA / GLOBO 3D** que cambia a una escena
+Three.js con la Tierra y los satélites del fix orbitando alrededor. Documenta
+la implementación vigente (`app/src/utils/gps.ts`, `app/web/admin/gps.*`,
+`app/web/admin/globe.js`).
+
+## Toggle MAPA / GLOBO 3D
+
+Arriba a la derecha del header (junto al estado del sistema). Dos vistas
+del mismo estado:
+
+- **MAPA** (default): el mapa Leaflet descrito abajo + panel de sky plot 2D.
+- **GLOBO 3D**: Tierra 3D (textura NASA/three.js vendoreada en
+  `web/admin/vendor/textures/earth-day.jpg`, con fallback procedural
+  wireframe si no hay textura) + marcador verde pulsante en tu posición +
+  los satélites que el dongle reporta, colocados por azimut/elevación sobre
+  rayos desde tu punto en tierra (el 0° = horizonte, 90° = cenit). Verde =
+  en fix, azul = con seguimiento (SNR), gris = en vista sin señal.
+
+  - Arrastrar rota el globo, scroll hace zoom, auto-rotación suave que se
+    pausa al interactuar y vuelve tras 8 s de inactividad.
+  - **Clic en un satélite** abre su ficha (mismo diseño de modal que
+    wardriving/radar): constelación y PRN, estado (en fix / seguimiento /
+    débil), SNR en dB-Hz, elevación, azimut, posición sobre la Tierra y
+    órbita (MEO ~20,200 km). Se cierra con ✕, backdrop o Escape y la
+    navegación del globo sigue funcionando.
+  - El sky plot 2D se oculta en vista globo (la esfera ya lo muestra).
+  - El render loop se pausa cuando vuelves a MAPA (CPU de la Pi).
 
 ## Hardware
 
@@ -129,7 +154,8 @@ GET /api/gps/summary      # {present, hasFix, satellitesUsed, satellitesInView, 
   o si hay techo/interiores — el mensaje de satélites es la guía.
 - La página es solo observación; no guarda historial de rutas ni logs de
   posición.
-- No requiere internet en la Pi: Leaflet y CSS están vendoreados
-  (`web/admin/vendor/leaflet/`); solo los tiles del mapa vienen de CARTO
-  (si la Pi no tiene salida a internet el mapa queda vacío pero el HUD de
-  posición y satélites funciona igual).
+- No requiere internet en la Pi: Leaflet, Three.js, OrbitControls y las
+  texturas de la Tierra están vendoreados (`web/admin/vendor/`); solo los
+  tiles del mapa vienen de OpenStreetMap (si la Pi no tiene salida a
+  internet el mapa queda vacío pero el HUD de posición y satélites funciona
+  igual — y el globo 3D funciona completo con su textura local).

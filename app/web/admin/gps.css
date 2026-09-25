@@ -9,6 +9,22 @@
   z-index: 0;
 }
 
+.gps-map.hidden { visibility: hidden; pointer-events: none; }
+
+/* Three.js globe canvas — same fullscreen slot as the map; one visible at a
+   time behind the header/HUDs (toggled via .hidden in gps.js). */
+.gps-globe {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+  background: radial-gradient(ellipse at 50% 60%, #101a2e 0%, #060a14 60%, #03060c 100%);
+  z-index: 0;
+}
+
+.gps-globe.hidden { display: none; }
+
 .gps-map .leaflet-tile-pane {
   filter: saturate(0.85) contrast(1.02) brightness(0.92);
 }
@@ -133,6 +149,78 @@
 
 .gps-fix-msg.warn { color: #ffd166; }
 
+/* ---- View toggle (MAPA / GLOBO 3D) — iOS-style, lives in the header ---- */
+
+.hdr-view-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(11, 16, 32, 0.6);
+}
+
+.hdr-view-label {
+  font-size: 10px;
+  font-family: ui-monospace, monospace;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
+}
+
+.hdr-view-label.active {
+  color: #34d351;
+  font-weight: 700;
+}
+
+.hdr-view-track {
+  position: relative;
+  width: 40px;
+  height: 20px;
+  border-radius: 10px;
+  background: rgba(148, 163, 184, 0.25);
+  border: 1px solid var(--border);
+  transition: background 0.25s ease;
+}
+
+.hdr-view-knob {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #34d351;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  transition: transform 0.25s ease, background 0.25s ease;
+}
+
+.hdr-view-toggle.on .hdr-view-track {
+  background: rgba(122, 183, 255, 0.25);
+}
+
+.hdr-view-toggle.on .hdr-view-knob {
+  transform: translateX(20px);
+  background: #7ab7ff;
+}
+
+.hdr-view-toggle.on #gps-view-label-globe { color: #7ab7ff; font-weight: 700; }
+.hdr-view-toggle.on #gps-view-label-map { color: var(--text-secondary); font-weight: 400; }
+
+.hdr-view-toggle:focus-visible {
+  box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.35);
+  outline: none;
+}
+
+@media (max-width: 900px) {
+  .hdr-view-toggle { padding: 4px 8px; }
+  .hdr-view-label { display: none; }
+  .hdr-view-label.active { display: inline; }
+}
+
 /* ---- Reverse-geocoded address panel ---- */
 
 .gps-address {
@@ -179,6 +267,75 @@
   color: rgba(232, 238, 252, 0.55);
   font-style: italic;
 }
+
+/* ---- Satellite modal (globe view) — reuses the wardriving .apm-* card,
+   restyled here for the GPS theme: blue accent instead of green. ---- */
+
+#gps-sat-modal .apm-card {
+  border-color: #7ab7ff;
+  box-shadow: 0 0 40px rgba(122, 183, 255, 0.15), 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+
+#gps-sat-modal .apm-title {
+  color: #7ab7ff;
+  text-shadow: 0 0 10px rgba(122, 183, 255, 0.45);
+}
+
+#gps-sat-modal .apm-row { border-bottom: 1px solid rgba(122, 183, 255, 0.12); }
+#gps-sat-modal .apm-row span:last-child { color: #e8eefc; }
+#gps-sat-modal .apm-close:hover { color: #7ab7ff; border-color: #7ab7ff; }
+#gps-sat-modal .apm-hint {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+  border-top: 1px solid rgba(122, 183, 255, 0.15);
+  padding-top: 10px;
+}
+
+.gsm-status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+}
+
+.gsm-status-badge.used {
+  background: rgba(52, 211, 153, 0.15);
+  color: #34d351;
+  border: 1px solid rgba(52, 211, 153, 0.4);
+}
+
+.gsm-status-badge.tracked {
+  background: rgba(122, 183, 255, 0.12);
+  color: #7ab7ff;
+  border: 1px solid rgba(122, 183, 255, 0.35);
+}
+
+.gsm-status-badge.idle {
+  background: rgba(148, 163, 184, 0.12);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+/* Globe hint bar (bottom center, only in globe view) */
+.gps-globe-hint {
+  position: fixed;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 890;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(11, 16, 32, 0.85);
+  border: 1px solid rgba(122, 183, 255, 0.25);
+  color: rgba(232, 238, 252, 0.75);
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.gps-globe-hint.hidden { display: none; }
 
 /* ---- Satellite panel (bottom left) ---- */
 

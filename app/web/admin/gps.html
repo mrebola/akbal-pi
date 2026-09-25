@@ -7,9 +7,16 @@
   <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="gps.css" />
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three.module.min.js" } }
+  </script>
 </head>
 <body>
+  <!-- Two views behind one iOS-style toggle:
+       view=map  → Leaflet world map (position pin)
+       view=globe → Three.js globe: position pin + satellites orbiting -->
   <div id="gps-map" class="gps-map"></div>
+  <canvas id="gps-globe" class="gps-globe hidden"></canvas>
 
   <!-- Same topbar as the rest of the admin UI (see index.html) -->
   <div id="gps-header">
@@ -34,6 +41,12 @@
       <div id="nav-backdrop" class="nav-backdrop hidden"></div>
 
       <div class="hdr-right">
+        <div class="hdr-view-toggle" id="gps-view-toggle" role="switch" aria-checked="false" tabindex="0"
+             title="Ver: mapa de posición / globo 3D con satélites">
+          <span class="hdr-view-label active" id="gps-view-label-map">MAPA</span>
+          <span class="hdr-view-track"><span class="hdr-view-knob"></span></span>
+          <span class="hdr-view-label" id="gps-view-label-globe">GLOBO 3D</span>
+        </div>
         <button type="button" id="sys-toggle" class="hdr-summary" title="Estado del sistema">
           <span class="hdr-dot" id="hdr-online-dot"></span>
           <span class="hdr-model" id="hdr-model">—</span>
@@ -103,7 +116,35 @@
 
   <div id="gps-error" class="gps-error hidden"></div>
 
+  <!-- Globe view navigation hint (visible only in globe view) -->
+  <div id="gps-globe-hint" class="gps-globe-hint hidden">arrastrá para girar · scroll = zoom · clic en un satélite para su ficha</div>
+
+  <!-- Satellite detail modal (click a satellite on the globe) — same card
+       design as the wardriving/radar network modal (.apm-*). Closable via ✕,
+       backdrop or Escape; navigation on the globe keeps working after. -->
+  <div id="gps-sat-modal" class="apm hidden">
+    <div class="apm-backdrop" id="gps-sat-modal-backdrop"></div>
+    <div class="apm-card">
+      <button id="gps-sat-modal-close" class="apm-close">✕</button>
+      <div class="apm-head">
+        <div class="apm-title" id="gsm-title">—</div>
+        <div class="apm-sub">Satélite GNSS</div>
+      </div>
+      <div class="apm-grid">
+        <div class="apm-row"><span>Constelación / PRN</span><span id="gsm-prn">—</span></div>
+        <div class="apm-row"><span>Estado</span><span id="gsm-status">—</span></div>
+        <div class="apm-row"><span>Señal (SNR)</span><span id="gsm-snr">—</span></div>
+        <div class="apm-row"><span>Elevación</span><span id="gsm-elev">—</span></div>
+        <div class="apm-row"><span>Azimut</span><span id="gsm-azim">—</span></div>
+        <div class="apm-row"><span>Posición sobre la Tierra</span><span id="gsm-ground">—</span></div>
+        <div class="apm-row"><span>Distancia al usuario</span><span id="gsm-dist">—</span></div>
+      </div>
+      <div class="apm-hint">Arrastrá para girar el globo · scroll para zoom · clic en otro satélite para cambiar la ficha.</div>
+    </div>
+  </div>
+
   <script src="vendor/leaflet/leaflet.js"></script>
   <script src="gps.js"></script>
+  <script type="module" src="globe.js"></script>
 </body>
 </html>

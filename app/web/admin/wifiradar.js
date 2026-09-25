@@ -567,7 +567,7 @@ function renderApInfoModal() {
       ? '<div class="apm-devices-empty">Ningún equipo visto hablando con esta red (aparece cuando la captura ve tráfico de un cliente asociado).</div>'
       : devices
           .map((d) => `<div class="apm-device">
-              <span class="apm-dev-mac">${escapeHtml(revealMacs ? (d.macFull || d.mac) : d.mac)}</span>
+              <span class="apm-dev-mac">${escapeHtml(revealMacs ? maskMac(d.macFull || d.mac) : maskMac(d.mac))}</span>
               <span class="apm-dev-vendor">${escapeHtml(d.vendor || "?")}</span>
               <span class="apm-dev-rssi">${d.rssi} dBm</span>
             </div>`)

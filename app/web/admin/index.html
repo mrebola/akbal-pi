@@ -318,24 +318,21 @@
       <!-- Network info modal (row click): same detail card the radar uses. -->
       <div id="wd-netinfo-modal" class="wd-modal hidden">
         <div class="wd-modal-backdrop" onclick="document.getElementById('wd-netinfo-modal').classList.add('hidden')"></div>
-        <div class="wd-modal-content" style="max-width: 480px;">
-          <div class="wd-modal-header">
-            <span id="wd-netinfo-title">Red</span>
-            <div class="wd-modal-actions">
-              <button class="secondary" onclick="document.getElementById('wd-netinfo-modal').classList.add('hidden')">Cerrar</button>
-            </div>
+        <div class="apm-card">
+          <button class="apm-close" onclick="document.getElementById('wd-netinfo-modal').classList.add('hidden')">✕</button>
+          <div class="apm-head">
+            <div class="apm-title" id="wd-netinfo-title">—</div>
+            <div class="apm-sub">Detalles de la red</div>
           </div>
-          <div style="padding: 16px 20px;">
-            <div class="apm-grid">
-              <div class="apm-row"><span>MAC Address (BSSID)</span><span id="wdni-bssid">—</span></div>
-              <div class="apm-row"><span>Marca / fabricante</span><span id="wdni-vendor">—</span></div>
-              <div class="apm-row"><span>Seguridad</span><span id="wdni-security">—</span></div>
-              <div class="apm-row"><span>Canal</span><span id="wdni-channel">—</span></div>
-              <div class="apm-row"><span>Potencia (RSSI)</span><span id="wdni-rssi">—</span></div>
-              <div class="apm-row"><span>Distancia aprox.</span><span id="wdni-distance">—</span></div>
-            </div>
-            <div class="muted" style="font-size: 11px;">Equipos conectados: ver el radar (WIFIRADAR) o la lista de dispositivos de esta sesión.</div>
+          <div class="apm-grid">
+            <div class="apm-row"><span>MAC Address (BSSID)</span><span id="wdni-bssid">—</span></div>
+            <div class="apm-row"><span>Marca / fabricante</span><span id="wdni-vendor">—</span></div>
+            <div class="apm-row"><span>Seguridad</span><span id="wdni-security">—</span></div>
+            <div class="apm-row"><span>Canal</span><span id="wdni-channel">—</span></div>
+            <div class="apm-row"><span>Potencia (RSSI)</span><span id="wdni-rssi">—</span></div>
+            <div class="apm-row"><span>Distancia aprox.</span><span id="wdni-distance">—</span></div>
           </div>
+          <div class="apm-hint">La lista de equipos conectados vive en el radar (WIFIRADAR) y en los archivos de la sesión.</div>
         </div>
       </div>
 

@@ -164,7 +164,7 @@ momento (verificado con `lsof`/`find` durante una sesión de captura larga).
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y iw tshark
+sudo apt-get install -y iw tshark ieee-data
 ```
 
 - **`iw`** (`/usr/sbin/iw` en Debian/Raspberry Pi OS) — control de modo
@@ -174,6 +174,12 @@ sudo apt-get install -y iw tshark
   via `apt` puede preguntar si usuarios no-root pueden capturar paquetes
   (grupo `wireshark`) — no hace falta responder que sí, porque WIFIRADAR
   siempre invoca `dumpcap` a través de `sudo -n`, no directamente.
+- **`ieee-data`** (opcional pero recomendado) — el registro completo de
+  OUIs del IEEE (~35k fabricantes) en `/usr/share/ieee-data/oui.csv`. El
+  backend lo carga una sola vez al arrancar y lo usa para resolver la
+  marca de cada AP/dispositivo; sin él cae a una tabla corta curada a mano
+  (~50 entradas) y muchas redes muestran "Desconocido". No añade
+  subprocessos ni costo por consulta (dict lookup en memoria).
 - El usuario que corre `chatbot.service` (`akbal` en este dispositivo) ya
   tiene sudo sin contraseña completo (`(ALL:ALL) ALL`, ver
   [`wifi.md`](./wifi.md)) — no hace falta una regla de sudoers adicional

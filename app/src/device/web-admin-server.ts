@@ -1399,7 +1399,10 @@ export class WebAdminServer {
     // checked, since a WebSocket upgrade request never goes through Koa.
     this.wss = new WebSocketServer({ noServer: true });
     this.server.on("upgrade", (req, socket, head) => {
-      if (req.url !== "/wifiradar/ws" || !this.isValidSessionCookie(req.headers.cookie)) {
+      // req.url can carry a query string (/wifiradar/ws?fullMac=1) — strip it
+      // for the path check or the upgrade is rejected and the socket dies.
+      const pathname = (req.url || "").split("?")[0];
+      if (pathname !== "/wifiradar/ws" || !this.isValidSessionCookie(req.headers.cookie)) {
         socket.destroy();
         return;
       }

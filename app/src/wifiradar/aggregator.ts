@@ -10,7 +10,7 @@ import {
   WifiRadarMode,
 } from "./types";
 import { anonymizeMac, hashMac } from "./privacy";
-import { lookupVendor, lookupVendorOrRandom } from "./oui";
+import { lookupVendorFull, lookupVendorOrRandom } from "./oui";
 
 const AP_LOST_TIMEOUT_MS = 60_000; // no beacon/probe-resp in 60s -> considered lost
 const AP_PRUNE_MS = 5 * 60_000; // fully drop from memory 5 min after last seen
@@ -102,7 +102,7 @@ export class Aggregator {
         channel: frame.channel,
         rssi: frame.rssi,
         security: frame.security,
-        vendor: lookupVendor(frame.bssid),
+        vendor: lookupVendorFull(frame.bssid),
         firstSeen: frame.timestamp,
         lastSeen: frame.timestamp,
         frames: 1,

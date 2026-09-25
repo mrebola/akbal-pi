@@ -33,6 +33,9 @@ export type GpsStatus = {
   satellitesNeeded: number; // 4 = minimum for a 3D fix (lat/lon/alt/time)
   satellites: GpsSatellite[];
   fixTime: string | null; // ISO timestamp from the fix
+  // Reverse-geocoded street address of the current fix (null while
+  // unresolved or moving faster than the geocoder can keep up).
+  address: string | null;
   error: string; // human-readable state when no dongle/fix
 };
 
@@ -51,6 +54,7 @@ const EMPTY: GpsStatus = {
   satellitesNeeded: 4,
   satellites: [],
   fixTime: null,
+  address: null,
   error: "Sin dongle GPS conectado",
 };
 
@@ -356,6 +360,12 @@ export async function getGpsStatus(): Promise<GpsStatus> {
       ? `Fix inválido — ${gga.satellitesUsed}/${MIN_SATS_FOR_FIX} satélites`
       : "Esperando datos del dongle GPS";
 
+  // Kick a reverse-geocode when the fix moved beyond the cache radius —
+  // fire-and-forget, the response never waits on the network.
+  if (hasFix && gga!.lat != null && gga!.lon != null) {
+    reverseGeocoder.update(gga!.lat, gga!.lon, state.lastRmc?.speedKmh ?? null);
+  }
+
   return {
     present: true,
     device,
@@ -373,6 +383,7 @@ export async function getGpsStatus(): Promise<GpsStatus> {
     fixTime: hasFix && gga!.time
       ? nmeaTimeToIso(gga!.time)
       : null,
+    address: hasFix ? reverseGeocoder.current() : null,
     error,
   };
 }
@@ -385,3 +396,128 @@ function nmeaTimeToIso(hhmmss: string): string {
   const s = hhmmss.slice(4, 6);
   return `${h}:${m}:${s}Z`;
 }
+
+// ─── Reverse geocoding (street address of the fix) ──────────────────────────
+// Nominatim (OpenStreetMap, free, no key). Usage policy: max 1 req/s and a
+// meaningful User-Agent — handled with a request timer plus a proximity
+// cache so being parked in one spot costs ZERO requests, and moving only
+// triggers a lookup after crossing a distance threshold.
+
+// Re-geocode after moving more than this far from the last lookup (~40m —
+// below typical GPS jitter while parked, above a couple of house fronts).
+const GEO_MIN_MOVE_M = 40;
+// Hard throttle: never two Nominatim calls closer than this (usage policy).
+const GEO_MIN_INTERVAL_MS = 15_000;
+// Give up after this long so a hung request never blocks the status poll
+// (the fetch itself is awaited by the status route).
+const GEO_TIMEOUT_MS = 8_000;
+// While driving faster than this, the address is stale the moment it
+// resolves — display it but stop burning requests every 40m.
+const GEO_MAX_SPEED_KMH = 70;
+
+type GeoResult = {
+  lat: number;
+  lon: number;
+  address: string | null;
+  resolvedAt: number;
+  failed: boolean;
+};
+
+class ReverseGeocoder {
+  private last: GeoResult | null = null;
+  private lastRequestAt = 0;
+  private inflight = false;
+  // Sequential queue marker: newest fix wins, stale lookups get dropped.
+  private requestSeq = 0;
+
+  // Current known address — returns it for any fix within GEO_MIN_MOVE_M
+  // of where it was resolved, else null while a new lookup is in flight.
+  current(): string | null {
+    return this.last && !this.last.failed ? this.last.address : null;
+  }
+
+  // Called on every status poll with a valid fix. Decides whether to fire a
+  // new reverse-geocode and starts it without blocking the response.
+  update(lat: number, lon: number, speedKmh: number | null): void {
+    if (this.inflight) return;
+    const moved = this.last
+      ? haversineM(lat, lon, this.last.lat, this.last.lon)
+      : Infinity;
+    const now = Date.now();
+    const throttled = now - this.lastRequestAt < GEO_MIN_INTERVAL_MS;
+    if (this.last && moved < GEO_MIN_MOVE_M) return; // parked: cache valid
+    if (speedKmh != null && speedKmh > GEO_MAX_SPEED_KMH && this.last) {
+      return; // highway: address would be stale immediately
+    }
+    if (throttled) return;
+    this.fire(lat, lon);
+  }
+
+  private fire(lat: number, lon: number): void {
+    const seq = ++this.requestSeq;
+    this.inflight = true;
+    this.lastRequestAt = Date.now();
+    void (async () => {
+      let address: string | null = null;
+      let failed = false;
+      try {
+        address = await nominatimAddress(lat, lon);
+        if (address === null) failed = true;
+      } catch {
+        failed = true;
+      }
+      this.inflight = false;
+      if (seq !== this.requestSeq) return; // superseded
+      this.last = { lat, lon, address, resolvedAt: Date.now(), failed };
+    })();
+  }
+}
+
+async function nominatimAddress(lat: number, lon: number): Promise<string | null> {
+  const url =
+    `https://nominatim.openstreetmap.org/reverse?lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}` +
+    `&format=jsonv2&zoom=18&addressdetails=1&accept-language=es`;
+  const res = await fetch(url, {
+    headers: {
+      // Nominatim usage policy: identify the app (akbal-pi, contact-less lab use).
+      "User-Agent": "akbal-pi-gps-admin/1.0 (Raspberry Pi device page)",
+      "Accept-Language": "es",
+    },
+    signal: AbortSignal.timeout(GEO_TIMEOUT_MS),
+  });
+  if (!res.ok) return null;
+  const data: any = await res.json().catch(() => null);
+  if (!data) return null;
+  return composeAddress(data);
+}
+
+// Human-friendly one-liner: "Calle 123, Colonia, Ciudad, CP, País" — built
+// from Nominatim's address object rather than display_name (which is long
+// and includes the county/district noise).
+function composeAddress(data: any): string | null {
+  const a = data?.address || {};
+  const parts: string[] = [];
+  const street = a.road || a.pedestrian || a.footway || a.residential || a.name;
+  if (street) parts.push(a.house_number ? `${street} ${a.house_number}` : street);
+  if (a.suburb || a.neighbourhood) parts.push(a.suburb || a.neighbourhood);
+  if (a.city || a.town || a.village || a.municipality) {
+    parts.push(a.city || a.town || a.village || a.municipality);
+  }
+  if (a.state) parts.push(a.state);
+  if (a.postcode) parts.push(a.postcode);
+  if (a.country) parts.push(a.country);
+  const composed = parts.filter(Boolean).join(", ");
+  return composed || data?.display_name || null;
+}
+
+function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6_371_000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+export const reverseGeocoder = new ReverseGeocoder();

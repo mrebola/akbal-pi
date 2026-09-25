@@ -135,12 +135,15 @@ function render(gps) {
   const fixMsg = document.getElementById("gps-fix-msg");
   const hud = document.getElementById("gps-hud");
   const satPanel = document.getElementById("gps-sat-panel");
+  const addressPanel = document.getElementById("gps-address-panel");
 
   if (!gps.present) {
     clearMarker();
     lastHadFix = false;
     hud?.classList.add("dim");
     satPanel?.classList.add("dim");
+    addressPanel?.classList.add("dim");
+    setGpsAddress("Sin dongle GPS conectado", true);
     if (fixMsg) fixMsg.textContent = "Sin dongle GPS conectado — enchufá el receptor USB";
     setText("gps-coords", "— , —");
     setText("gps-device", "—");
@@ -164,6 +167,7 @@ function render(gps) {
   errEl?.classList.add("hidden");
   hud?.classList.remove("dim");
   satPanel?.classList.remove("dim");
+  addressPanel?.classList.remove("dim");
   setText("gps-device", gps.device || "—");
 
   if (gps.hasFix && gps.latitude != null && gps.longitude != null) {
@@ -179,6 +183,13 @@ function render(gps) {
     setText("gps-hdop", gps.hdop != null ? gps.hdop.toFixed(1) : "—");
     setText("gps-time", gps.fixTime || "—");
     updateMarker(gps.latitude, gps.longitude, gps.hdop);
+    // Reverse-geocoded address: the backend caches it per position (~40m
+    // radius) and refreshes when the fix moves, so this stays current.
+    if (gps.address) {
+      setGpsAddress(gps.address, false);
+    } else {
+      setGpsAddress("Resolviendo dirección…", true);
+    }
   } else {
     if (lastHadFix) clearMarker();
     lastHadFix = false;
@@ -188,6 +199,7 @@ function render(gps) {
     setText("gps-heading", "—");
     setText("gps-hdop", "—");
     setText("gps-time", "—");
+    setGpsAddress("Sin fix — la dirección aparece al tener posición", true);
     if (fixMsg) {
       fixMsg.classList.add("warn");
       // The core requirement: say how many satellites we have vs need.
@@ -196,6 +208,16 @@ function render(gps) {
   }
 
   renderSatellites(gps);
+}
+
+// ---- Address panel ----
+
+function setGpsAddress(text, dimmed) {
+  const el = document.getElementById("gps-address");
+  const panel = document.getElementById("gps-address-panel");
+  if (!el) return;
+  if (el.textContent !== text) el.textContent = text; // avoid reflow churn
+  panel?.classList.toggle("pending", Boolean(dimmed));
 }
 
 function satMessage(gps) {

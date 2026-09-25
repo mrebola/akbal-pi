@@ -73,6 +73,14 @@
     <div id="gps-fix-msg" class="gps-fix-msg">Buscando satélites…</div>
   </div>
 
+  <!-- Reverse-geocoded street address (Nominatim/OSM). Updates automatically
+       when the fix moves beyond the backend's geocode radius. -->
+  <div class="gps-address" id="gps-address-panel">
+    <div class="gps-address-title">DIRECCIÓN</div>
+    <div class="gps-address-value" id="gps-address">Resolviendo dirección…</div>
+    <div class="gps-address-note" id="gps-address-note">se actualiza sola al moverte (OpenStreetMap)</div>
+  </div>
+
   <!-- Satellite sky plot + counters -->
   <div class="gps-sat-panel" id="gps-sat-panel">
     <div class="gps-sat-head">

@@ -39,6 +39,16 @@ Latitud/longitud, altitud, velocidad (km/h), rumbo, HDOP, hora del fix (UTC)
 y el device (`/dev/ttyACM0`…). Sin fix muestra el mensaje de estado con la
 cuenta de satélites.
 
+### Dirección (arriba a la derecha)
+
+Dirección calle del fix actual, resuelta por **Nominatim**
+(OpenStreetMap, gratis, sin API key) contra la posición del GPS. Se
+actualiza sola: el backend re-geocodifica cuando el fix se mueve más de
+~40 m del punto de la última consulta (con throttle mínimo de 15 s entre
+llamadas, su política de uso). Estacionado en un lugar, el costo es cero
+requests; en movimiento, se refresca al cruzar el umbral (y por encima de
+70 km/h deja de refrescar — la dirección quedaría vieja al instante).
+
 ### Panel de satélites (abajo a la izquierda)
 
 - Contador **en fix**: `N/4` — los satélites usados en la solución contra el
@@ -70,8 +80,9 @@ dongle USB (/dev/ttyACM0|ttyUSB0)
             ├─ RMC → velocidad/rumbo
             ├─ GSV → satélites en vista (PRN/el/az/SNR por constelación)
             └─ GSA → PRNs en la solución (used)
-         → getGpsStatus() → /api/gps/status (poll 2s desde gps.js)
-                           → /api/gps/summary (resumen para headers)
+         → getGpsStatus() ── ReverseGeocoder (Nominatim, caché por proximidad)
+            └→ /api/gps/status (poll 2s desde gps.js, incluye `address`)
+             → /api/gps/summary (resumen para headers)
 ```
 
 - El reader es **long-lived**: se spawnéa al primer pedido de status, reinicia
@@ -101,6 +112,7 @@ GET /api/gps/summary      # {present, hasFix, satellitesUsed, satellitesInView, 
 | `hdop` | dilución de precisión horizontal (<2 bueno) |
 | `satellitesUsed` / `satellitesInView` / `satellitesNeeded` | N en fix / M visibles / mínimo 4 |
 | `satellites[]` | `{prn, elevation, azimuth, snr, used}` |
+| `address` | dirección calle del fix (Nominatim, cacheada por posición) |
 | `error` | estado humano cuando no hay fix |
 
 ## Cómo usarlo

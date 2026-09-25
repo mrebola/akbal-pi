@@ -133,6 +133,53 @@
 
 .gps-fix-msg.warn { color: #ffd166; }
 
+/* ---- Reverse-geocoded address panel ---- */
+
+.gps-address {
+  position: fixed;
+  top: calc(var(--header-height, 64px) + 12px);
+  right: 14px;
+  z-index: 900;
+  min-width: 260px;
+  max-width: 340px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(11, 16, 32, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(6px);
+  color: #e8eefc;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.45);
+  transition: opacity 0.3s ease;
+}
+
+.gps-address.dim { opacity: 0.55; }
+
+.gps-address-title {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: rgba(255, 255, 255, 0.55);
+  margin-bottom: 6px;
+  font-family: ui-monospace, monospace;
+}
+
+.gps-address-value {
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: #7ab7ff;
+  margin-bottom: 4px;
+  word-wrap: break-word;
+}
+
+.gps-address-note {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.gps-address.pending .gps-address-value {
+  color: rgba(232, 238, 252, 0.55);
+  font-style: italic;
+}
+
 /* ---- Satellite panel (bottom left) ---- */
 
 .gps-sat-panel {
@@ -265,6 +312,10 @@
     max-width: calc(100vw - 28px);
     top: auto;
     bottom: 190px;
+  }
+  .gps-address {
+    top: 74px;
+    max-width: calc(100vw - 28px);
   }
   .gps-sat-panel { bottom: 10px; }
   .gps-error { top: 74px; width: calc(100vw - 28px); text-align: center; }

@@ -727,17 +727,19 @@ searchInput.addEventListener("input", (e) => {
 });
 
 // ---- security visibility toggles (OPEN/WEP/WPA) ----
-// Toggling off prunes those APs (and their orbiting devices) on the next
-// snapshot; re-render from the latest snapshot immediately so the change
-// feels instant, without waiting for the 2s tick.
-document.querySelectorAll(".as-sec").forEach((btn) => {
+// Plain .as-btn toggles, same look/behavior as SRC/LIVE: .active = shown,
+// no class = hidden. Toggling prunes those APs (and their orbiting
+// devices) by re-applying the latest snapshot immediately — no 2s wait.
+for (const id of ["sec-toggle-open", "sec-toggle-wep", "sec-toggle-wpa"]) {
+  const btn = document.getElementById(id);
+  if (!btn) continue;
   btn.addEventListener("click", () => {
     const sec = btn.dataset.sec;
     securityVisible[sec] = !securityVisible[sec];
     btn.classList.toggle("active", securityVisible[sec]);
     if (latestSnapshot) applySnapshot(latestSnapshot);
   });
-});
+}
 
 // ---- toolbar controls ----
 // SRC toggle: real capture ("live") vs synthetic demo data — same toggle

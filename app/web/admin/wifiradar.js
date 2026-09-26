@@ -9,7 +9,6 @@ import { OrbitControls } from "./vendor/OrbitControls.js";
 const canvas = document.getElementById("scene");
 const bootOverlay = document.getElementById("boot-overlay");
 const bootSub = document.getElementById("boot-sub");
-const demoBadge = document.getElementById("demo-badge");
 const searchInput = document.getElementById("search-input");
 const livePauseBtn = document.getElementById("live-pause-btn");
 const srcToggleBtn = document.getElementById("src-toggle-btn");
@@ -214,6 +213,25 @@ controls.enablePan = false;
 controls.minDistance = 4;
 controls.maxDistance = 60;
 controls.target.set(0, 0, 0);
+
+// Subtle auto-rotation: the view keeps drifting on its own; dragging pauses
+// it, and 2s after the user lets go it eases back in (accelerates from 0).
+let autoRotateSpeed = 0.35; // degrees per frame at 60fps → gentle drift
+let userInteracting = false;
+let resumeTimeout = null;
+const camEl = renderer.domElement;
+const onCamGrab = () => {
+  userInteracting = true;
+  if (resumeTimeout) { clearTimeout(resumeTimeout); resumeTimeout = null; }
+};
+camEl.addEventListener("pointerdown", onCamGrab);
+window.addEventListener("pointerup", () => {
+  if (!userInteracting) return;
+  userInteracting = false;
+  // 2s grace before the drift resumes; eased ramp handles the transition.
+  if (resumeTimeout) clearTimeout(resumeTimeout);
+  resumeTimeout = setTimeout(() => { resumeTimeout = null; }, 2000);
+});
 
 // ---- lighting (minimal — most materials are emissive/basic, no dynamic shadows) ----
 scene.add(new THREE.AmbientLight(0x1a2a33, 1.2));
@@ -622,12 +640,10 @@ function updateHud(snapshot) {
   hudFpm.textContent = String(snapshot.framesPerMinute);
   const alertCount = snapshot.events.filter((e) => e.severity === "alert").length;
   hudAlerts.textContent = String(alertCount);
-  demoBadge.classList.toggle("hidden", !snapshot.demo);
   // Backend is the source of truth — if capture died and fell back to demo
   // while the user asked for live, the toggle stays on REAL but the badge
   // shows DEMO (fallback in progress).
   currentRadarMode = snapshot.mode;
-  renderSrcToggle();
 
   hudSpectrum.innerHTML = "";
   const maxFrames = Math.max(1, ...snapshot.channelActivity.map((c) => c.frames));
@@ -745,7 +761,6 @@ for (const id of ["sec-toggle-open", "sec-toggle-wep", "sec-toggle-wpa"]) {
 // ---- toolbar controls ----
 // The SRC button was replaced by the platform toggle in the toolbar header
 // (one LIVE/DEMO switch for radar + wardrive + gps — POST /api/platform/mode).
-// These helpers remain for the demo badge logic below.
 
 async function applySourceToggle(mode) {
   try {
@@ -755,12 +770,6 @@ async function applySourceToggle(mode) {
       currentRadarMode = res.mode;
     }
   } catch { /* keep previous state */ }
-  renderSrcToggle();
-}
-
-function renderSrcToggle() {
-  // No src button anymore — the demo badge is the live indicator here.
-  demoBadge.classList.toggle("hidden", requestedMode !== "demo");
 }
 
 // Platform toggle wiring (LIVE/DEMO): posts the device-wide mode; the radar
@@ -971,6 +980,12 @@ function animate(now) {
 
   updatePulses(dt);
   updateLabels();
+  // Ease the auto-rotation in/out: target speed is 0 while interacting or
+  // within the 2s post-drag grace window, the gentle drift otherwise.
+  const wantSpin = !userInteracting && !resumeTimeout;
+  autoRotateSpeed += ((wantSpin ? 0.035 : 0) - autoRotateSpeed) * 0.05;
+  controls.autoRotate = Math.abs(autoRotateSpeed) > 0.0005;
+  controls.autoRotateSpeed = autoRotateSpeed;
   controls.update();
   renderer.render(scene, camera);
 }

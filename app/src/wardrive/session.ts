@@ -47,15 +47,18 @@ export class WardriveSession {
   private targets = new Map<string, SessionTargetSnapshot>();
   private progressLog = new Map<string, AttackProgressEntry[]>(); // bssid -> entries
 
-  constructor() {
+  constructor(demo = false) {
     this.startedAt = Date.now();
     // 20260919-024533 — timestamp + nothing else: SSIDs can contain slashes
     // and other filesystem-hostile characters, so they never go in the path.
-    this.id = new Date(this.startedAt)
-      .toISOString()
-      .replace(/[-:]/g, "")
-      .replace(/\..+$/, "")
-      .replace("T", "-");
+    // `demo` (optional): demo sessions carry the prefix so pruneDemoSessions
+    // (service.ts) can wipe simulated captures on exit.
+    this.id = (demo ? "demo-" : "")
+      + new Date(this.startedAt)
+        .toISOString()
+        .replace(/[-:]/g, "")
+        .replace(/\..+$/, "")
+        .replace("T", "-");
     this.dir = path.join(SESSIONS_ROOT, this.id);
     fs.mkdirSync(this.dir, { recursive: true });
     this.writeMeta();

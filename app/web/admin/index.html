@@ -456,25 +456,6 @@
               </div>
             </div>
           </div>
-
-          <div class="cfg-card">
-            <div class="cfg-card-head"><span class="cfg-card-title">Contraseña de esta web</span></div>
-            <p class="cfg-meta">Se guarda en el <code>.env</code> del dispositivo (texto plano, accesible por SSH) por si la olvidan.</p>
-            <form id="password-change-form" class="cfg-form">
-              <label class="cfg-field">
-                <span class="cfg-key">Contraseña actual</span>
-                <input type="password" id="pw-current" autocomplete="current-password" required />
-              </label>
-              <label class="cfg-field">
-                <span class="cfg-key">Contraseña nueva</span>
-                <input type="password" id="pw-new" autocomplete="new-password" minlength="4" required />
-              </label>
-              <div class="cfg-actions">
-                <button type="submit" class="cfg-btn cfg-btn-accent">Cambiar contraseña</button>
-              </div>
-              <span id="pw-change-status" class="cfg-meta"></span>
-            </form>
-          </div>
         </div>
 
         <!-- WIFI -->
@@ -639,6 +620,25 @@
             <p class="cfg-meta">Guarda la configuración (incluye claves y wifi) en la microSD de la Pi. No se sube al repositorio. Úsalo para restaurar si algo falla.</p>
             <span id="backup-status" class="cfg-meta"></span>
             <ul id="backup-list" class="cfg-list"></ul>
+          </div>
+
+          <div class="cfg-card">
+            <div class="cfg-card-head"><span class="cfg-card-title">Contraseña de esta web</span></div>
+            <p class="cfg-meta">Se guarda en el <code>.env</code> del dispositivo (texto plano, accesible por SSH) por si la olvidan.</p>
+            <form id="password-change-form" class="cfg-form">
+              <label class="cfg-field">
+                <span class="cfg-key">Contraseña actual</span>
+                <input type="password" id="pw-current" autocomplete="current-password" required />
+              </label>
+              <label class="cfg-field">
+                <span class="cfg-key">Contraseña nueva</span>
+                <input type="password" id="pw-new" autocomplete="new-password" minlength="4" required />
+              </label>
+              <div class="cfg-actions">
+                <button type="submit" class="cfg-btn cfg-btn-accent">Cambiar contraseña</button>
+              </div>
+              <span id="pw-change-status" class="cfg-meta"></span>
+            </form>
           </div>
         </div>
       </div>

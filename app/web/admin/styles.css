@@ -694,27 +694,6 @@ button.secondary {
 
 /* ---- Wardriving (tab-wardrive) ---- */
 
-.wd-subtabs {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 12px;
-}
-
-.wd-subtab {
-  font-size: 12px;
-  padding: 4px 14px;
-  border-radius: 16px;
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-}
-
-.wd-subtab.active {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: rgba(80, 255, 120, 0.06);
-}
-
 .wd-files-path {
   font-size: 12px;
   color: var(--text-secondary);
@@ -1483,32 +1462,32 @@ button.secondary {
 }
 
 /* ---- Wardrive subtabs (1 · Auditoría / 2 · Sesiones) ---- */
+/* Same button look as USB/settings controls (.cfg-btn / .cfg-btn-accent). */
 
 .wd-subtabs {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   margin-bottom: 12px;
-  border-bottom: 1px solid var(--border);
 }
 
 .wd-subtab {
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
   color: var(--text-secondary);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.05em;
-  padding: 8px 14px;
+  padding: 7px 14px;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
 
-.wd-subtab:hover { color: var(--text-primary); }
+.wd-subtab:hover { color: var(--text-primary); border-color: var(--border-strong, var(--border)); }
 
 .wd-subtab.active {
   color: var(--accent);
-  border-bottom-color: var(--accent);
+  border-color: var(--accent-dim, var(--accent));
+  background: rgba(80, 255, 120, 0.06);
   text-shadow: 0 0 8px rgba(80, 255, 120, 0.35);
 }
 

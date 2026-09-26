@@ -49,6 +49,10 @@
       <div id="nav-backdrop" class="nav-backdrop hidden"></div>
 
       <div class="hdr-right">
+        <div class="plx-toggle" id="platform-toggle" title="Fuente de datos: LIVE usa los dongles reales · DEMO muestra datos sintéticos y libera el hardware">
+          <span class="plx-toggle-label mode-live" data-mode="live">LIVE</span>
+          <span class="plx-toggle-label mode-demo" data-mode="demo">DEMO</span>
+        </div>
         <button type="button" id="sys-toggle" class="hdr-summary" title="Estado del sistema">
           <span class="hdr-dot" id="hdr-online-dot"></span>
           <span class="hdr-model" id="hdr-model">—</span>
@@ -73,14 +77,6 @@
     </header>
 
     <div class="as-toolbar">
-      <span id="demo-badge" class="demo-badge hidden">DEMO</span>
-
-      <!-- Platform source: LIVE / DEMO (drives radar + wardrive + gps) -->
-      <div class="plx-toggle lg" id="platform-toggle" title="Fuente de datos: LIVE usa los dongles reales · DEMO muestra datos sintéticos y libera el hardware">
-        <span class="plx-toggle-label mode-live" data-mode="live">LIVE</span>
-        <span class="plx-toggle-label mode-demo" data-mode="demo">DEMO</span>
-      </div>
-
       <div class="as-search">
         <input id="search-input" type="text" placeholder="buscar SSID o BSSID..." autocomplete="off" />
       </div>

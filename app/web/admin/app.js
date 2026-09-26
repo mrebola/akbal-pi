@@ -1677,16 +1677,18 @@ function wdRender() {
   const monitorReady = !cap || cap.monitorSupported;
 
   wdBannerStatus.textContent = on
-    ? `${wdStatus.targets?.length || 0} redes visibles`
-    : cap && !cap.present
-      ? "Sin adaptador WiFi USB"
-      : cap && !cap.monitorSupported
-        ? `${cap.description || "Adaptador"} no soporta modo monitor`
-        : "Listo para auditar";
+    ? `${wdStatus.targets?.length || 0} redes visibles${wdSource === "demo" ? " (demo — simulado)" : ""}`
+    : cap?.demo
+      ? "Demo — auditar redes sintéticas sin adaptador"
+      : cap && !cap.present
+        ? "Sin adaptador WiFi USB"
+        : cap && !cap.monitorSupported
+          ? `${cap.description || "Adaptador"} no soporta modo monitor`
+          : "Listo para auditar";
 
   wdEnterBtn.classList.toggle("hidden", on);
   // Demo source needs no adapter: entering is always allowed.
-  wdEnterBtn.disabled = !on && !monitorReady && wdSource !== "demo";
+  wdEnterBtn.disabled = !on && !monitorReady && wdSource !== "demo" && !cap?.demo;
   wdExitBtn.classList.toggle("hidden", !on);
   wdScanBtn.classList.toggle("hidden", !on);
   // The src button/switch are always visible (mode applies before entering).
@@ -2145,6 +2147,20 @@ document.getElementById("wd-sessions-dict-progress")?.addEventListener("click", 
   void wdRenderDictProgress();
 });
 
+// Cancel / dismiss work from the inline dict widget too (it lives inside
+// the sessions list, so the list's delegated listener covers it).
+document.getElementById("wd-sessions-list")?.addEventListener("click", async (ev) => {
+  if (ev.target.closest(".wd-dict-clear")) {
+    await apiFetch("/api/wardrive/dict/clear", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    void wdRenderDictProgress();
+    return;
+  }
+  if (ev.target.closest(".wd-dict-stop")) {
+    await apiFetch("/api/wardrive/dict/stop", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    void wdRenderDictProgress();
+  }
+});
+
 document.getElementById("wd-verify-list")?.addEventListener("click", async (ev) => {
   const btn = ev.target.closest(".wd-dict-btn");
   if (!btn) return;
@@ -2154,6 +2170,7 @@ document.getElementById("wd-verify-list")?.addEventListener("click", async (ev) 
     return;
   }
   void wdRenderDictProgress();
+  void wdLoadSessions();
 });
 
 // ---- Attack progress modal ----
@@ -2929,6 +2946,10 @@ for (const btn of document.querySelectorAll(".tab-btn")) {
         if (wdPaused) return;
         const active = document.getElementById("tab-wardrive")?.classList.contains("active");
         if (active) void wdRefresh();
+        // The dict-crack widget renders inline in the sessions list, which
+        // wdRefresh/wdLoadSessions rebuild — repaint it after each poll so
+        // the progress bar doesn't blink away (only while it's running).
+        if (active && wdDictTimer) void wdRenderDictProgress();
       }, 2000);
     });
   }
@@ -3028,7 +3049,7 @@ function renderMusicStatus(s) {
   for (const li of mpList ? mpList.querySelectorAll("li[data-index]") : []) {
     li.classList.toggle("active", s.playing && Number(li.dataset.index) === s.index);
   }
-  syncLyrics(s.positionMs);
+  syncLyrics();
 }
 
 async function pollMusicStatus() {
@@ -3074,10 +3095,9 @@ async function loadLyricsFor(index) {
 }
 
 // Keep the lyrics panel in sync with the player: reload when the track
-// changes. No auto-scroll — the user reads/navigates the lyrics freely.
-function syncLyrics(positionMs) {
-  const panel = document.getElementById("mp-lyrics");
-  if (!panel) return;
+// changes. No auto-scroll, no per-poll work — only reload when the index
+// actually moved (the previous version re-fetched every status poll).
+function syncLyrics() {
   const status = lastMusicStatus;
   if (!status) return;
   void loadLyricsFor(status.playing || status.paused ? status.index : -1);

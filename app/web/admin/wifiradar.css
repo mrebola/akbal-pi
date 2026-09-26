@@ -104,17 +104,6 @@ html, body {
   font-family: "Courier New", Courier, monospace;
 }
 
-.demo-badge {
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  color: #06140b;
-  background: var(--as-warning);
-  border-radius: 4px;
-  padding: 3px 8px;
-  font-weight: 700;
-  box-shadow: 0 0 10px rgba(255, 209, 102, 0.5);
-}
-
 .as-search { flex: 1; max-width: 320px; }
 
 .as-search input {

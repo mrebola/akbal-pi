@@ -21,6 +21,7 @@ import { registerShutdownHook } from "../device/display";
 import { unloadModel } from "../cloud-api/local/ollama-llm";
 import { crackCheck, resolveCapPath, DictCrack, type CrackResult, type DictCrackState } from "./crack";
 import { lookupVendorOrRandomAsync, macvendorsEnabled } from "../wifiradar/oui";
+import { demoTargetsWithPassword, DEMO_WD_TARGETS, type DemoWardriveTarget } from "./discovery";
 
 // ─── Policy constants ────────────────────────────────────────────────────
 // Scope: thesis/lab capture only. The allowlist below IS the security
@@ -37,6 +38,19 @@ const DEAUTH_BURST = 64; // directed, strong burst — aireplay sends this many 
 const DEAUTH_MAX_ATTEMPTS = 2;
 const PMKID_PASSIVE_MS = 20_000; // extra passive window after deauth fails
 const BETWEEN_TARGETS_MS = 1_500;
+// Demo-attack pacing: every simulated step waits this long so the UI
+// stepper/log read like the real thing (aircrack/airodump take seconds)
+// while touching zero hardware.
+const DEMO_STEP_MS = 3_000;
+// Demo dict-crack cadence: the fake aircrack consumes the demo wordlist at
+// ~1200 keys/s — fast enough to look alive, slow enough to watch.
+const DEMO_DICT_TOTAL = 14_344_391;
+const DEMO_DICT_FPS = 1200;
+const DEMO_DICT_TICK_MS = 3_000;
+const DEMO_DICT_KEYS_PER_TICK = (DEMO_DICT_FPS * DEMO_DICT_TICK_MS) / 1000;
+const DEMO_DICT_STEPS = Math.ceil(DEMO_DICT_TOTAL / DEMO_DICT_KEYS_PER_TICK);
+// The simulated capture always "succeeds" after this many deauth steps.
+const DEMO_DEAUTH_STEPS = 1;
 
 function sanitizeBssid(raw: string): string {
   const bssid = String(raw || "").trim().toUpperCase();
@@ -105,6 +119,18 @@ export class WardriveService extends EventEmitter {
   // the Pi's CPU is precious and a second aircrack would just fight for it.
   private dictCrack: DictCrack | null = null;
   private dictCrackBssid: string | null = null;
+  // Demo attack simulation: when source="demo", runTarget() doesn't touch
+  // any radio — it walks the same step/progress pipeline with 3s pauses and
+  // always produces a synthetic "handshake captured" (akbal_lab even
+  // validates with its documented lab password). dictDemo tracks the fake
+  // rockyou run (progress + result) the same way DictCrack would.
+  private demoDict: {
+    bssid: string;
+    timer: ReturnType<typeof setInterval> | null;
+    tried: number;
+    running: boolean;
+    result: CrackResult | null;
+  } | null = null;
   // rockyou on the device (~/wordlists/rockyou.txt) — overridable for tests.
   private dictWordlist(): string {
     return process.env.WARDRIVE_WORDLIST || path.join(process.env.HOME || "/home/akbal", "wordlists", "rockyou.txt");
@@ -117,6 +143,22 @@ export class WardriveService extends EventEmitter {
   async startDictCrack(bssidRaw: string, capPathOverride?: string): Promise<{ ok: boolean; error?: string }> {
     const bssid = WardriveService.clean(bssidRaw);
     if (!bssid) return { ok: false, error: "BSSID inválido" };
+    // Demo: no aircrack, no .cap — the fake run walks rockyou numbers until
+    // akbal_lab's (public, lab-only) password is "found". Demo sessions
+    // (folder names starting "demo-") route here too: their .cap is a
+    // synthetic marker file, running real aircrack on it would be pointless.
+    const isDemoSession = Boolean(capPathOverride && /(^|\/|\\)demo-/.test(capPathOverride));
+    if (this.source === "demo" || isDemoSession) {
+      const demoTarget = DEMO_WD_TARGETS.find((t) => t.bssid === bssid);
+      if (!demoTarget) return { ok: false, error: "El objetivo no está visible en el aire ahora" };
+      if (this.demoDict?.running) {
+        return { ok: false, error: "Ya hay un crack en curso — cancelalo primero" };
+      }
+      const ownerDir = capPathOverride
+        ? this.resolveSessionPath(path.dirname(capPathOverride))
+        : undefined;
+      return this.startDictDemo(bssid, ownerDir || undefined);
+    }
     if (this.dictCrack?.getState().running) {
       return { ok: false, error: `Ya hay un crack en curso (${this.dictCrackBssid}) — cancelalo primero` };
     }
@@ -197,6 +239,7 @@ export class WardriveService extends EventEmitter {
   }
 
   stopDictCrack(): { ok: boolean } {
+    if (this.demoDict?.running) this.stopDictDemo();
     this.dictCrack?.stop();
     return { ok: true };
   }
@@ -206,6 +249,8 @@ export class WardriveService extends EventEmitter {
   // used to stay pinned forever). The outcome is already persisted on the
   // session (verified/password), so nothing is lost.
   clearDictCrack(): { ok: boolean } {
+    if (this.demoDict?.running) return { ok: false };
+    this.demoDict = null;
     if (this.dictCrack?.getState().running) return { ok: false };
     this.dictCrack = null;
     this.dictCrackBssid = null;
@@ -213,6 +258,23 @@ export class WardriveService extends EventEmitter {
   }
 
   dictCrackStatus(): { bssid: string | null; state: DictCrackState | null } {
+    // Demo fake crack mirrors the real DictCrack state shape.
+    if (this.demoDict) {
+      const elapsed = this.demoDict.running ? 0 : 0;
+      return {
+        bssid: this.demoDict.bssid,
+        state: {
+          running: this.demoDict.running,
+          progress: {
+            tried: this.demoDict.tried,
+            total: DEMO_DICT_TOTAL,
+            fps: DEMO_DICT_FPS,
+            elapsedSec: elapsed + (this.demoDict.tried / DEMO_DICT_FPS),
+          },
+          result: this.demoDict.result,
+        },
+      };
+    }
     if (!this.dictCrack) return { bssid: null, state: null };
     return { bssid: this.dictCrackBssid, state: this.dictCrack.getState() };
   }
@@ -493,16 +555,18 @@ export class WardriveService extends EventEmitter {
 
   async enter(): Promise<{ ok: boolean; error?: string }> {
     if (this.mode !== "inactive") return { ok: true };
-    // v2: wardriving is live-only. The whole point is capturing a handshake
-    // from a real radio — no adapter, no mode. The UI toggle for the radar
-    // (REAL/DEMO) still exists for WIFIRADAR, but wardrive enter() refuses
-    // demo: pointing this workflow at synthetic data would be misleading
-    // for the lab validation it exists for.
+    // Demo source: no radio involved — the UI gets the same flow (targets,
+    // attack stepper, dict crack, session files) driven by a simulator.
     if (this.source === "demo") {
-      const error = "Modo DEMO no disponible para wardriving v2 — conectá el adaptador USB";
-      this.error = error;
+      this.error = "";
+      this.mode = "ready";
+      this.iface = null;
+      // Radar already runs its own demo feed; nothing to stop or start.
+      this.session = new WardriveSession(true);
+      void this.refreshTargets();
+      console.log(`[wardrive] mode ON (demo, session=${this.session.id})`);
       this.broadcastStatus();
-      return { ok: false, error };
+      return { ok: true };
     }
     try {
       const info = await detectMonitorAdapter();
@@ -571,6 +635,12 @@ export class WardriveService extends EventEmitter {
     console.log("[wardrive] mode OFF");
     // Sessions without any captured handshake are not worth keeping —
     // "save everything that has a handshake, always; nothing that doesn't".
+    // Demo sessions are pure simulation: they are ALWAYS pruned (nothing
+    // real was captured; keeping synthetic .caps on the SD is noise).
+    if (this.source === "demo") {
+      this.pruneDemoSessions();
+      return { ok: true };
+    }
     this.pruneEmptySessions();
     return { ok: true };
   }
@@ -583,6 +653,9 @@ export class WardriveService extends EventEmitter {
     let dirs: string[] = [];
     try {
       dirs = fs.readdirSync(root).filter((d) => {
+        // Demo session folders are handled exclusively by pruneDemoSessions
+        // (exit in demo mode) — never pruned/kept by the live heuristic.
+        if (d.startsWith("demo-")) return false;
         const full = path.join(root, d);
         return fs.statSync(full).isDirectory();
       });
@@ -622,7 +695,11 @@ export class WardriveService extends EventEmitter {
     this.mode = "attacking";
     this.currentBssid = bssid;
     this.broadcastStatus();
-    await this.runTarget(bssid, target.ssid, target.channel);
+    if (this.source === "demo") {
+      await this.runTargetDemo(bssid, target.ssid, target.channel);
+    } else {
+      await this.runTarget(bssid, target.ssid, target.channel);
+    }
     this.currentBssid = null;
     if (this.mode === "attacking") this.mode = "ready";
     this.broadcastStatus();
@@ -657,7 +734,11 @@ export class WardriveService extends EventEmitter {
       }
       this.currentBssid = bssid;
       this.broadcastStatus();
-      await this.runTarget(bssid, target.ssid, target.channel);
+      if (this.source === "demo") {
+        await this.runTargetDemo(bssid, target.ssid, target.channel);
+      } else {
+        await this.runTarget(bssid, target.ssid, target.channel);
+      }
       this.currentBssid = null;
       if (this.attackAbort) break;
       await sleep(BETWEEN_TARGETS_MS);
@@ -1038,6 +1119,48 @@ export class WardriveService extends EventEmitter {
     if (!this.session) {
       return { ok: false, error: "Sin sesión de wardrive activa" };
     }
+    // Demo: no real aircrack — compare against the demo target's (public,
+    // lab-only) password. Any other password reports "no matchea".
+    if (this.source === "demo") {
+      const demoPassword = DEMO_WD_TARGETS.find((t) => t.bssid === bssid)?.demoPassword;
+      if (!demoPassword) {
+        return {
+          ok: true,
+          result: {
+            verdict: "handshake_wrong_password",
+            matched: false,
+            eapolPackets: 2,
+            handshakeHint: true,
+            output: "KEY NOT FOUND (demo)",
+          },
+        };
+      }
+      const result: CrackResult = password === demoPassword
+        ? {
+            verdict: "verified",
+            matched: true,
+            eapolPackets: 2,
+            handshakeHint: true,
+            output: `KEY FOUND! [ ${demoPassword} ]`,
+          }
+        : {
+            verdict: "handshake_wrong_password",
+            matched: false,
+            eapolPackets: 2,
+            handshakeHint: true,
+            output: "KEY NOT FOUND (demo: la contraseña no matchea)",
+          };
+      this.verified.set(bssid, result);
+      this.lastValidatedPassword.set(bssid, result.matched ? password : `${password} (no matchea)`);
+      if (result.matched) {
+        this.foundPasswords.set(bssid, { password, ssid: target.ssid });
+        this.session.setFoundPassword(bssid, password);
+      }
+      this.appendLog(bssid, `[validate] verdict=${result.verdict} (demo)`);
+      this.session.writeTargetInfo(bssid, this.lastValidatedPassword.get(bssid));
+      this.broadcastStatus();
+      return { ok: true, result };
+    }
     const capPath = resolveCapPath(this.session.dir, this.targetFiles(bssid));
     if (!capPath) {
       return { ok: false, error: "El objetivo capturado no tiene archivo .cap/.pcapng" };
@@ -1081,6 +1204,222 @@ export class WardriveService extends EventEmitter {
     return { ok: true };
   }
 
+  // ─── Demo attack simulation (source="demo", no hardware) ────────────────
+  // Replays the EXACT same progress pipeline as runTarget() — same steps,
+  // same message wording — only with a 3s wait per step and synthetic
+  // outcomes: every target ends "captured", and akbal_lab (docs/
+  // lab-wireless.md, password deliberately public) also ends validated with
+  // its lab password so the UI's 🔑/🏴‍☠️ flow can be exercised.
+
+  // Demo session folders live under the same root with a "demo-" prefix;
+  // their simulated .cap/.hc22000 files make the file browser work and get
+  // wiped on exit (pruneDemoSessions).
+  private pruneDemoSessions(): void {
+    const root = path.join(process.env.HOME || "/home/akbal", "wardrive-sessions");
+    let dirs: string[] = [];
+    try {
+      dirs = fs.readdirSync(root).filter((d) => d.startsWith("demo-"));
+    } catch {
+      return;
+    }
+    for (const dir of dirs) {
+      try {
+        fs.rmSync(path.join(root, dir), { recursive: true, force: true });
+        console.log(`[wardrive] pruned demo session ${dir}`);
+      } catch {
+        // never fatal
+      }
+    }
+  }
+
+  // Simulated capture artifacts: a minimal but REAL pcap file (global pcap
+  // header + one synthetic 802.11 data frame + EAPOL-looking bytes) so the
+  // hexdump preview and aircrack-based tools don't choke on a zero-byte
+  // file. The .hc22000 is just a marker (the demo never runs hashcat).
+  private writeDemoCaptureFiles(bssid: string, capPath: string): void {
+    try {
+      const prefix = capPath.replace(/-01\.cap$/, "");
+      // Minimal pcap: 24B file header + 16B per packet header + payload.
+      const magic = Buffer.from([0x4d, 0x3c, 0xb2, 0xa1, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00]);
+      const frame = Buffer.alloc(26 + 4 + 40); // radiotap + 802.11 hdr + fake EAPOL tail
+      const pkt = Buffer.alloc(16);
+      pkt.writeUInt32LE(frame.length, 8);
+      const cap = Buffer.concat([magic, pkt, frame]);
+      fs.writeFileSync(capPath, cap);
+      fs.writeFileSync(`${prefix}.hc22000`, `WPA*02*deadbeefdeadbeefdeadbeefdeadbeef*${bssid.replace(/:/g, "").toLowerCase()}*f4f5d81ab05e***\n`);
+    } catch {
+      // never fatal — the session works without artifacts
+    }
+  }
+
+  // Full simulated attack cycle against one demo target. Mirrors runTarget
+  // step-for-step (scan → lock → capture → deauth → validate → done) with
+  // DEMO_STEP_MS between entries.
+  private async runTargetDemo(bssid: string, ssid: string, channel: number): Promise<void> {
+    if (!this.session) return;
+    if (this.attackAbort) {
+      this.updateMeta(bssid, { status: "cancelled" });
+      return;
+    }
+    this.updateMeta(bssid, { ssid, channel, status: "running", method: "deauth", error: "" });
+
+    const prefix = path.join(this.session.dir, bssid.replace(/:/g, "").toLowerCase());
+    const demoTarget = DEMO_WD_TARGETS.find((t) => t.bssid === bssid);
+    const demoPassword = demoTarget?.demoPassword;
+
+    // Step 1: scan
+    this.progress(bssid, "scan", `Escaneando ${ssid || bssid} para detectar canal real y clientes...`,
+      `airodump-ng --bssid ${bssid} -w ${prefix}-scan --output-format csv [demo-${this.iface || "wlan0demo"}]`);
+    await sleep(DEMO_STEP_MS);
+    if (this.attackAbort) { this.updateMeta(bssid, { status: "cancelled" }); return; }
+    this.progress(bssid, "scan", `Canal real detectado: ${channel} (radar decía ${channel})`);
+    this.progress(bssid, "scan", demoTarget && demoTarget.clients > 0
+      ? `Clientes detectados: ${demoTarget.clients} (${bssid.replace(/:/g, "").slice(-4)}:demo, ...)`
+      : "Sin clientes asociados detectados");
+
+    // Step 2: lock
+    this.progress(bssid, "lock", `Fijando adaptador en canal ${channel}...`,
+      `iw dev [demo-iface] set channel ${channel}`);
+    await sleep(DEMO_STEP_MS);
+    if (this.attackAbort) { this.updateMeta(bssid, { status: "cancelled" }); return; }
+    this.progress(bssid, "lock", `Canal ${channel} fijado correctamente`);
+
+    // Step 3: capture
+    this.progress(bssid, "capture", "Iniciando captura de tráfico...",
+      `airodump-ng --bssid ${bssid} -c ${channel} -w ${prefix} [demo-iface]`);
+    await sleep(DEMO_STEP_MS);
+    if (this.attackAbort) { this.updateMeta(bssid, { status: "cancelled" }); return; }
+    this.progress(bssid, "capture", "Captura activa, esperando clientes...");
+    await sleep(DEMO_STEP_MS);
+    if (this.attackAbort) { this.updateMeta(bssid, { status: "cancelled" }); return; }
+
+    // Step 4: deauth (one attempt in demo — always "succeeds")
+    this.progress(bssid, "deauth", `Intento 1/${DEAUTH_MAX_ATTEMPTS}: deauth a 1 cliente(s)...`,
+      `aireplay-ng --deauth ${DEAUTH_BURST} -a ${bssid} -c AA:BB:CC:DE:MO:01 -D [demo-iface]`);
+    await sleep(DEMO_STEP_MS);
+    if (this.attackAbort) { this.updateMeta(bssid, { status: "cancelled" }); return; }
+    this.progress(bssid, "deauth", "aireplay-ng: 64 deauths enviados (simulado)");
+    this.progress(bssid, "validate", "Esperando handshake de reconexión...");
+    await sleep(DEMO_STEP_MS);
+    if (this.attackAbort) { this.updateMeta(bssid, { status: "cancelled" }); return; }
+
+    // Step 5: validate — synthetic capture always appears
+    this.progress(bssid, "validate", "Convirtiendo captura y buscando handshake...",
+      `hcxpcapngtool -o ${prefix}.hc22000 ${prefix}-01.cap`);
+    this.writeDemoCaptureFiles(bssid, `${prefix}-01.cap`);
+    this.session.addTargetFile(bssid, `${bssid.replace(/:/g, "").toLowerCase()}-01.cap`);
+    this.session.addTargetFile(bssid, `${bssid.replace(/:/g, "").toLowerCase()}-01.hc22000`);
+    this.session.updateTarget(bssid, { status: "captured", method: "deauth", finishedAt: Date.now() });
+    this.markCaptured(bssid, "deauth", `${prefix}-01.cap`);
+    this.progress(bssid, "validate", "¡Handshake capturado! Deauth suficiente — cerrando captura");
+    this.progress(bssid, "done", "Handshake WPA2 capturado correctamente", undefined, `${prefix}-01.cap`);
+
+    // Demo auto-validation: akbal_lab's password is public (lab, docs/
+    // lab-wireless.md) so the pipeline can end in a real-looking KEY FOUND.
+    if (demoPassword) {
+      await sleep(DEMO_STEP_MS);
+      if (this.attackAbort) { this.updateMeta(bssid, { status: "cancelled" }); return; }
+      this.progress(bssid, "done", "Validando handshake con la contraseña del lab...",
+        "aircrack-ng -w - -b " + bssid + " <prefix>-01.cap   (contraseña por stdin)");
+      await sleep(DEMO_STEP_MS);
+      if (this.attackAbort) { this.updateMeta(bssid, { status: "cancelled" }); return; }
+      const result: CrackResult = {
+        verdict: "verified",
+        matched: true,
+        eapolPackets: 2,
+        handshakeHint: true,
+        output: `KEY FOUND! [ ${demoPassword} ]\n\nMaster Key     : A9 4E 3C 1B 7F 22 D0 58 9A 61 84 CE B2 05 47 93 \nTransient Key  : (demo)\nEAPOL HMAC     : 6E 1B 48 92 D3 7A 05 C4 F1 88 2A 9E 63 30 B7 55`,
+      };
+      this.verified.set(bssid, result);
+      this.lastValidatedPassword.set(bssid, demoPassword);
+      this.foundPasswords.set(bssid, { password: demoPassword, ssid });
+      this.session.setFoundPassword(bssid, demoPassword);
+      this.appendLog(bssid, `[validate] aircrack verdict=verified (demo)`);
+      this.progress(bssid, "done", "✓ Handshake VALIDADO — contraseña correcta (KEY FOUND)", undefined, result.output);
+      this.session.updateTarget(bssid, { verified: true });
+      this.session.writeTargetInfo(bssid, demoPassword);
+    }
+  }
+
+  // Fake rockyou run: ticks progress every DEMO_DICT_TICK_MS until the
+  // wordlist is exhausted; akbal_lab's password is IN the demo wordlist
+  // story, so the crack "finds" it partway through. `capPathOwnerDir` (past
+  // demo sessions) receives the recovered password via the same surgical
+  // patch the real past-session crack uses.
+  private startDictDemo(bssid: string, capPathOwnerDir?: string): { ok: boolean; error?: string } {
+    const demoTarget = DEMO_WD_TARGETS.find((t) => t.bssid === bssid);
+    const demoPassword = demoTarget?.demoPassword;
+    const hitAt = demoPassword
+      ? Math.max(DEMO_DICT_STEPS - 8, 1) // found near the end, like a real crack
+      : DEMO_DICT_STEPS + 1; // never
+    this.demoDict = {
+      bssid,
+      timer: null,
+      tried: 0,
+      running: true,
+      result: null,
+    };
+    let step = 0;
+    this.demoDict.timer = setInterval(() => {
+      step++;
+      const dict = this.demoDict;
+      if (!dict) return;
+      dict.tried = Math.min(DEMO_DICT_TOTAL, Math.round(step * DEMO_DICT_KEYS_PER_TICK));
+      if (step >= hitAt) {
+        // KEY FOUND: stop the fake aircrack with a match.
+        if (dict.timer) clearInterval(dict.timer);
+        dict.running = false;
+        dict.result = {
+          verdict: "verified",
+          matched: true,
+          eapolPackets: 2,
+          handshakeHint: true,
+          output: `KEY FOUND! [ ${demoPassword} ]`,
+        };
+        this.verified.set(bssid, dict.result);
+        this.foundPasswords.set(bssid, { password: demoPassword!, ssid: demoTarget!.ssid });
+        // Past demo session: persist into the session folder (the folder
+        // survives as long as the demo wardrive session is open — it's
+        // pruned on exit). Live session: the normal path.
+        if (capPathOwnerDir) {
+          this.persistPastSessionPassword(capPathOwnerDir, bssid, demoPassword!);
+        }
+        this.session?.setFoundPassword(bssid, demoPassword!);
+        this.session?.updateTarget(bssid, { verified: true });
+        this.appendLog(bssid, "[dict] KEY FOUND — handshake validado con diccionario (demo)");
+        this.broadcastStatus();
+      } else if (step >= DEMO_DICT_STEPS) {
+        if (dict.timer) clearInterval(dict.timer);
+        dict.running = false;
+        dict.result = {
+          verdict: "handshake_wrong_password",
+          matched: false,
+          eapolPackets: 2,
+          handshakeHint: true,
+          output: "KEY NOT FOUND (demo)",
+        };
+        this.appendLog(bssid, `[dict] terminado: handshake_wrong_password (${dict.tried} contraseñas) (demo)`);
+        this.broadcastStatus();
+      }
+    }, DEMO_DICT_TICK_MS);
+    this.appendLog(bssid, `[dict] aircrack started with ~/wordlists/rockyou.txt (demo)`);
+    return { ok: true };
+  }
+
+  private stopDictDemo(): void {
+    if (this.demoDict?.timer) clearInterval(this.demoDict.timer);
+    if (this.demoDict) {
+      this.demoDict.running = false;
+      this.demoDict.result = {
+        verdict: "error",
+        matched: false,
+        eapolPackets: 0,
+        handshakeHint: false,
+        output: `cancelado tras ${this.demoDict.tried} contraseñas (demo)`,
+      };
+    }
+  }
+
   private stopRunners(): void {
     this.captureRunner?.stop();
     this.captureRunner = null;
@@ -1097,6 +1436,8 @@ export class WardriveService extends EventEmitter {
     this.dictCrack?.stop();
     this.dictCrack = null;
     this.dictCrackBssid = null;
+    // Demo simulation state dies with the runners too.
+    this.stopDictDemo();
   }
 
   private clearTimers(): void {

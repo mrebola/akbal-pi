@@ -887,13 +887,16 @@ export class WebAdminServer {
 
     // Monitor-mode capability of the currently connected USB WiFi adapter — the
     // UI uses this to enable WiFi auditing (Radar/Wardriving) or show a clear
-    // "adapter not monitor-capable" message.
+    // "adapter not monitor-capable" message. In platform demo mode the UI
+    // drives a simulated wardrive instead, so it doesn't need the adapter:
+    // demo:true tells the frontend the enter button stays enabled.
     router.get("/api/wifi/monitor-capability", async (ctx) => {
       try {
-        ctx.body = await detectMonitorAdapter();
+        const cap = await detectMonitorAdapter();
+        ctx.body = { ...cap, demo: getPlatformMode() === "demo" };
       } catch (err: any) {
         ctx.status = 500;
-        ctx.body = { present: false, monitorSupported: false, error: err?.message || String(err) };
+        ctx.body = { present: false, monitorSupported: false, error: err?.message || String(err), demo: getPlatformMode() === "demo" };
       }
     });
 
@@ -1291,7 +1294,10 @@ export class WebAdminServer {
         return;
       }
       const cleaned = String(id || "").trim();
-      if (!/^20\d{6}-\d{6}$/.test(cleaned)) {
+      // Demo sessions (folders prefixed "demo-") follow the same rules but
+      // with their own prefix (the id regex below only matches live ones).
+      const demoSession = /^demo-20\d{6}-\d{6}$/.test(cleaned);
+      if (!demoSession && !/^20\d{6}-\d{6}$/.test(cleaned)) {
         ctx.status = 400;
         ctx.body = { ok: false, error: "id de sesión inválido" };
         return;

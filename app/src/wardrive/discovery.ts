@@ -76,26 +76,99 @@ function parseIwScan(output: string): WardriveTarget[] {
   });
 }
 
-// Demo source for wardriving: reuses the WIFIRADAR demo generator's AP pool
-// so both features can be exercised without a monitor-capable dongle. Shapes
-// the synthetic APs into WardriveTargets the same way the real radar
-// snapshot path below does. Returns [] while the radar isn't actually in
-// demo mode — the caller (WardriveService.enter) switches it over first.
-function demoTargets(): WardriveTarget[] {
-  const snapshot = getWifiRadarSnapshot(true);
-  if (snapshot.mode !== "demo") return [];
-  return snapshot.accessPoints.map((ap) => ({
-    bssid: ap.bssidFull.toUpperCase(),
-    ssid: ap.ssid,
-    vendor: ap.vendor || lookupVendorOrRandom(ap.bssidFull).vendor,
-    channel: ap.channel,
-    rssi: ap.rssi,
-    security: ap.security,
-    clients: ap.clients ?? 0,
-    distanceMeters: estimateDistanceMeters(ap.rssi),
+// Demo source for wardriving: a STATIC synthetic target list (stable BSSIDs
+// so the allowlist/session flow survives polling and page reloads — the
+// radar's DemoGenerator churns random MACs, useless for an attack workflow).
+// Includes akbal_lab, the dedicated lab AP (docs/lab-wireless.md): its
+// password is deliberately public/weak so the demo can run the full
+// capture → validate → show-password pipeline end to end.
+export type DemoWardriveTarget = WardriveTarget & { demoPassword?: string };
+
+export const DEMO_WD_TARGETS: DemoWardriveTarget[] = [
+  {
+    bssid: "F4:F5:D8:1A:B0:5E",
+    ssid: "akbal_lab",
+    vendor: "TP-Link",
+    channel: 1,
+    rssi: -42,
+    security: "WPA2",
+    clients: 1,
+    distanceMeters: 2.5,
     inAllowlist: false,
-    attackable: ap.rssi >= USABLE_DBM,
-  }));
+    attackable: true,
+    // Lab-only by design: deliberately weak/public (docs/lab-wireless.md),
+    // used so the demo dictionary crack ends in a KEY FOUND like the real
+    // lab pipeline does. Never a real network's password.
+    demoPassword: "123456789",
+  },
+  {
+    bssid: "B8:27:EB:7C:44:01",
+    ssid: "CasaVerde_5G",
+    vendor: "Raspberry Pi Trading",
+    channel: 6,
+    rssi: -58,
+    security: "WPA2",
+    clients: 2,
+    distanceMeters: 8.1,
+    inAllowlist: false,
+    attackable: true,
+  },
+  {
+    bssid: "3C:5A:B4:92:6D:C3",
+    ssid: "Oficina_Norte",
+    vendor: "TP-Link",
+    channel: 11,
+    rssi: -51,
+    security: "WPA2",
+    clients: 0,
+    distanceMeters: 4.4,
+    inAllowlist: false,
+    attackable: true,
+  },
+  {
+    bssid: "00:1A:11:AF:30:77",
+    ssid: "CyberCafe_WiFi",
+    vendor: "Wistron Neweb",
+    channel: 3,
+    rssi: -66,
+    security: "WEP",
+    clients: 0,
+    distanceMeters: 14.2,
+    inAllowlist: false,
+    attackable: true,
+  },
+  {
+    bssid: "AC:63:BE:05:D1:9A",
+    ssid: "GuestNetwork",
+    vendor: "Beholder",
+    channel: 9,
+    rssi: -63,
+    security: "OPEN",
+    clients: 1,
+    distanceMeters: 19.5,
+    inAllowlist: false,
+    attackable: true,
+  },
+  {
+    bssid: "F8:8F:CA:44:18:2F",
+    ssid: "Vecino_2.4G",
+    vendor: "Sercomm",
+    channel: 1,
+    rssi: -79,
+    security: "WPA2/3",
+    clients: 0,
+    distanceMeters: 46.3,
+    inAllowlist: false,
+    attackable: false,
+  },
+];
+
+function demoTargets(): WardriveTarget[] {
+  return DEMO_WD_TARGETS.map(({ demoPassword: _pw, ...t }) => t);
+}
+
+export function demoTargetsWithPassword(): DemoWardriveTarget[] {
+  return DEMO_WD_TARGETS;
 }
 
 export async function discoverTargets(source?: "live" | "demo"): Promise<WardriveTarget[]> {

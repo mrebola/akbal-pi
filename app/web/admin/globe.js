@@ -224,7 +224,10 @@ async function main() {
     };
   }
 
-  const SUN_DIST_UNITS = 130;
+  // Visual distance: close enough that the sun is already peeking into the
+  // opening camera frame (no scrolling needed). Direction stays the REAL
+  // solar direction — only the distance is artistic (sun is NOT to scale).
+  const SUN_DIST_UNITS = 42;
   function updateSunPosition() {
     const d = new Date();
     const dir = solarDirectionEquatorial(d);
@@ -406,7 +409,7 @@ async function main() {
   controls.dampingFactor = 0.07;
   controls.enablePan = false;
   controls.minDistance = EARTH_R + 1.5;
-  controls.maxDistance = SUN_DIST_UNITS * 1.4;
+  controls.maxDistance = SUN_DIST_UNITS * 1.2; // close range: sun stays near
   controls.zoomSpeed = 1.2;
   controls.autoRotate = true;
   controls.autoRotateSpeed = 0.6;

@@ -617,13 +617,19 @@ function clearTrail(icao) {
 // a plane move. maxZoom caps how tight it'll go for a very close aircraft.
 let positionedIcaosKey = "";
 function maybeAutoFit(aircraftList) {
-  if (!map || !ownPosition) return;
+  // Deliberately NOT gated on ownPosition — Akbal not having a GPS fix
+  // (no dongle, no sky view, still acquiring satellites) must not mean
+  // "never zoom in on a detected aircraft either". A previous version
+  // required both, so on a device with no fix at all (present but 0
+  // satellites, a completely normal state) the map stayed at the initial
+  // whole-world view forever even once a real aircraft had a position.
+  if (!map) return;
   const positioned = aircraftList.filter((a) => a.latitude !== null && a.longitude !== null);
   const key = positioned.map((a) => a.icao).sort().join(",");
   if (key === positionedIcaosKey) return;
   positionedIcaosKey = key;
   if (positioned.length === 0) return; // nothing new to frame — keep the current view
-  const bounds = L.latLngBounds([[ownPosition.lat, ownPosition.lon]]);
+  const bounds = L.latLngBounds(ownPosition ? [[ownPosition.lat, ownPosition.lon]] : []);
   for (const a of positioned) bounds.extend([a.latitude, a.longitude]);
   map.fitBounds(bounds, { padding: [70, 70], maxZoom: 14 });
 }

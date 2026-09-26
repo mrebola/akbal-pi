@@ -323,3 +323,12 @@ aeronaves detectadas con posición entren en pantalla (con
 No se reajusta en cada snapshot — solo cuando cambia el conjunto — para
 no pelearse con quien esté paneando/zoomeando manualmente mientras
 observa una aeronave moverse.
+
+**No depende de que Akbal tenga fix GPS.** Bug real encontrado en vivo:
+la primera versión de `maybeAutoFit()` no hacía nada sin la posición de
+Akbal (`if (!map || !ownPosition) return`) — con el GPS conectado pero
+sin fix (0 satélites, estado normal en interiores o mala vista del
+cielo), el mapa se quedaba para siempre en la vista mundial inicial aun
+cuando sí llegaba una aeronave real con posición. Ahora el encuadre
+incluye la posición de Akbal *cuando existe*, pero se calcula igual
+solo con las aeronaves si no la hay.

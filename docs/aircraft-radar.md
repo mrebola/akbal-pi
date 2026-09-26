@@ -333,13 +333,29 @@ cuando sí llegaba una aeronave real con posición. Ahora el encuadre
 incluye la posición de Akbal *cuando existe*, pero se calcula igual
 solo con las aeronaves si no la hay.
 
-### Click en una aeronave — centrar mapa + datos siempre frescos
+### Click en una aeronave — cada zona hace una sola cosa
 
-Click en una tarjeta de la lista: abre el detalle (como antes) **y**
-centra/zoomea el mapa a la posición de esa aeronave (`centerMapOn()`,
-zoom 12 salvo que ya se esté más cerca) — cambia a la vista MAPA
-primero si estaba en RADAR, porque centrar un mapa que no se ve no
-sirve de nada.
+Roles separados a propósito (evita que un solo click dispare dos
+acciones distintas a la vez):
+
+- **Tarjeta de la lista** → solo centra/zoomea el mapa a la posición de
+  esa aeronave (`centerMapOn()`, zoom 12 salvo que ya se esté más cerca),
+  cambiando a la vista MAPA primero si estaba en RADAR. Ya **no** abre el
+  detalle — sí sigue resaltando la tarjeta/punto del radar
+  (`selectedIcao`) para que el click tenga algún efecto visible incluso
+  en una aeronave sin posición (`centerMapOn` no hace nada en ese caso).
+- **Ícono del avión o su etiqueta en el mapa** → abre el detalle
+  (`openDetail()`). La etiqueta (`.ar-plane-label`, el cuadro con el
+  callsign) usa `interactive: true` de Leaflet para aceptar clicks — por
+  default un tooltip de Leaflet tiene `pointer-events: none` y deja pasar
+  el click al mapa de abajo.
+- **Punto del radar circular** (canvas) → también abre el detalle, sin
+  cambios.
+
+La etiqueta además se restyleó: Leaflet la pinta blanca por default
+(`.leaflet-tooltip` en `leaflet.css`) — ahora es gris oscuro con texto
+verde (mismos tokens `--bg-elevated`/`--accent` que el resto del panel),
+más legible sobre el mapa oscuro y evidentemente clickeable.
 
 Bug real encontrado y arreglado de paso: el marcador de cada aeronave en
 el mapa solo se crea una vez (`L.marker` no se recrea cada snapshot, a

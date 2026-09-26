@@ -235,8 +235,15 @@ function renderList(snapshot) {
         <span>${aircraft.bearingDeg === null ? "" : `${bearingCompass(aircraft.bearingDeg)} ${Math.round(aircraft.bearingDeg)}°`}</span>
       </div>
     `;
+    // List click only centers the map on this aircraft — it no longer also
+    // opens the detail card (that's now specifically a map-marker/tooltip
+    // action, see updateAircraftMarkers). Still highlights the card/radar
+    // dot so the click has *some* visible effect even for an aircraft with
+    // no position yet (centerMapOn is a no-op without lat/lon).
     card.addEventListener("click", () => {
-      openDetail(aircraft);
+      selectedIcao = aircraft.icao;
+      renderList(latestSnapshot);
+      render();
       centerMapOn(aircraft);
     });
     listEl.appendChild(card);
@@ -683,9 +690,16 @@ function updateAircraftMarkers(aircraftList) {
         direction: "top",
         offset: [0, -8],
         className: "ar-plane-label",
+        interactive: true, // lets the label itself receive clicks, not just the icon under it
       });
       const icao = aircraft.icao; // captured once — look up fresh data at click time, see findAircraft()
-      marker.on("click", () => openDetail(findAircraft(icao) || aircraft));
+      const showDetail = () => openDetail(findAircraft(icao) || aircraft);
+      marker.on("click", showDetail);
+      // interactive:true makes Leaflet add pointer-events/cursor via its own
+      // .leaflet-tooltip.leaflet-interactive CSS, but doesn't wire a click
+      // handler on its own — bind directly to the tooltip's DOM element,
+      // which permanent:true means already exists right after bindTooltip.
+      marker.getTooltip()?.getElement()?.addEventListener("click", showDetail);
       aircraftMarkers.set(aircraft.icao, marker);
     } else {
       marker.setLatLng(pos);

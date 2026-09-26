@@ -223,12 +223,27 @@ header.topbar { z-index: 1000; }
 
 .ar-plane-marker svg { filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.6)); }
 
-.ar-plane-label {
+/* Overrides Leaflet's own default white tooltip look (leaflet.css sets
+   background/border on the bare .leaflet-tooltip class) — the extra
+   .ar-map ancestor + both of the tooltip's own classes push specificity
+   above that default rule regardless of stylesheet load order. Clickable
+   (interactive:true in aircraft-radar.js): dark terminal box, hacker green
+   text, easy to read against the map. */
+.ar-map .leaflet-tooltip.ar-plane-label {
   font-family: var(--font-mono);
   font-size: 10px;
-  color: #ececec;
-  text-shadow: 0 0 3px #000, 0 0 3px #000;
+  font-weight: 700;
+  color: var(--accent, #50ff78);
+  text-shadow: 0 0 4px rgba(80, 255, 120, 0.5);
   white-space: nowrap;
+  background-color: var(--bg-elevated, #1c2024);
+  border: 1px solid var(--accent-dim, #234a30);
+  box-shadow: 0 0 6px rgba(80, 255, 120, 0.25);
+  cursor: pointer;
+}
+
+.ar-map .leaflet-tooltip.ar-plane-label.leaflet-tooltip-top::before {
+  border-top-color: var(--bg-elevated, #1c2024);
 }
 
 /* ---- MAPA/RADAR header toggle — exact same look as gps.css's own

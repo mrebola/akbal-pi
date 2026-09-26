@@ -201,6 +201,17 @@ export class WardriveService extends EventEmitter {
     return { ok: true };
   }
 
+  // Dismiss a finished dictionary crack: drops it from memory so the status
+  // endpoint returns null and the UI widget clears (the ✓ ENCONTRADA banner
+  // used to stay pinned forever). The outcome is already persisted on the
+  // session (verified/password), so nothing is lost.
+  clearDictCrack(): { ok: boolean } {
+    if (this.dictCrack?.getState().running) return { ok: false };
+    this.dictCrack = null;
+    this.dictCrackBssid = null;
+    return { ok: true };
+  }
+
   dictCrackStatus(): { bssid: string | null; state: DictCrackState | null } {
     if (!this.dictCrack) return { bssid: null, state: null };
     return { bssid: this.dictCrackBssid, state: this.dictCrack.getState() };

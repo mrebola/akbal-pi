@@ -1042,6 +1042,18 @@ button.secondary {
 
 .wd-dict-stop:hover { background: rgba(239, 68, 68, 0.1); }
 
+.wd-dict-clear {
+  font-size: 11px;
+  padding: 4px 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.wd-dict-clear:hover { color: var(--text-primary); border-color: var(--border-strong); }
+
 .wd-dict-bar {
   height: 6px;
   background: var(--bg-raised);
@@ -1313,7 +1325,7 @@ button.secondary {
 }
 
 .wd-modal-backdrop {
-  position: absolute;
+  position: fixed; /* cover the viewport regardless of scroll position */
   top: 0;
   left: 0;
   right: 0;
@@ -1939,7 +1951,7 @@ button.secondary {
 
 /* ===== Reproductor de música — estilo terminal/hacker (Cypher) ===== */
 .mx {
-  max-width: 760px;
+  max-width: 1100px;
   margin: 0 auto;
   font-family: "Courier New", Courier, monospace;
 }
@@ -1951,9 +1963,16 @@ button.secondary {
     #06090a;
   border: 1px solid var(--accent-dim, #234a30);
   border-radius: 12px;
-  padding: 18px 18px 20px;
+  padding: 14px 16px 14px;
   box-shadow: inset 0 0 40px rgba(80,255,120,0.06), 0 0 0 1px rgba(0,0,0,0.4);
 }
+/* Player top: cover + info side by side, visual compact, controls closer. */
+.mx-now { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+.mx-visual { height: 56px; display: flex; align-items: center; justify-content: center; position: relative; margin-bottom: 8px; }
+.mx-eq { height: 48px; }
+@keyframes mx-bounce { 0%,100% { height: 6px; opacity: 0.55; } 50% { height: 46px; opacity: 1; } }
+.mx-time { margin-bottom: 8px; }
+.mx-extra { margin-top: 10px; }
 .mx-scan {
   pointer-events: none;
   position: absolute;
@@ -2136,22 +2155,47 @@ button.secondary {
 }
 .mx-output select:focus { outline: none; }
 
-.mx-list-head { margin: 16px 4px 6px; }
-.mx-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; font-family: "Courier New", Courier, monospace; }
+.mx-list-head { margin: 0 4px 6px; }
+.mx-list { list-style: none; margin: 0; padding: 0 4px; display: flex; flex-direction: column; gap: 3px; font-family: "Courier New", Courier, monospace; }
+
+/* ---- Lower half: tracklist (left) + lyrics (right) side by side ---- */
+
+.mx-lower {
+  display: grid;
+  grid-template-columns: minmax(0, 40fr) minmax(0, 60fr);
+  gap: 12px;
+  margin-top: 12px;
+  align-items: start;
+}
+
+.mx-col-tracks,
+.mx-col-lyrics {
+  background: #06090a;
+  border: 1px solid var(--accent-dim, #234a30);
+  border-radius: 12px;
+  padding: 12px 12px 12px;
+  box-shadow: inset 0 0 30px rgba(80,255,120,0.04);
+}
+
+.mx-col-tracks .mx-list {
+  max-height: 430px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
 
 /* ---- Lyrics panel (letra de la pista en reproducción) ---- */
 
 .mp-lyrics {
-  max-height: 260px;
+  max-height: 460px;
   overflow-y: auto;
   font-family: "Courier New", Courier, monospace;
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: 12.5px;
+  line-height: 1.75;
   color: var(--text-primary);
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: transparent;
+  border: none;
   border-radius: 8px;
-  padding: 10px 14px;
+  padding: 2px 4px;
   scrollbar-width: thin;
 }
 
@@ -2171,12 +2215,12 @@ button.secondary {
 .mp-lyrics-hint { color: var(--text-secondary); font-size: 11px; padding: 4px 0; }
 .mx-list li {
   display: flex; align-items: center; gap: 10px;
-  padding: 8px 12px;
+  padding: 6px 10px;
   border: 1px solid transparent;
   border-left: 2px solid transparent;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--text-primary);
 }
 .mx-list li:hover { background: rgba(80,255,120,0.06); }
@@ -2190,6 +2234,14 @@ button.secondary {
 .mx-list li.active .mp-idx { color: var(--accent); }
 .mx-list .mp-eq-mini { margin-left: auto; display: none; }
 .mx-list li.active .mp-eq-mini { display: inline; animation: mx-blink 1s steps(1) infinite; }
+
+/* Music player responsive: lyrics right after the player, tracklist below. */
+@media (max-width: 860px) {
+  .mx-lower { grid-template-columns: 1fr; }
+  .mx-col-lyrics { order: -1; } /* lyrics first, tracklist under */
+  .mp-lyrics { max-height: 300px; }
+  .mx-col-tracks .mx-list { max-height: 320px; }
+}
 
 /* ===== WiFi directo (AP) ===== */
 .ap-details { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-start; }
@@ -2228,6 +2280,80 @@ body { font-family: var(--font-sans); }
 
 /* ---- Header derecha: resumen compacto + popover ---- */
 .hdr-right { position: relative; display: flex; align-items: center; }
+
+/* ---- Platform source toggle (LIVE/DEMO) — hacker terminal switch ----
+   Sliding pill with scanline texture; DEMO lights amber with a soft blink,
+   LIVE lights green. Present on radar/wardrive/gps headers. */
+
+.plx-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: rgba(6, 10, 6, 0.85);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  overflow: hidden;
+}
+
+.plx-toggle::after {
+  /* scanline overlay */
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.03) 0px,
+    rgba(255, 255, 255, 0.03) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  pointer-events: none;
+}
+
+.plx-toggle-label {
+  position: relative;
+  z-index: 1;
+  padding: 0 12px;
+  line-height: 24px;
+  color: var(--text-muted);
+  transition: color 0.18s ease, background 0.18s ease;
+}
+
+.plx-toggle-label.active { color: var(--text-primary); }
+
+.plx-toggle-label.mode-live.active {
+  color: #0c1a0f;
+  background: var(--accent, #50ff78);
+  text-shadow: none;
+  box-shadow: 0 0 12px rgba(80, 255, 120, 0.55);
+}
+
+.plx-toggle-label.mode-demo.active {
+  color: #241a05;
+  background: var(--warning, #ffd166);
+  box-shadow: 0 0 12px rgba(255, 209, 102, 0.5);
+  animation: plx-demo-blink 1.6s ease-in-out infinite;
+}
+
+@keyframes plx-demo-blink {
+  0%, 100% { box-shadow: 0 0 12px rgba(255, 209, 102, 0.5); }
+  50% { box-shadow: 0 0 6px rgba(255, 209, 102, 0.25); }
+}
+
+.plx-toggle-label:not(.active) { color: rgba(150, 156, 161, 0.75); }
+
+.plx-toggle.busy { opacity: 0.6; pointer-events: none; }
+
+/* Wifiradar toolbar variant (bigger, inside .as-toolbar) */
+.plx-toggle.lg { height: 28px; font-size: 11px; }
+.plx-toggle.lg .plx-toggle-label { padding: 0 14px; line-height: 26px; }
 .hdr-summary {
   display: flex; align-items: center; gap: 10px;
   background: var(--bg); color: var(--text-primary);
@@ -2382,10 +2508,7 @@ body { font-family: var(--font-sans); }
 #tab-chat select { max-width: 260px; }
 .chat-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; flex: 1; gap: 6px; color: var(--text-secondary); }
 .chat-empty.hidden { display: none; }
-.chat-empty-avatar { width: 96px; height: 96px; border-radius: 16px; object-fit: cover; opacity: 0.95; margin-bottom: 6px; }
-.chat-empty-title { font-weight: 800; letter-spacing: 0.14em; font-size: 20px; color: var(--text-primary); }
-.chat-empty-sub { font-size: 15px; margin-bottom: 12px; }
-.chat-empty-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.chat-empty-title { font-weight: 600; letter-spacing: 0.02em; font-size: 16px; color: var(--text-secondary); }
 
 /* ---- Dispositivos: grilla de cards ---- */
 .dev-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }

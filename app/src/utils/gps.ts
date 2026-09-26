@@ -323,9 +323,85 @@ async function ensureReader(device: string | null): Promise<void> {
   reader.start();
 }
 
+// ─── Platform demo mode ──────────────────────────────────────────────────────
+// Demo mode stops the NMEA reader (releases the dongle's serial line and
+// CPU) and serves a synthetic fix + satellite set so the GPS page still has
+// something to show without touching real hardware. Storage is never
+// touched here (that's not this module's job).
+let demoMode = false;
+const DEMO_FIX = {
+  lat: 19.43315,
+  lon: -99.13305, // Zócalo de la Ciudad de México (demo público, no es un dato privado)
+  alt: 1600.0,
+};
+
+export function setGpsDemoMode(on: boolean): void {
+  if (demoMode === on) return;
+  demoMode = on;
+  if (on) {
+    // Park the reader: no serial traffic, no restarts while demo.
+    if (reader) {
+      reader.stop();
+      reader = null;
+      readerDevice = null;
+    }
+    console.log("[gps] demo mode ON — NMEA reader stopped, synthetic fix served");
+  } else {
+    reverseGeocoder.reset();
+    console.log("[gps] demo mode OFF — reader will respawn on next status poll");
+  }
+}
+
+export function getGpsDemoMode(): boolean {
+  return demoMode;
+}
+
+// Synthetic satellite set for demo (GPS constellation on the demo fix).
+function demoSatellites(): GpsSatellite[] {
+  const t = Date.now() / 1000;
+  const mk = (prn: string, el: number, az: number, snr: number, used: boolean): GpsSatellite => ({
+    prn,
+    elevation: Math.round(el),
+    azimuth: Math.round((az + t * 0.4) % 360), // slow drift for liveliness
+    snr,
+    used,
+  });
+  return [
+    mk("08", 50, 128, 48, true),
+    mk("27", 37, 74, 46, true),
+    mk("04", 75, 75, 45, true),
+    mk("07", 33, 315, 43, true),
+    mk("09", 57, 334, 39, true),
+    mk("16", 23, 36, 35, true),
+    mk("30", 11, 296, 22, false),
+    mk("05", 8, 200, 14, false),
+  ];
+}
+
 // ─── Public status ───────────────────────────────────────────────────────────
 
 export async function getGpsStatus(): Promise<GpsStatus> {
+  if (demoMode) {
+    const t = (Date.now() / 1000) % 60;
+    return {
+      present: true,
+      device: "demo",
+      hasFix: true,
+      latitude: DEMO_FIX.lat + Math.sin(t / 8) * 0.00008, // meters-scale drift
+      longitude: DEMO_FIX.lon + Math.cos(t / 11) * 0.00008,
+      altitudeM: DEMO_FIX.alt + Math.sin(t / 20) * 2,
+      speedKmh: 0.0,
+      headingDeg: 0,
+      hdop: 1.4,
+      satellitesUsed: 6,
+      satellitesInView: 8,
+      satellitesNeeded: MIN_SATS_FOR_FIX,
+      satellites: demoSatellites(),
+      fixTime: new Date().toISOString().slice(11, 19) + "Z",
+      address: "Zócalo, Centro Histórico, Ciudad de México, 06000, México (demo)",
+      error: "",
+    };
+  }
   const device = await findGpsDevice();
   if (!device) {
     ensureReader(null);
@@ -434,6 +510,12 @@ class ReverseGeocoder {
   // of where it was resolved, else null while a new lookup is in flight.
   current(): string | null {
     return this.last && !this.last.failed ? this.last.address : null;
+  }
+
+  // Drop the cache (demo→live transitions: the old address belongs to
+  // synthetic data, not the real fix that's about to arrive).
+  reset(): void {
+    this.last = null;
   }
 
   // Called on every status poll with a valid fix. Decides whether to fire a

@@ -743,10 +743,11 @@ for (const id of ["sec-toggle-open", "sec-toggle-wep", "sec-toggle-wpa"]) {
 }
 
 // ---- toolbar controls ----
-// SRC toggle: real capture ("live") vs synthetic demo data — same toggle
-// drives the wardriving discovery source (POST /api/wifiradar/mode).
+// The SRC button was replaced by the platform toggle in the toolbar header
+// (one LIVE/DEMO switch for radar + wardrive + gps — POST /api/platform/mode).
+// These helpers remain for the demo badge logic below.
+
 async function applySourceToggle(mode) {
-  srcToggleBtn.disabled = true;
   try {
     const res = await apiPost("/api/wifiradar/mode", { mode });
     if (res && res.ok) {
@@ -755,34 +756,44 @@ async function applySourceToggle(mode) {
     }
   } catch { /* keep previous state */ }
   renderSrcToggle();
-  srcToggleBtn.disabled = false;
 }
 
 function renderSrcToggle() {
-  const isDemo = requestedMode === "demo";
-  srcToggleBtn.textContent = isDemo ? "DEMO" : "REAL";
-  srcToggleBtn.classList.toggle("active", isDemo);
-  srcToggleBtn.title = isDemo
-    ? "Datos demo — click para volver a captura real"
-    : "Captura real — click para pasar a datos demo";
+  // No src button anymore — the demo badge is the live indicator here.
+  demoBadge.classList.toggle("hidden", requestedMode !== "demo");
 }
 
-srcToggleBtn.addEventListener("click", () => {
-  applySourceToggle(requestedMode === "demo" ? "live" : "demo");
-});
-
-// Initial state (best-effort; the badge below corrects it on first snapshot).
-void (async () => {
-  try {
-    const res = await fetch("/api/wifiradar/mode");
-    if (res.ok) {
-      const data = await res.json();
-      requestedMode = data.requested || "live";
-      currentRadarMode = data.mode;
+// Platform toggle wiring (LIVE/DEMO): posts the device-wide mode; the radar
+// follows because the backend re-points it.
+function initPlatformToggle() {
+  const toggle = document.getElementById("platform-toggle");
+  if (!toggle) return;
+  const render = () => {
+    for (const label of toggle.querySelectorAll(".plx-toggle-label")) {
+      label.classList.toggle("active", label.dataset.mode === requestedMode);
     }
-  } catch { /* default live */ }
-  renderSrcToggle();
-})();
+  };
+  void (async () => {
+    try {
+      const res = await fetch("/api/wifiradar/mode");
+      if (res.ok) {
+        const data = await res.json();
+        requestedMode = data.requested || "live";
+        currentRadarMode = data.mode;
+      }
+    } catch { /* default live */ }
+    render();
+  })();
+  toggle.addEventListener("click", async (ev) => {
+    const label = ev.target.closest(".plx-toggle-label");
+    if (!label || label.dataset.mode === requestedMode) return;
+    toggle.classList.add("busy");
+    await applySourceToggle(label.dataset.mode);
+    toggle.classList.remove("busy");
+    render();
+  });
+}
+initPlatformToggle();
 
 livePauseBtn.addEventListener("click", () => {
   paused = !paused;

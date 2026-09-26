@@ -76,6 +76,7 @@ import {
   resolveFilePath,
 } from "../utils/usb";
 import { getGpsStatus } from "../utils/gps";
+import { setPlatformMode, getPlatformMode } from "../utils/platform-mode";
 
 const SESSION_COOKIE = "akbal_session";
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days — a LAN admin
@@ -256,6 +257,23 @@ export class WebAdminServer {
 
     router.get("/api/gps/status", async (ctx) => {
       ctx.body = await getGpsStatus();
+    });
+
+    // Platform-wide source mode: LIVE (real dongles feed radar/wardrive/gps)
+    // or DEMO (synthetic data everywhere, dongles released — never storage).
+    // One switch drives all three pages.
+    router.get("/api/platform/mode", (ctx) => {
+      ctx.body = { mode: getPlatformMode() };
+    });
+
+    router.post("/api/platform/mode", async (ctx) => {
+      const { mode } = (ctx.request.body as any) || {};
+      if (mode !== "demo" && mode !== "live") {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "mode debe ser 'demo' o 'live'" };
+        return;
+      }
+      ctx.body = await setPlatformMode(mode);
     });
 
     router.get("/api/wifiradar/snapshot", (ctx) => {
@@ -991,6 +1009,11 @@ export class WebAdminServer {
 
     router.post("/api/wardrive/dict/stop", (ctx) => {
       ctx.body = wardrive.stopDictCrack();
+    });
+
+    // Dismiss a finished dict-crack widget (✕ button) — clears backend state.
+    router.post("/api/wardrive/dict/clear", (ctx) => {
+      ctx.body = wardrive.clearDictCrack();
     });
 
     router.get("/api/wardrive/dict/status", (ctx) => {

@@ -335,6 +335,39 @@ function initHeader() {
   // Copy of index.html's loadStatus, trimmed to what this page shows.
   void loadStatus();
   setInterval(() => void loadStatus(), 60000);
+  // Platform LIVE/DEMO toggle (device-wide; the backend parks the dongle in
+  // demo and serves a synthetic fix, so this page needs no special casing).
+  const plx = document.getElementById("platform-toggle");
+  plx?.addEventListener("click", async (ev) => {
+    const label = ev.target.closest(".plx-toggle-label");
+    if (!label) return;
+    const next = label.dataset.mode;
+    plx.classList.add("busy");
+    try {
+      const res = await fetch("/api/platform/mode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: next }),
+      });
+      if (res.ok) {
+        for (const l of plx.querySelectorAll(".plx-toggle-label")) {
+          l.classList.toggle("active", l.dataset.mode === next);
+        }
+      }
+    } catch { /* keep previous */ }
+    plx.classList.remove("busy");
+  });
+  void (async () => {
+    try {
+      const res = await fetch("/api/platform/mode");
+      if (res.ok) {
+        const mode = (await res.json()).mode || "live";
+        for (const l of plx.querySelectorAll(".plx-toggle-label")) {
+          l.classList.toggle("active", l.dataset.mode === mode);
+        }
+      }
+    } catch { /* default live */ }
+  })();
   const toggle = document.getElementById("sys-toggle");
   const pop = document.getElementById("sys-popover");
   toggle?.addEventListener("click", (e) => {

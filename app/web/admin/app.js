@@ -1547,6 +1547,60 @@ void loadModels();
 // reload needed to see the % move.
 setInterval(() => void loadStatus(), 60000);
 
+// ---- Platform source toggle (LIVE/DEMO) ----
+// One device-wide switch: demo serves synthetic data on radar/wardrive/gps
+// AND releases the dongles (wifi adapter out of monitor, GPS reader parked).
+// Storage is never unmounted. Syncs the radar/wardrive internal toggles.
+
+let platformMode = "live";
+
+function renderPlatformToggle() {
+  const toggle = document.getElementById("platform-toggle");
+  if (!toggle) return;
+  for (const label of toggle.querySelectorAll(".plx-toggle-label")) {
+    label.classList.toggle("active", label.dataset.mode === platformMode);
+  }
+}
+
+async function initPlatformToggle() {
+  const toggle = document.getElementById("platform-toggle");
+  if (!toggle) return;
+  try {
+    const res = await fetch("/api/platform/mode");
+    if (res.ok) platformMode = (await res.json()).mode || "live";
+  } catch { /* default live */ }
+  renderPlatformToggle();
+  // Wardrive's own switch mirrors the platform mode (same backend source).
+  wdSource = platformMode;
+  wdRenderSourceBtn();
+  toggle.addEventListener("click", async (ev) => {
+    const label = ev.target.closest(".plx-toggle-label");
+    if (!label || label.dataset.mode === platformMode) return;
+    const next = label.dataset.mode;
+    toggle.classList.add("busy");
+    try {
+      const res = await apiFetch("/api/platform/mode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: next }),
+      });
+      const data = await res.json();
+      if (data?.ok) platformMode = data.mode;
+      else if (data?.error) wdError && (wdError.textContent = data.error);
+    } catch { /* keep previous */ }
+    toggle.classList.remove("busy");
+    renderPlatformToggle();
+    // Radar/wardrive pick up the new source from the backend on next poll;
+    // mirror locally so their own toggles agree immediately.
+    wdSource = platformMode;
+    wdRenderSourceBtn();
+    void wdRefresh();
+    void loadMonitorCap();
+  });
+}
+
+void initPlatformToggle();
+
 // ---- Audit WiFi (mode; internal API paths stay /api/wardrive/*) ----
 // Flow: enter mode → see networks → click "Auditar" → handshake captured →
 // download .cap/.hc22000 for offline cracking. That's it.
@@ -1574,10 +1628,10 @@ let wdSource = "live";
 
 void (async () => {
   try {
-    const res = await fetch("/api/wifiradar/mode");
+    // Source of truth: the device-wide platform mode (radar follows it too).
+    const res = await fetch("/api/platform/mode");
     if (res.ok) {
-      const data = await res.json();
-      wdSource = data.requested === "demo" ? "demo" : "live";
+      wdSource = (await res.json()).mode === "demo" ? "demo" : "live";
       wdRenderSourceBtn();
     }
   } catch { /* default live */ }
@@ -2005,10 +2059,16 @@ async function wdRenderDictCrack(statusData) {
         ? '<span class="wd-verify-badge wrong">Diccionario agotado — contraseña no está en rockyou</span>'
         : `<span class="wd-verify-badge err">${escapeHtml(state.result.output || "cancelado")}</span>`
     : "";
+  // A finished crack offers a ✕ dismiss so the banner doesn't stay pinned
+  // while navigating sessions; the outcome is persisted on the session.
+  const dismissBtn = !state.running ? '<button class="wd-dict-clear" title="Cerrar">✕</button>' : "";
   block.innerHTML = `
     <div class="wd-dict-head">
       <span>Diccionario (rockyou) · <strong>${escapeHtml(targetSsid)}</strong></span>
-      ${state.running ? '<button class="wd-dict-stop">Cancelar</button>' : ""}
+      <span style="display:inline-flex; gap:6px;">
+        ${state.running ? '<button class="wd-dict-stop">Cancelar</button>' : ""}
+        ${dismissBtn}
+      </span>
     </div>
     <div class="wd-dict-bar"><div class="wd-dict-bar-fill" style="width:${pct.toFixed(1)}%"></div></div>
     <div class="wd-dict-meta muted">${p.tried.toLocaleString()} / ${p.total.toLocaleString()} contraseñas · ${p.fps.toFixed(1)} pass/s · ${p.elapsedSec}s ${state.running ? "· corriendo..." : state.result ? "· terminado" : "· cancelado"}</div>
@@ -2031,13 +2091,23 @@ async function wdRenderDictCrack(statusData) {
 let wdDictTimer = null;
 
 document.getElementById("wd-dict-progress")?.addEventListener("click", async (ev) => {
+  if (ev.target.closest(".wd-dict-clear")) {
+    await apiFetch("/api/wardrive/dict/clear", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    void wdRenderDictProgress();
+    return;
+  }
   if (!ev.target.closest(".wd-dict-stop")) return;
   await apiFetch("/api/wardrive/dict/stop", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
   void wdRenderDictProgress();
 });
 
-// Stop works from the mirrored block in the sessions browser too.
+// Stop works from the mirrored block in the sessions browser too; the ✕ dismiss.
 document.getElementById("wd-sessions-dict-progress")?.addEventListener("click", async (ev) => {
+  if (ev.target.closest(".wd-dict-clear")) {
+    await apiFetch("/api/wardrive/dict/clear", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    void wdRenderDictProgress();
+    return;
+  }
   if (!ev.target.closest(".wd-dict-stop")) return;
   await apiFetch("/api/wardrive/dict/stop", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
   void wdRenderDictProgress();
@@ -2301,6 +2371,8 @@ function wdCheckOngoingAttack() {
 // ---- Past sessions browser ----
 
 let wdSessionsTimer = null;
+let wdSessionsCache = []; // session list, for the eye modal (bssid → password)
+let wdLastOpenedSession = null; // last "Ver archivos" click, to place the files block
 
 async function wdLoadSessions() {
   try {
@@ -2310,6 +2382,7 @@ async function wdLoadSessions() {
     const list = document.getElementById("wd-sessions-list");
     if (!list) return;
     const sessions = data.sessions || [];
+    wdSessionsCache = sessions;
     if (sessions.length === 0) {
       list.innerHTML = '<div class="muted">Sin sesiones aún. Cada auditoría con handshake crea una carpeta con fecha.</div>';
       wdSessionsDeleteAllBtn.classList.add("hidden");
@@ -2335,7 +2408,9 @@ async function wdLoadSessions() {
         const dictBtn = dictTarget
           ? `<button class="wd-session-dict" data-id="${s.id}" data-bssid="${dictTarget.bssid}" title="Ataque de diccionario (rockyou) contra este handshake">dictionary attack</button>`
           : "";
-        return `<div class="wd-session-row" data-id="${s.id}">
+        // SSID for the eye modal reads from the session row (no info.txt parse).
+        const rowSsid = (s.targets || []).find((t) => t.status === "captured")?.ssid || "";
+        return `<div class="wd-session-row" data-id="${s.id}" data-ssid="${escapeHtml(rowSsid)}">
           <div class="wd-session-info">
             <span class="wd-session-date">${s.id}</span>
             <span class="wd-session-meta">${s.captured} handshake(s) · ${escapeHtml(nets || "sin objetivos")}</span>
@@ -2368,13 +2443,21 @@ function wdMaskPassword(password) {
 
 async function wdShowSessionPassword(sessionId, bssid) {
   try {
-    // The password lives in <session>/<bssid>-info.txt (CONTRASEÑA ENCONTRADA).
-    const res = await fetch(`/api/wardrive/files/preview?path=${encodeURIComponent(`${sessionId}/${bssid.replace(/:/g, "").toLowerCase()}-info.txt`)}`);
-    if (!res.ok) throw new Error("no info");
-    const data = await res.json();
-    if (data?.kind !== "text") throw new Error("no info");
-    const m = /^  (.+)$/m.exec((data.content || "").split("CONTRASEÑA ENCONTRADA")[1] || "");
-    const password = m?.[1]?.trim() || "";
+    // Canonical source: the /sessions payload (session.json targets[].password).
+    // info.txt parse only as a fallback for very old sessions.
+    const sess = wdSessionsCache.find((s) => s.id === sessionId);
+    let password = sess?.found?.find((f) => f.bssid === bssid)?.password || "";
+    let ssid = sess?.targets?.find((t) => t.bssid === bssid)?.ssid || "";
+    if (!password) {
+      const res = await fetch(`/api/wardrive/files/preview?path=${encodeURIComponent(`${sessionId}/${bssid.replace(/:/g, "").toLowerCase()}-info.txt`)}`);
+      if (!res.ok) throw new Error("no info");
+      const data = await res.json();
+      if (data?.kind !== "text") throw new Error("no info");
+      // New sessions: "CONTRASEÑA ENCONTRADA"; old ones: "CONTRASEÑA PROBADA".
+      const section = (data.content || "").split(/CONTRASEÑA (?:ENCONTRADA|PROBADA)/)[1] || "";
+      const m = /^  (.+)$/m.exec(section);
+      password = m?.[1]?.trim() || "";
+    }
     if (!password || password.startsWith("(")) throw new Error("no password");
     const modal = document.getElementById("wd-session-pwd-modal");
     const masked = wdMaskPassword(password);
@@ -2391,7 +2474,7 @@ async function wdShowSessionPassword(sessionId, bssid) {
     };
     // SSID from the session list entry (data attr on the row) or BSSID.
     const row = document.querySelector(`.wd-session-row[data-id="${sessionId}"]`);
-    const ssid = row?.dataset?.ssid || bssid;
+    ssid = ssid || row?.dataset?.ssid || bssid;
     document.getElementById("wd-session-pwd-ssid").textContent = ssid;
     modal.classList.remove("hidden");
   } catch {
@@ -2460,7 +2543,7 @@ async function wdStartSessionDictAttack(sessionId, bssid) {
   }
 }
 
-async function wdOpenSessionFiles(id) {
+async function wdOpenSessionFiles(id, clickedRow = null) {
   const filesBlock = document.getElementById("wd-session-files");
   const filesTitle = document.getElementById("wd-session-files-title");
   const filesBody = document.getElementById("wd-session-files-body");
@@ -2483,7 +2566,15 @@ async function wdOpenSessionFiles(id) {
         </tr>`;
       })
       .join("");
+    // Place the files block right under the clicked session row (not pinned
+    // to the bottom of the list) and collapse the previously opened one.
+    const list = document.getElementById("wd-sessions-list");
+    const row = clickedRow || document.querySelector(`.wd-session-row[data-id="${id}"]`);
+    if (list && row && row.parentElement === list) {
+      list.insertBefore(filesBlock, row.nextSibling);
+    }
     filesBlock.classList.remove("hidden");
+    if (row) row.scrollIntoView({ behavior: "smooth", block: "nearest" });
   } catch { /* non-fatal */ }
 }
 
@@ -2531,7 +2622,7 @@ document.getElementById("wd-sessions-list")?.addEventListener("click", async (ev
   const hsBtn = ev.target.closest(".wd-session-hs");
   const dictBtn = ev.target.closest(".wd-session-dict");
   if (openBtn) {
-    await wdOpenSessionFiles(openBtn.dataset.id);
+    await wdOpenSessionFiles(openBtn.dataset.id, openBtn.closest(".wd-session-row"));
     return;
   }
   if (eyeBtn) {
@@ -2707,67 +2798,21 @@ wdScanBtn.addEventListener("click", async () => {
   void wdRefresh(true);
 });
 
-// REAL/DEMO toggle for the wardrive discovery source (same preference as
-// the radar's SRC toggle — both call the same backend state).
-async function wdSetSource(next) {
-  const toggle = document.getElementById("wd-src-toggle");
-  if (toggle) toggle.style.opacity = "0.6";
-  try {
-    const res = await apiFetch("/api/wardrive/source", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ source: next }),
-    });
-    const data = await res.json();
-    if (data?.ok) wdSource = data.source;
-  } catch { /* keep previous state */ }
-  wdRenderSourceBtn();
-  if (toggle) toggle.style.opacity = "";
-  void wdRefresh();
-}
-
-// The REAL button no longer exists in the DOM (replaced by the iOS switch) —
-// keep a no-op listener only if it ever comes back.
-wdSrcBtn?.addEventListener("click", async () => {
-  await wdSetSource(wdSource === "demo" ? "live" : "demo");
-});
-
-// iOS switch: click (label wraps the checkbox) or keyboard.
-document.getElementById("wd-src-toggle")?.addEventListener("click", (ev) => {
-  // The label toggles the native checkbox before this handler runs; read
-  // the NEW state off the input.
-  const input = document.getElementById("wd-src-toggle-input");
-  if (!input) return;
-  ev.preventDefault(); // avoid double-toggle from label + handler
-  const next = input.checked ? "live" : "demo";
-  input.checked = !input.checked; // reflect real state only after backend ack
-  void wdSetSource(next);
-});
+// The wardrive source now follows the device-wide platform toggle (header):
+// no local live/demo switch here anymore. wdSource stays in sync from
+// initPlatformToggle() and the backend snapshot; render keeps the enter/exit
+// gating logic intact.
 
 function wdRenderSourceBtn() {
   const isDemo = wdSource === "demo";
-  // iOS-style switch state (the REAL button stays hidden — the switch
-  // replaced it; keep the button logic for compatibility).
+  // Legacy button/switch are gone from the DOM — guarded no-ops.
+  wdSrcBtn?.classList.add("hidden");
   const srcToggle = document.getElementById("wd-src-toggle");
-  const srcToggleInput = document.getElementById("wd-src-toggle-input");
-  if (srcToggleInput) srcToggleInput.checked = isDemo;
   if (srcToggle) {
+    const srcToggleInput = document.getElementById("wd-src-toggle-input");
+    if (srcToggleInput) srcToggleInput.checked = isDemo;
     srcToggle.classList.toggle("demo", isDemo);
     srcToggle.setAttribute("aria-checked", isDemo ? "true" : "false");
-    srcToggle.title = isDemo
-      ? "Descubrimiento demo (sin radio) — click para volver a live"
-      : "Descubrimiento real — click para pasar a datos demo";
-  }
-  // The REAL button was replaced by the iOS switch and no longer exists in
-  // the DOM — guard every access (a null here killed the whole wardrive
-  // render on every 2s tick).
-  wdSrcBtn?.classList.add("hidden"); // replaced by the iOS switch
-  if (wdSrcBtn) {
-    wdSrcBtn.textContent = isDemo ? "DEMO" : "REAL";
-    wdSrcBtn.classList.toggle("active", isDemo);
-    wdSrcBtn.title = isDemo
-      ? "Descubrimiento demo (sin radio) — click para volver a real"
-      : "Descubrimiento real — click para pasar a datos demo";
   }
   // With demo source, entering wardriving works without any adapter.
   wdEnterBtn.disabled = wdStatus?.mode === "inactive" ? false : !wdStatus?.mode;
@@ -3496,6 +3541,8 @@ pwForm?.addEventListener("submit", async (e) => {
 })();
 
 // ================= Chat: sugerencias del empty state =================
+// The welcome card no longer carries suggestion buttons; the loop below
+// stays harmless (querySelectorAll finds nothing) if suggestions return.
 (function () {
   for (const b of document.querySelectorAll(".chat-suggest")) {
     b.addEventListener("click", () => {

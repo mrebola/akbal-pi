@@ -75,6 +75,12 @@
     <div class="as-toolbar">
       <span id="demo-badge" class="demo-badge hidden">DEMO</span>
 
+      <!-- Platform source: LIVE / DEMO (drives radar + wardrive + gps) -->
+      <div class="plx-toggle lg" id="platform-toggle" title="Fuente de datos: LIVE usa los dongles reales · DEMO muestra datos sintéticos y libera el hardware">
+        <span class="plx-toggle-label mode-live" data-mode="live">LIVE</span>
+        <span class="plx-toggle-label mode-demo" data-mode="demo">DEMO</span>
+      </div>
+
       <div class="as-search">
         <input id="search-input" type="text" placeholder="buscar SSID o BSSID..." autocomplete="off" />
       </div>
@@ -83,7 +89,6 @@
         <button id="sec-toggle-open" class="as-btn active" data-sec="OPEN" title="Mostrar/ocultar redes abiertas">OPEN</button>
         <button id="sec-toggle-wep" class="as-btn active" data-sec="WEP" title="Mostrar/ocultar redes WEP">WEP</button>
         <button id="sec-toggle-wpa" class="as-btn active" data-sec="WPA" title="Mostrar/ocultar redes WPA/WPA2/WPA3">WPA</button>
-        <button id="src-toggle-btn" class="as-btn" title="Alternar captura real / datos demo">SRC</button>
         <button id="live-pause-btn" class="as-btn active" title="Pausar/reanudar el stream">LIVE</button>
         <button id="reset-view-btn" class="as-btn" title="Restablecer cámara">RESET VIEW</button>
         <button id="dim-toggle-btn" class="as-btn" title="Alternar 2D/3D">3D</button>

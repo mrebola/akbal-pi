@@ -117,13 +117,18 @@ async function main() {
         vec3 nightColor;
         if (hasTextures) {
           dayColor = texture2D(dayMap, vUv).rgb;
-          // City lights: the NASA night texture is mostly black with bright
-          // cities — keep it as-is, boost a touch for punch.
+          // City lights: gamma-compress the night texture so dense metros pop
+          // and suburbs stay as faint clusters — a real night shot from orbit.
           vec3 lights = texture2D(lightsMap, vUv).rgb;
-          // Warm sodium lamps, dimmed where there are no cities (black stays black).
           float luminance = dot(lights, vec3(0.299, 0.587, 0.114));
-          nightColor = lights * vec3(1.0, 0.82, 0.55) * 1.35
-            + vec3(0.010, 0.014, 0.028) * (1.0 - luminance * 2.0); // faint moonlit ocean/land
+          vec3 lamps = pow(lights, vec3(1.0 / 1.8)); // lift mid-tones: streets appear
+          lamps *= 4.2;                              // ~80% brighter overall
+          // Sodium-vapor warm tint, cooler core for dense cores (contrast).
+          vec3 sodium = lamps * vec3(1.0, 0.80, 0.50);
+          vec3 cores = pow(lamps, vec3(1.35)) * vec3(1.0, 0.92, 0.78);
+          nightColor = sodium + cores * 0.5;
+          // Faint moonlit base so landmass/ocean silhouettes read on the dark side.
+          nightColor += vec3(0.008, 0.011, 0.020);
         } else {
           // Procedural fallback: cheap continents/oceans from noise-free bands.
           float lat = abs(vUv.y - 0.5) * 2.0;
@@ -144,10 +149,11 @@ async function main() {
         float spec = pow(max(dot(n, halfDir), 0.0), 42.0);
         color += vec3(0.45, 0.5, 0.55) * spec * dayAmount * 0.8;
 
-        // Rim atmosphere (fresnel): thin blue halo, sunlit side bluer.
-        float fres = pow(1.0 - max(dot(n, viewDir), 0.0), 2.6);
-        vec3 rim = mix(vec3(0.02, 0.05, 0.13), vec3(0.24, 0.47, 0.85), dayAmount);
-        color += rim * fres * 0.9;
+        // Faint rim (no white/blue daytime glow on the limb): barely-there
+        // sky-blue only, so the night side keeps its dark, living feel.
+        float fres = pow(1.0 - max(dot(n, viewDir), 0.0), 3.2);
+        vec3 rim = mix(vec3(0.004, 0.008, 0.02), vec3(0.06, 0.12, 0.24), dayAmount);
+        color += rim * fres * 0.5;
 
         gl_FragColor = vec4(color, 1.0);
       }
@@ -188,8 +194,10 @@ async function main() {
           float glow = pow(0.62 - dot(normalize(vNormal), viewDir) * 0.4, 3.5);
           vec3 s = normalize(sunDirection);
           float dayAmount = smoothstep(-0.3, 0.5, dot(normalize(vNormal), s));
-          vec3 tint = mix(vec3(0.05, 0.09, 0.2), vec3(0.28, 0.5, 0.9), dayAmount);
-          gl_FragColor = vec4(tint, clamp(glow, 0.0, 1.0) * 0.55);
+          // Tight, dim halo: a whisper of blue on the day limb, almost nothing
+          // at night — no white glow washing out the dark side.
+          vec3 tint = mix(vec3(0.01, 0.02, 0.05), vec3(0.10, 0.22, 0.45), dayAmount);
+          gl_FragColor = vec4(tint, clamp(glow, 0.0, 1.0) * 0.28);
         }
       `,
     }),

@@ -137,7 +137,15 @@ export class AircraftRadarService extends EventEmitter {
         this.startRetryLoop();
       }
     });
-    this.receiver.start(parseInt(process.env.ADSB_HACKRF_GAIN || "40", 10));
+    this.receiver.start({
+      // Defaults confirmed to actually decode real ADS-B on this hardware
+      // (see docs/aircraft-radar.md's capture-status section) — reception
+      // is still marginal (weak antenna/USB-timing quirk on this HackRF),
+      // so these are deliberately overridable while that gets improved.
+      lnaGain: parseInt(process.env.ADSB_HACKRF_LNA_GAIN || "40", 10),
+      vgaGain: parseInt(process.env.ADSB_HACKRF_VGA_GAIN || "50", 10),
+      ampEnabled: (process.env.ADSB_HACKRF_AMP_ENABLED || "true").toLowerCase() !== "false",
+    });
 
     this.mode = "live";
     this.lastError = undefined;

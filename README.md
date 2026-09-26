@@ -464,9 +464,12 @@ reales vía el GPS del Pi. Toggle **MAPA / RADAR** en el header:
   bearing/distancia relativos, anillos de 10/25/50/100km.
 
 Click en un punto o tarjeta abre el detalle completo. Mismo toggle LIVE/DEMO
-que WIFIRADAR — sin HackRF conectado (o mientras se afina la recepción real,
-ver [`docs/aircraft-radar.md`](docs/aircraft-radar.md#estado-de-la-captura-real-en-investigación))
-cae a aeronaves sintéticas con prefijo "DEMO · ". Solo recepción: el HackRF
+que WIFIRADAR — sin HackRF conectado cae a aeronaves sintéticas con prefijo
+"DEMO · ". Decodificado con [`readsb`](https://github.com/wiedehopf/readsb)
+(soporte nativo de HackRF); la recepción real depende bastante de la
+antena — ver
+[`docs/aircraft-radar.md`](docs/aircraft-radar.md#estado-de-la-captura-real)
+para cómo se afinó y sus límites conocidos. Solo recepción: el HackRF
 nunca transmite. Detalle completo en
 [`docs/aircraft-radar.md`](docs/aircraft-radar.md).
 

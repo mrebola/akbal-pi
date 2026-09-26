@@ -1,18 +1,19 @@
 # AIRCRAFT RADAR — ADS-B con HackRF One
 
 `http://<ip-del-dispositivo>:8090/aircraft-radar` — lista de aeronaves
-detectadas ordenada por distancia + radar circular (Akbal al centro,
-anillos de 10/25/50/100km), alimentado en tiempo real por un HackRF One en
-1090MHz. Además hay una pantalla física simplificada en el menú rápido del
-LCD ("Aviones"). Solo recepción: el HackRF nunca transmite (`hackrf_transfer
--r`, jamás `-t`), y este módulo no interactúa con ningún transpondedor.
+detectadas ordenada por distancia + mapa/radar (ver "Frontend" abajo),
+alimentado en tiempo real por un HackRF One en 1090MHz. Además hay una
+pantalla física simplificada en el menú rápido del LCD ("Aviones"). Solo
+recepción: el backend de HackRF de `readsb` únicamente recibe (API RX de
+`libhackrf`, sin ninguna ruta de transmisión en el binario), y este módulo
+no interactúa con ningún transpondedor.
 
 ## Arquitectura
 
 ```
 HackRF One (USB, RX-only)
-  → hackrf_transfer -r - -f 1090000000 -s 2000000  (IQ crudo u8 a stdout)
-  → dump1090 --ifile - --net --net-sbs-port 30003   (decodifica Mode-S/ADS-B)
+  → readsb --device-type hackrf --net --net-sbs-port 30003  (nativo, sin
+    proceso intermedio — decodifica Mode-S/ADS-B directo desde libhackrf)
   → socket TCP 127.0.0.1:30003 (texto SBS-1/BaseStation)
   → parser (app/src/services/adsb/sbs-parser.ts) → RawAdsbMessage
   → tracker (app/src/services/adsb/aircraft-tracker.ts) — estado en
@@ -28,34 +29,36 @@ Mismo patrón que WIFIRADAR (ver [`wifiradar.md`](./wifiradar.md)): capturar
 con una herramienta externa bien probada y parsear su salida, en vez de
 reimplementar el decodificador (Mode-S/CRC/CPR es fácil de hacer mal).
 
-### Por qué `hackrf_transfer | dump1090` y no un decodificador propio
+### Por qué `readsb` (y no `dump1090`, ni un decodificador propio)
 
-`dump1090` (y sus forks) no soportan HackRF nativamente — están escritos
-contra `librtlsdr`. El truco estándar de la comunidad HackRF+ADS-B:
-`hackrf_transfer` escribe IQ crudo sin firma/cabecera a stdout, exactamente
-el mismo formato de bytes (u8 entrelazado I/Q) que `dump1090 --ifile`
-espera leer de un archivo — así que un pipe de shell conecta ambos sin que
-`dump1090` necesite saber que el HackRF existe.
+La primera versión de este módulo usaba `hackrf_transfer -r - | dump1090
+--ifile -` (el truco estándar de la comunidad HackRF+ADS-B para forks de
+`dump1090`, que no soportan HackRF nativamente — están escritos contra
+`librtlsdr`). Verificado en hardware real: ese pipeline corría sin errores
+pero **nunca decodificó un mensaje ADS-B real** — ver
+["Estado de la captura real"](#estado-de-la-captura-real) más abajo para
+la investigación completa. Se cambió a
+[`readsb`](https://github.com/wiedehopf/readsb) (fork moderno,
+activamente mantenido) porque tiene **soporte nativo de HackRF** vía
+`libhackrf` (`sdr_hackrf.c`, `--device-type hackrf`) — un solo proceso,
+sin `hackrf_transfer` ni un pipe intermedio, sin que Node necesite manejar
+el formato de bytes (`readsb` sabe leer directo del HackRF, muestreando a
+la tasa que su propio demodulador espera) — y fue lo que realmente
+consiguió decodificar aeronaves reales en este hardware.
 
-**La tasa de muestreo debe ser exactamente 2,000,000 Hz, no 2.4MSPS.**
-`dump1090.h` define `MODES_DEFAULT_RATE 2000000` y todo su demodulador
-Mode-S asume 2 muestras/µs (encoding PPM de 1Mbit/s) — alimentarlo a otra
-tasa desincroniza el timing de bits silenciosamente y decodifica basura, no
-un error visible. `app/src/services/adsb/hackrf-receiver.ts` fija esto con
-un comentario explícito para que nadie lo "optimice" de vuelta a 2.4MSPS.
-
-Igual que en WIFIRADAR: un solo `bash -c "hackrf_transfer ... | dump1090 ..."`
-(no dos `spawn` de Node conectados con `.pipe()`), `detached: true` para
-poder matar el grupo de procesos completo en `stop()`.
+`app/src/services/adsb/hackrf-receiver.ts` hace `spawn("readsb", [...])`
+directo (sin `bash -c`, sin pipe — un solo proceso que ya habla TCP).
 
 ### Por qué el feed SBS-1 (puerto 30003) y no Beast binario
 
-`dump1090 --net-sbs-port` expone el feed BaseStation en texto plano CSV
-(`MSG,3,...`) sobre TCP — parseable línea por línea sin una capa de framing
-binario adicional, mismo espíritu que parsear la salida `-T fields` de
-`tshark` en WIFIRADAR. `app/src/services/adsb/sbs-parser.ts` interpreta los
-22 campos según el `TransmissionType` (1=callsign, 2/3=posición,
-4=velocidad, 5/6=altitud+squawk).
+`readsb --net --net-sbs-port` expone el mismo feed BaseStation en texto
+plano CSV (`MSG,3,...`) que ya exponía `dump1090` — parseable línea por
+línea sin una capa de framing binario adicional, mismo espíritu que
+parsear la salida `-T fields` de `tshark` en WIFIRADAR.
+`app/src/services/adsb/sbs-parser.ts` interpreta los 22 campos según el
+`TransmissionType` (1=callsign, 2/3=posición, 4=velocidad,
+5/6=altitud+squawk) — sin cambios frente a la versión con `dump1090`,
+porque el formato del feed es idéntico entre ambos.
 
 ### Demo Mode
 
@@ -133,32 +136,32 @@ campos que no se pudieron resolver.
 
 ## Dependencias de Linux
 
-`dump1090` no tiene paquete en Debian trixie (Raspberry Pi OS actual) —
-se compila desde fuente. `hackrf` sí está en apt.
+Ni `hackrf` (para `hackrf_info`, usado solo para detección) ni `readsb`
+con soporte de HackRF tienen paquete listo en Debian trixie (Raspberry Pi
+OS actual) para lo segundo — `readsb` se compila desde fuente.
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y hackrf librtlsdr-dev
-git clone https://github.com/MalcolmRobb/dump1090.git ~/dump1090-src
-cd ~/dump1090-src
-# GCC moderno (10+) rompe este código de 2016 con "multiple definition of
-# `Modes`" por el cambio de default a -fno-common — EXTRACFLAGS=-fcommon
-# restaura el comportamiento viejo que este Makefile asume.
-make EXTRACFLAGS=-fcommon
-sudo cp dump1090 /usr/local/bin/dump1090
+sudo apt-get install -y hackrf libhackrf-dev libncurses-dev zlib1g-dev \
+  libzstd-dev help2man git build-essential pkg-config
+
+git clone --depth 20 https://github.com/wiedehopf/readsb.git ~/readsb-src
+cd ~/readsb-src
+make HACKRF=yes -j4
+sudo cp readsb /usr/local/bin/readsb
 ```
 
-- **`hackrf`** (paquete apt) — trae `hackrf_info`/`hackrf_transfer`. El
-  usuario que corre `chatbot.service` necesita estar en el grupo `plugdev`
-  (udev rule del paquete usa `MODE="0666"`/`GROUP="plugdev"`); si
-  `hackrf_info` da permission denied justo después de instalar, desconectar
-  y reconectar el HackRF alcanza (no hace falta reiniciar).
-- **`librtlsdr-dev`** — dump1090 se linkea contra `librtlsdr` en su
-  Makefile aunque nunca se usa un dongle RTL-SDR en este flujo (solo hace
-  falta para compilar).
+- **`hackrf`** (paquete apt) — trae `hackrf_info`/`hackrf_transfer` (este
+  último ya no se usa para capturar, solo queda `hackrf_info` para
+  detección). El usuario que corre `chatbot.service` necesita estar en el
+  grupo `plugdev` (udev rule del paquete usa `MODE="0666"`/`GROUP="plugdev"`);
+  si `hackrf_info` da permission denied justo después de instalar,
+  desconectar y reconectar el HackRF alcanza (no hace falta reiniciar).
+- **`libhackrf-dev`** — headers de `libhackrf` que `readsb` necesita para
+  compilar su backend nativo de HackRF (`sdr_hackrf.c`, `-DENABLE_HACKRF`).
 - Mismo sudo sin contraseña completo del usuario `akbal` que ya cubre
-  WIFIRADAR/wardrive — no hace falta una regla de sudoers adicional para
-  `hackrf_transfer`/`dump1090` (corren sin sudo).
+  WIFIRADAR/wardrive — no hace falta una regla de sudoers adicional,
+  `readsb` corre sin sudo.
 
 ## Cómo verificar que el HackRF está conectado
 
@@ -167,7 +170,7 @@ lsusb | grep -i "1d50:6089"   # Great Scott Gadgets HackRF One
 hackrf_info                   # debe imprimir "Found HackRF" + serial
 ```
 
-Sin el HackRF (o si `hackrf_info`/`dump1090` no están instalados), Aircraft
+Sin el HackRF (o si `hackrf_info`/`readsb` no están instalados), Aircraft
 Radar arranca automáticamente en DEMO MODE — no hace falta hardware para
 probar la UI.
 
@@ -183,50 +186,49 @@ grep -i aircraft-radar ~/whisplay-ai-chatbot/chatbot.log | tail -5
 # "Real capture unavailable, using DEMO MODE: <razón>" → demo
 ```
 
-## Estado de la captura real (en investigación)
+## Estado de la captura real
 
-Verificado en el dispositivo real (Pi 5 + HackRF One, Guadalajara): el
-pipeline completo corre sin errores — `hackrf_transfer` entrega ~4MB/s
-reales, `dump1090`/`readsb` procesan esos datos, el snapshot/WS/lista
-funcionan — pero **todavía no se decodificó ningún mensaje ADS-B real**
-en las pruebas hechas hasta ahora, pese a que el usuario confirmó ver
-aeronaves con la misma HackRF desde otra herramienta (LNA 40, VGA 50,
-AMP on).
+Verificado en el dispositivo real (Pi 5 + HackRF One, Guadalajara) — la
+recepción real **funciona**, aunque sigue siendo marginal. Bitácora de la
+investigación, por si hace falta retomarla:
 
-Lo que ya se descartó:
-- **No es la tasa de muestreo**: fijada en 2,000,000 Hz exacto (ver
-  arriba), confirmado correcto contra `dump1090.h`.
-- **No es un bug de signo de bytes**: HackRF entrega IQ de 8 bits
-  **con signo** (confirmado en el código fuente oficial de
-  `hackrf_transfer.c`, que explícitamente hace `^= 0x80` para convertir a
-  sin signo solo en su modo `--wav`), mientras que `dump1090` asume bytes
-  **sin signo** centrados en 127 (confirmado en su tabla de magnitud,
-  `dump1090.c`). Se probó la conversión (XOR 0x80 en un pipe intermedio)
-  sin cambios en el resultado.
-- **No es el decodificador**: se compiló y probó
-  [`readsb`](https://github.com/wiedehopf/readsb) (fork moderno,
-  mantenido activamente, con soporte nativo de HackRF vía `libhackrf`,
-  sin pasar por `hackrf_transfer` ni por el bug de signo de arriba —
-  `make HACKRF=yes`, requiere `libhackrf-dev`). Con `readsb` sí aparece
-  actividad real y consistente con la ganancia (decenas de miles de
-  "preambles" Mode-S por sesión de 20s, piso de ruido que sube de forma
-  predecible con la ganancia), pero **0 pasan la verificación CRC** en
-  todas las combinaciones de ganancia probadas (LNA 16–40, VGA 20–62, amp
-  on/off) — un patrón típico de exceso de ganancia/saturación, pero bajar
-  la ganancia tampoco cambió el resultado.
+1. **Primer sospechoso, descartado — tasa de muestreo**: `dump1090.h`
+   define `MODES_DEFAULT_RATE 2000000` (2 muestras/µs) — confirmado
+   correcto, no era esto.
+2. **Segundo sospechoso, descartado — signo de bytes**: HackRF entrega IQ
+   de 8 bits **con signo** (confirmado en el código fuente oficial de
+   `hackrf_transfer.c`, que hace `^= 0x80` para convertir a sin signo solo
+   en su modo `--wav`) mientras `dump1090` asume bytes **sin signo**
+   (confirmado en su tabla de magnitud). Se probó la conversión (XOR 0x80
+   en un pipe intermedio) sin cambio en el resultado — tampoco era esto.
+3. **La causa real — el propio `dump1090`**: con `readsb` (ver arriba) sí
+   aparecía actividad real consistente con la ganancia (decenas de miles
+   de "preambles" Mode-S por sesión de 20s, piso de ruido subiendo con la
+   ganancia), pero en ventanas cortas (10-20s) **0 mensajes pasaban CRC**.
+   La ganancia exacta que el usuario ya había confirmado funcional en otra
+   herramienta (LNA 40, VGA 50, amp on) tampoco cambiaba nada en esas
+   ventanas cortas — hasta que una prueba de **2 minutos** con esos mismos
+   valores sí decodificó mensajes reales (6 con CRC válido, 1 aeronave
+   real). La recepción es rara/débil (8 mensajes usables en 120s en la
+   mejor corrida), pero real. `dump1090` (el fork de 2016, nunca probado
+   contra un HackRF de verdad) simplemente no lo lograba en el tiempo de
+   prueba disponible — no está claro si es una diferencia real de
+   sensibilidad del demodulador o solo mala suerte con ventanas cortas,
+   pero cambiar a `readsb` fue lo que funcionó.
 
-Hipótesis abiertas (pendiente de resolver con acceso físico al hardware):
-antena (pasiva vs. activa con alimentación bias-tee — `readsb` no expone
-esa opción por CLI, a diferencia de `hackrf_transfer -p 1`), calibración
-de frecuencia (`--ppm`), o una diferencia de configuración específica de
-la herramienta con la que el usuario sí vio aeronaves.
+**Limitante conocida, sin resolver**: `readsb` reporta seguido
+`weirdness: hackRF gave us a block with an unusual size` y ocasionalmente
+`Lost N packets on USB` — apunta a un problema de timing/throughput por
+USB en este HackRF/Pi específico (puerto, cable, o el controlador USB del
+Pi 5) que probablemente limita la tasa de recepción real por debajo de lo
+que la antena permitiría. Probar otro puerto/cable USB o un hub
+alimentado es la siguiente pista a seguir si la recepción sigue
+sintiéndose demasiado esporádica.
 
-**Mientras se resuelve esto**: el modo demo (`ADSB_ENABLED` sin
-resultado real, o toggle manual a DEMO) reproduce el pipeline completo
-—tracker, historial, resolución de ruta contra la API real de
-adsbdb.com, UI, LCD— con aeronaves sintéticas, así que el resto del
-módulo es verificable y usable sin depender de que la captura real ya
-esté afinada.
+**Ganancia por defecto** (`ADSB_HACKRF_LNA_GAIN=40`,
+`ADSB_HACKRF_VGA_GAIN=50`, `ADSB_HACKRF_AMP_ENABLED=true`) — la primera
+combinación confirmada funcional en este hardware; ajustable por `.env`
+si una antena distinta o un entorno distinto necesita otra cosa.
 
 ## API interna
 

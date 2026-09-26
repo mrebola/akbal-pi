@@ -92,7 +92,7 @@ whisplay-ai-chatbot/
 │   │   ├── crack.ts              # aircrack-ng handshake validation + rockyou dict crack
 │   │   └── session.ts            # ~/wardrive-sessions persistence (incl. cracked passwords)
 │   ├── services/adsb/            # Aircraft Radar: ADS-B via HackRF One (docs/aircraft-radar.md)
-│   │   ├── hackrf-receiver.ts    # hackrf_transfer|dump1090 pipeline + SBS-1 TCP client
+│   │   ├── hackrf-receiver.ts    # readsb --device-type hackrf process + SBS-1 TCP client
 │   │   ├── sbs-parser.ts         # SBS-1/BaseStation CSV → RawAdsbMessage
 │   │   ├── aircraft-tracker.ts   # in-memory state, GPS distance/bearing, history writes
 │   │   ├── aircraft-database.ts  # ICAO24 → registration/model/operator (cache + adsbdb.com)

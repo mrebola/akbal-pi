@@ -6,13 +6,7 @@ import { parseSbsLine } from "./sbs-parser";
 
 const execFileAsync = promisify(execFile);
 
-const ADSB_FREQ_HZ = 1_090_000_000;
-// dump1090's Mode-S demodulator hardcodes MODES_DEFAULT_RATE = 2,000,000 Hz
-// (2 samples/µs, matching the 1Mbit/s PPM encoding) — NOT 2.4MSPS. Feeding
-// it any other rate silently desyncs its bit timing and decodes garbage;
-// this must stay 2,000,000 to match dump1090.c, not HackRF's own default.
-const SAMPLE_RATE_HZ = 2_000_000;
-const SBS_PORT = 30003; // dump1090 --net-sbs-port: plain-text BaseStation feed
+const SBS_PORT = 30003; // readsb --net-sbs-port: plain-text BaseStation feed
 const SBS_HOST = "127.0.0.1";
 const SBS_CONNECT_RETRY_MS = 500;
 const SBS_CONNECT_TIMEOUT_MS = 10_000;
@@ -41,22 +35,27 @@ export async function detectHackRf(): Promise<HackRfInfo> {
   }
 }
 
-function shellSingleQuote(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
-}
+export type ReceiverGain = {
+  lnaGain: number; // "IF" gain, 0-40dB in 8dB steps
+  vgaGain: number; // baseband gain, 0-62dB in 2dB steps
+  ampEnabled: boolean; // RF amp, ~11dB, on/off
+};
 
-// Spawns `hackrf_transfer | dump1090` as one shell pipeline (same reasoning
-// as wifiradar/capture.ts's dumpcap|tshark: a real shell pipe, not two
-// Node-spawned children wired together with .pipe(), avoids the child
-// rejecting stdin as a "special file") and reads dump1090's decoded output
-// back over its SBS-1/BaseStation TCP port instead of parsing its stdout —
-// dump1090 doesn't have a "-T fields"-style text stdout mode the way tshark
-// does, so this is the equivalent plain-text tap for it.
+// Spawns readsb directly against the HackRF via its native libhackrf
+// support (`--device-type hackrf`) — replaces an earlier
+// hackrf_transfer|dump1090 shell pipeline (see git history/docs/
+// aircraft-radar.md's "Estado de la captura real" section for why: the
+// old dump1090 fork is unmaintained and never validated against a real
+// HackRF, and switching to readsb's own native SDR handling — no external
+// hackrf_transfer, no intermediate stdout/stdin pipe — was what actually
+// got real ADS-B decodes on real hardware). readsb keeps dump1090's
+// SBS-1/BaseStation text feed (`--net-sbs-port`), so sbs-parser.ts and
+// everything downstream of it is unchanged.
 //
-// SECURITY: hackrf_transfer is only ever invoked with `-r -` (receive to
-// stdout). This module must never add `-t` (transmit from file) or any
-// other TX-enabling flag — see AGENTS.md's RX-only requirement for this
-// feature. dump1090 itself has no transmit capability at all.
+// SECURITY: readsb's HackRF backend only ever receives (libhackrf's own
+// RX API) — there is no transmit code path in readsb at all, and this
+// module must never invoke hackrf_transfer/hackrf_spiflash or any other
+// tool with a TX-capable flag. See AGENTS.md's RX-only requirement.
 export class AdsbReceiver extends EventEmitter {
   private proc: ChildProcess | null = null;
   private sbsSocket: net.Socket | null = null;
@@ -64,42 +63,25 @@ export class AdsbReceiver extends EventEmitter {
   private sbsBuffer = "";
   private running = false;
 
-  start(gain = 40): void {
+  start(gain: ReceiverGain): void {
     if (this.running) return;
     this.running = true;
 
-    const hackrfCmd = [
-      "hackrf_transfer",
-      "-r",
-      "-", // receive to stdout — never "-t" (transmit)
-      "-f",
-      String(ADSB_FREQ_HZ),
-      "-s",
-      String(SAMPLE_RATE_HZ),
-      "-a",
-      "1", // RF amp on
-      "-l",
-      "16", // baseband (LNA) gain
-      "-g",
-      String(gain), // VGA gain
-    ].join(" ");
-    const dump1090Cmd = [
-      "dump1090",
-      "--ifile",
-      "-",
+    const args = [
+      "--device-type",
+      "hackrf",
+      "--gain",
+      String(gain.lnaGain * 10), // readsb's --gain is LNA-gain-in-dB * 10
+      "--hackrf-vgagain",
+      String(gain.vgaGain),
+      ...(gain.ampEnabled ? ["--hackrf-enable-ampgain"] : []),
       "--net",
       "--net-sbs-port",
       String(SBS_PORT),
       "--quiet",
-    ].join(" ");
+    ];
 
-    // detached: true so stop() can kill the whole process group — same
-    // rationale as wifiradar/capture.ts (killing bash's own pid alone
-    // wouldn't reliably reach hackrf_transfer/dump1090 too).
-    this.proc = spawn("bash", ["-c", `${hackrfCmd} | ${dump1090Cmd}`], {
-      stdio: ["ignore", "ignore", "pipe"],
-      detached: true,
-    });
+    this.proc = spawn("readsb", args, { stdio: ["ignore", "ignore", "pipe"] });
     this.proc.stderr?.on("data", (chunk: Buffer) => this.logStderr(chunk));
     this.proc.on("exit", (code, signal) => {
       if (!this.running) return; // stop() already called intentionally
@@ -117,21 +99,22 @@ export class AdsbReceiver extends EventEmitter {
     this.connectSbs();
   }
 
-  // hackrf_transfer prints routine status to stderr (its config echo at
-  // startup, a throughput/power line once a second, "Stop with Ctrl-C") —
-  // none of that is an error, same "filter the expected noise" reasoning as
-  // wifiradar/capture.ts's logStderr for dumpcap's startup/summary lines.
+  // readsb logs routine status to stderr (startup banner, the periodic
+  // "weirdness: hackRF gave us a block with an unusual size" notice — a
+  // real but so-far-benign USB-timing quirk on this hardware, not fatal —
+  // and USB packet-loss warnings). None of that is worth escalating on
+  // every line; only genuinely unexpected output gets logged.
   private logStderr(chunk: Buffer): void {
     const text = chunk.toString("utf8").trim();
-    if (text && !/^call hackrf_|MiB\/second|^Stop with Ctrl-C/.test(text)) {
+    if (text && !/^readsb version|^Opening HackRF|^HackRF successfully|^invoked by:|weirdness:|SBS TCP output/.test(text)) {
       console.warn("[aircraft-radar] receiver:", text);
     }
   }
 
-  // dump1090 needs a moment after spawn before its SBS listener is up, and
-  // the connection can also legitimately drop mid-session (dump1090
-  // restarted, hackrf_transfer glitched) — retry on a timer either way
-  // instead of treating a failed connect as fatal.
+  // readsb needs a moment after spawn before its SBS listener is up, and
+  // the connection can also legitimately drop mid-session (readsb
+  // restarted, HackRF glitched) — retry on a timer either way instead of
+  // treating a failed connect as fatal.
   private connectSbs(): void {
     if (!this.running) return;
     const socket = net.createConnection({ host: SBS_HOST, port: SBS_PORT, timeout: SBS_CONNECT_TIMEOUT_MS });
@@ -177,13 +160,9 @@ export class AdsbReceiver extends EventEmitter {
     this.sbsSocket = null;
     if (this.proc) {
       try {
-        process.kill(-this.proc.pid!, "SIGTERM");
+        this.proc.kill("SIGTERM");
       } catch {
-        try {
-          this.proc.kill("SIGTERM");
-        } catch {
-          // Already gone — nothing left to kill.
-        }
+        // Already gone — nothing left to kill.
       }
       this.proc = null;
     }

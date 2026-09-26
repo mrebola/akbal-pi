@@ -139,10 +139,14 @@ header.topbar { z-index: 1000; }
 
 /* True dark-mode tiles: OSM only ships light basemaps for free/keyless use
    (CARTO's dark_all tiles now require an API key — see gps.js's history
-   with this), so this inverts the light tiles and rotates hue back to
-   compensate, the standard no-tile-provider trick for a dark map. */
+   with this), so this inverts the light tiles, the standard no-tile-provider
+   trick for a dark map. saturate(0) instead of a hue-rotate compensation:
+   OSM's standard raster tiles bake in colored POI icons (e.g. small
+   pink/magenta airport-symbol triangles) that get confused with our own
+   colored aircraft triangles — fully desaturating the tile pane turns
+   those into neutral gray so only our live markers carry color. */
 .ar-map .leaflet-tile-pane {
-  filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9) saturate(0.9);
+  filter: invert(1) brightness(0.95) contrast(0.9) saturate(0);
 }
 
 .ar-map .leaflet-control-attribution {

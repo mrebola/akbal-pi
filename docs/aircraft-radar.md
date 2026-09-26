@@ -80,6 +80,18 @@ GPS no se mueve lo suficiente entre dos mensajes separados por cientos de
 ms como para justificar el I/O extra. Sin fix, `distanceKm`/`bearingDeg`
 quedan `null` — nunca un valor inventado.
 
+**Dos motivos distintos para que una aeronave no aparezca en el mapa/radar,
+aunque sí esté en la lista** (fácil de confundir): (1) Akbal no tiene fix
+GPS — nada se puede ubicar; o (2) Akbal sí tiene fix, pero *esa aeronave en
+particular* todavía no tuvo un mensaje de posición (SBS tipo 2/3) que
+decodificara — con recepción real tan escasa, es común ver
+velocidad/altitud/identidad resueltas (mensajes tipo 4 y de vigilancia) de
+una aeronave bastante antes que su posición, o nunca. El frontend
+distingue ambos casos explícitamente (`distanceLabel()` en
+`aircraft-radar.js`: "sin fix GPS de Akbal" vs. "sin posición aún") — antes
+decía "sin GPS" para los dos casos, lo cual hacía ver como un problema de
+Akbal algo que en realidad es "todavía no le tocó esa aeronave".
+
 ### Resolución de ICAO24 y ruta — sin inventar datos
 
 Mismo orden capa-local-antes-que-remota que `wifiradar/oui.ts` usa para

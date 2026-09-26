@@ -199,6 +199,21 @@ function displayName(aircraft) {
   return aircraft.callsign || aircraft.icao;
 }
 
+// "null distance" has two very different causes an operator needs to tell
+// apart: Akbal itself has no GPS fix (nothing can be placed on the radar
+// right now), vs. this *specific* aircraft simply hasn't had a position
+// message (SBS type 2/3) decode yet — real ADS-B reception here is sparse
+// enough that an aircraft can have speed/altitude/identity resolved (from
+// velocity/surveillance messages) well before its position ever does. Only
+// the first case is "sin fix GPS"; conflating them made a perfectly normal
+// "still waiting for a position report" look like a GPS problem.
+function distanceLabel(aircraft) {
+  if (aircraft.distanceKm !== null) return fmt(aircraft.distanceKm, " km", 1);
+  if (!ownPosition) return "sin fix GPS de Akbal";
+  if (aircraft.latitude === null) return "sin posición aún";
+  return "—";
+}
+
 function renderList(snapshot) {
   listEl.querySelectorAll(".ar-card").forEach((el) => el.remove());
   emptyEl.classList.toggle("hidden", snapshot.aircraft.length > 0);
@@ -216,7 +231,7 @@ function renderList(snapshot) {
       <div class="ar-card-metrics">
         <span>${fmt(aircraft.altitudeFt, " ft")}</span>
         <span>${fmt(aircraft.speedKt, " kt")}</span>
-        <span class="${aircraft.distanceKm === null ? "" : "warn"}">${aircraft.distanceKm === null ? "sin GPS" : fmt(aircraft.distanceKm, " km", 1)}</span>
+        <span class="${aircraft.distanceKm === null ? "" : "warn"}">${distanceLabel(aircraft)}</span>
         <span>${aircraft.bearingDeg === null ? "" : `${bearingCompass(aircraft.bearingDeg)} ${Math.round(aircraft.bearingDeg)}°`}</span>
       </div>
     `;
@@ -262,8 +277,17 @@ function render() {
   if (!latestSnapshot) return;
   const withFix = latestSnapshot.aircraft.filter((a) => a.distanceKm !== null && a.bearingDeg !== null);
   // Only relevant in radar view — the map plots aircraft by their own
-  // absolute lat/lon and never needs Akbal's fix to do it.
-  nofixEl.classList.toggle("hidden", view !== "radar" || withFix.length > 0 || latestSnapshot.aircraft.length === 0);
+  // absolute lat/lon and never needs Akbal's fix to do it. Two different
+  // reasons nothing's plotted (see distanceLabel's comment above): no fix
+  // on Akbal at all, vs. every currently-tracked aircraft simply hasn't had
+  // a position message decoded yet even though Akbal itself has a fix.
+  const showNofix = view === "radar" && withFix.length === 0 && latestSnapshot.aircraft.length > 0;
+  nofixEl.classList.toggle("hidden", !showNofix);
+  if (showNofix) {
+    nofixEl.textContent = !ownPosition
+      ? "Sin fix GPS de Akbal — mostrando lista sin radar"
+      : "Ninguna aeronave detectada tiene posición todavía";
+  }
 
   for (const aircraft of withFix) {
     const r = Math.min(aircraft.distanceKm / MAX_RANGE_KM, 1) * maxRadiusPx;
@@ -329,7 +353,7 @@ function openDetail(aircraft) {
       <div class="apm-row"><span>Speed</span><span>${fmt(aircraft.speedKt, " kt")}</span></div>
       <div class="apm-row"><span>Heading</span><span>${aircraft.headingDeg === null ? "—" : `${Math.round(aircraft.headingDeg)}°`}</span></div>
       <div class="apm-row"><span>Squawk</span><span>${aircraft.squawk || "—"}</span></div>
-      <div class="apm-row"><span>Distance</span><span>${aircraft.distanceKm === null ? "sin fix GPS" : fmt(aircraft.distanceKm, " km", 1)}</span></div>
+      <div class="apm-row"><span>Distance</span><span>${distanceLabel(aircraft)}</span></div>
       <div class="apm-row"><span>Bearing</span><span>${aircraft.bearingDeg === null ? "—" : `${bearingCompass(aircraft.bearingDeg)} ${Math.round(aircraft.bearingDeg)}°`}</span></div>
       <div class="apm-row"><span>Last seen</span><span>${lastSeenLabel(aircraft.lastSeen)}</span></div>
     </div>

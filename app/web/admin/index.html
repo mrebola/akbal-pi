@@ -186,42 +186,73 @@
 
       <div id="wd-error" class="error"></div>
 
-      <div class="wd-toolbar">
-        <button id="wd-scan-btn">Escanear redes</button>
-        <button id="wd-pause-btn" class="secondary hidden">Pausar</button>
-        <button id="wd-cancel-btn" class="wd-danger hidden">Cancelar ataque</button>
-        <span id="wd-attack-status" class="muted"></span>
-        <input id="wd-search" type="search" placeholder="Buscar red (SSID, BSSID, canal...)" autocomplete="off"
-               style="width: 220px; font-size: 12px; padding: 6px 10px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary);" />
-        <button id="wd-filters-reset" class="secondary" title="Limpiar búsqueda y orden">Borrar filtros</button>
+      <!-- Two subsections: 1. AUDIT (select a network, capture the handshake)
+           2. SESSIONS (past audits + dictionary attacks from there). -->
+      <div class="wd-subtabs">
+        <button class="wd-subtab active" data-subtab="audit">1 · Auditoría</button>
+        <button class="wd-subtab" data-subtab="sessions">2 · Sesiones</button>
       </div>
 
-      <div class="wd-list-wrap">
-        <table class="wd-table">
-          <thead>
-            <tr>
-              <th data-sort="ssid" data-label="Red">Red</th>
-              <th data-sort="channel" data-label="Canal">Canal</th>
-              <th data-sort="rssi" data-label="Señal">Señal</th>
-              <th data-sort="clients" data-label="Clientes">Clientes</th>
-              <th data-sort="security" data-label="Seguridad">Seguridad</th>
-              <th>Estado</th>
-              <th>Acción</th>
-            </tr>
-          </thead>
-          <tbody id="wd-table-body">
-            <tr><td colspan="7" class="muted">—</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="wd-session-block" id="wd-results-block">
-        <div class="wd-session-title">HANDSHAKES CAPTURADOS</div>
-        <div id="wd-results-list" class="wd-results-list">
-          <div class="muted">Sin capturas aún. Selecciona una red y pulsa Auditar.</div>
+      <div id="wd-sub-audit" class="wd-subtab-panel active">
+        <div class="wd-toolbar">
+          <button id="wd-scan-btn">Escanear redes</button>
+          <button id="wd-pause-btn" class="secondary hidden">Pausar</button>
+          <button id="wd-cancel-btn" class="wd-danger hidden">Cancelar ataque</button>
+          <span id="wd-attack-status" class="muted"></span>
+          <input id="wd-search" type="search" placeholder="Buscar red (SSID, BSSID, canal...)" autocomplete="off"
+                 style="margin-left: auto; width: 220px; font-size: 12px; padding: 6px 10px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary);" />
+          <button id="wd-filters-reset" class="secondary" title="Limpiar búsqueda y orden">Borrar filtros</button>
         </div>
-        <div id="wd-verify-list" class="wd-results-list"></div>
-        <div id="wd-dict-progress" class="wd-dict-progress"></div>
+
+        <div class="wd-list-wrap">
+          <table class="wd-table">
+            <thead>
+              <tr>
+                <th data-sort="ssid" data-label="Red">Red</th>
+                <th data-sort="channel" data-label="Canal">Canal</th>
+                <th data-sort="rssi" data-label="Señal">Señal</th>
+                <th data-sort="clients" data-label="Clientes">Clientes</th>
+                <th data-sort="security" data-label="Seguridad">Seguridad</th>
+                <th>Estado</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody id="wd-table-body">
+              <tr><td colspan="7" class="muted">—</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="wd-session-block" id="wd-results-block">
+          <div class="wd-session-title">HANDSHAKES CAPTURADOS</div>
+          <div id="wd-results-list" class="wd-results-list">
+            <div class="muted">Sin capturas aún. Selecciona una red y pulsa Auditar.</div>
+          </div>
+          <div id="wd-verify-list" class="wd-results-list"></div>
+          <div id="wd-dict-progress" class="wd-dict-progress"></div>
+        </div>
+      </div>
+
+      <div id="wd-sub-sessions" class="wd-subtab-panel">
+        <!-- Past sessions browser: every folder is one session (date-named),
+             browse its files and download handshakes/hashes/info.txt. -->
+        <div class="wd-session-block" id="wd-sessions-block" style="margin-top: 0;">
+          <div class="wd-session-title">SESIONES ANTERIORES</div>
+          <div id="wd-sessions-list" class="wd-sessions-list">
+            <div class="muted">—</div>
+          </div>
+          <!-- Dictionary attack progress for a past-session handshake -->
+          <div id="wd-sessions-dict-progress" class="wd-dict-progress"></div>
+          <div id="wd-session-files" class="wd-sessions-files hidden">
+            <div class="wd-session-title" id="wd-session-files-title" style="font-size:12px; margin-top:10px;"></div>
+            <table class="wd-table">
+              <thead>
+                <tr><th>Archivo</th><th>Tamaño</th><th></th><th></th></tr>
+              </thead>
+              <tbody id="wd-session-files-body"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <!-- Attack progress modal: shows step-by-step what's happening.
@@ -245,26 +276,6 @@
           <div class="wd-progress-log" id="wd-progress-log">
             <div class="muted">Esperando inicio...</div>
           </div>
-        </div>
-      </div>
-
-      <!-- Past sessions browser: every folder is one session (date-named),
-           browse its files and download handshakes/hashes/info.txt. -->
-      <div class="wd-session-block" id="wd-sessions-block">
-        <div class="wd-session-title">SESIONES ANTERIORES</div>
-        <div id="wd-sessions-list" class="wd-sessions-list">
-          <div class="muted">—</div>
-        </div>
-        <!-- Dictionary attack progress for a past-session handshake -->
-        <div id="wd-sessions-dict-progress" class="wd-dict-progress"></div>
-        <div id="wd-session-files" class="wd-sessions-files hidden">
-          <div class="wd-session-title" id="wd-session-files-title" style="font-size:12px; margin-top:10px;"></div>
-          <table class="wd-table">
-            <thead>
-              <tr><th>Archivo</th><th>Tamaño</th><th></th><th></th></tr>
-            </thead>
-            <tbody id="wd-session-files-body"></tbody>
-          </table>
         </div>
       </div>
 
@@ -320,20 +331,21 @@
         </div>
       </div>
 
-      <!-- Past-session password viewer (👁): SSID + masked password, eye
-           reveals. Mirrors the live 🔑 modal but reads the session folder. -->
+      <!-- Past-session password viewer (🏴‍☠️): SSID + masked password, the
+           flag button reveals. Mirrors the live 🔑 modal but reads the
+           session folder. -->
       <div id="wd-session-pwd-modal" class="wd-modal hidden">
         <div class="wd-modal-backdrop" onclick="document.getElementById('wd-session-pwd-modal').classList.add('hidden')"></div>
         <div class="wd-modal-content" style="max-width: 380px;">
           <div class="wd-modal-header">
-            <span>Contraseña de la sesión — <span id="wd-session-pwd-ssid">—</span></span>
+            <span>🏴‍☠️ password — <span id="wd-session-pwd-ssid">—</span></span>
             <div class="wd-modal-actions">
               <button id="wd-session-pwd-close" class="secondary">Cerrar</button>
             </div>
           </div>
           <div style="padding: 18px 20px; display: flex; align-items: center; gap: 10px;">
             <span id="wd-session-pwd-value" style="flex: 1; font-family: ui-monospace, monospace; font-size: 15px; letter-spacing: 0.06em; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px;">—</span>
-            <button id="wd-session-pwd-eye" class="secondary" style="font-size: 16px; min-width: 40px;">🙈</button>
+            <button id="wd-session-pwd-eye" class="secondary" style="font-size: 18px; min-width: 44px;" title="Revelar / ocultar">🏴‍☠️</button>
           </div>
         </div>
       </div>

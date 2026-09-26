@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Akbal · AIRCRAFT RADAR</title>
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
   <link rel="stylesheet" href="aircraft-radar.css" />
 </head>
 <body>
@@ -36,6 +37,12 @@
       <div class="plx-toggle" id="platform-toggle" title="Fuente de datos: LIVE usa el HackRF real · DEMO muestra aeronaves sintéticas">
         <span class="plx-toggle-label mode-live" data-mode="live">LIVE</span>
         <span class="plx-toggle-label mode-demo" data-mode="demo">DEMO</span>
+      </div>
+      <div class="hdr-view-toggle" id="ar-view-toggle" role="switch" aria-checked="false" tabindex="0"
+           title="Ver: mapa real de la zona / radar circular por distancia">
+        <span class="hdr-view-label active" id="ar-view-label-map">MAPA</span>
+        <span class="hdr-view-track"><span class="hdr-view-knob"></span></span>
+        <span class="hdr-view-label" id="ar-view-label-radar">RADAR</span>
       </div>
       <button type="button" id="sys-toggle" class="hdr-summary" title="Estado del sistema">
         <span class="hdr-dot" id="hdr-online-dot"></span>
@@ -78,15 +85,21 @@
       <div class="ar-empty" id="ar-empty">Buscando aeronaves…</div>
     </section>
 
-    <!-- Radar: Akbal at the center, aircraft placed by bearing/distance,
-         rings at 10/25/50/100km (docs/aircraft-radar.md). Plain 2D canvas —
-         no 3D needed for a top-down radar, unlike WIFIRADAR's globe. -->
+    <!-- Two views behind the MAPA/RADAR toggle (see index.html/gps.html's
+         MAPA/GLOBO pattern): a real Leaflet map with Akbal + every aircraft
+         plotted by its actual lat/lon (the zone they're flying over), or
+         the circular radar (Akbal at the center, aircraft placed by
+         bearing/distance, rings at 10/25/50/100km). The map needs no GPS
+         fix on Akbal's side to show aircraft — their own ADS-B position is
+         absolute; only Akbal's own marker needs a fix. -->
     <section class="ar-radar-wrap">
-      <canvas id="ar-radar" class="ar-radar"></canvas>
-      <div class="ar-radar-legend">
+      <div id="ar-map" class="ar-map"></div>
+      <canvas id="ar-radar" class="ar-radar hidden"></canvas>
+      <div class="ar-radar-legend hidden" id="ar-radar-legend">
         <span>10</span><span>25</span><span>50</span><span>100 km</span>
       </div>
       <div class="ar-nofix hidden" id="ar-nofix">Sin fix GPS — mostrando lista sin radar</div>
+      <div class="ar-map-error hidden" id="ar-map-error"></div>
     </section>
   </main>
 
@@ -99,6 +112,7 @@
     </div>
   </div>
 
+  <script src="vendor/leaflet/leaflet.js"></script>
   <script type="module" src="aircraft-radar.js"></script>
 </body>
 </html>

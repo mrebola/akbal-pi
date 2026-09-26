@@ -255,7 +255,9 @@ function render() {
 
   if (!latestSnapshot) return;
   const withFix = latestSnapshot.aircraft.filter((a) => a.distanceKm !== null && a.bearingDeg !== null);
-  nofixEl.classList.toggle("hidden", withFix.length > 0 || latestSnapshot.aircraft.length === 0);
+  // Only relevant in radar view — the map plots aircraft by their own
+  // absolute lat/lon and never needs Akbal's fix to do it.
+  nofixEl.classList.toggle("hidden", view !== "radar" || withFix.length > 0 || latestSnapshot.aircraft.length === 0);
 
   for (const aircraft of withFix) {
     const r = Math.min(aircraft.distanceKm / MAX_RANGE_KM, 1) * maxRadiusPx;
@@ -344,7 +346,197 @@ function applySnapshot(snapshot) {
   setTxt("ar-hardware", snapshot.demo ? "DEMO" : (snapshot.hardware || "—"));
   renderList(snapshot);
   render();
+  updateAircraftMarkers(snapshot.aircraft);
 }
+
+// ---- Map view (MAPA/RADAR toggle) — real Leaflet tiles, Akbal + every
+// aircraft plotted by its actual lat/lon (the zone they're flying over),
+// same OSM basemap and divIcon-marker approach as gps.js. Unlike the
+// circular radar, this needs no GPS fix on Akbal's side to place aircraft —
+// only Akbal's own marker does.
+const GPS_POLL_MS = 2000;
+const WORLD_VIEW = { lat: 20, lon: 0, zoom: 2 };
+const FIX_ZOOM = 10; // wider than gps.js's own 15 — aircraft can be tens of km out
+
+let map = null;
+let ownMarker = null;
+let firstFixSeen = false;
+const aircraftMarkers = new Map(); // icao -> L.Marker
+let view = "map"; // "map" | "radar"
+
+function initMap() {
+  const el = document.getElementById("ar-map");
+  const errEl = document.getElementById("ar-map-error");
+  if (!el || typeof L === "undefined") {
+    if (errEl) {
+      errEl.textContent = "No se pudo cargar el motor de mapas (vendor/leaflet) — revisá el deploy.";
+      errEl.classList.remove("hidden");
+    }
+    return;
+  }
+  map = L.map(el, {
+    center: [WORLD_VIEW.lat, WORLD_VIEW.lon],
+    zoom: WORLD_VIEW.zoom,
+    zoomControl: true,
+    attributionControl: true,
+    worldCopyJump: true,
+  });
+  const tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    subdomains: "abc",
+    maxZoom: 19,
+    crossOrigin: true,
+  });
+  tiles.addTo(map);
+  tiles.on("tileerror", () => {
+    if (errEl && errEl.classList.contains("hidden")) {
+      errEl.textContent = "Los tiles del mapa (OpenStreetMap) no cargan — sin salida a internet desde la Pi.";
+      errEl.classList.remove("hidden");
+      clearTimeout(tiles._akbalErrTimer);
+      tiles._akbalErrTimer = setTimeout(() => errEl.classList.add("hidden"), 8000);
+    }
+  });
+}
+
+function updateOwnMarker(lat, lon) {
+  if (!map) return;
+  const pos = [lat, lon];
+  if (!ownMarker) {
+    const icon = L.divIcon({
+      className: "ar-own-marker-wrap",
+      html: '<div class="ar-own-marker"><div class="ar-own-marker-pulse"></div><div class="ar-own-marker-dot"></div></div>',
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+    });
+    ownMarker = L.marker(pos, { icon, title: "Akbal", zIndexOffset: 1000 }).addTo(map);
+  } else {
+    ownMarker.setLatLng(pos);
+  }
+  if (!firstFixSeen) {
+    firstFixSeen = true;
+    map.setView(pos, FIX_ZOOM);
+  }
+}
+
+function clearOwnMarker() {
+  firstFixSeen = false;
+  if (ownMarker) {
+    map.removeLayer(ownMarker);
+    ownMarker = null;
+  }
+}
+
+async function refreshOwnPosition() {
+  try {
+    const res = await fetch("/api/gps/status");
+    if (!res.ok) return;
+    const gps = await res.json();
+    if (gps.hasFix && gps.latitude != null && gps.longitude != null) {
+      updateOwnMarker(gps.latitude, gps.longitude);
+    } else {
+      clearOwnMarker();
+    }
+  } catch {
+    // offline poll — keep whatever marker state we had
+  }
+}
+
+function planeIconHtml(aircraft) {
+  const color = aircraft.approaching === true ? "#50ff78" : aircraft.approaching === false ? "#ff6b6b" : "#ffd166";
+  const rotation = aircraft.headingDeg ?? 0;
+  return `
+    <div class="ar-plane-marker" style="transform: rotate(${rotation}deg)">
+      <svg width="20" height="20" viewBox="0 0 24 24">
+        <path d="M12 2 L19 20 L12 16 L5 20 Z" fill="${color}" stroke="#0b0d0f" stroke-width="1"/>
+      </svg>
+    </div>
+  `;
+}
+
+// Adds/updates a marker per aircraft that has a real lat/lon, and removes
+// markers for aircraft that dropped out of the snapshot (out of range,
+// pruned) — same "only what's currently tracked" rule as the list/radar.
+function updateAircraftMarkers(aircraftList) {
+  if (!map) return;
+  const seen = new Set();
+  for (const aircraft of aircraftList) {
+    if (aircraft.latitude === null || aircraft.longitude === null) continue;
+    seen.add(aircraft.icao);
+    const pos = [aircraft.latitude, aircraft.longitude];
+    let marker = aircraftMarkers.get(aircraft.icao);
+    if (!marker) {
+      const icon = L.divIcon({
+        className: "ar-plane-marker-wrap",
+        html: planeIconHtml(aircraft),
+        iconSize: [20, 20],
+        iconAnchor: [10, 10],
+      });
+      marker = L.marker(pos, { icon, title: displayName(aircraft) }).addTo(map);
+      marker.bindTooltip(displayName(aircraft), {
+        permanent: true,
+        direction: "top",
+        offset: [0, -8],
+        className: "ar-plane-label",
+      });
+      marker.on("click", () => openDetail(aircraft));
+      aircraftMarkers.set(aircraft.icao, marker);
+    } else {
+      marker.setLatLng(pos);
+      marker.setIcon(
+        L.divIcon({
+          className: "ar-plane-marker-wrap",
+          html: planeIconHtml(aircraft),
+          iconSize: [20, 20],
+          iconAnchor: [10, 10],
+        }),
+      );
+    }
+  }
+  for (const [icao, marker] of aircraftMarkers) {
+    if (!seen.has(icao)) {
+      map.removeLayer(marker);
+      aircraftMarkers.delete(icao);
+    }
+  }
+}
+
+function initViewToggle() {
+  const toggle = document.getElementById("ar-view-toggle");
+  if (!toggle) return;
+  const activate = () => setView(view === "map" ? "radar" : "map");
+  toggle.addEventListener("click", activate);
+  toggle.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      activate();
+    }
+  });
+}
+
+function setView(next) {
+  view = next;
+  const isRadar = view === "radar";
+  document.getElementById("ar-map")?.classList.toggle("hidden", isRadar);
+  document.getElementById("ar-radar")?.classList.toggle("hidden", !isRadar);
+  document.getElementById("ar-radar-legend")?.classList.toggle("hidden", !isRadar);
+  const toggle = document.getElementById("ar-view-toggle");
+  toggle?.classList.toggle("on", isRadar);
+  toggle?.setAttribute("aria-checked", isRadar ? "true" : "false");
+  document.getElementById("ar-view-label-map")?.classList.toggle("active", !isRadar);
+  document.getElementById("ar-view-label-radar")?.classList.toggle("active", isRadar);
+  if (isRadar) {
+    resizeCanvas();
+  } else if (map) {
+    // Leaflet can't measure a container that was display:none — force a
+    // remeasure now that it's visible again (same fix gps.js uses).
+    map.invalidateSize({ animate: false });
+  }
+}
+
+initMap();
+initViewToggle();
+void refreshOwnPosition();
+setInterval(() => void refreshOwnPosition(), GPS_POLL_MS);
 
 // ---- live snapshot stream ----
 function connectWs() {

@@ -90,6 +90,21 @@ export interface Status {
   }[];
   radar_ui_count: number;
   radar_ui_channel: number;
+  // Simplified Aircraft Radar screen (chat-flow/aircraft-radar-mode.ts,
+  // docs/aircraft-radar.md) — same dedicated-screen shape as radar_ui above,
+  // reusing chatbot-ui.py's disc-of-points renderer but with real GPS
+  // bearing/distance angles instead of a hashed layout, and "unavailable"
+  // covering both "no HackRF" and "no GPS fix". Kept as its own field
+  // rather than overloading radar_ui so both screens can't collide, and so
+  // the LCD title reads "AIRCRAFT RADAR" instead of "WIFI RADAR".
+  aircraft_radar_ui: "" | "view" | "unavailable";
+  aircraft_radar_ui_points: {
+    angle: number;
+    radius: number;
+    strength: "strong" | "mid" | "weak";
+    featured: boolean;
+  }[];
+  aircraft_radar_ui_count: number;
   // Small always-on indicator in the top bar (see render_top_bar in
   // chatbot-ui.py) showing whether the device is answering via OpenClaw or
   // the local model — see docs/agent-mode.md.
@@ -149,6 +164,9 @@ export class WhisplayDisplay {
     radar_ui_points: [],
     radar_ui_count: 0,
     radar_ui_channel: 0,
+    aircraft_radar_ui: "",
+    aircraft_radar_ui_points: [],
+    aircraft_radar_ui_count: 0,
     top_bar_mode: "",
     wardrive_ui: "",
     wardrive_label: "",
@@ -530,6 +548,9 @@ export class WhisplayDisplay {
       radar_ui_points,
       radar_ui_count,
       radar_ui_channel,
+      aircraft_radar_ui,
+      aircraft_radar_ui_points,
+      aircraft_radar_ui_count,
       top_bar_mode,
       wardrive_ui,
       wardrive_label,
@@ -588,6 +609,9 @@ export class WhisplayDisplay {
     this.currentStatus.radar_ui_points = radar_ui_points;
     this.currentStatus.radar_ui_count = radar_ui_count;
     this.currentStatus.radar_ui_channel = radar_ui_channel;
+    this.currentStatus.aircraft_radar_ui = aircraft_radar_ui;
+    this.currentStatus.aircraft_radar_ui_points = aircraft_radar_ui_points;
+    this.currentStatus.aircraft_radar_ui_count = aircraft_radar_ui_count;
     this.currentStatus.top_bar_mode = top_bar_mode;
     this.currentStatus.wardrive_ui = wardrive_ui;
     this.currentStatus.wardrive_label = wardrive_label;

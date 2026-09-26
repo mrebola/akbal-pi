@@ -13,6 +13,14 @@ import { getWifiRadarSnapshot, setWifiRadarMode, getWifiRadarMode, getWifiRadarR
 import { detectMonitorAdapter } from "../wifiradar/adapter";
 import { getWardriveService } from "../wardrive/service";
 import {
+  getAircraftRadarSnapshot,
+  getAircraftByIcao,
+  setAircraftRadarMode,
+  getAircraftRadarMode,
+  getAircraftRadarRequestedMode,
+} from "../services/adsb/service";
+import { getRecentHistory, getHistoryForIcao } from "../services/adsb/history";
+import {
   getCurrentModel,
   isModelLoaded,
   listOllamaModelsWithSize,
@@ -244,6 +252,15 @@ export class WebAdminServer {
       ctx.set("Cache-Control", "no-store");
       ctx.type = "text/html";
       ctx.body = fs.createReadStream(path.resolve(__dirname, "../..", "web", "admin", "wifiradar.html"));
+    });
+
+    // Aircraft Radar — HackRF One + dump1090 ADS-B (docs/aircraft-radar.md).
+    // Own page like /wifiradar; live data streams over /aircraft-radar/ws
+    // (see start()), this route just serves the page shell.
+    router.get("/aircraft-radar", (ctx) => {
+      ctx.set("Cache-Control", "no-store");
+      ctx.type = "text/html";
+      ctx.body = fs.createReadStream(path.resolve(__dirname, "../..", "web", "admin", "aircraft-radar.html"));
     });
 
     // GPS — fullscreen world map with the dongle's live position (docs/gps.md).
@@ -925,6 +942,59 @@ export class WebAdminServer {
       };
     });
 
+    // ── AIRCRAFT RADAR (HackRF One + dump1090 ADS-B) ──
+    // Same live/demo shape as WIFIRADAR above — also wired into the shared
+    // platform mode toggle (utils/platform-mode.ts), but exposed here too
+    // for a per-feature toggle independent of GPS/WiFi Radar.
+    router.get("/api/aircraft", (ctx) => {
+      ctx.body = getAircraftRadarSnapshot();
+    });
+
+    router.get("/api/aircraft/nearest", (ctx) => {
+      const snapshot = getAircraftRadarSnapshot();
+      const nearest = snapshot.aircraft.find((a) => a.distanceKm !== null) || snapshot.aircraft[0] || null;
+      ctx.body = nearest;
+    });
+
+    router.get("/api/aircraft/history", (ctx) => {
+      const minutes = parseInt(String(ctx.query.minutes || "30"), 10) || 30;
+      const icao = ctx.query.icao ? String(ctx.query.icao) : null;
+      ctx.body = icao
+        ? getHistoryForIcao(icao)
+        : getRecentHistory(Date.now() - minutes * 60_000);
+    });
+
+    router.post("/api/aircraft/mode", async (ctx) => {
+      const { mode } = (ctx.request.body as any) || {};
+      if (mode !== "demo" && mode !== "live") {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "mode debe ser 'demo' o 'live'" };
+        return;
+      }
+      const applied = await setAircraftRadarMode(mode);
+      ctx.body = { ok: true, mode: applied, requested: getAircraftRadarRequestedMode() };
+    });
+
+    router.get("/api/aircraft/mode", (ctx) => {
+      ctx.body = {
+        mode: getAircraftRadarMode(),
+        requested: getAircraftRadarRequestedMode(),
+      };
+    });
+
+    // :icao catch-all must come after every more specific /api/aircraft/*
+    // route above — @koa/router matches path segments literally, so e.g.
+    // "/api/aircraft/nearest" would otherwise be captured as icao="nearest".
+    router.get("/api/aircraft/:icao", (ctx) => {
+      const aircraft = getAircraftByIcao(ctx.params.icao);
+      if (!aircraft) {
+        ctx.status = 404;
+        ctx.body = { error: "Aeronave no encontrada" };
+        return;
+      }
+      ctx.body = aircraft;
+    });
+
     router.get("/api/wardrive/status", (ctx) => {
       ctx.body = wardrive.getStatus();
     });
@@ -1462,12 +1532,13 @@ export class WebAdminServer {
     // a firewall — `noServer: true` + a manual `upgrade` handler below is
     // what makes that possible, and is also where the session cookie gets
     // checked, since a WebSocket upgrade request never goes through Koa.
+    const WS_PATHS = ["/wifiradar/ws", "/aircraft-radar/ws"];
     this.wss = new WebSocketServer({ noServer: true });
     this.server.on("upgrade", (req, socket, head) => {
       // req.url can carry a query string (/wifiradar/ws?fullMac=1) — strip it
       // for the path check or the upgrade is rejected and the socket dies.
       const pathname = (req.url || "").split("?")[0];
-      if (pathname !== "/wifiradar/ws" || !this.isValidSessionCookie(req.headers.cookie)) {
+      if (!WS_PATHS.includes(pathname) || !this.isValidSessionCookie(req.headers.cookie)) {
         socket.destroy();
         return;
       }
@@ -1477,13 +1548,16 @@ export class WebAdminServer {
     });
     this.wss.on("connection", (ws: WebSocket, req) => {
       const url = new URL(req.url || "", "http://localhost");
-      const revealFullMac = url.searchParams.get("fullMac") === "1";
       const send = () => {
         if (ws.readyState !== WebSocket.OPEN) return;
         try {
-          ws.send(JSON.stringify(getWifiRadarSnapshot(revealFullMac)));
+          if (url.pathname === "/aircraft-radar/ws") {
+            ws.send(JSON.stringify(getAircraftRadarSnapshot()));
+          } else {
+            ws.send(JSON.stringify(getWifiRadarSnapshot(url.searchParams.get("fullMac") === "1")));
+          }
         } catch (err) {
-          console.warn("[WebAdmin] wifiradar ws send failed:", err);
+          console.warn("[WebAdmin] radar ws send failed:", err);
         }
       };
       send();

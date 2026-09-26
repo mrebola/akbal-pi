@@ -6,6 +6,7 @@ import { setWifiRadarMode, getWifiRadarRequestedMode, stopWifiRadarService } fro
 import { exitMonitorMode } from "../wardrive/monitor";
 import { detectMonitorAdapter } from "../wifiradar/adapter";
 import { setGpsDemoMode } from "./gps";
+import { setAircraftRadarMode } from "../services/adsb/service";
 
 const execFileAsync = promisify(execFile);
 
@@ -88,13 +89,15 @@ export async function setPlatformMode(mode: PlatformMode): Promise<{ ok: boolean
     if (mode === "demo") {
       // 1. Radar to demo (stops the dumpcap capture on the wifi adapter).
       await setWifiRadarMode("demo").catch(() => {});
-      // 2. GPS dongle: stop the NMEA reader, park the device.
+      // 2. Aircraft Radar to demo (stops hackrf_transfer|dump1090).
+      await setAircraftRadarMode("demo").catch(() => {});
+      // 3. GPS dongle: stop the NMEA reader, park the device.
       setGpsDemoMode(true);
-      // 3. WiFi adapter: out of monitor, link down (radar already released it).
+      // 4. WiFi adapter: out of monitor, link down (radar already released it).
       await releaseWifiAdapter();
-      // 4. USB serial rebind: frees the GPS tty.
+      // 5. USB serial rebind: frees the GPS tty.
       await usbAuthRebind("unbind");
-      // 5. An active wardrive session would fight the release — close it.
+      // 6. An active wardrive session would fight the release — close it.
       currentMode = "demo";
       platformEvents.emit("mode", currentMode);
       console.log("[platform] mode → DEMO (dongles released, synthetic data everywhere)");
@@ -106,6 +109,8 @@ export async function setPlatformMode(mode: PlatformMode): Promise<{ ok: boolean
       setGpsDemoMode(false);
       // 3. Radar back to live.
       await setWifiRadarMode("live").catch(() => {});
+      // 4. Aircraft Radar back to live.
+      await setAircraftRadarMode("live").catch(() => {});
       currentMode = "live";
       platformEvents.emit("mode", currentMode);
       console.log("[platform] mode → LIVE (real hardware feeding panels)");

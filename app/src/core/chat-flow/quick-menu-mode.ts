@@ -16,6 +16,7 @@ export type QuickMenuKey =
   | "wifi_connect"
   | "network"
   | "wifiradar"
+  | "aircraft_radar"
   | "jukebox";
 
 type QuickMenuItem = { key: QuickMenuKey; label: string; description: string };
@@ -31,6 +32,7 @@ const BASE_ITEMS: QuickMenuItem[] = [
   { key: "wifi_connect", label: "Wifi connect", description: "Conectate directo por wifi" },
   { key: "network", label: "Conexión web", description: "IP, tailscale y QR" },
   { key: "wifiradar", label: "WiFi Radar", description: "Ver redes cercanas" },
+  { key: "aircraft_radar", label: "Aviones", description: "Ver tráfico aéreo cercano" },
 ];
 
 const SHORT_PRESS_MAX_MS = 400;

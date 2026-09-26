@@ -8,6 +8,7 @@ import { registerShutdownHook } from "./device/display";
 import { startWifiRadarService, stopWifiRadarService } from "./wifiradar/service";
 import { getWardriveService } from "./wardrive/service";
 import { startWardriveDisplayMirror } from "./core/chat-flow/wardrive-mode";
+import { startAircraftRadarService, stopAircraftRadarService } from "./services/adsb/service";
 
 dotenv.config();
 
@@ -24,6 +25,17 @@ startVpnStatus();
 // system for why this isn't a plain SIGTERM listener here.
 startWifiRadarService();
 registerShutdownHook(() => stopWifiRadarService());
+
+// Aircraft Radar (HackRF One + dump1090, RX-only ADS-B — docs/aircraft-radar.md).
+// Same unconditional-start + auto-fallback-to-demo shape as WIFIRADAR above:
+// no HackRF plugged in just means detectHackRf() fails and the service runs
+// its DemoGenerator instead, so the physical menu screen and the web page
+// both still work without the hardware. ADSB_ENABLED lets it be turned off
+// entirely for anyone who doesn't want the extra sweep timer / SQLite file.
+if ((process.env.ADSB_ENABLED || "true").toLowerCase() !== "false") {
+  startAircraftRadarService();
+  registerShutdownHook(() => stopAircraftRadarService());
+}
 
 // WARDRIVE (thesis/lab handshake capture — wardrive/service.ts). Service
 // only: entering the mode is a web-admin action (POST /api/wardrive/enter).

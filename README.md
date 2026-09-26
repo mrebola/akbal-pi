@@ -20,10 +20,12 @@ El proyecto toma como base el repositorio [PiSugar/whisplay-ai-chatbot](https://
 | — | [Comandos de voz](#comandos-de-voz-instantáneos-no-gastan-turno) | Atajos instantáneos ("ayuda", volumen, modelo...) |
 | — | [Menú rápido](#menú-rápido-click-corto-en-reposo) | Los 10 modos de la app física y sus gestos |
 | — | [WiFi Radar en pantalla](#wifi-radar-pantalla) | Radar de redes en la LCD física |
+| — | [Aircraft Radar en pantalla](#aircraft-radar-pantalla) | Radar de aeronaves (ADS-B) en la LCD física |
 | **Sitio web** (`http://<ip>:8090`) | | |
 | — | [Chat](#chat) | Chat escrito con el LLM local |
 | — | [WiFi](#wifi-pestaña-sub-pestañas-conexión-redes) | Conexión, redes, punto de acceso |
 | — | [WIFIRADAR 3D](#wifiradar-wifiradar-link-radar-wi-fi) | Radar 3D con toggle REAL/DEMO |
+| — | [Aircraft Radar](#aircraft-radar-aircraft-radar-link-aviones) | Tráfico aéreo (ADS-B) vía HackRF One |
 | — | [Wardriving](#wardriving-pestaña) | Auditoría de handshakes (allowlist, ataques, sesiones) |
 | — | [OST](#ost-pestaña-música) | Jukebox de música |
 | — | [Dispositivos](#dispositivos-pestaña-usb) | USB, montaje, adaptadores WiFi |
@@ -62,6 +64,7 @@ Raspberry Pi OS 64-bit, basado en Debian Trixie.
 | WiFi Radar | Visualización 3D (Three.js) del espacio WiFi alrededor del Pi, capturado pasivamente con cualquier adaptador USB en modo monitor (detección genérica; probado con Atheros AR9271 y Ralink RT5372) — toggle real/demo y caída a demo con datos simulados si no hay hardware conectado. Fabricantes resueltos del registro IEEE local (ieee-data), con fallback opcional a la API de macvendors.com ([`docs/wifiradar.md`](docs/wifiradar.md)) |
 | Wardriving | Captura de handshakes para laboratorio/tesis: allowlist explícita de BSSIDs como único mecanismo de autorización, ataques pmkid/deauth con aircrack-ng, sesiones con artifacts descargables desde la web, contraseñas crackeadas visibles por sesión (ojo con revelado) y dictionary attack (rockyou) desde el listado de sesiones — probado contra un AP de laboratorio dedicado ([`docs/wardrive.md`](docs/wardrive.md), [`docs/lab-wireless.md`](docs/lab-wireless.md)) |
 | GPS | Mapa mundial con la posición en vivo del dongle GPS USB: marcador, precisión, sky plot de satélites (en fix / visibles / necesarios) — [`docs/gps.md`](docs/gps.md) |
+| Aircraft Radar | Aeronaves cercanas por ADS-B (1090MHz) con un HackRF One en modo RX-only: lista + radar circular por distancia/rumbo real (vía el GPS del Pi), identidad (matrícula/modelo/aerolínea) y ruta resueltas por caché local + adsbdb.com, historial en SQLite y caída a demo si no hay HackRF conectado ([`docs/aircraft-radar.md`](docs/aircraft-radar.md)) |
 
 Detalle completo del setup en [`docs/SETUP.md`](docs/SETUP.md).
 
@@ -338,6 +341,7 @@ con estos modos, cada uno con su propio control:
 | **Wifi connect** | Convierte la wifi de la Pi en un punto de acceso **`akbal-pi`** con QR en pantalla: escanéalo con un celular para conectarte directo (y abrir la web admin). Dos QR navegables con click: wifi y web. En cuanto un teléfono se conecta, salta solo al QR web. **Mantener** desactiva el AP y sale; **doble clic** sale dejándolo activo. |
 | **Conexión web** | Muestra la IP LAN y de Tailscale del dispositivo + QR apuntando a la web admin (`http://<ip>:8090`). Es la forma de saber a qué URL conectarse. |
 | **WiFi Radar** | Versión de pantalla del radar WiFi (detalle abajo): discos con puntos por red cercana, texto inferior rotando nombre + dBm. **Mantener** para salir. |
+| **Aviones** | Versión de pantalla del Aircraft Radar (detalle abajo): disco con un punto por aeronave, ubicado por su rumbo/distancia GPS reales. **Mantener** para salir. |
 
 El menú se cierra solo tras **60 segundos** sin tocar el botón.
 
@@ -349,6 +353,17 @@ franja inferior rota entre las redes visibles. Si no hay adaptador USB con modo
 monitor conectado muestra "Sin adaptador WiFi compatible"; con el toggle global
 en demo muestra datos sintéticos con un prefijo "DEMO · ". Entra desde el menú
 rápido; mantener presionado para salir.
+
+### Aircraft Radar (pantalla)
+
+Aeronaves detectadas por ADS-B (HackRF One), mostradas como puntos en el mismo
+tipo de disco — pero ubicados por el rumbo/distancia GPS reales de cada avión
+contra la posición del Pi, no por un hash. El color indica si se acerca (verde)
+o se aleja (rojo); amarillo mientras no hay fix GPS para calcularlo. La franja
+inferior rota callsign + distancia + rumbo. Sin HackRF conectado muestra "Sin
+HackRF conectado o sin fix GPS"; en demo, aeronaves sintéticas con prefijo
+"DEMO · ". Entra desde el menú rápido ("Aviones"); mantener presionado para
+salir. Detalle completo en [`docs/aircraft-radar.md`](docs/aircraft-radar.md).
 
 ## Sitio web de administración (`http://<ip>:8090`)
 
@@ -432,6 +447,18 @@ visibles M/total, coloreados por SNR). Sin fix indica cuántos satélites hay
 y cuántos faltan. Funciona con u-blox y clones (`ttyACM*`/`ttyUSB*`), con o
 sin `gpsd` — ver [`docs/gps.md`](docs/gps.md).
 
+### Aircraft Radar (`/aircraft-radar`, link "Aviones")
+
+Lista de aeronaves cercanas ordenada por distancia + radar circular (Akbal al
+centro, anillos de 10/25/50/100km) alimentado por un HackRF One en 1090MHz.
+Cada tarjeta/punto muestra callsign, matrícula/modelo/aerolínea (resueltos por
+caché local + adsbdb.com), ruta origen→destino ("Route unknown" si no se puede
+confirmar), altitud, velocidad y distancia/rumbo reales vía el GPS del Pi.
+Click en un punto o tarjeta abre el detalle completo. Mismo toggle LIVE/DEMO
+que WIFIRADAR — sin HackRF conectado cae a aeronaves sintéticas con prefijo
+"DEMO · ". Solo recepción: el HackRF nunca transmite. Detalle completo en
+[`docs/aircraft-radar.md`](docs/aircraft-radar.md).
+
 ### OST (pestaña Música)
 
 Jukebox del OST de Cypher: playlist fija local con play/pausa, siguiente/
@@ -471,6 +498,8 @@ radar/wardrive para decidir si pueden operar).
 Todo lo anterior también es accesible programáticamente bajo `/api/*` con la
 misma sesión de cookie: `/api/status`, `/api/chat`, `/api/wifi/scan`,
 `/api/wifiradar/snapshot` + `POST /api/wifiradar/mode`
-(`{"mode":"live"|"demo"}`), `/api/wardrive/*` (`enter`, `exit`, `source`,
+(`{"mode":"live"|"demo"}`), `/api/aircraft` + `/api/aircraft/:icao` +
+`/api/aircraft/nearest` + `/api/aircraft/history` + `POST /api/aircraft/mode`,
+`/api/wardrive/*` (`enter`, `exit`, `source`,
 `allowlist`, `attack/one`, ...), `/api/music/*`, `/api/usb/*`, `/api/backup/*`.
 Ver `app/src/device/web-admin-server.ts` para la lista completa.

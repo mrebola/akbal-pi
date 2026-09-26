@@ -26,7 +26,8 @@ export type FlowName =
   | "volume_adjust"
   | "wifi_connect"
   | "network_info"
-  | "wifi_radar";
+  | "wifi_radar"
+  | "aircraft_radar";
 
 export type FlowStateHandler = (ctx: ChatFlowContext) => void;
 

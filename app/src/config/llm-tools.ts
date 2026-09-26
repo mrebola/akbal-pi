@@ -7,6 +7,7 @@ import { addWebSearchTools } from "./web-search";
 import { addLocalMemoryTools } from "./local-memory";
 import { addMemPalaceTools } from "./mempalace";
 import { addHarnessCommandTools } from "./harness-command";
+import { addAircraftRadarTools } from "./aircraft-radar-tools";
 import { pluginRegistry } from "../plugin";
 
 // ── Collect tools from all llm-tools plugins ────────────────
@@ -50,6 +51,7 @@ addWebSearchTools(pluginTools);
 addLocalMemoryTools(pluginTools);
 addMemPalaceTools(pluginTools);
 addHarnessCommandTools(pluginTools);
+addAircraftRadarTools(pluginTools);
 
 // ── Exported aggregated tool lists ──────────────────────────
 export const llmTools: LLMTool[] = [...pluginTools];

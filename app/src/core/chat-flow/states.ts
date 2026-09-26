@@ -111,6 +111,13 @@ import {
   handleWifiRadarRelease,
   onWifiRadarExit,
 } from "./wifi-radar-mode";
+import {
+  enterAircraftRadarMode,
+  handleAircraftRadarDoubleClick,
+  handleAircraftRadarPress,
+  handleAircraftRadarRelease,
+  onAircraftRadarExit,
+} from "./aircraft-radar-mode";
 import { isAgentMode, setDeviceMode } from "../../config/device-mode";
 import { setAudioOutputTarget } from "../../config/audio-output";
 import { connectSpeaker } from "../../device/bluetooth-audio";
@@ -261,6 +268,10 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       }
       if (key === "wifiradar") {
         ctx.transitionTo("wifi_radar");
+        return;
+      }
+      if (key === "aircraft_radar") {
+        ctx.transitionTo("aircraft_radar");
         return;
       }
       const captureImgPath = `${cameraDir}/capture-${moment().format(
@@ -1264,5 +1275,16 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     onButtonPressed(() => handleWifiRadarPress());
     onButtonReleased(() => handleWifiRadarRelease());
     enterWifiRadarMode();
+  },
+  aircraft_radar: (ctx: ChatFlowContext) => {
+    onAircraftRadarExit(() => {
+      if (ctx.currentFlowName === "aircraft_radar") {
+        ctx.transitionTo("sleep");
+      }
+    });
+    onButtonDoubleClick(() => handleAircraftRadarDoubleClick());
+    onButtonPressed(() => handleAircraftRadarPress());
+    onButtonReleased(() => handleAircraftRadarRelease());
+    enterAircraftRadarMode();
   },
 };

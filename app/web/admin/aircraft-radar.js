@@ -235,7 +235,10 @@ function renderList(snapshot) {
         <span>${aircraft.bearingDeg === null ? "" : `${bearingCompass(aircraft.bearingDeg)} ${Math.round(aircraft.bearingDeg)}°`}</span>
       </div>
     `;
-    card.addEventListener("click", () => openDetail(aircraft));
+    card.addEventListener("click", () => {
+      openDetail(aircraft);
+      centerMapOn(aircraft);
+    });
     listEl.appendChild(card);
   }
 }
@@ -334,6 +337,31 @@ canvas.addEventListener("click", (ev) => {
   }
   if (closest) openDetail(closest);
 });
+
+// Looks up an aircraft's current data by ICAO in the latest snapshot —
+// used instead of trusting a closure-captured aircraft object wherever
+// that closure can outlive a single snapshot (the map marker's click
+// handler is only created once per aircraft, not every snapshot like the
+// list cards are, so a stale capture there would show whatever
+// altitude/speed/position the aircraft had back when its marker was first
+// created instead of its current data).
+function findAircraft(icao) {
+  if (!latestSnapshot) return null;
+  return latestSnapshot.aircraft.find((a) => a.icao === icao) || null;
+}
+
+const CLICK_CENTER_ZOOM = 12;
+
+// Pans/zooms the map to an aircraft's position and switches to MAP view if
+// the radar view is currently showing — called from the list, so "center
+// the map" is only meaningful if the map is what's actually on screen.
+function centerMapOn(aircraft) {
+  if (!map || aircraft.latitude === null || aircraft.longitude === null) return;
+  if (view !== "map") setView("map");
+  map.setView([aircraft.latitude, aircraft.longitude], Math.max(map.getZoom(), CLICK_CENTER_ZOOM), {
+    animate: true,
+  });
+}
 
 function openDetail(aircraft) {
   selectedIcao = aircraft.icao;
@@ -656,7 +684,8 @@ function updateAircraftMarkers(aircraftList) {
         offset: [0, -8],
         className: "ar-plane-label",
       });
-      marker.on("click", () => openDetail(aircraft));
+      const icao = aircraft.icao; // captured once — look up fresh data at click time, see findAircraft()
+      marker.on("click", () => openDetail(findAircraft(icao) || aircraft));
       aircraftMarkers.set(aircraft.icao, marker);
     } else {
       marker.setLatLng(pos);

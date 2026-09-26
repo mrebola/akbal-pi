@@ -332,3 +332,20 @@ cielo), el mapa se quedaba para siempre en la vista mundial inicial aun
 cuando sí llegaba una aeronave real con posición. Ahora el encuadre
 incluye la posición de Akbal *cuando existe*, pero se calcula igual
 solo con las aeronaves si no la hay.
+
+### Click en una aeronave — centrar mapa + datos siempre frescos
+
+Click en una tarjeta de la lista: abre el detalle (como antes) **y**
+centra/zoomea el mapa a la posición de esa aeronave (`centerMapOn()`,
+zoom 12 salvo que ya se esté más cerca) — cambia a la vista MAPA
+primero si estaba en RADAR, porque centrar un mapa que no se ve no
+sirve de nada.
+
+Bug real encontrado y arreglado de paso: el marcador de cada aeronave en
+el mapa solo se crea una vez (`L.marker` no se recrea cada snapshot, a
+diferencia de las tarjetas de la lista, que sí) — su `click` handler
+original capturaba el objeto `aircraft` de ese primer momento, así que
+con el tiempo mostraba datos cada vez más viejos (altitud/velocidad/
+posición de cuando se creó el marcador, no las actuales). Ahora busca la
+aeronave fresca en el snapshot más reciente por ICAO (`findAircraft()`)
+en el momento del click, en vez de confiar en el closure.

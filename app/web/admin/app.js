@@ -2428,7 +2428,7 @@ async function wdLoadSessions() {
           .join(", ");
         // Eye icon per cracked network (SSID + masked password, eye reveals).
         const eyeBtns = (s.found || [])
-          .map((f) => `<button class="wd-session-eye" data-id="${s.id}" data-bssid="${f.bssid}" title="Ver contraseña de ${escapeHtml(f.ssid || f.bssid)}">👁</button>`)
+          .map((f) => `<button class="wd-session-eye" data-id="${s.id}" data-bssid="${f.bssid}" title="password — ${escapeHtml(f.ssid || f.bssid)}">🏴‍☠️</button>`)
           .join("");
         // Handshake download: first .cap/.pcapng/.hc22000 of any captured target.
         const hsTarget = (s.targets || []).find((t) => t.status === "captured");
@@ -2467,8 +2467,8 @@ async function wdLoadSessions() {
 // hexdump head) + download. Kept open until "Cerrar".
 let wdOpenSessionId = null;
 
-// ── Past-session password (👁) ──
-// SSID + masked password; the eye inside the modal reveals it fully.
+// ── Past-session password (🏴‍☠️) ──
+// SSID + masked password; the pirate flag inside the modal reveals it fully.
 function wdMaskPassword(password) {
   return password.length <= 3
     ? "•".repeat(password.length)

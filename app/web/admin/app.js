@@ -2710,8 +2710,6 @@ wdScanBtn.addEventListener("click", async () => {
 // REAL/DEMO toggle for the wardrive discovery source (same preference as
 // the radar's SRC toggle — both call the same backend state).
 async function wdSetSource(next) {
-  const srcToggleInput = document.getElementById("wd-src-toggle-input");
-  wdSrcBtn.disabled = true;
   const toggle = document.getElementById("wd-src-toggle");
   if (toggle) toggle.style.opacity = "0.6";
   try {
@@ -2724,12 +2722,13 @@ async function wdSetSource(next) {
     if (data?.ok) wdSource = data.source;
   } catch { /* keep previous state */ }
   wdRenderSourceBtn();
-  wdSrcBtn.disabled = false;
   if (toggle) toggle.style.opacity = "";
   void wdRefresh();
 }
 
-wdSrcBtn.addEventListener("click", async () => {
+// The REAL button no longer exists in the DOM (replaced by the iOS switch) —
+// keep a no-op listener only if it ever comes back.
+wdSrcBtn?.addEventListener("click", async () => {
   await wdSetSource(wdSource === "demo" ? "live" : "demo");
 });
 
@@ -2759,12 +2758,17 @@ function wdRenderSourceBtn() {
       ? "Descubrimiento demo (sin radio) — click para volver a live"
       : "Descubrimiento real — click para pasar a datos demo";
   }
-  wdSrcBtn.classList.add("hidden"); // replaced by the iOS switch
-  wdSrcBtn.textContent = isDemo ? "DEMO" : "REAL";
-  wdSrcBtn.classList.toggle("active", isDemo);
-  wdSrcBtn.title = isDemo
-    ? "Descubrimiento demo (sin radio) — click para volver a real"
-    : "Descubrimiento real — click para pasar a datos demo";
+  // The REAL button was replaced by the iOS switch and no longer exists in
+  // the DOM — guard every access (a null here killed the whole wardrive
+  // render on every 2s tick).
+  wdSrcBtn?.classList.add("hidden"); // replaced by the iOS switch
+  if (wdSrcBtn) {
+    wdSrcBtn.textContent = isDemo ? "DEMO" : "REAL";
+    wdSrcBtn.classList.toggle("active", isDemo);
+    wdSrcBtn.title = isDemo
+      ? "Descubrimiento demo (sin radio) — click para volver a real"
+      : "Descubrimiento real — click para pasar a datos demo";
+  }
   // With demo source, entering wardriving works without any adapter.
   wdEnterBtn.disabled = wdStatus?.mode === "inactive" ? false : !wdStatus?.mode;
   wdEnterBtn.disabled = false;

@@ -1163,13 +1163,14 @@ button.secondary {
   background: rgba(251, 146, 60, 0.1);
 }
 
-/* ---- iOS-style live/demo switch (wardrive toolbar, top right) ---- */
+/* ---- iOS-style live/demo switch (wardrive toolbar, right side) ---- */
 
 .wd-src-switch {
   display: inline-flex;
   align-items: center;
   cursor: pointer;
   user-select: none;
+  margin-left: auto; /* right-aligned within the toolbar flexbox */
 }
 
 .wd-src-switch input {

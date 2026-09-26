@@ -182,10 +182,9 @@
 
       <div id="wd-error" class="error"></div>
 
-      <div class="wd-toolbar" style="position: relative;">
-        <!-- iOS-style live/demo switch, pinned top right -->
-        <label class="wd-src-switch" id="wd-src-toggle" title="Modo de descubrimiento: red real (live) o datos demo"
-               style="position: absolute; top: -14px; right: 0;">
+      <div class="wd-toolbar">
+        <!-- iOS-style live/demo switch (right-aligned, in toolbar flow) -->
+        <label class="wd-src-switch" id="wd-src-toggle" title="Modo de descubrimiento: red real (live) o datos demo">
           <input type="checkbox" id="wd-src-toggle-input" aria-label="Modo demo" />
           <span class="wd-src-switch-track">
             <span class="wd-src-switch-labels"><span>mode: live</span><span>mode: demo</span></span>
@@ -197,7 +196,7 @@
         <button id="wd-cancel-btn" class="wd-danger hidden">Cancelar ataque</button>
         <span id="wd-attack-status" class="muted"></span>
         <input id="wd-search" type="search" placeholder="Buscar red (SSID, BSSID, canal...)" autocomplete="off"
-               style="margin-left: auto; width: 220px; font-size: 12px; padding: 6px 10px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary);" />
+               style="width: 220px; font-size: 12px; padding: 6px 10px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary);" />
         <button id="wd-filters-reset" class="secondary" title="Limpiar búsqueda y orden">Borrar filtros</button>
       </div>
 

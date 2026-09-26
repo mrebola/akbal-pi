@@ -7,6 +7,9 @@
   <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
   <link rel="stylesheet" href="aircraft-radar.css" />
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three.module.min.js" } }
+  </script>
 </head>
 <body>
   <!-- Same topbar as the rest of the admin UI (see index.html/wifiradar.html) —
@@ -94,6 +97,12 @@
          absolute; only Akbal's own marker needs a fix. -->
     <section class="ar-radar-wrap">
       <div id="ar-map" class="ar-map"></div>
+      <!-- 3D aircraft layer (Three.js, vendored — same module as WIFIRADAR):
+           each aircraft drawn as a small plane mesh floating above its
+           ground point at a height proportional to altitude, with a drop
+           line down to the map — the Leaflet marker underneath (invisible)
+           stays the actual click target and label. -->
+      <canvas id="ar-3d" class="ar-3d"></canvas>
       <canvas id="ar-radar" class="ar-radar hidden"></canvas>
       <div class="ar-radar-legend hidden" id="ar-radar-legend">
         <span>10</span><span>25</span><span>50</span><span>100 km</span>

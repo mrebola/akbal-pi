@@ -183,6 +183,51 @@ grep -i aircraft-radar ~/whisplay-ai-chatbot/chatbot.log | tail -5
 # "Real capture unavailable, using DEMO MODE: <razón>" → demo
 ```
 
+## Estado de la captura real (en investigación)
+
+Verificado en el dispositivo real (Pi 5 + HackRF One, Guadalajara): el
+pipeline completo corre sin errores — `hackrf_transfer` entrega ~4MB/s
+reales, `dump1090`/`readsb` procesan esos datos, el snapshot/WS/lista
+funcionan — pero **todavía no se decodificó ningún mensaje ADS-B real**
+en las pruebas hechas hasta ahora, pese a que el usuario confirmó ver
+aeronaves con la misma HackRF desde otra herramienta (LNA 40, VGA 50,
+AMP on).
+
+Lo que ya se descartó:
+- **No es la tasa de muestreo**: fijada en 2,000,000 Hz exacto (ver
+  arriba), confirmado correcto contra `dump1090.h`.
+- **No es un bug de signo de bytes**: HackRF entrega IQ de 8 bits
+  **con signo** (confirmado en el código fuente oficial de
+  `hackrf_transfer.c`, que explícitamente hace `^= 0x80` para convertir a
+  sin signo solo en su modo `--wav`), mientras que `dump1090` asume bytes
+  **sin signo** centrados en 127 (confirmado en su tabla de magnitud,
+  `dump1090.c`). Se probó la conversión (XOR 0x80 en un pipe intermedio)
+  sin cambios en el resultado.
+- **No es el decodificador**: se compiló y probó
+  [`readsb`](https://github.com/wiedehopf/readsb) (fork moderno,
+  mantenido activamente, con soporte nativo de HackRF vía `libhackrf`,
+  sin pasar por `hackrf_transfer` ni por el bug de signo de arriba —
+  `make HACKRF=yes`, requiere `libhackrf-dev`). Con `readsb` sí aparece
+  actividad real y consistente con la ganancia (decenas de miles de
+  "preambles" Mode-S por sesión de 20s, piso de ruido que sube de forma
+  predecible con la ganancia), pero **0 pasan la verificación CRC** en
+  todas las combinaciones de ganancia probadas (LNA 16–40, VGA 20–62, amp
+  on/off) — un patrón típico de exceso de ganancia/saturación, pero bajar
+  la ganancia tampoco cambió el resultado.
+
+Hipótesis abiertas (pendiente de resolver con acceso físico al hardware):
+antena (pasiva vs. activa con alimentación bias-tee — `readsb` no expone
+esa opción por CLI, a diferencia de `hackrf_transfer -p 1`), calibración
+de frecuencia (`--ppm`), o una diferencia de configuración específica de
+la herramienta con la que el usuario sí vio aeronaves.
+
+**Mientras se resuelve esto**: el modo demo (`ADSB_ENABLED` sin
+resultado real, o toggle manual a DEMO) reproduce el pipeline completo
+—tracker, historial, resolución de ruta contra la API real de
+adsbdb.com, UI, LCD— con aeronaves sintéticas, así que el resto del
+módulo es verificable y usable sin depender de que la captura real ya
+esté afinada.
+
 ## API interna
 
 ```
@@ -196,8 +241,40 @@ POST /api/aircraft/mode       { mode: "live" | "demo" }
 
 ## Frontend
 
-`app/web/admin/aircraft-radar.html` + `.js` + `.css` — canvas 2D plano
-(sin Three.js: un radar visto desde arriba no necesita 3D, a diferencia
-del globo de WIFIRADAR), mismo topbar/nav/tema que el resto del panel
-(`styles.css`). Lista lateral ordenada por distancia + detalle al hacer
-click (reutiliza las clases `.apm-*` del modal de WIFIRADAR/Audit WiFi).
+`app/web/admin/aircraft-radar.html` + `.js` + `.css`, mismo topbar/nav/tema
+que el resto del panel (`styles.css`). Lista lateral ordenada por distancia
++ detalle al hacer click (reutiliza las clases `.apm-*` del modal de
+WIFIRADAR/Audit WiFi). Dos vistas detrás de un toggle **MAPA / RADAR** en
+el header (mismo patrón que el MAPA/GLOBO 3D de `/gps`):
+
+- **RADAR**: el disco circular original — Akbal al centro, aeronaves
+  ubicadas por bearing/distancia relativos, anillos de 10/25/50/100km.
+  Canvas 2D plano.
+- **MAPA**: un mapa Leaflet real (mismo motor que `/gps`, vendorizado en
+  `vendor/leaflet/`) con cada aeronave ubicada por su **lat/lon absoluta**
+  de ADS-B — a diferencia del radar circular, no necesita que Akbal tenga
+  fix GPS para mostrar aviones (solo el propio marcador de Akbal sí lo
+  necesita). Tiles en **modo oscuro**: OSM solo sirve basemaps claros sin
+  key (CARTO dark_all empezó a pedir API key — ver el historial de
+  `gps.js` con el mismo problema), así que se usa el truco estándar de
+  invertir los tiles claros (`filter: invert(1) hue-rotate(180deg) ...`)
+  en vez de depender de un proveedor de tiles oscuros que puede romperse.
+
+  Cada aeronave se dibuja en **3D con Three.js** (mismo módulo vendorizado
+  que WIFIRADAR, `vendor/three.module.min.js`, vía import map) en un
+  `<canvas>` superpuesto al mapa: un cono apuntando según el rumbo real,
+  flotando a una altura proporcional a su altitud (`altitudeFt / 300`
+  unidades) con una línea vertical + anillo en el punto de tierra —
+  el efecto "torre de radar 3D" en vez de una vista cenital plana. La
+  cámara es fija (no sigue al mapa); en cada pan/zoom de Leaflet se
+  recalculan las coordenadas X/Z de cada avión desde
+  `map.latLngToContainerPoint()`, así el avión 3D siempre coincide con su
+  posición 2D real bajo el mapa. El marcador Leaflet debajo de cada avión
+  queda invisible (`.ar-plane-hitbox`) — solo existe para el click y el
+  tooltip con el callsign; el dibujo real lo hace la capa 3D.
+
+  Gotcha de CSS a tener en cuenta si se toca este código: un `<canvas>`
+  (elemento reemplazado) con `position:absolute; inset:0` **no** se
+  estira a llenar su contenedor — cae a su tamaño intrínseco (atributos
+  `width`/`height` del canvas). Hace falta `width:100%; height:100%`
+  explícito además de `inset:0` (ver `.ar-3d` en `aircraft-radar.css`).

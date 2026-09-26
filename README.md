@@ -64,7 +64,7 @@ Raspberry Pi OS 64-bit, basado en Debian Trixie.
 | WiFi Radar | Visualización 3D (Three.js) del espacio WiFi alrededor del Pi, capturado pasivamente con cualquier adaptador USB en modo monitor (detección genérica; probado con Atheros AR9271 y Ralink RT5372) — toggle real/demo y caída a demo con datos simulados si no hay hardware conectado. Fabricantes resueltos del registro IEEE local (ieee-data), con fallback opcional a la API de macvendors.com ([`docs/wifiradar.md`](docs/wifiradar.md)) |
 | Wardriving | Captura de handshakes para laboratorio/tesis: allowlist explícita de BSSIDs como único mecanismo de autorización, ataques pmkid/deauth con aircrack-ng, sesiones con artifacts descargables desde la web, contraseñas crackeadas visibles por sesión (ojo con revelado) y dictionary attack (rockyou) desde el listado de sesiones — probado contra un AP de laboratorio dedicado ([`docs/wardrive.md`](docs/wardrive.md), [`docs/lab-wireless.md`](docs/lab-wireless.md)) |
 | GPS | Mapa mundial con la posición en vivo del dongle GPS USB: marcador, precisión, sky plot de satélites (en fix / visibles / necesarios) — [`docs/gps.md`](docs/gps.md) |
-| Aircraft Radar | Aeronaves cercanas por ADS-B (1090MHz) con un HackRF One en modo RX-only: lista + radar circular por distancia/rumbo real (vía el GPS del Pi), identidad (matrícula/modelo/aerolínea) y ruta resueltas por caché local + adsbdb.com, historial en SQLite y caída a demo si no hay HackRF conectado ([`docs/aircraft-radar.md`](docs/aircraft-radar.md)) |
+| Aircraft Radar | Aeronaves cercanas por ADS-B (1090MHz) con un HackRF One en modo RX-only: mapa real en modo oscuro con cada avión renderizado en 3D (Three.js) por posición/altitud reales, o radar circular por distancia/rumbo (vía el GPS del Pi); identidad (matrícula/modelo/aerolínea) y ruta resueltas por caché local + adsbdb.com, historial en SQLite y caída a demo si no hay HackRF conectado ([`docs/aircraft-radar.md`](docs/aircraft-radar.md)) |
 
 Detalle completo del setup en [`docs/SETUP.md`](docs/SETUP.md).
 
@@ -449,14 +449,25 @@ sin `gpsd` — ver [`docs/gps.md`](docs/gps.md).
 
 ### Aircraft Radar (`/aircraft-radar`, link "Aviones")
 
-Lista de aeronaves cercanas ordenada por distancia + radar circular (Akbal al
-centro, anillos de 10/25/50/100km) alimentado por un HackRF One en 1090MHz.
-Cada tarjeta/punto muestra callsign, matrícula/modelo/aerolínea (resueltos por
-caché local + adsbdb.com), ruta origen→destino ("Route unknown" si no se puede
-confirmar), altitud, velocidad y distancia/rumbo reales vía el GPS del Pi.
+Lista de aeronaves cercanas ordenada por distancia, alimentada por un HackRF
+One en 1090MHz. Cada tarjeta muestra callsign, matrícula/modelo/aerolínea
+(resueltos por caché local + adsbdb.com), ruta origen→destino ("Route
+unknown" si no se puede confirmar), altitud, velocidad y distancia/rumbo
+reales vía el GPS del Pi. Toggle **MAPA / RADAR** en el header:
+
+- **MAPA**: mapa real (Leaflet, modo oscuro) con cada aeronave ubicada por su
+  posición GPS absoluta — no necesita que el Pi tenga fix GPS para mostrar
+  aviones, solo para ubicarse a sí mismo. Cada avión se dibuja **en 3D**
+  (Three.js) como un cono apuntando según su rumbo real, flotando a una
+  altura proporcional a su altitud sobre un punto/línea en el mapa.
+- **RADAR**: el disco circular original — Akbal al centro, aeronaves por
+  bearing/distancia relativos, anillos de 10/25/50/100km.
+
 Click en un punto o tarjeta abre el detalle completo. Mismo toggle LIVE/DEMO
-que WIFIRADAR — sin HackRF conectado cae a aeronaves sintéticas con prefijo
-"DEMO · ". Solo recepción: el HackRF nunca transmite. Detalle completo en
+que WIFIRADAR — sin HackRF conectado (o mientras se afina la recepción real,
+ver [`docs/aircraft-radar.md`](docs/aircraft-radar.md#estado-de-la-captura-real-en-investigación))
+cae a aeronaves sintéticas con prefijo "DEMO · ". Solo recepción: el HackRF
+nunca transmite. Detalle completo en
 [`docs/aircraft-radar.md`](docs/aircraft-radar.md).
 
 ### OST (pestaña Música)

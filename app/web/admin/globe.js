@@ -240,6 +240,8 @@ async function main() {
     atmosphere.material.uniforms.sunDirection.value.copy(unit);
     sun.position.copy(pos);
     sunTarget.position.set(0, 0, 0);
+    // The visible sun (shader sphere + corona) sits at the same point:
+    sunGroup.position.copy(pos);
     return pos;
   }
 

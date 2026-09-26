@@ -116,7 +116,10 @@ async function main() {
         vec3 dayColor;
         vec3 nightColor;
         if (hasTextures) {
-          dayColor = texture2D(dayMap, vUv).rgb;
+          // Slightly dimmed and warmed: a real photo from space reads darker
+          // than a raw albedo map — the sun is far away, not a studio light.
+          dayColor = texture2D(dayMap, vUv).rgb * 0.82;
+          dayColor = mix(dayColor, dayColor * dayColor * 2.2, 0.35); // gentle contrast S-curve
           // City lights: gamma-compress the night texture so dense metros pop
           // and suburbs stay as faint clusters — a real night shot from orbit.
           vec3 lights = texture2D(lightsMap, vUv).rgb;
@@ -147,7 +150,7 @@ async function main() {
         vec3 viewDir = normalize(cameraPosition - vWorldPos);
         vec3 halfDir = normalize(s + viewDir);
         float spec = pow(max(dot(n, halfDir), 0.0), 42.0);
-        color += vec3(0.45, 0.5, 0.55) * spec * dayAmount * 0.8;
+        color += vec3(0.35, 0.4, 0.45) * spec * dayAmount * 0.55;
 
         // Faint rim (no white/blue daytime glow on the limb): barely-there
         // sky-blue only, so the night side keeps its dark, living feel.
@@ -205,8 +208,8 @@ async function main() {
   scene.add(atmosphere);
 
   // ─── Lighting (mostly handled by the shader; lights for the satellites) ───
-  scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-  const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.28));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.75);
   scene.add(sun);
   const sunTarget = new THREE.Object3D();
   scene.add(sunTarget);
@@ -232,10 +235,11 @@ async function main() {
     };
   }
 
-  // Visual distance: close enough that the sun is already peeking into the
-  // opening camera frame (no scrolling needed). Direction stays the REAL
-  // solar direction — only the distance is artistic (sun is NOT to scale).
-  const SUN_DIST_UNITS = 42;
+  // Distance: far enough that the sun reads as a distant star rather than a
+  // lamp bolted to the globe's edge — that separation is what keeps the
+  // earth from looking flooded with light. Direction stays the REAL solar
+  // direction; only the distance is artistic (sun is NOT to scale).
+  const SUN_DIST_UNITS = 95;
   function updateSunPosition() {
     const d = new Date();
     const dir = solarDirectionEquatorial(d);

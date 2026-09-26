@@ -245,102 +245,14 @@ async function main() {
     return pos;
   }
 
-  // Realistic sun: layered shader sphere (limb darkening + granulation noise)
-  // inside a big corona sprite. Not to scale; placed at the real direction.
-  const sunGroup = new THREE.Group();
-  {
-    // Surface shader: limb darkening + slow-moving granulation.
-    const sunMat = new THREE.ShaderMaterial({
-      transparent: false,
-      uniforms: { time: { value: 0 } },
-      vertexShader: /* glsl */ `
-        varying vec3 vNormal;
-        varying vec3 vPos;
-        void main() {
-          vNormal = normalize(mat3(modelMatrix) * normal);
-          vPos = position;
-          gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: /* glsl */ `
-        uniform float time;
-        varying vec3 vNormal;
-        varying vec3 vPos;
-        // Cheap 3D value-noise for granulation.
-        float hash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
-        float noise(vec3 p) {
-          vec3 i = floor(p); vec3 f = fract(p);
-          f = f * f * (3.0 - 2.0 * f);
-          return mix(
-            mix(mix(hash(i), hash(i + vec3(1,0,0)), f.x), mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
-            mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x), mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y),
-            f.z);
-        }
-        void main() {
-          // Limb darkening: edge of the disc dims and reddens (real photosphere).
-          float mu = max(dot(normalize(vNormal), normalize(cameraPosition - vPos)), 0.0);
-          // Granulation: two octaves drifting at different speeds.
-          float g1 = noise(normalize(vPos) * 22.0 + time * 0.16);
-          float g2 = noise(normalize(vPos) * 48.0 - time * 0.28);
-          float gran = 0.72 + 0.24 * g1 + 0.12 * g2;
-          vec3 hot = vec3(1.0, 0.96, 0.86);
-          vec3 mid = vec3(1.0, 0.72, 0.30);
-          vec3 edge = vec3(0.95, 0.38, 0.12);
-          vec3 col = mix(hot, mid, smoothstep(0.35, 0.9, 1.0 - mu));
-          col = mix(col, edge, smoothstep(0.85, 0.35, mu));
-          col *= gran;
-          // Occasional sunspecks (dark cells).
-          float spots = smoothstep(0.72, 0.95, noise(normalize(vPos) * 9.0 + 41.7));
-          col *= 1.0 - spots * 0.35;
-          gl_FragColor = vec4(col * 1.25, 1.0);
-        }
-      `,
-    });
-    const sunCore = new THREE.Mesh(new THREE.SphereGeometry(4.6, 48, 48), sunMat);
-    sunGroup.add(sunCore);
-    sunGroup.userData.sunMat = sunMat;
-
-    // Corona: 3 stacked sprites (inner bright, mid halo, outer far glow).
-    const mkGlow = (size, stops) => {
-      const cnv = document.createElement("canvas");
-      cnv.width = 256;
-      cnv.height = 256;
-      const ctx = cnv.getContext("2d");
-      const grad = ctx.createRadialGradient(128, 128, 2, 128, 128, 128);
-      for (const [off, col] of stops) grad.addColorStop(off, col);
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, 256, 256);
-      const sprite = new THREE.Sprite(
-        new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cnv), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }),
-      );
-      sprite.scale.setScalar(size);
-      return sprite;
-    };
-    sunGroup.add(mkGlow(30, [
-      [0, "rgba(255,255,245,1)"],
-      [0.25, "rgba(255,225,150,0.7)"],
-      [0.6, "rgba(255,170,60,0.18)"],
-      [1, "rgba(255,150,40,0)"],
-    ]));
-    sunGroup.add(mkGlow(64, [
-      [0, "rgba(255,210,120,0.35)"],
-      [0.4, "rgba(255,160,60,0.1)"],
-      [1, "rgba(255,140,40,0)"],
-    ]));
-    sunGroup.add(mkGlow(110, [
-      [0, "rgba(255,180,90,0.16)"],
-      [0.5, "rgba(255,150,60,0.05)"],
-      [1, "rgba(255,140,40,0)"],
-    ]));
-    // Chromosphere ring just outside the surface.
-    const chromo = new THREE.Mesh(
-      new THREE.SphereGeometry(4.85, 48, 48),
-      new THREE.MeshBasicMaterial({
-        color: 0xffb050, transparent: true, opacity: 0.5, side: THREE.BackSide, blending: THREE.AdditiveBlending, depthWrite: false,
-      }),
-    );
-    sunGroup.add(chromo);
-  }
+  // Realistic sun — the full multi-layer effect from the "Realistic Sun"
+  // three.js example (fwdapps.net/l/sun): perlin cubemap → shader sphere →
+  // glow ribbon → flying rays → arcing magma flares. Scaled up ~12× to read
+  // at earth-view distance; NOT to scale, but always in the real direction.
+  const { RealisticSun } = await import("./sun.js");
+  const sunFx = new RealisticSun(renderer);
+  const sunGroup = sunFx.group;
+  sunGroup.scale.setScalar(7); // 1.5-radius sphere → ~10.5 world units
   scene.add(sunGroup);
 
   // ─── Receiver ground point + user marker ─────────────────────────────────
@@ -608,6 +520,7 @@ async function main() {
   let loopRunning = false;
   let globeActive = false;
   let sunRepositionAt = 0;
+  let lastFrameAt = 0;
   function animate() {
     if (!globeActive) {
       loopRunning = false;
@@ -615,6 +528,9 @@ async function main() {
     }
     requestAnimationFrame(animate);
     loopRunning = true;
+    const now = Date.now();
+    const delta = Math.min(0.1, (now - (lastFrameAt || now)) / 1000); // clamp tab-switch spikes
+    lastFrameAt = now;
     const t = clock.getElapsedTime();
     // Pulse the user pin ring.
     if (userMarker) {
@@ -629,12 +545,12 @@ async function main() {
       en.ring.scale.setScalar(1 + 0.3 * amp * Math.sin(t * 1.8 + en.group.position.x));
       en.mesh.material.opacity = 0.7 + 0.3 * amp * Math.sin(t * 2 + en.group.position.y);
     }
-    // Sun: real position (refreshed every 60s — it barely moves) + shader time.
-    if (!sunRepositionAt || Date.now() - sunRepositionAt > 60_000) {
-      sunRepositionAt = Date.now();
+    // Sun: real position (refreshed every 60s — it barely moves) + effects.
+    if (!sunRepositionAt || now - sunRepositionAt > 60_000) {
+      sunRepositionAt = now;
       updateSunPosition();
     }
-    sunGroup.userData.sunMat.uniforms.time.value = t;
+    sunFx.update(camera, delta);
     controls.update();
     renderer.render(scene, camera);
   }

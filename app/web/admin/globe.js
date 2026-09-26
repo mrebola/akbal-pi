@@ -19,7 +19,8 @@ async function main() {
   // ─── Scene ────────────────────────────────────────────────────────────────
   const canvas = document.getElementById("gps-globe");
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 2000);
+  // Far plane covers the whole solar system view (Neptune ~30 AU).
+  const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 6000);
   camera.position.set(0, 6, 22);
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
@@ -83,11 +84,240 @@ async function main() {
     scene.add(grid);
   }
 
-  // ─── Lighting ─────────────────────────────────────────────────────────────
-  scene.add(new THREE.AmbientLight(0xffffff, 0.75));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.1);
-  sun.position.set(30, 12, 18);
+  // ─── Lighting: the SUN at its real position ───────────────────────────────
+  // Direction computed from the NOAA low-precision solar ephemeris (±0.01°),
+  // expressed in the same equatorial frame the earth mesh uses (Y = north
+  // pole). The DirectionalLight shines FROM the sun toward the earth, so the
+  // day/night terminator on the globe matches reality.
+  function solarDirectionEquatorial(date) {
+    const rad = Math.PI / 180;
+    const jd = date.getTime() / 86400000 + 2440587.5;
+    const n = jd - 2451545.0; // days since J2000
+    const L = (280.460 + 0.9856474 * n) % 360; // mean longitude
+    const g = ((357.528 + 0.9856003 * n) % 360) * rad; // mean anomaly
+    const lambda = (L + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) * rad; // ecliptic lon
+    const eps = (23.439 - 0.0000004 * n) * rad; // obliquity
+    return {
+      x: Math.cos(lambda),
+      y: Math.cos(eps) * Math.sin(lambda),
+      z: Math.sin(eps) * Math.sin(lambda),
+    };
+  }
+
+  // Ecliptic→equatorial rotation shared with the planets (same obliquity).
+  // Correct ecl→eq transform: x_eq = x_ecl, y_eq = y_ecl·cosε − z_ecl·sinε,
+  // z_eq = y_ecl·sinε + z_ecl·cosε — a rotation around X by +ε.
+  function eclipticToEquatorial() {
+    const now = new Date();
+    const rad = Math.PI / 180;
+    const jd = now.getTime() / 86400000 + 2440587.5;
+    const n = jd - 2451545.0;
+    const eps = (23.439 - 0.0000004 * n) * rad;
+    return new THREE.Matrix4().makeRotationX(eps);
+  }
+
+  const SUN_DIST_UNITS = 120; // visual distance of the sun sprite from earth
+  let sunMesh = null;
+  {
+    // Glow sprite: canvas-generated radial gradient, additive blending —
+    // the most "impactful" part of the scene after the earth itself.
+    const cnv = document.createElement("canvas");
+    cnv.width = 256;
+    cnv.height = 256;
+    const ctx = cnv.getContext("2d");
+    const grad = ctx.createRadialGradient(128, 128, 4, 128, 128, 128);
+    grad.addColorStop(0, "rgba(255,255,240,1)");
+    grad.addColorStop(0.12, "rgba(255,236,160,0.95)");
+    grad.addColorStop(0.35, "rgba(255,190,80,0.4)");
+    grad.addColorStop(0.7, "rgba(255,150,50,0.12)");
+    grad.addColorStop(1, "rgba(255,140,40,0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 256, 256);
+    const tex = new THREE.CanvasTexture(cnv);
+    sunMesh = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+    sunMesh.scale.setScalar(46);
+    scene.add(sunMesh);
+    // Core disc inside the glow.
+    const core = new THREE.Mesh(
+      new THREE.SphereGeometry(2.2, 24, 24),
+      new THREE.MeshBasicMaterial({ color: 0xfff4d6 }),
+    );
+    sunMesh.add(core);
+  }
+
+  // The DirectionalLight whose position tracks the real sun — this is what
+  // lights the earth (and the planets, which are far enough to ignore).
+  const sun = new THREE.DirectionalLight(0xffffff, 1.35);
   scene.add(sun);
+  const sunTarget = new THREE.Object3D();
+  scene.add(sunTarget);
+  sun.target = sunTarget;
+  scene.add(new THREE.AmbientLight(0xffffff, 0.35)); // low: keep night side dark for drama
+
+  function updateSunPosition() {
+    const d = new Date();
+    const dir = solarDirectionEquatorial(d);
+    // Equatorial (RA/dec) → sub-solar point (lat/lon) via GMST, then the
+    // same latLonToVec3 mapping the earth mesh uses. This puts the light
+    // over the true noon meridian (e.g. -77° at 17:00 UTC — South America
+    // morning, Mexico ~9am) so the day/night terminator is correct.
+    const n = d.getTime() / 86400000 + 2440587.5 - 2451545.0;
+    const raDeg = (Math.atan2(dir.y, dir.x) * 180 / Math.PI + 360) % 360;
+    const decDeg = Math.asin(dir.z) * 180 / Math.PI;
+    const gmst = (280.46061837 + 360.98564736629 * n) % 360;
+    const lonSub = ((raDeg - gmst + 540) % 360) - 180;
+    const pos = latLonToVec3(decDeg, lonSub, SUN_DIST_UNITS);
+    sunMesh.position.copy(pos);
+    sun.position.copy(pos);
+    sunTarget.position.set(0, 0, 0);
+    sunMesh.userData.equatorial = dir; // planets are placed in this frame
+  }
+
+  // ─── Planets at their real heliocentric positions ─────────────────────────
+  // JPL approximate Keplerian elements (valid 1800–2050). Positions are
+  // computed per-frame-ish (each globe view + every 60s) and rendered in
+  // ecliptic coords rotated into the equatorial frame shared with the sun.
+  // Visible when the camera zooms out past ~EARTH_R*4; scale exaggeration is
+  // minimal and sizes are illustrative (real planet sizes are invisible at
+  // this scale: ~1px per 1000 km at this distance).
+  const PLANETS = [
+    { name: "Mercurio", color: 0xb8a99a, size: 1.6, a: 0.38709927, e: 0.20563593, i: 7.00497902, L: 252.25032350, lp: 77.45779628, ln: 48.33076593, da: 0.00000037, de: 0.00001906, di: -0.00594749, dL: 149472.67411175, dlp: 0.16047689, dln: -0.12534081 },
+    { name: "Venus", color: 0xe8d5a3, size: 2.4, a: 0.72333566, e: 0.00677672, i: 3.39467605, L: 181.97909950, lp: 131.60246718, ln: 76.67984255, da: 0.00000390, de: -0.00004107, di: -0.00078890, dL: 58517.81538729, dlp: 0.00268329, dln: -0.27769418 },
+    { name: "Marte", color: 0xd1683f, size: 2.1, a: 1.52371034, e: 0.09339410, i: 1.84969142, L: -4.55343205, lp: -23.94362959, ln: 49.55953891, da: 0.00001847, de: 0.00007882, di: 0.00812131, dL: 19140.30268499, dlp: 0.29257343, dln: -0.29257343 },
+    { name: "Júpiter", color: 0xd9b38c, size: 4.4, a: 5.20288700, e: 0.04838624, i: 1.30439695, L: 34.39644051, lp: 14.72847983, ln: 100.47390909, da: -0.00011607, de: -0.00013253, di: -0.00183714, dL: 3034.74612775, dlp: 0.21262690, dln: 0.20469106 },
+    { name: "Saturno", color: 0xe3d29b, size: 3.8, a: 9.53667594, e: 0.05386179, i: 2.48599187, L: 49.95424423, lp: 92.59887831, ln: 113.66242448, da: -0.00125060, de: -0.00050991, di: 0.00193609, dL: 1222.49362201, dlp: -0.41897216, dln: -0.28867794 },
+  ];
+
+  // AU → world units: the inner planets would crowd the earth at true scale,
+  // so use a compressed log-ish mapping that preserves ORDER and direction:
+  // 1 AU ≈ 26 world units (sun at 120u sits ~4.6 AU — visually past venus,
+  // which is fine because the sun sprite is a light source, not a body).
+  const AU_UNITS = 26;
+
+  function planetHelioEcliptic(el, date) {
+    const T = (date.getTime() / 86400000 + 2440587.5 - 2451545.0) / 36525; // centuries
+    const a = el.a + el.da * T;
+    const ec = el.e + el.de * T;
+    const I = (el.i + el.di * T) * (Math.PI / 180);
+    const L = (el.L + el.dL * T) % 360;
+    const lp = el.lp + el.dlp * T;
+    const ln = el.ln + el.dln * T;
+    const w = (lp - ln) * (Math.PI / 180); // argument of perihelion
+    const O = ln * (Math.PI / 180); // ascending node
+    const M = ((L - lp) % 360) * (Math.PI / 180); // mean anomaly
+    // Kepler's equation (Newton, 8 iters is plenty at these eccentricities)
+    let E = M;
+    for (let k = 0; k < 8; k++) E = E - (E - ec * Math.sin(E) - M) / (1 - ec * Math.cos(E));
+    const xp = a * (Math.cos(E) - ec); // orbital plane, perihelion at +x
+    const yp = a * Math.sqrt(1 - ec * ec) * Math.sin(E);
+    const cw = Math.cos(w), sw = Math.sin(w), cO = Math.cos(O), sO = Math.sin(O), cI = Math.cos(I), sI = Math.sin(I);
+    // Rotate perifocal → ecliptic
+    return {
+      x: (cw * cO - sw * sO * cI) * xp + (-sw * cO - cw * sO * cI) * yp,
+      y: (cw * sO + sw * cO * cI) * xp + (-sw * sO + cw * cO * cI) * yp,
+      z: sw * sI * xp + cw * sI * yp,
+    };
+  }
+
+  // Geocentric position of a planet: heliocentric ecliptic − earth's
+  // heliocentric position. Earth's heliocentric = −sun direction (in
+  // ecliptic coords, at 1 AU). Then converted to the mesh's equatorial frame.
+  const planetNodes = []; // { group, mesh, el, label }
+  {
+    for (const el of PLANETS) {
+      const group = new THREE.Group();
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(el.size, 24, 24),
+        new THREE.MeshPhongMaterial({ color: el.color, emissive: new THREE.Color(el.color).multiplyScalar(0.25), shininess: 4 }),
+      );
+      group.add(mesh);
+      // Label sprite (canvas text) so each planet is identifiable at zoom.
+      const lcnv = document.createElement("canvas");
+      lcnv.width = 256;
+      lcnv.height = 64;
+      const lctx = lcnv.getContext("2d");
+      lctx.font = "600 42px ui-monospace, monospace";
+      lctx.fillStyle = "rgba(200,225,255,0.95)";
+      lctx.textAlign = "center";
+      lctx.shadowColor = "rgba(0,0,0,0.9)";
+      lctx.shadowBlur = 8;
+      lctx.fillText(el.name, 128, 54);
+      const ltex = new THREE.CanvasTexture(lcnv);
+      const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: ltex, transparent: true, depthWrite: false, opacity: 0.85 }));
+      label.scale.set(7, 1.75, 1);
+      label.position.y = el.size + 2.2;
+      group.add(label);
+      group.visible = false; // LOD: revealed by camera distance
+      scene.add(group);
+      planetNodes.push({ group, mesh, el, label });
+    }
+  }
+
+  let planetsPlacedAt = 0;
+  function updatePlanets() {
+    const now = new Date();
+    // Cache: recompute at most once a minute (planets barely move).
+    if (planetsPlacedAt && now - planetsPlacedAt < 60_000) return;
+    planetsPlacedAt = now;
+    // Earth's heliocentric ecliptic position = −sun direction × 1 AU:
+    // the sun sits at direction (eq→ecl, −1) from earth, so earth from the
+    // sun is the opposite vector, at exactly 1 AU.
+    const sunEcl = sunEqToEcl(solarDirectionEquatorial(now)).multiplyScalar(-1);
+    for (const node of planetNodes) {
+      const helio = planetHelioEcliptic(node.el, now);
+      // Geocentric = helio − earthHelio.
+      const geo = new THREE.Vector3(helio.x, helio.y, helio.z).sub(sunEcl);
+      const pos = eclipticToMesh(geo).multiplyScalar(AU_UNITS);
+      node.group.position.copy(pos);
+    }
+  }
+
+  // Ecliptic (geocentric) → scene coords. Planets are celestial objects:
+  // in the earth-fixed mesh they must sit at (RA − GMST) longitude, the same
+  // convention the sun uses, so the whole sky rotates correctly with the time
+  // of day. v is in ecliptic coords; conversion chain: ecl → equatorial
+  // (RA/dec) → hour angle (RA − GMST) → latLonToVec3.
+  function eclipticToMesh(v) {
+    const now = new Date();
+    const rot = eclipticToEquatorial();
+    const p = new THREE.Vector3(v.x, v.y, v.z).applyMatrix4(rot); // equatorial
+    const n = now.getTime() / 86400000 + 2440587.5 - 2451545.0;
+    const gmst = (280.46061837 + 360.98564736629 * n) % 360;
+    const raDeg = (Math.atan2(p.y, p.x) * 180 / Math.PI + 360) % 360;
+    const decDeg = Math.asin(p.z / p.length()) * 180 / Math.PI;
+    const lonSub = ((raDeg - gmst + 540) % 360) - 180; // over-earth longitude
+    // Direction from earth toward the planet (not a surface point, but the
+    // same angular mapping keeps it aligned with the sun and the pin):
+    const r = p.length();
+    const ground = latLonToVec3(decDeg, lonSub, 1).normalize();
+    return ground.multiplyScalar(r);
+  }
+
+  function sunEqToEcl(v) {
+    // Inverse rotation of eclipticToEquatorial (rotate by −ε around X):
+    // x_ecl = x_eq, y_ecl = y_eq·cosε + z_eq·sinε, z_ecl = −y_eq·sinε + z_eq·cosε.
+    const rad = Math.PI / 180;
+    const now = new Date();
+    const jd = now.getTime() / 86400000 + 2440587.5;
+    const n = jd - 2451545.0;
+    const eps = (23.439 - 0.0000004 * n) * rad;
+    return new THREE.Vector3(v.x, v.y, v.z).applyMatrix4(new THREE.Matrix4().makeRotationX(-eps));
+  }
+
+  // LOD: planets fade in once the camera is far enough from earth.
+  function updatePlanetLod() {
+    const dist = camera.position.length();
+    const show = dist > EARTH_R * 3.2; // ~zoomed out past the GNSS shell
+    for (const node of planetNodes) {
+      node.group.visible = show;
+      node.group.children[1].material.opacity = show
+        ? Math.min(0.9, (dist - EARTH_R * 3.2) / (EARTH_R * 4))
+        : 0;
+    }
+    // Keep the sun glow readable at any distance.
+    const glowScale = dist > EARTH_R * 6 ? Math.min(3.2, dist / (EARTH_R * 8)) : 1;
+    sunMesh.scale.setScalar(46 * glowScale);
+  }
 
   // ─── Receiver ground point + user marker ─────────────────────────────────
   // lat/lon → ECEF-ish on the sphere. lat/lon in degrees, radius in world units.
@@ -240,7 +470,8 @@ async function main() {
   controls.dampingFactor = 0.07;
   controls.enablePan = false;
   controls.minDistance = EARTH_R + 1.5;
-  controls.maxDistance = EARTH_R * 6;
+  controls.maxDistance = EARTH_R * 12; // far enough to see Jupiter's orbit
+  controls.zoomSpeed = 1.2;
   controls.autoRotate = true;
   controls.autoRotateSpeed = 0.6;
   controls.rotateSpeed = 0.55;
@@ -373,6 +604,11 @@ async function main() {
       en.ring.scale.setScalar(1 + 0.3 * amp * Math.sin(t * 1.8 + en.group.position.x));
       en.mesh.material.opacity = 0.7 + 0.3 * amp * Math.sin(t * 2 + en.group.position.y);
     }
+    // Solar system: real sun position (and light) + planets at their real
+    // heliocentric spots, revealed by zoom-out.
+    updateSunPosition();
+    updatePlanets();
+    updatePlanetLod();
     controls.update();
     renderer.render(scene, camera);
   }

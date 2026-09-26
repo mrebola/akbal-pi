@@ -159,21 +159,6 @@ header.topbar { z-index: 1000; }
   border-color: rgba(255, 255, 255, 0.15);
 }
 
-/* 3D aircraft layer — sits above the Leaflet tiles/markers but never
-   intercepts clicks (pointer-events:none); the invisible Leaflet marker
-   underneath each plane remains the real click target. */
-.ar-3d {
-  position: absolute;
-  inset: 0;
-  /* inset:0 alone doesn't stretch a replaced element (canvas/img/video) to
-     fill its container — it falls back to intrinsic size (CSS2.1 §10.3.8).
-     Explicit 100%/100% is required on top of inset:0 here. */
-  width: 100%;
-  height: 100%;
-  z-index: 620; /* above Leaflet's marker pane (600), below its tooltip pane (650) so labels stay readable */
-  pointer-events: none;
-}
-
 .ar-map-error {
   position: absolute;
   top: 10px;
@@ -214,11 +199,29 @@ header.topbar { z-index: 1000; }
   100% { transform: scale(1.6); opacity: 0; }
 }
 
-/* Aircraft marker (divIcon): invisible click hit-target only — the visible
-   glyph is the Three.js 3D layer (.ar-3d) floating above it. */
+/* Aircraft marker (divIcon): a rotated triangle pointing along heading —
+   plain 2D, no WebGL, so it just works everywhere (an earlier Three.js
+   version rendered nothing on some browsers/devices with no visible
+   error). Smooth-move: Leaflet positions marker icons via a CSS transform,
+   so animating that transform makes setLatLng() glide between updates
+   instead of jumping — matches the ~1s cadence real/demo positions
+   actually arrive at (see aircraft-radar.js's updateAircraftMarkers). */
+.ar-map .leaflet-marker-icon {
+  transition: transform 0.9s linear;
+}
+
 .ar-plane-marker-wrap { background: transparent; border: none; }
 
-.ar-plane-hitbox { width: 28px; height: 28px; cursor: pointer; }
+.ar-plane-marker {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: center;
+}
+
+.ar-plane-marker svg { filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.6)); }
 
 .ar-plane-label {
   font-family: var(--font-mono);

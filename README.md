@@ -64,7 +64,7 @@ Raspberry Pi OS 64-bit, basado en Debian Trixie.
 | WiFi Radar | Visualización 3D (Three.js) del espacio WiFi alrededor del Pi, capturado pasivamente con cualquier adaptador USB en modo monitor (detección genérica; probado con Atheros AR9271 y Ralink RT5372) — toggle real/demo y caída a demo con datos simulados si no hay hardware conectado. Fabricantes resueltos del registro IEEE local (ieee-data), con fallback opcional a la API de macvendors.com ([`docs/wifiradar.md`](docs/wifiradar.md)) |
 | Wardriving | Captura de handshakes para laboratorio/tesis: allowlist explícita de BSSIDs como único mecanismo de autorización, ataques pmkid/deauth con aircrack-ng, sesiones con artifacts descargables desde la web, contraseñas crackeadas visibles por sesión (ojo con revelado) y dictionary attack (rockyou) desde el listado de sesiones — probado contra un AP de laboratorio dedicado ([`docs/wardrive.md`](docs/wardrive.md), [`docs/lab-wireless.md`](docs/lab-wireless.md)) |
 | GPS | Mapa mundial con la posición en vivo del dongle GPS USB: marcador, precisión, sky plot de satélites (en fix / visibles / necesarios) — [`docs/gps.md`](docs/gps.md) |
-| Aircraft Radar | Aeronaves cercanas por ADS-B (1090MHz) con un HackRF One en modo RX-only: mapa real en modo oscuro con cada avión renderizado en 3D (Three.js) por posición/altitud reales, o radar circular por distancia/rumbo (vía el GPS del Pi); identidad (matrícula/modelo/aerolínea) y ruta resueltas por caché local + adsbdb.com, historial en SQLite y caída a demo si no hay HackRF conectado ([`docs/aircraft-radar.md`](docs/aircraft-radar.md)) |
+| Aircraft Radar | Aeronaves cercanas por ADS-B (1090MHz, decodificado con `readsb`) con un HackRF One en modo RX-only: mapa real en modo oscuro con cada avión moviéndose por su posición real, o radar circular por distancia/rumbo (vía el GPS del Pi); identidad (matrícula/modelo/aerolínea) y ruta resueltas por caché local + adsbdb.com, historial en SQLite y caída a demo si no hay HackRF conectado ([`docs/aircraft-radar.md`](docs/aircraft-radar.md)) |
 
 Detalle completo del setup en [`docs/SETUP.md`](docs/SETUP.md).
 
@@ -456,10 +456,8 @@ unknown" si no se puede confirmar), altitud, velocidad y distancia/rumbo
 reales vía el GPS del Pi. Toggle **MAPA / RADAR** en el header:
 
 - **MAPA**: mapa real (Leaflet, modo oscuro) con cada aeronave ubicada por su
-  posición GPS absoluta — no necesita que el Pi tenga fix GPS para mostrar
-  aviones, solo para ubicarse a sí mismo. Cada avión se dibuja **en 3D**
-  (Three.js) como un cono apuntando según su rumbo real, flotando a una
-  altura proporcional a su altitud sobre un punto/línea en el mapa.
+  posición GPS absoluta y moviéndose en vivo — no necesita que el Pi tenga
+  fix GPS para mostrar aviones, solo para ubicarse a sí mismo.
 - **RADAR**: el disco circular original — Akbal al centro, aeronaves por
   bearing/distancia relativos, anillos de 10/25/50/100km.
 

@@ -262,21 +262,33 @@ el header (mismo patrón que el MAPA/GLOBO 3D de `/gps`):
   invertir los tiles claros (`filter: invert(1) hue-rotate(180deg) ...`)
   en vez de depender de un proveedor de tiles oscuros que puede romperse.
 
-  Cada aeronave se dibuja en **3D con Three.js** (mismo módulo vendorizado
-  que WIFIRADAR, `vendor/three.module.min.js`, vía import map) en un
-  `<canvas>` superpuesto al mapa: un cono apuntando según el rumbo real,
-  flotando a una altura proporcional a su altitud (`altitudeFt / 300`
-  unidades) con una línea vertical + anillo en el punto de tierra —
-  el efecto "torre de radar 3D" en vez de una vista cenital plana. La
-  cámara es fija (no sigue al mapa); en cada pan/zoom de Leaflet se
-  recalculan las coordenadas X/Z de cada avión desde
-  `map.latLngToContainerPoint()`, así el avión 3D siempre coincide con su
-  posición 2D real bajo el mapa. El marcador Leaflet debajo de cada avión
-  queda invisible (`.ar-plane-hitbox`) — solo existe para el click y el
-  tooltip con el callsign; el dibujo real lo hace la capa 3D.
+  Cada aeronave es un `L.divIcon` — un triángulo SVG rotado según su rumbo
+  real y coloreado por tendencia de acercamiento (mismo esquema
+  verde/amarillo/rojo que el radar/LCD). **No usa Three.js/WebGL**: una
+  primera versión dibujaba los aviones con una capa 3D encima del mapa,
+  pero WebGL no es algo de lo que depender en una página que debe andar en
+  cualquier navegador/dispositivo — en algunos simplemente no pintaba nada,
+  sin ningún error visible. Un `<div>` con SVG funciona en todos lados.
 
-  Gotcha de CSS a tener en cuenta si se toca este código: un `<canvas>`
-  (elemento reemplazado) con `position:absolute; inset:0` **no** se
-  estira a llenar su contenedor — cae a su tamaño intrínseco (atributos
-  `width`/`height` del canvas). Hace falta `width:100%; height:100%`
-  explícito además de `inset:0` (ver `.ar-3d` en `aircraft-radar.css`).
+  **Movimiento suave**: Leaflet posiciona cada marcador con un
+  `transform: translate(...)` — `.ar-map .leaflet-marker-icon` le agrega
+  una `transition` sobre ese `transform`, así que `marker.setLatLng()`
+  desliza al marcador a la nueva posición en vez de saltar. Combinado con
+  que las posiciones reales llegan aproximadamente cada segundo (real o
+  demo), el resultado es una aeronave que se ve moverse continuamente en
+  vez de brincar una vez por segundo.
+
+### Distancia/rumbo recalculados en el navegador (no solo en el backend)
+
+El backend solo refresca `distanceKm`/`bearingDeg` cada 5s (el timer de
+`aircraft-tracker.ts` que también consulta el GPS), pero los snapshots por
+WebSocket llegan cada 300ms — usar el valor del backend tal cual hacía que
+el radar circular se viera "brincar" una vez cada 5 segundos en vez de
+moverse. `aircraft-radar.js` guarda la posición de Akbal (la misma que ya
+consulta cada 2s para el marcador propio del mapa) y recalcula
+distancia/rumbo de cada aeronave **en el cliente**, con las mismas
+fórmulas de haversine/bearing que `services/adsb/geo.ts`, en cada snapshot
+— así el radar se mueve tan seguido como llegan snapshots, sin depender
+del timer de 5s del backend. La tendencia "acercándose/alejándose"
+(`approaching`, para el color de cada punto) también se recalcula así,
+comparando contra la última distancia vista por ICAO.

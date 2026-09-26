@@ -2,7 +2,12 @@
 // The backend (device/web-admin-server.ts + services/adsb/*) only ever
 // sends small aggregated JSON snapshots over /aircraft-radar/ws, same
 // shape/cadence as WIFIRADAR's own /wifiradar/ws (see wifiradar.js).
-import * as THREE from "three";
+//
+// Plain 2D Leaflet markers, not Three.js/WebGL: an earlier version drew
+// aircraft with a Three.js layer on top of the map, but WebGL support is
+// not something to depend on for a page meant to work everywhere (some
+// browsers/devices silently give a blank canvas with no visible error) —
+// plain divIcon markers work universally and are simpler to keep correct.
 
 // ---- shared topbar wiring (same markup/classes as the rest of the admin
 // UI — see wifiradar.js/gps.js, duplicated per page since these are
@@ -340,7 +345,59 @@ function lastSeenLabel(ts) {
   return `${Math.round(secs / 60)} min`;
 }
 
+// ---- distance/bearing, recomputed client-side on every snapshot ----
+// The backend only refreshes distanceKm/bearingDeg every 5s (aircraft-
+// tracker.ts's GPS poll cadence) while snapshots arrive every 300ms — using
+// the backend's values directly made the radar view visibly jump once
+// every 5s instead of moving smoothly. Akbal's own position is already
+// polled here (refreshOwnPosition, every 2s, for the map marker) and each
+// aircraft's raw lat/lon arrives fresh in every snapshot, so recomputing
+// locally (same haversine/bearing formulas as services/adsb/geo.ts) lets
+// the radar update at full snapshot rate regardless of the backend's own
+// GPS-poll timer.
+const EARTH_RADIUS_KM = 6371;
+function toRad(deg) {
+  return (deg * Math.PI) / 180;
+}
+function haversineDistanceKm(lat1, lon1, lat2, lon2) {
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return EARTH_RADIUS_KM * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+function initialBearingDeg(lat1, lon1, lat2, lon2) {
+  const y = Math.sin(toRad(lon2 - lon1)) * Math.cos(toRad(lat2));
+  const x =
+    Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lon2 - lon1));
+  const bearing = (Math.atan2(y, x) * 180) / Math.PI;
+  return (bearing + 360) % 360;
+}
+
+let ownPosition = null; // {lat, lon} | null — from refreshOwnPosition
+const lastDistanceByIcao = new Map(); // for the same "approaching" trend the backend computes
+
+function recomputeDistances(aircraftList) {
+  if (!ownPosition) return; // no fix yet — leave whatever the backend sent
+  for (const aircraft of aircraftList) {
+    if (aircraft.latitude === null || aircraft.longitude === null) {
+      aircraft.distanceKm = null;
+      aircraft.bearingDeg = null;
+      aircraft.approaching = null;
+      continue;
+    }
+    const distance = haversineDistanceKm(ownPosition.lat, ownPosition.lon, aircraft.latitude, aircraft.longitude);
+    const bearing = initialBearingDeg(ownPosition.lat, ownPosition.lon, aircraft.latitude, aircraft.longitude);
+    const last = lastDistanceByIcao.get(aircraft.icao);
+    aircraft.approaching = last === undefined ? null : distance < last;
+    aircraft.distanceKm = distance;
+    aircraft.bearingDeg = bearing;
+    lastDistanceByIcao.set(aircraft.icao, distance);
+  }
+}
+
 function applySnapshot(snapshot) {
+  recomputeDistances(snapshot.aircraft);
   latestSnapshot = snapshot;
   setTxt("ar-count", String(snapshot.aircraft.length));
   setTxt("ar-mpm", String(snapshot.messagesPerMinute));
@@ -397,147 +454,6 @@ function initMap() {
       tiles._akbalErrTimer = setTimeout(() => errEl.classList.add("hidden"), 8000);
     }
   });
-  map.on("move zoom", () => updateThreePositions());
-  initThree();
-}
-
-// ---- 3D aircraft layer (Three.js) — a small plane mesh per aircraft,
-// floating above its ground point at a height proportional to altitude,
-// with a drop line + ground ring so the altitude actually reads visually.
-// Ground X/Z come straight from Leaflet's own container-pixel projection
-// of each aircraft's lat/lon (map.latLngToContainerPoint), recomputed on
-// every pan/zoom — so the 3D layer always lines up with the 2D map
-// underneath instead of keeping its own separate camera/projection math.
-const GROUND_SCALE = 0.35; // pixel offset -> Three.js world units
-const ALT_SCALE = 300; // altitudeFt -> world units of height (a 35,000ft airliner sits ~117 units up)
-let three = null; // { renderer, scene, camera, planes: Map<icao, {group,cone,line,ring}> }
-
-function planeColor(aircraft) {
-  return aircraft.approaching === true ? 0x50ff78 : aircraft.approaching === false ? 0xff6b6b : 0xffd166;
-}
-
-function makePlaneGroup(color) {
-  const group = new THREE.Group();
-
-  const cone = new THREE.Mesh(
-    new THREE.ConeGeometry(7, 22, 3),
-    new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.35, flatShading: true }),
-  );
-  cone.rotation.x = -Math.PI / 2; // apex now points toward -Z ("north")
-  group.add(cone);
-
-  const lineGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 0)]);
-  const line = new THREE.Line(lineGeom, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.55 }));
-  group.add(line);
-
-  const ring = new THREE.Mesh(
-    new THREE.RingGeometry(5, 8, 16),
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, side: THREE.DoubleSide }),
-  );
-  ring.rotation.x = -Math.PI / 2;
-  group.add(ring);
-
-  return { group, cone, line, ring };
-}
-
-function initThree() {
-  const canvas = document.getElementById("ar-3d");
-  if (!canvas || !map) return;
-  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
-  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
-  const scene = new THREE.Scene();
-  scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-  const sun = new THREE.DirectionalLight(0xffffff, 0.8);
-  sun.position.set(200, 400, 200);
-  scene.add(sun);
-  const camera = new THREE.PerspectiveCamera(45, 1, 1, 5000);
-  three = { renderer, scene, camera, planes: new Map() };
-  resizeThree();
-  requestAnimationFrame(animateThree);
-}
-
-function resizeThree() {
-  if (!three) return;
-  const el = document.getElementById("ar-map");
-  const rect = el.getBoundingClientRect();
-  const w = Math.max(1, rect.width);
-  const h = Math.max(1, rect.height);
-  three.renderer.setSize(w, h, false);
-  three.camera.aspect = w / h;
-  // Fixed tilted-down view over the scene center — the "3D radar tower"
-  // look. Objects' ground X/Z (from Leaflet pixels) stay centered around
-  // the viewport middle regardless of pan/zoom, so this camera never needs
-  // to move to track the map. Pulled back/up and aimed above ground level
-  // so a high-altitude airliner (which can sit ~150 world units up) stays
-  // in frame alongside low ones near the ground plane.
-  three.camera.position.set(0, 420, 480);
-  three.camera.lookAt(0, 60, 0);
-  three.camera.updateProjectionMatrix();
-  updateThreePositions();
-}
-window.addEventListener("resize", () => resizeThree());
-
-function animateThree(t) {
-  requestAnimationFrame(animateThree);
-  if (!three || view !== "map") return;
-  // Gentle bob so the 3D layer reads as alive even between snapshot ticks.
-  for (const { group } of three.planes.values()) {
-    group.position.y += Math.sin((t || 0) / 600 + group.position.x) * 0.02;
-  }
-  three.renderer.render(three.scene, three.camera);
-}
-
-// Recomputes every plane's ground X/Z from the map's current pan/zoom —
-// called on Leaflet 'move'/'zoom' and whenever aircraft data updates.
-function updateThreePositions() {
-  if (!three || !map) return;
-  const rect = document.getElementById("ar-map").getBoundingClientRect();
-  const cx = rect.width / 2;
-  const cy = rect.height / 2;
-  for (const [icao, entry] of three.planes) {
-    const aircraft = latestAircraftByIcao.get(icao);
-    if (!aircraft || aircraft.latitude === null) continue;
-    const pt = map.latLngToContainerPoint([aircraft.latitude, aircraft.longitude]);
-    const x = (pt.x - cx) * GROUND_SCALE;
-    const z = (pt.y - cy) * GROUND_SCALE;
-    const y = Math.max(6, (aircraft.altitudeFt || 0) / ALT_SCALE);
-    entry.group.position.set(x, y, z);
-    entry.group.rotation.y = -THREE.MathUtils.degToRad(aircraft.headingDeg ?? 0);
-    entry.line.geometry.setFromPoints([new THREE.Vector3(0, -y, 0), new THREE.Vector3(0, 0, 0)]);
-    entry.ring.position.y = -y;
-  }
-}
-
-const latestAircraftByIcao = new Map();
-
-function updateThreeAircraft(aircraftList) {
-  if (!three) return;
-  const seen = new Set();
-  for (const aircraft of aircraftList) {
-    if (aircraft.latitude === null || aircraft.longitude === null) continue;
-    seen.add(aircraft.icao);
-    latestAircraftByIcao.set(aircraft.icao, aircraft);
-    let entry = three.planes.get(aircraft.icao);
-    if (!entry) {
-      entry = makePlaneGroup(planeColor(aircraft));
-      three.scene.add(entry.group);
-      three.planes.set(aircraft.icao, entry);
-    } else {
-      const color = planeColor(aircraft);
-      entry.cone.material.color.setHex(color);
-      entry.cone.material.emissive.setHex(color);
-      entry.line.material.color.setHex(color);
-      entry.ring.material.color.setHex(color);
-    }
-  }
-  for (const [icao, entry] of three.planes) {
-    if (!seen.has(icao)) {
-      three.scene.remove(entry.group);
-      three.planes.delete(icao);
-      latestAircraftByIcao.delete(icao);
-    }
-  }
-  updateThreePositions();
 }
 
 function updateOwnMarker(lat, lon) {
@@ -574,8 +490,10 @@ async function refreshOwnPosition() {
     if (!res.ok) return;
     const gps = await res.json();
     if (gps.hasFix && gps.latitude != null && gps.longitude != null) {
+      ownPosition = { lat: gps.latitude, lon: gps.longitude };
       updateOwnMarker(gps.latitude, gps.longitude);
     } else {
+      ownPosition = null;
       clearOwnMarker();
     }
   } catch {
@@ -583,19 +501,36 @@ async function refreshOwnPosition() {
   }
 }
 
-// The visible plane glyph is now the Three.js 3D layer (see makePlaneGroup)
-// — this marker only exists as the click hit-target under it, sized for a
-// comfortable tap/click area but with no drawn icon of its own.
-const PLANE_HITBOX_ICON = L.divIcon({
-  className: "ar-plane-marker-wrap",
-  html: '<div class="ar-plane-hitbox"></div>',
-  iconSize: [28, 28],
-  iconAnchor: [14, 14],
-});
+// Plain SVG triangle rotated by heading, colored by approach trend — same
+// three-tier color as the list/radar/LCD (green=approaching, red=receding,
+// yellow=unknown/no fix yet).
+function planeIconHtml(aircraft) {
+  const color = aircraft.approaching === true ? "#50ff78" : aircraft.approaching === false ? "#ff6b6b" : "#ffd166";
+  const rotation = aircraft.headingDeg ?? 0;
+  return `
+    <div class="ar-plane-marker" style="transform: rotate(${rotation}deg)">
+      <svg width="20" height="20" viewBox="0 0 24 24">
+        <path d="M12 2 L19 20 L12 16 L5 20 Z" fill="${color}" stroke="#0b0d0f" stroke-width="1"/>
+      </svg>
+    </div>
+  `;
+}
+
+function planeIcon(aircraft) {
+  return L.divIcon({
+    className: "ar-plane-marker-wrap",
+    html: planeIconHtml(aircraft),
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+  });
+}
 
 // Adds/updates a marker per aircraft that has a real lat/lon, and removes
 // markers for aircraft that dropped out of the snapshot (out of range,
 // pruned) — same "only what's currently tracked" rule as the list/radar.
+// setLatLng() alone would jump between positions; aircraft-radar.css adds
+// a CSS transition on .leaflet-marker-icon so this glides instead, matching
+// the ~1s cadence real/demo position updates actually arrive at.
 function updateAircraftMarkers(aircraftList) {
   if (!map) return;
   const seen = new Set();
@@ -605,7 +540,7 @@ function updateAircraftMarkers(aircraftList) {
     const pos = [aircraft.latitude, aircraft.longitude];
     let marker = aircraftMarkers.get(aircraft.icao);
     if (!marker) {
-      marker = L.marker(pos, { icon: PLANE_HITBOX_ICON, title: displayName(aircraft) }).addTo(map);
+      marker = L.marker(pos, { icon: planeIcon(aircraft), title: displayName(aircraft) }).addTo(map);
       marker.bindTooltip(displayName(aircraft), {
         permanent: true,
         direction: "top",
@@ -616,6 +551,7 @@ function updateAircraftMarkers(aircraftList) {
       aircraftMarkers.set(aircraft.icao, marker);
     } else {
       marker.setLatLng(pos);
+      marker.setIcon(planeIcon(aircraft));
       marker.setTooltipContent(displayName(aircraft));
     }
   }
@@ -625,7 +561,6 @@ function updateAircraftMarkers(aircraftList) {
       aircraftMarkers.delete(icao);
     }
   }
-  updateThreeAircraft(aircraftList);
 }
 
 function initViewToggle() {
@@ -658,7 +593,6 @@ function setView(next) {
     // Leaflet can't measure a container that was display:none — force a
     // remeasure now that it's visible again (same fix gps.js uses).
     map.invalidateSize({ animate: false });
-    resizeThree();
   }
 }
 

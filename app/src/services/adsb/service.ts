@@ -154,7 +154,7 @@ export class AircraftRadarService extends EventEmitter {
     this.tracker.reset(); // synthetic data must not mix with stale real state
     if (!this.demo) {
       this.demo = new DemoGenerator(this.tracker);
-      this.demo.start();
+      void this.demo.start();
     }
   }
 

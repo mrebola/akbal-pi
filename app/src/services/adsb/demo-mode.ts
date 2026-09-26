@@ -1,14 +1,29 @@
 import { AircraftTracker } from "./aircraft-tracker";
 import { RawAdsbMessage } from "./types";
+import { getGpsStatus } from "../../utils/gps";
 
 // Feeds the exact same AircraftTracker.ingest() path the real HackRF+dump1090
 // pipeline does (see wifiradar/demo-mode.ts for the same idea applied to
 // WIFIRADAR) — only the message source is fake. Aircraft fly in a straight
-// line at constant speed/heading from a spawn point around Guadalajara (GDL),
-// consistent with the wardrive demo mode already using akbal_lab/GDL as its
-// fictional location.
-const CENTER_LAT = 20.5218; // GDL airport, demo-only reference point
-const CENTER_LON = -103.3111;
+// line at constant speed/heading from a spawn point around Akbal's own
+// current position (real GPS fix if there is one, GPS's own demo fix if
+// that's what's active, falling back to Guadalajara/GDL — consistent with
+// the wardrive demo mode's akbal_lab/GDL fictional location — only when
+// there's no GPS position at all).
+//
+// Centering on GPS_DEFAULT unconditionally used to be the bug here: GPS's
+// own demo mode defaults to a fix in Mexico City (utils/gps.ts's DEMO_FIX),
+// ~450km from GDL. AircraftTracker.updatePosition() computes each
+// aircraft's distance/bearing from Akbal's *actual* reported position, so
+// a demo GPS fix in CDMX + aircraft scattered 5-90km around a hardcoded
+// GDL center meant every aircraft was ~450km away — past the radar's
+// 100km outer ring, so every point clamped to the same max radius, and all
+// within the same ~10° angular sliver (a 90km-wide cluster viewed from
+// 450km away subtends a narrow angle) — exactly the "all in a line"
+// symptom. Centering the spawn point on wherever Akbal currently reports
+// itself (whatever that source is) keeps the two consistent no matter
+// which demo/live combination is active.
+const GDL_DEFAULT = { lat: 20.5218, lon: -103.3111 }; // GDL airport, last-resort fallback
 const KM_PER_DEG_LAT = 111.32;
 
 const AIRLINES = [
@@ -37,19 +52,19 @@ type DemoAircraft = {
   squawk: string;
 };
 
-function spawnAircraft(): DemoAircraft {
+function spawnAircraft(center: { lat: number; lon: number }): DemoAircraft {
   const airline = AIRLINES[Math.floor(Math.random() * AIRLINES.length)];
   const distanceKm = 5 + Math.random() * 90;
   const bearing = Math.random() * 360;
   const bearingRad = (bearing * Math.PI) / 180;
   const dLat = (distanceKm * Math.cos(bearingRad)) / KM_PER_DEG_LAT;
-  const kmPerDegLon = KM_PER_DEG_LAT * Math.cos((CENTER_LAT * Math.PI) / 180);
+  const kmPerDegLon = KM_PER_DEG_LAT * Math.cos((center.lat * Math.PI) / 180);
   const dLon = (distanceKm * Math.sin(bearingRad)) / kmPerDegLon;
   return {
     icao: randomIcao(),
     callsign: `${airline.callsignPrefix}${1000 + Math.floor(Math.random() * 8999)}`,
-    lat: CENTER_LAT + dLat,
-    lon: CENTER_LON + dLon,
+    lat: center.lat + dLat,
+    lon: center.lon + dLon,
     altitudeFt: 3000 + Math.floor(Math.random() * 35000),
     speedKt: 180 + Math.floor(Math.random() * 300),
     headingDeg: Math.random() * 360,
@@ -62,19 +77,28 @@ export class DemoGenerator {
   private aircraft: DemoAircraft[] = [];
   private tickTimer: ReturnType<typeof setInterval> | null = null;
   private churnTimer: ReturnType<typeof setInterval> | null = null;
+  private center = GDL_DEFAULT;
 
   constructor(private tracker: AircraftTracker) {}
 
-  start(): void {
+  async start(): Promise<void> {
+    try {
+      const gps = await getGpsStatus();
+      if (gps.latitude != null && gps.longitude != null) {
+        this.center = { lat: gps.latitude, lon: gps.longitude };
+      }
+    } catch {
+      // stay on GDL_DEFAULT
+    }
     const count = 4 + Math.floor(Math.random() * 5);
-    this.aircraft = Array.from({ length: count }, spawnAircraft);
+    this.aircraft = Array.from({ length: count }, () => spawnAircraft(this.center));
     this.tickTimer = setInterval(() => this.tick(), 1000);
     this.churnTimer = setInterval(() => this.churn(), 20_000);
   }
 
   private tick(): void {
     const now = Date.now();
-    const kmPerDegLon = KM_PER_DEG_LAT * Math.cos((CENTER_LAT * Math.PI) / 180);
+    const kmPerDegLon = KM_PER_DEG_LAT * Math.cos((this.center.lat * Math.PI) / 180);
     for (const ac of this.aircraft) {
       // Advance position: 1s of flight at speedKt along headingDeg.
       const distanceKm = (ac.speedKt * 1.852) / 3600;
@@ -117,7 +141,7 @@ export class DemoGenerator {
 
   private churn(): void {
     if (this.aircraft.length < 9 && Math.random() < 0.4) {
-      this.aircraft.push(spawnAircraft());
+      this.aircraft.push(spawnAircraft(this.center));
     } else if (this.aircraft.length > 3 && Math.random() < 0.25) {
       // Just stop simulating this aircraft — it ages out and gets pruned
       // by AircraftTracker.sweep(), same as a real one flying out of range.

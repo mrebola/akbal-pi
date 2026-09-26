@@ -26,6 +26,10 @@ async function main() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setClearColor(0x03060c, 1);
+  // Filmic response: real night shots have crushed blacks and rolled
+  // highlights — this keeps the dark side truly dark without raising blacks.
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.9;
 
   // Slow ambient starfield backdrop.
   {
@@ -106,57 +110,70 @@ async function main() {
       varying vec3 vNormal;
       varying vec3 vWorldPos;
 
+      // ── Adjustable look parameters ──
+      // Terminator width (smaller range = sharper edge).
+      const vec2 TERMINATOR = vec2(-0.08, 0.12);
+      // City-light intensity (emissive on the night side only).
+      const float CITY_BRIGHTNESS = 3.4;
+      // How black the night side is (ocean/land residual light).
+      const float NIGHT_AMBIENT = 0.004;
+
       void main() {
         vec3 n = normalize(vNormal);
         vec3 s = normalize(sunDirection);
-        float cosAngle = dot(n, s);
-        // Smooth day/night terminator (soft twilight band ~ ±7°).
-        float dayAmount = smoothstep(-0.12, 0.12, cosAngle);
+        float sunAmount = dot(n, s);
+        // Short, defined terminator: full day by sunAmount=0.12, full night
+        // by -0.15. No wide gray band.
+        float dayFactor = smoothstep(TERMINATOR.x, TERMINATOR.y, sunAmount);
+        float nightFactor = 1.0 - smoothstep(-0.15, 0.05, sunAmount);
 
         vec3 dayColor;
-        vec3 nightColor;
+        vec3 cityLights;
         if (hasTextures) {
-          // Slightly dimmed and warmed: a real photo from space reads darker
-          // than a raw albedo map — the sun is far away, not a studio light.
-          dayColor = texture2D(dayMap, vUv).rgb * 0.82;
-          dayColor = mix(dayColor, dayColor * dayColor * 2.2, 0.35); // gentle contrast S-curve
-          // City lights: gamma-compress the night texture so dense metros pop
-          // and suburbs stay as faint clusters — a real night shot from orbit.
+          // Day: the albedo map, slightly contrasted — the ACES tonemapper
+          // does the rest; no extra dimming so oceans read deep blue.
+          dayColor = texture2D(dayMap, vUv).rgb;
+          dayColor = mix(dayColor, dayColor * dayColor * 2.4, 0.30); // S-curve
+          // Night lights (emissive): warm sodium streets + brighter cores.
           vec3 lights = texture2D(lightsMap, vUv).rgb;
-          float luminance = dot(lights, vec3(0.299, 0.587, 0.114));
-          vec3 lamps = pow(lights, vec3(1.0 / 1.8)); // lift mid-tones: streets appear
-          lamps *= 4.2;                              // ~80% brighter overall
-          // Sodium-vapor warm tint, cooler core for dense cores (contrast).
-          vec3 sodium = lamps * vec3(1.0, 0.80, 0.50);
-          vec3 cores = pow(lamps, vec3(1.35)) * vec3(1.0, 0.92, 0.78);
-          nightColor = sodium + cores * 0.5;
-          // Faint moonlit base so landmass/ocean silhouettes read on the dark side.
-          nightColor += vec3(0.008, 0.011, 0.020);
+          vec3 lamps = pow(lights, vec3(1.0 / 1.9)); // lift mid-tones: streets appear
+          lamps *= CITY_BRIGHTNESS;
+          vec3 sodium = lamps * vec3(1.0, 0.78, 0.46);
+          vec3 cores = pow(lamps, vec3(1.4)) * vec3(1.0, 0.9, 0.72);
+          cityLights = sodium + cores * 0.55;
         } else {
-          // Procedural fallback: cheap continents/oceans from noise-free bands.
           float lat = abs(vUv.y - 0.5) * 2.0;
           dayColor = mix(vec3(0.05, 0.10, 0.22), vec3(0.12, 0.30, 0.18), step(0.28, sin(vUv.x * 180.0) * 0.5 + 0.5));
-          dayColor = mix(dayColor, vec3(0.8, 0.85, 0.9), smoothstep(0.86, 0.95, lat)); // polar caps
-          dayColor *= 0.6 + 0.4 * smoothstep(0.0, 0.25, lat); // darker equator seam
-          nightColor = vec3(0.010, 0.014, 0.028);
+          dayColor = mix(dayColor, vec3(0.8, 0.85, 0.9), smoothstep(0.86, 0.95, lat));
+          dayColor *= 0.6 + 0.4 * smoothstep(0.0, 0.25, lat);
+          cityLights = vec3(0.0);
         }
 
-        // Twilight tint: orange band hugging the terminator on the day side.
-        float twilight = (1.0 - abs(cosAngle)) * smoothstep(-0.25, 0.25, cosAngle);
-        vec3 color = mix(nightColor, dayColor, dayAmount);
-        color += vec3(0.55, 0.28, 0.08) * twilight * 0.35 * dayAmount;
+        // Night base: near-black. Ocean sinks to almost nothing; land keeps a
+        // whisper of residual light — not brown, not gray: deep blue-black.
+        vec3 nightColor = vec3(NIGHT_AMBIENT) * (0.6 + 0.4 * dayColor.g);
+        // Twilight: a short warm band exactly at the terminator (sunset hue),
+        // fading out fast — not a wide brown smear.
+        float twilight = smoothstep(0.25, 0.0, abs(sunAmount)) * smoothstep(-0.35, 0.05, sunAmount);
+        vec3 twilightTint = vec3(0.85, 0.38, 0.10) * twilight * 0.28;
 
-        // Specular sun-glint on oceans (Blinn-ish against a fixed view).
+        // Compose: night base + city lights, then day lit by N·L over it.
+        float diffuse = max(sunAmount, 0.0);
+        vec3 color = nightColor * nightFactor;
+        color += cityLights * nightFactor; // lights ONLY where it's night
+        color = mix(color, dayColor * (0.15 + 0.85 * diffuse), dayFactor);
+        color += twilightTint;
+
+        // Ocean specular on the day side only.
         vec3 viewDir = normalize(cameraPosition - vWorldPos);
         vec3 halfDir = normalize(s + viewDir);
-        float spec = pow(max(dot(n, halfDir), 0.0), 42.0);
-        color += vec3(0.35, 0.4, 0.45) * spec * dayAmount * 0.55;
+        float spec = pow(max(dot(n, halfDir), 0.0), 60.0);
+        color += vec3(0.4, 0.45, 0.5) * spec * dayFactor * 0.5;
 
-        // Faint rim (no white/blue daytime glow on the limb): barely-there
-        // sky-blue only, so the night side keeps its dark, living feel.
-        float fres = pow(1.0 - max(dot(n, viewDir), 0.0), 3.2);
-        vec3 rim = mix(vec3(0.004, 0.008, 0.02), vec3(0.06, 0.12, 0.24), dayAmount);
-        color += rim * fres * 0.5;
+        // Very thin limb: no white glow.
+        float fres = pow(1.0 - max(dot(n, viewDir), 0.0), 3.5);
+        vec3 rim = vec3(0.05, 0.10, 0.22) * dayFactor;
+        color += rim * fres * 0.4;
 
         gl_FragColor = vec4(color, 1.0);
       }
@@ -196,20 +213,23 @@ async function main() {
           vec3 viewDir = normalize(cameraPosition - vWorldPos);
           float glow = pow(0.62 - dot(normalize(vNormal), viewDir) * 0.4, 3.5);
           vec3 s = normalize(sunDirection);
-          float dayAmount = smoothstep(-0.3, 0.5, dot(normalize(vNormal), s));
-          // Tight, dim halo: a whisper of blue on the day limb, almost nothing
-          // at night — no white glow washing out the dark side.
-          vec3 tint = mix(vec3(0.01, 0.02, 0.05), vec3(0.10, 0.22, 0.45), dayAmount);
-          gl_FragColor = vec4(tint, clamp(glow, 0.0, 1.0) * 0.28);
+          float dayAmount = smoothstep(0.0, 0.5, dot(normalize(vNormal), s));
+          // Thin blue rim: clearly visible on the sunlit limb, fading to
+          // nothing around the night hemisphere — never lights the sphere.
+          vec3 tint = mix(vec3(0.002, 0.005, 0.012), vec3(0.16, 0.35, 0.72), dayAmount);
+          gl_FragColor = vec4(tint, clamp(glow, 0.0, 1.0) * mix(0.03, 0.42, dayAmount));
         }
       `,
     }),
   );
   scene.add(atmosphere);
 
-  // ─── Lighting (mostly handled by the shader; lights for the satellites) ───
-  scene.add(new THREE.AmbientLight(0xffffff, 0.28));
-  const sun = new THREE.DirectionalLight(0xffffff, 0.75);
+  // ─── Lighting: the sun is THE light source; ambient ≈ nothing ────────────
+  // The earth shader does its own day/night; this light exists for the
+  // satellites (MeshBasic — actually unaffected) and any standard materials.
+  // Kept at near-zero so nothing brightens the night hemisphere.
+  scene.add(new THREE.AmbientLight(0xffffff, 0.05));
+  const sun = new THREE.DirectionalLight(0xffffff, 2.6);
   scene.add(sun);
   const sunTarget = new THREE.Object3D();
   scene.add(sunTarget);
@@ -262,12 +282,14 @@ async function main() {
 
   // Realistic sun — the full multi-layer effect from the "Realistic Sun"
   // three.js example (fwdapps.net/l/sun): perlin cubemap → shader sphere →
-  // glow ribbon → flying rays → arcing magma flares. Scaled up ~12× to read
-  // at earth-view distance; NOT to scale, but always in the real direction.
+  // glow ribbon → flying rays → arcing magma flares. Visual size ~1/4 of the
+  // previous take: small and distant, like a real star. Its mesh scale is
+  // purely cosmetic — the earth's lighting comes exclusively from the
+  // DirectionalLight driven by the solar direction.
   const { RealisticSun } = await import("./sun.js");
   const sunFx = new RealisticSun(renderer);
   const sunGroup = sunFx.group;
-  sunGroup.scale.setScalar(7); // 1.5-radius sphere → ~10.5 world units
+  sunGroup.scale.setScalar(1.8); // 1.5-radius sphere → ~2.7 world units
   scene.add(sunGroup);
 
   // ─── Receiver ground point + user marker ─────────────────────────────────

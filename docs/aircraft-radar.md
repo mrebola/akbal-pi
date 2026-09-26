@@ -304,3 +304,22 @@ fórmulas de haversine/bearing que `services/adsb/geo.ts`, en cada snapshot
 del timer de 5s del backend. La tendencia "acercándose/alejándose"
 (`approaching`, para el color de cada punto) también se recalcula así,
 comparando contra la última distancia vista por ICAO.
+
+### Trayectoria y auto-encuadre (vista MAPA)
+
+Cada aeronave con posición deja un rastro (`L.polyline`, verde punteado)
+en `aircraft-radar.js`: la primera vez que aparece se pide su historial
+(`GET /api/aircraft/history?icao=`, la misma tabla SQLite de
+`history.ts`) para no empezar con un rastro vacío, y de ahí en adelante
+se extiende con cada posición nueva que llega (deduplicando puntos
+repetidos). Se borra cuando la aeronave sale del snapshot (fuera de
+rango, podada por `aircraft-tracker.ts`).
+
+El mapa también se auto-encuadra: cuando el conjunto de aeronaves *con
+posición* cambia (aparece una nueva, o la última desaparece),
+`map.fitBounds()` ajusta zoom/centro para que Akbal y todas las
+aeronaves detectadas con posición entren en pantalla (con
+`maxZoom` para no acercarse de forma absurda si una queda muy cerca).
+No se reajusta en cada snapshot — solo cuando cambia el conjunto — para
+no pelearse con quien esté paneando/zoomeando manualmente mientras
+observa una aeronave moverse.

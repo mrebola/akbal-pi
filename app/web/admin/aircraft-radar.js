@@ -549,6 +549,85 @@ function planeIcon(aircraft) {
   });
 }
 
+// ---- trajectory trails — one polyline per aircraft, seeded from SQLite
+// history (GET /api/aircraft/history?icao=) the first time it's seen so the
+// trail isn't just "born empty" on page load, then extended live as new
+// positions arrive. Points are deduped (a position repeated verbatim, e.g.
+// while waiting on the next real message, doesn't add a segment).
+const aircraftTrails = new Map(); // icao -> L.Polyline
+const aircraftTrailPoints = new Map(); // icao -> [[lat,lon], ...] chronological
+const trailSeeded = new Set(); // icaos whose history fetch has already been kicked off
+const MAX_TRAIL_POINTS = 80;
+
+function trailLine(icao) {
+  let line = aircraftTrails.get(icao);
+  if (!line) {
+    line = L.polyline([], { color: "#50ff78", weight: 2, opacity: 0.55, dashArray: "5,5" }).addTo(map);
+    aircraftTrails.set(icao, line);
+  }
+  return line;
+}
+
+function pushTrailPoint(icao, lat, lon) {
+  const points = aircraftTrailPoints.get(icao) || [];
+  const last = points[points.length - 1];
+  if (!last || last[0] !== lat || last[1] !== lon) {
+    points.push([lat, lon]);
+    if (points.length > MAX_TRAIL_POINTS) points.shift();
+    aircraftTrailPoints.set(icao, points);
+  }
+  trailLine(icao).setLatLngs(points);
+}
+
+async function seedTrail(icao) {
+  if (trailSeeded.has(icao)) return;
+  trailSeeded.add(icao);
+  try {
+    const res = await fetch(`/api/aircraft/history?icao=${encodeURIComponent(icao)}`);
+    if (!res.ok) return;
+    const rows = await res.json();
+    const seeded = rows
+      .filter((r) => r.lat != null && r.lon != null)
+      .reverse() // history.ts returns newest-first; the trail wants chronological order
+      .map((r) => [r.lat, r.lon]);
+    if (seeded.length === 0 || !map) return;
+    // Prepend history to whatever live points already accumulated while
+    // this fetch was in flight, instead of overwriting them.
+    const current = aircraftTrailPoints.get(icao) || [];
+    const merged = [...seeded, ...current].slice(-MAX_TRAIL_POINTS);
+    aircraftTrailPoints.set(icao, merged);
+    trailLine(icao).setLatLngs(merged);
+  } catch {
+    // offline / no history yet — trail just grows from live points instead
+  }
+}
+
+function clearTrail(icao) {
+  const line = aircraftTrails.get(icao);
+  if (line) map.removeLayer(line);
+  aircraftTrails.delete(icao);
+  aircraftTrailPoints.delete(icao);
+  trailSeeded.delete(icao);
+}
+
+// ---- auto-fit: zoom/pan so the map actually shows whatever's just been
+// detected. Only re-fits when the *set* of positioned aircraft changes (a
+// new one appears, or the last one disappears) — re-fitting on every
+// snapshot tick would fight anyone manually panning/zooming while watching
+// a plane move. maxZoom caps how tight it'll go for a very close aircraft.
+let positionedIcaosKey = "";
+function maybeAutoFit(aircraftList) {
+  if (!map || !ownPosition) return;
+  const positioned = aircraftList.filter((a) => a.latitude !== null && a.longitude !== null);
+  const key = positioned.map((a) => a.icao).sort().join(",");
+  if (key === positionedIcaosKey) return;
+  positionedIcaosKey = key;
+  if (positioned.length === 0) return; // nothing new to frame — keep the current view
+  const bounds = L.latLngBounds([[ownPosition.lat, ownPosition.lon]]);
+  for (const a of positioned) bounds.extend([a.latitude, a.longitude]);
+  map.fitBounds(bounds, { padding: [70, 70], maxZoom: 14 });
+}
+
 // Adds/updates a marker per aircraft that has a real lat/lon, and removes
 // markers for aircraft that dropped out of the snapshot (out of range,
 // pruned) — same "only what's currently tracked" rule as the list/radar.
@@ -578,13 +657,17 @@ function updateAircraftMarkers(aircraftList) {
       marker.setIcon(planeIcon(aircraft));
       marker.setTooltipContent(displayName(aircraft));
     }
+    void seedTrail(aircraft.icao);
+    pushTrailPoint(aircraft.icao, aircraft.latitude, aircraft.longitude);
   }
   for (const [icao, marker] of aircraftMarkers) {
     if (!seen.has(icao)) {
       map.removeLayer(marker);
       aircraftMarkers.delete(icao);
+      clearTrail(icao);
     }
   }
+  maybeAutoFit(aircraftList);
 }
 
 function initViewToggle() {

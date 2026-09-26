@@ -80,6 +80,16 @@ GPS no se mueve lo suficiente entre dos mensajes separados por cientos de
 ms como para justificar el I/O extra. Sin fix, `distanceKm`/`bearingDeg`
 quedan `null` — nunca un valor inventado.
 
+**`ADSB_HOME_LAT`/`ADSB_HOME_LON`** (`.env`, ambas requeridas juntas,
+`service.ts`'s `homePosition()`): posición de referencia fija, usada
+*solo* para el cálculo de distancia/rumbo de la vista RADAR cuando no hay
+fix GPS real (un fix real siempre tiene prioridad). Sin GPS conectado —
+o sin vista de cielo, caso muy común en interiores — la vista radar no
+tiene desde dónde medir y se queda permanentemente vacía; esto no es un
+bug de renderizado, es que nunca hubo un punto de referencia. La página
+`/gps` nunca usa este fallback (siempre muestra el fix real o nada), es
+exclusivo de la vista radar de este módulo.
+
 **Dos motivos distintos para que una aeronave no aparezca en el mapa/radar,
 aunque sí esté en la lista** (fácil de confundir): (1) Akbal no tiene fix
 GPS — nada se puede ubicar; o (2) Akbal sí tiene fix, pero *esa aeronave en

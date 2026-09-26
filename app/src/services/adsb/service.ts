@@ -8,6 +8,19 @@ import { getGpsStatus } from "../../utils/gps";
 const SWEEP_INTERVAL_MS = 5_000;
 const RETRY_INTERVAL_MS = 15_000;
 
+// Fixed reference position for the radar view (distance/bearing math) when
+// Akbal has no live GPS fix — e.g. no GPS dongle plugged in, or one with no
+// sky view. Manually configured by whoever installs Akbal (they know where
+// the device physically sits), same idea as a receiver's "site location" in
+// dump1090-fa/tar1090 — never inferred or guessed. Both env vars must be set
+// and parse as finite numbers, otherwise the radar view stays without a
+// reference point (its existing "sin fix GPS" messaging already covers that).
+function homePosition(): { lat: number; lon: number } | null {
+  const lat = parseFloat(process.env.ADSB_HOME_LAT || "");
+  const lon = parseFloat(process.env.ADSB_HOME_LON || "");
+  return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null;
+}
+
 // Orchestrates Aircraft Radar end to end: try the real HackRF+dump1090
 // pipeline (hackrf_info -> hackrf_transfer|dump1090 -> SBS feed -> tracker),
 // and if any step fails — no HackRF, dump1090 missing, process dies — fall
@@ -85,14 +98,23 @@ export class AircraftRadarService extends EventEmitter {
   // Polled on the same cadence as the sweep timer (not per ADS-B message —
   // see aircraft-tracker.ts's updatePosition comment for why). Errors are
   // swallowed: no GPS fix just means distance/bearing stay null, same as
-  // the web GPS page's own "sin fix" state.
+  // the web GPS page's own "sin fix" state — unless ADSB_HOME_LAT/LON is
+  // configured (see homePosition()), in which case that fixed reference
+  // point is used instead so the radar view still works on a Pi with no
+  // GPS dongle or without sky view for a real fix.
   private async refreshGpsPosition(): Promise<void> {
     try {
       const status = await getGpsStatus();
       const hasFix = status.hasFix && status.latitude !== null && status.longitude !== null;
-      this.tracker.updatePosition(hasFix ? status.latitude : null, hasFix ? status.longitude : null);
+      if (hasFix) {
+        this.tracker.updatePosition(status.latitude, status.longitude);
+        return;
+      }
+      const home = homePosition();
+      this.tracker.updatePosition(home ? home.lat : null, home ? home.lon : null);
     } catch {
-      this.tracker.updatePosition(null, null);
+      const home = homePosition();
+      this.tracker.updatePosition(home ? home.lat : null, home ? home.lon : null);
     }
   }
 

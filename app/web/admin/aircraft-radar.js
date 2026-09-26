@@ -200,16 +200,28 @@ function displayName(aircraft) {
 }
 
 // "null distance" has two very different causes an operator needs to tell
-// apart: Akbal itself has no GPS fix (nothing can be placed on the radar
-// right now), vs. this *specific* aircraft simply hasn't had a position
-// message (SBS type 2/3) decode yet — real ADS-B reception here is sparse
-// enough that an aircraft can have speed/altitude/identity resolved (from
-// velocity/surveillance messages) well before its position ever does. Only
-// the first case is "sin fix GPS"; conflating them made a perfectly normal
-// "still waiting for a position report" look like a GPS problem.
+// apart: there's no reference point at all to measure from (nothing can be
+// placed on the radar right now — no live GPS fix on Akbal AND no
+// ADSB_HOME_LAT/LON fallback configured server-side, see service.ts), vs.
+// this *specific* aircraft simply hasn't had a position message (SBS type
+// 2/3) decode yet — real ADS-B reception here is sparse enough that an
+// aircraft can have speed/altitude/identity resolved (from velocity/
+// surveillance messages) well before its position ever does. Only the first
+// case is "sin fix GPS"; conflating them made a perfectly normal "still
+// waiting for a position report" look like a GPS problem.
+//
+// The client only ever sees its own live fix (ownPosition, null when Akbal
+// has none) — it has no way to know whether the backend's home-position
+// fallback is configured. So "is there a reference at all" is inferred from
+// the snapshot itself: if ANY aircraft got a real distanceKm, a reference
+// clearly exists and this aircraft's null is about ITS OWN missing position.
+function hasDistanceReference(snapshot) {
+  return Boolean(ownPosition) || (snapshot?.aircraft.some((a) => a.distanceKm !== null) ?? false);
+}
+
 function distanceLabel(aircraft) {
   if (aircraft.distanceKm !== null) return fmt(aircraft.distanceKm, " km", 1);
-  if (!ownPosition) return "sin fix GPS de Akbal";
+  if (!hasDistanceReference(latestSnapshot)) return "sin fix GPS de Akbal";
   if (aircraft.latitude === null) return "sin posición aún";
   return "—";
 }
@@ -234,6 +246,9 @@ function renderList(snapshot) {
         <span class="${aircraft.distanceKm === null ? "" : "warn"}">${distanceLabel(aircraft)}</span>
         <span>${aircraft.bearingDeg === null ? "" : `${bearingCompass(aircraft.bearingDeg)} ${Math.round(aircraft.bearingDeg)}°`}</span>
       </div>
+      ${aircraft.latitude !== null && aircraft.longitude !== null
+        ? `<button type="button" class="ar-card-note-btn" title="Ver info de ${displayName(aircraft)}">📝</button>`
+        : ""}
     `;
     // List click only centers the map on this aircraft — it no longer also
     // opens the detail card (that's now specifically a map-marker/tooltip
@@ -246,6 +261,17 @@ function renderList(snapshot) {
       render();
       centerMapOn(aircraft);
     });
+    // Note icon: only present once the aircraft has a position (it's the
+    // same "shows up on the map" aircraft the user asked for) — opens the
+    // detail modal directly from the list, without stealing the card's own
+    // click (which only centers the map, see above).
+    const noteBtn = card.querySelector(".ar-card-note-btn");
+    if (noteBtn) {
+      noteBtn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        openDetail(aircraft);
+      });
+    }
     listEl.appendChild(card);
   }
 }

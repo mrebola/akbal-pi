@@ -80,16 +80,46 @@ header.topbar { z-index: 1000; }
 }
 
 .ar-card {
+  position: relative;
   background: var(--bg-raised);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 10px 12px;
+  padding: 10px 34px 10px 12px;
   cursor: pointer;
   transition: border-color 0.12s ease;
 }
 
 .ar-card:hover { border-color: var(--border-strong); }
 .ar-card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+
+/* Opens the detail modal straight from the list (the card itself only
+   centers the map on click, see aircraft-radar.js's renderList) — only
+   rendered once the aircraft actually has a position, i.e. it's the same
+   aircraft that shows up on the map. */
+.ar-card-note-btn {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  line-height: 1;
+  background: var(--bg-elevated, #1c2024);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.12s ease, border-color 0.12s ease;
+}
+
+.ar-card-note-btn:hover {
+  opacity: 1;
+  border-color: var(--accent);
+}
 
 .ar-card-top {
   display: flex;
@@ -139,14 +169,10 @@ header.topbar { z-index: 1000; }
 
 /* True dark-mode tiles: OSM only ships light basemaps for free/keyless use
    (CARTO's dark_all tiles now require an API key — see gps.js's history
-   with this), so this inverts the light tiles, the standard no-tile-provider
-   trick for a dark map. saturate(0) instead of a hue-rotate compensation:
-   OSM's standard raster tiles bake in colored POI icons (e.g. small
-   pink/magenta airport-symbol triangles) that get confused with our own
-   colored aircraft triangles — fully desaturating the tile pane turns
-   those into neutral gray so only our live markers carry color. */
+   with this), so this inverts the light tiles and rotates hue back to
+   compensate, the standard no-tile-provider trick for a dark map. */
 .ar-map .leaflet-tile-pane {
-  filter: invert(1) brightness(0.95) contrast(0.9) saturate(0);
+  filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9) saturate(0.9);
 }
 
 .ar-map .leaflet-control-attribution {

@@ -8,11 +8,16 @@
     :root {
       --bg: #0b0d0f;
       --bg-raised: #10141a;
+      --bg-elevated: #161c22;
       --border: #1d2f22;
+      --border-strong: #2c4b37;
       --text-primary: #e8fff0;
       --text-secondary: #6d8f79;
+      --text-muted: #46604f;
       --accent: #50ff78;
+      --accent-dim: #234a30;
       --danger: #ff6b6b;
+      --font-mono: "Courier New", Courier, monospace;
     }
     * { box-sizing: border-box; }
     html, body {
@@ -20,7 +25,7 @@
       height: 100%;
       background: var(--bg);
       color: var(--text-primary);
-      font-family: "Courier New", Courier, monospace;
+      font-family: var(--font-mono);
     }
     body {
       display: flex;
@@ -30,62 +35,123 @@
       position: relative;
       overflow: hidden;
     }
+    .bg-grid {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(80, 255, 120, 0.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(80, 255, 120, 0.06) 1px, transparent 1px);
+      background-size: 42px 42px;
+      -webkit-mask-image: radial-gradient(ellipse at center, black 0%, transparent 72%);
+      mask-image: radial-gradient(ellipse at center, black 0%, transparent 72%);
+    }
     body::before {
       content: "";
       position: fixed;
       inset: 0;
       pointer-events: none;
+      z-index: 2;
       background: repeating-linear-gradient(
         0deg,
-        rgba(80, 255, 120, 0.03),
-        rgba(80, 255, 120, 0.03) 1px,
+        rgba(80, 255, 120, 0.025),
+        rgba(80, 255, 120, 0.025) 1px,
         transparent 1px,
         transparent 3px
       );
     }
-    .card {
+    .hud-corner {
+      position: fixed;
+      top: 18px;
+      font-size: 10px;
+      line-height: 1.6;
+      color: var(--text-muted);
+      letter-spacing: 0.03em;
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: 1;
+    }
+    .hud-tl { left: 20px; text-align: left; }
+    .hud-tr { right: 20px; text-align: right; }
+    .hud-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 5px var(--accent);
+      margin-left: 4px;
+      vertical-align: 1px;
+    }
+    .login-wrap {
       position: relative;
       width: 100%;
-      max-width: 340px;
+      max-width: 440px;
+    }
+    .card-glow {
+      position: absolute;
+      z-index: 0;
+      inset: 50% auto auto 50%;
+      width: 560px;
+      height: 560px;
+      margin-left: -280px;
+      margin-top: -280px;
+      background: radial-gradient(circle, rgba(80, 255, 120, 0.16), transparent 68%);
+      filter: blur(4px);
+      pointer-events: none;
+    }
+    .card {
+      position: relative;
+      z-index: 1;
+      width: 100%;
       background: var(--bg-raised);
       border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 28px 26px 24px;
-      box-shadow: 0 0 24px rgba(80, 255, 120, 0.08), inset 0 0 40px rgba(80, 255, 120, 0.03);
+      border-radius: 12px;
+      padding: 32px 32px 26px;
+      box-shadow: 0 0 32px rgba(80, 255, 120, 0.09), inset 0 0 44px rgba(80, 255, 120, 0.03);
     }
     .avatar {
       display: block;
-      width: 84px;
-      height: 84px;
-      border-radius: 14px;
+      width: 96px;
+      height: 96px;
+      border-radius: 16px;
       object-fit: cover;
       border: 1px solid var(--border);
-      box-shadow: 0 0 16px rgba(80, 255, 120, 0.15);
-      margin: 0 auto 12px;
+      box-shadow: 0 0 18px rgba(80, 255, 120, 0.18);
+      margin: 0 auto 14px;
     }
     .prompt {
+      text-align: center;
       font-size: 12px;
       color: var(--text-secondary);
-      letter-spacing: 0.08em;
+      letter-spacing: 0.06em;
     }
     h1 {
-      margin: 6px 0 2px;
-      font-size: 26px;
-      letter-spacing: 0.16em;
+      margin: 8px 0 2px;
+      text-align: center;
+      font-size: 30px;
+      letter-spacing: 0.18em;
       color: var(--accent);
-      text-shadow: 0 0 10px rgba(80, 255, 120, 0.5);
+      text-shadow: 0 0 12px rgba(80, 255, 120, 0.5);
     }
     .subtitle {
-      margin: 0 0 22px;
-      font-size: 12px;
+      margin: 0;
+      text-align: center;
+      font-size: 11px;
+      letter-spacing: 0.12em;
       color: var(--text-secondary);
+    }
+    .divider {
+      height: 1px;
+      margin: 20px 0 4px;
+      background: linear-gradient(90deg, transparent, var(--border-strong), transparent);
     }
     label {
       display: block;
       font-size: 11px;
       color: var(--text-secondary);
-      margin: 14px 0 4px;
-      letter-spacing: 0.05em;
+      margin: 16px 0 5px;
+      letter-spacing: 0.06em;
     }
     input {
       width: 100%;
@@ -94,98 +160,201 @@
       color: var(--accent);
       font-family: inherit;
       font-size: 14px;
-      padding: 10px 12px;
+      padding: 11px 12px;
       border-radius: 6px;
       outline: none;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    input:hover {
+      border-color: var(--border-strong);
     }
     input:focus {
       border-color: var(--accent);
       box-shadow: 0 0 8px rgba(80, 255, 120, 0.35);
     }
-    button {
+    .input-wrap {
+      position: relative;
+    }
+    .input-wrap input {
+      padding-right: 40px;
+    }
+    .toggle-pass {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 40px;
+      background: transparent;
+      border: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+    .toggle-pass:hover { color: var(--accent); }
+    .toggle-pass svg { width: 17px; height: 17px; }
+    .toggle-pass .icon-off { display: none; }
+    .toggle-pass.is-visible .icon-on { display: none; }
+    .toggle-pass.is-visible .icon-off { display: block; }
+    button[type="submit"] {
       width: 100%;
-      margin-top: 20px;
+      margin-top: 22px;
       background: var(--accent);
       color: #06140b;
       border: none;
-      border-radius: 6px;
-      padding: 11px 16px;
+      border-radius: 8px;
+      padding: 13px 16px;
       font-weight: 700;
       font-family: inherit;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.08em;
       cursor: pointer;
       font-size: 14px;
+      box-shadow: 0 0 14px rgba(80, 255, 120, 0.35);
+      transition: transform 0.1s ease, box-shadow 0.15s ease, opacity 0.15s ease;
     }
-    button:disabled { opacity: 0.6; cursor: default; }
+    button[type="submit"]:hover {
+      box-shadow: 0 0 20px rgba(80, 255, 120, 0.55);
+    }
+    button[type="submit"]:active {
+      transform: translateY(1px);
+    }
+    button[type="submit"]:disabled { opacity: 0.6; cursor: default; box-shadow: none; }
+    .status-line {
+      margin-top: 14px;
+      text-align: center;
+      font-size: 11px;
+      color: var(--text-muted);
+      letter-spacing: 0.03em;
+    }
+    .status-line .hud-dot { margin-left: 0; margin-right: 5px; }
     .error {
-      min-height: 1.2em;
-      margin-top: 12px;
-      font-size: 12px;
+      margin-top: 4px;
+      font-size: 11px;
       color: var(--danger);
       text-align: center;
+      letter-spacing: 0.02em;
+    }
+    .error:not(:empty) {
+      margin-top: 14px;
+      padding: 8px 10px;
+      border: 1px solid rgba(255, 107, 107, 0.35);
+      border-radius: 6px;
+      background: rgba(255, 107, 107, 0.06);
     }
     .cursor {
       display: inline-block;
-      width: 8px;
-      height: 14px;
+      width: 9px;
+      height: 16px;
       background: var(--accent);
       margin-left: 4px;
-      vertical-align: -2px;
+      vertical-align: -3px;
       animation: blink 1s steps(1) infinite;
     }
     @keyframes blink { 50% { opacity: 0; } }
+
+    @media (max-width: 640px) {
+      .hud-corner { display: none; }
+    }
+    @media (max-width: 480px) {
+      .card { padding: 24px 18px 20px; }
+      .avatar { width: 76px; height: 76px; }
+      h1 { font-size: 26px; }
+    }
   </style>
 </head>
 <body>
-  <form class="card" id="login-form" autocomplete="off">
-    <img class="avatar" src="/avatar/standing.gif" alt="Akbal" />
-    <div class="prompt">root@akbal-pi:~$ ./acceso</div>
-    <h1>AKBAL<span class="cursor"></span></h1>
-    <p class="subtitle">Panel de control — acceso restringido</p>
+  <div class="bg-grid"></div>
 
-    <label for="username">usuario</label>
-    <input id="username" name="username" type="text" autocomplete="username" required autofocus />
+  <div class="hud-corner hud-tl">
+    AKBAL.SYSTEMS v2.3.1<br />
+    NODO: AKBAL-PI<br />
+    HOST: <span id="hud-host">—</span><br />
+    ESTADO: EN LÍNEA<span class="hud-dot"></span>
+  </div>
+  <div class="hud-corner hud-tr">
+    CONEXIÓN SEGURA<br />
+    SSH://akbal-pi
+  </div>
 
-    <label for="password">contraseña</label>
-    <input id="password" name="password" type="password" autocomplete="current-password" required />
+  <div class="login-wrap">
+    <div class="card-glow"></div>
+    <form class="card" id="login-form" autocomplete="off">
+      <img class="avatar" src="/avatar/standing.gif" alt="Akbal" />
+      <div class="prompt">root@akbal-pi:~$ ./acceso</div>
+      <h1>AKBAL<span class="cursor"></span></h1>
+      <p class="subtitle">// CONTROL NODE ACCESS</p>
+      <div class="divider"></div>
 
-    <button type="submit" id="submit-btn">Entrar</button>
-    <div class="error" id="error"></div>
-  </form>
+      <label for="username">// USUARIO</label>
+      <input id="username" name="username" type="text" autocomplete="username" required autofocus />
+
+      <label for="password">// CONTRASEÑA</label>
+      <div class="input-wrap">
+        <input id="password" name="password" type="password" autocomplete="current-password" required />
+        <button type="button" class="toggle-pass" id="toggle-pass" aria-label="Mostrar contraseña">
+          <svg class="icon-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+          <svg class="icon-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.9 19.9 0 0 1 4.22-5.44M9.9 4.24A10.6 10.6 0 0 1 12 4c7 0 11 8 11 8a19.9 19.9 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+        </button>
+      </div>
+
+      <button type="submit" id="submit-btn">&gt; AUTENTICAR</button>
+      <div class="status-line"><span class="hud-dot"></span>nodo seguro · conexión cifrada</div>
+      <div class="error" id="error"></div>
+    </form>
+  </div>
 
   <script>
     const form = document.getElementById("login-form");
     const errorEl = document.getElementById("error");
     const submitBtn = document.getElementById("submit-btn");
+    const togglePassBtn = document.getElementById("toggle-pass");
+    const passwordInput = document.getElementById("password");
+    const hudHost = document.getElementById("hud-host");
+
+    hudHost.textContent = window.location.hostname || "akbal-pi";
+
+    togglePassBtn.addEventListener("click", () => {
+      const showing = passwordInput.type === "text";
+      passwordInput.type = showing ? "password" : "text";
+      togglePassBtn.classList.toggle("is-visible", !showing);
+      togglePassBtn.setAttribute("aria-label", showing ? "Mostrar contraseña" : "Ocultar contraseña");
+    });
 
     const params = new URLSearchParams(window.location.search);
     const nextPath = params.get("next") && params.get("next").startsWith("/") ? params.get("next") : "/";
+
+    function showError(msg) {
+      errorEl.textContent = "ACCESS_DENIED :: " + msg;
+    }
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       errorEl.textContent = "";
       submitBtn.disabled = true;
-      submitBtn.textContent = "Verificando...";
+      submitBtn.textContent = "> VERIFICANDO...";
       try {
         const res = await fetch("/api/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             username: document.getElementById("username").value,
-            password: document.getElementById("password").value,
+            password: passwordInput.value,
           }),
         });
         const data = await res.json();
         if (data.ok) {
           window.location.href = nextPath;
         } else {
-          errorEl.textContent = data.error || "Acceso denegado.";
+          showError(data.error || "credenciales inválidas");
         }
       } catch (err) {
-        errorEl.textContent = err.message;
+        showError(err.message);
       } finally {
         submitBtn.disabled = false;
-        submitBtn.textContent = "Entrar";
+        submitBtn.textContent = "> AUTENTICAR";
       }
     });
   </script>

@@ -1,11 +1,11 @@
 // Globe 3D view (docs/gps.md): Three.js earth with the live GPS position pin
-// and the satellites reported by the dongle orbiting it. Click a satellite
-// for its detail card (same modal design as wardriving). The satellite
-// positions are derived from az/el/SNR — elevation 90° = right above the
-// receiver, so each satellite sits on a spike from the receiver's ground
-// point; that's how a single-station GNSS receiver sees the sky (no real
-// orbital ephemeris available). Module loaded only when the user toggles to
-// globe view; gps.js keeps polling /api/gps/status and forwards snapshots.
+// and the satellites reported by the dongle orbiting it. The sun sits at its
+// REAL current direction (NOAA solar ephemeris) and lights the globe with a
+// custom shader: real day imagery on the sunlit side, NASA city-lights
+// texture glowing on the night side, smooth terminator, ocean specular and a
+// rim atmosphere. Click a satellite for its detail card (same modal design
+// as wardriving). Module loaded only when the user toggles to globe view;
+// gps.js keeps polling /api/gps/status and forwards snapshots.
 "use strict";
 
 const importMapReady = document.querySelector('script[type="importmap"]') !== null;
@@ -19,7 +19,6 @@ async function main() {
   // ─── Scene ────────────────────────────────────────────────────────────────
   const canvas = document.getElementById("gps-globe");
   const scene = new THREE.Scene();
-  // Far plane covers the whole solar system view (Neptune ~30 AU).
   const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 6000);
   camera.position.set(0, 6, 22);
 
@@ -31,64 +30,185 @@ async function main() {
   // Slow ambient starfield backdrop.
   {
     const starGeo = new THREE.BufferGeometry();
-    const starCount = 1500;
+    const starCount = 1800;
     const positions = new Float32Array(starCount * 3);
+    const colors = new Float32Array(starCount * 3);
+    const tints = [
+      [0.72, 0.78, 1.0], // blue-white
+      [1.0, 0.95, 0.85], // warm white
+      [0.85, 0.88, 1.0], // pale blue
+    ];
     for (let i = 0; i < starCount; i++) {
-      const r = 400 + Math.random() * 300;
+      const r = 700 + Math.random() * 500;
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
       positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
       positions[i * 3 + 1] = r * Math.cos(phi);
       positions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+      const t = tints[Math.floor(Math.random() * tints.length)];
+      const b = 0.5 + Math.random() * 0.5;
+      colors[i * 3] = t[0] * b;
+      colors[i * 3 + 1] = t[1] * b;
+      colors[i * 3 + 2] = t[2] * b;
     }
     starGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    const starMat = new THREE.PointsMaterial({ color: 0x9fb6d9, size: 1.2, sizeAttenuation: true, transparent: true, opacity: 0.8 });
-    const stars = new THREE.Points(starGeo, starMat);
-    scene.add(stars);
+    starGeo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    const starMat = new THREE.PointsMaterial({
+      color: 0xffffff, vertexColors: true, size: 1.6, sizeAttenuation: true, transparent: true, opacity: 0.9,
+    });
+    scene.add(new THREE.Points(starGeo, starMat));
   }
 
   // ─── Earth ────────────────────────────────────────────────────────────────
   const EARTH_R = 10;
   const loader = new THREE.TextureLoader();
-  let earthMesh = null;
+  let earthDayTex = null;
+  let earthLightsTex = null;
   try {
-    const dayTex = await loader.loadAsync("./vendor/textures/earth-day.jpg");
-    dayTex.colorSpace = THREE.SRGBColorSpace;
-    const mat = new THREE.MeshPhongMaterial({
-      map: dayTex,
-      specular: new THREE.Color(0x223344),
-      shininess: 8,
-    });
-    earthMesh = new THREE.Mesh(new THREE.SphereGeometry(EARTH_R, 64, 64), mat);
-    scene.add(earthMesh);
-    // Subtle atmosphere glow.
-    const glow = new THREE.Mesh(
-      new THREE.SphereGeometry(EARTH_R * 1.025, 48, 48),
-      new THREE.MeshBasicMaterial({ color: 0x2b5ea8, transparent: true, opacity: 0.14, side: THREE.BackSide }),
-    );
-    scene.add(glow);
+    [earthDayTex, earthLightsTex] = await Promise.all([
+      loader.loadAsync("./vendor/textures/earth-day.jpg"),
+      loader.loadAsync("./vendor/textures/earth-lights.jpg"),
+    ]);
+    earthDayTex.colorSpace = THREE.SRGBColorSpace;
+    earthLightsTex.colorSpace = THREE.SRGBColorSpace;
   } catch {
-    // Texture fetch failed (offline Pi): procedural wireframe globe.
-    earthMesh = new THREE.Mesh(
-      new THREE.SphereGeometry(EARTH_R, 48, 32),
-      new THREE.MeshBasicMaterial({ color: 0x123452, wireframe: true, transparent: true, opacity: 0.7 }),
-    );
-    scene.add(earthMesh);
-  }
-  // Lat/long grid hint (subtle) — helps reading az/el positions.
-  {
-    const grid = new THREE.Mesh(
-      new THREE.SphereGeometry(EARTH_R * 1.002, 24, 12),
-      new THREE.MeshBasicMaterial({ color: 0x7ab7ff, wireframe: true, transparent: true, opacity: 0.07 }),
-    );
-    scene.add(grid);
+    // Textures unavailable — the shader falls back to a procedural look.
   }
 
-  // ─── Lighting: the SUN at its real position ───────────────────────────────
-  // Direction computed from the NOAA low-precision solar ephemeris (±0.01°),
-  // expressed in the same equatorial frame the earth mesh uses (Y = north
-  // pole). The DirectionalLight shines FROM the sun toward the earth, so the
-  // day/night terminator on the globe matches reality.
+  // Custom day/night shader: blends the NASA day map and the city-lights
+  // map across a smooth terminator computed from the real sun direction.
+  // Ocean specular + warm terminator tint + subtle rim make it feel alive.
+  const earthMat = new THREE.ShaderMaterial({
+    uniforms: {
+      dayMap: { value: earthDayTex },
+      lightsMap: { value: earthLightsTex },
+      sunDirection: { value: new THREE.Vector3(1, 0, 0) }, // unit, mesh frame
+      hasTextures: { value: Boolean(earthDayTex && earthLightsTex) },
+    },
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      varying vec3 vNormal;
+      varying vec3 vWorldPos;
+      void main() {
+        vUv = uv;
+        vNormal = normalize(mat3(modelMatrix) * normal);
+        vec4 world = modelMatrix * vec4(position, 1.0);
+        vWorldPos = world.xyz;
+        gl_Position = projectionMatrix * viewMatrix * world;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform sampler2D dayMap;
+      uniform sampler2D lightsMap;
+      uniform vec3 sunDirection;
+      uniform bool hasTextures;
+      varying vec2 vUv;
+      varying vec3 vNormal;
+      varying vec3 vWorldPos;
+
+      void main() {
+        vec3 n = normalize(vNormal);
+        vec3 s = normalize(sunDirection);
+        float cosAngle = dot(n, s);
+        // Smooth day/night terminator (soft twilight band ~ ±7°).
+        float dayAmount = smoothstep(-0.12, 0.12, cosAngle);
+
+        vec3 dayColor;
+        vec3 nightColor;
+        if (hasTextures) {
+          dayColor = texture2D(dayMap, vUv).rgb;
+          // City lights: the NASA night texture is mostly black with bright
+          // cities — keep it as-is, boost a touch for punch.
+          vec3 lights = texture2D(lightsMap, vUv).rgb;
+          // Warm sodium lamps, dimmed where there are no cities (black stays black).
+          float luminance = dot(lights, vec3(0.299, 0.587, 0.114));
+          nightColor = lights * vec3(1.0, 0.82, 0.55) * 1.35
+            + vec3(0.010, 0.014, 0.028) * (1.0 - luminance * 2.0); // faint moonlit ocean/land
+        } else {
+          // Procedural fallback: cheap continents/oceans from noise-free bands.
+          float lat = abs(vUv.y - 0.5) * 2.0;
+          dayColor = mix(vec3(0.05, 0.10, 0.22), vec3(0.12, 0.30, 0.18), step(0.28, sin(vUv.x * 180.0) * 0.5 + 0.5));
+          dayColor = mix(dayColor, vec3(0.8, 0.85, 0.9), smoothstep(0.86, 0.95, lat)); // polar caps
+          dayColor *= 0.6 + 0.4 * smoothstep(0.0, 0.25, lat); // darker equator seam
+          nightColor = vec3(0.010, 0.014, 0.028);
+        }
+
+        // Twilight tint: orange band hugging the terminator on the day side.
+        float twilight = (1.0 - abs(cosAngle)) * smoothstep(-0.25, 0.25, cosAngle);
+        vec3 color = mix(nightColor, dayColor, dayAmount);
+        color += vec3(0.55, 0.28, 0.08) * twilight * 0.35 * dayAmount;
+
+        // Specular sun-glint on oceans (Blinn-ish against a fixed view).
+        vec3 viewDir = normalize(cameraPosition - vWorldPos);
+        vec3 halfDir = normalize(s + viewDir);
+        float spec = pow(max(dot(n, halfDir), 0.0), 42.0);
+        color += vec3(0.45, 0.5, 0.55) * spec * dayAmount * 0.8;
+
+        // Rim atmosphere (fresnel): thin blue halo, sunlit side bluer.
+        float fres = pow(1.0 - max(dot(n, viewDir), 0.0), 2.6);
+        vec3 rim = mix(vec3(0.02, 0.05, 0.13), vec3(0.24, 0.47, 0.85), dayAmount);
+        color += rim * fres * 0.9;
+
+        gl_FragColor = vec4(color, 1.0);
+      }
+    `,
+  });
+  const earthMesh = new THREE.Mesh(new THREE.SphereGeometry(EARTH_R, 96, 64), earthMat);
+  scene.add(earthMesh);
+  scene.add(
+    new THREE.Mesh(
+      new THREE.SphereGeometry(EARTH_R * 1.002, 24, 12),
+      new THREE.MeshBasicMaterial({ color: 0x7ab7ff, wireframe: true, transparent: true, opacity: 0.05 }),
+    ),
+  );
+  // Outer atmosphere shell (soft halo seen from any angle).
+  const atmosphere = new THREE.Mesh(
+    new THREE.SphereGeometry(EARTH_R * 1.045, 48, 48),
+    new THREE.ShaderMaterial({
+      transparent: true,
+      side: THREE.BackSide,
+      depthWrite: false,
+      uniforms: { sunDirection: { value: new THREE.Vector3(1, 0, 0) } },
+      vertexShader: /* glsl */ `
+        varying vec3 vNormal;
+        varying vec3 vWorldPos;
+        void main() {
+          vNormal = normalize(mat3(modelMatrix) * normal);
+          vec4 world = modelMatrix * vec4(position, 1.0);
+          vWorldPos = world.xyz;
+          gl_Position = projectionMatrix * viewMatrix * world;
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        uniform vec3 sunDirection;
+        varying vec3 vNormal;
+        varying vec3 vWorldPos;
+        void main() {
+          vec3 viewDir = normalize(cameraPosition - vWorldPos);
+          float glow = pow(0.62 - dot(normalize(vNormal), viewDir) * 0.4, 3.5);
+          vec3 s = normalize(sunDirection);
+          float dayAmount = smoothstep(-0.3, 0.5, dot(normalize(vNormal), s));
+          vec3 tint = mix(vec3(0.05, 0.09, 0.2), vec3(0.28, 0.5, 0.9), dayAmount);
+          gl_FragColor = vec4(tint, clamp(glow, 0.0, 1.0) * 0.55);
+        }
+      `,
+    }),
+  );
+  scene.add(atmosphere);
+
+  // ─── Lighting (mostly handled by the shader; lights for the satellites) ───
+  scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+  scene.add(sun);
+  const sunTarget = new THREE.Object3D();
+  scene.add(sunTarget);
+  sun.target = sunTarget;
+
+  // ─── The sun, at its REAL current direction ───────────────────────────────
+  // NOAA low-precision solar ephemeris (±0.01°) → sub-solar point (lat/lon)
+  // via GMST, then the mesh's latLonToVec3 mapping. The shader's sunDirection
+  // and the DirectionalLight use the same vector, so the terminator and the
+  // visible sun agree with reality.
   function solarDirectionEquatorial(date) {
     const rad = Math.PI / 180;
     const jd = date.getTime() / 86400000 + 2440587.5;
@@ -104,220 +224,122 @@ async function main() {
     };
   }
 
-  // Ecliptic→equatorial rotation shared with the planets (same obliquity).
-  // Correct ecl→eq transform: x_eq = x_ecl, y_eq = y_ecl·cosε − z_ecl·sinε,
-  // z_eq = y_ecl·sinε + z_ecl·cosε — a rotation around X by +ε.
-  function eclipticToEquatorial() {
-    const now = new Date();
-    const rad = Math.PI / 180;
-    const jd = now.getTime() / 86400000 + 2440587.5;
-    const n = jd - 2451545.0;
-    const eps = (23.439 - 0.0000004 * n) * rad;
-    return new THREE.Matrix4().makeRotationX(eps);
-  }
-
-  const SUN_DIST_UNITS = 120; // visual distance of the sun sprite from earth
-  let sunMesh = null;
-  {
-    // Glow sprite: canvas-generated radial gradient, additive blending —
-    // the most "impactful" part of the scene after the earth itself.
-    const cnv = document.createElement("canvas");
-    cnv.width = 256;
-    cnv.height = 256;
-    const ctx = cnv.getContext("2d");
-    const grad = ctx.createRadialGradient(128, 128, 4, 128, 128, 128);
-    grad.addColorStop(0, "rgba(255,255,240,1)");
-    grad.addColorStop(0.12, "rgba(255,236,160,0.95)");
-    grad.addColorStop(0.35, "rgba(255,190,80,0.4)");
-    grad.addColorStop(0.7, "rgba(255,150,50,0.12)");
-    grad.addColorStop(1, "rgba(255,140,40,0)");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 256, 256);
-    const tex = new THREE.CanvasTexture(cnv);
-    sunMesh = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
-    sunMesh.scale.setScalar(46);
-    scene.add(sunMesh);
-    // Core disc inside the glow.
-    const core = new THREE.Mesh(
-      new THREE.SphereGeometry(2.2, 24, 24),
-      new THREE.MeshBasicMaterial({ color: 0xfff4d6 }),
-    );
-    sunMesh.add(core);
-  }
-
-  // The DirectionalLight whose position tracks the real sun — this is what
-  // lights the earth (and the planets, which are far enough to ignore).
-  const sun = new THREE.DirectionalLight(0xffffff, 1.35);
-  scene.add(sun);
-  const sunTarget = new THREE.Object3D();
-  scene.add(sunTarget);
-  sun.target = sunTarget;
-  scene.add(new THREE.AmbientLight(0xffffff, 0.35)); // low: keep night side dark for drama
-
+  const SUN_DIST_UNITS = 130;
   function updateSunPosition() {
     const d = new Date();
     const dir = solarDirectionEquatorial(d);
-    // Equatorial (RA/dec) → sub-solar point (lat/lon) via GMST, then the
-    // same latLonToVec3 mapping the earth mesh uses. This puts the light
-    // over the true noon meridian (e.g. -77° at 17:00 UTC — South America
-    // morning, Mexico ~9am) so the day/night terminator is correct.
     const n = d.getTime() / 86400000 + 2440587.5 - 2451545.0;
     const raDeg = (Math.atan2(dir.y, dir.x) * 180 / Math.PI + 360) % 360;
     const decDeg = Math.asin(dir.z) * 180 / Math.PI;
     const gmst = (280.46061837 + 360.98564736629 * n) % 360;
-    const lonSub = ((raDeg - gmst + 540) % 360) - 180;
+    const lonSub = ((raDeg - gmst + 540) % 360) - 180; // over-earth longitude
     const pos = latLonToVec3(decDeg, lonSub, SUN_DIST_UNITS);
-    sunMesh.position.copy(pos);
+    // Unit vector in the mesh frame — feeds the shader + the light:
+    const unit = pos.clone().normalize();
+    earthMat.uniforms.sunDirection.value.copy(unit);
+    atmosphere.material.uniforms.sunDirection.value.copy(unit);
     sun.position.copy(pos);
     sunTarget.position.set(0, 0, 0);
-    sunMesh.userData.equatorial = dir; // planets are placed in this frame
+    return pos;
   }
 
-  // ─── Planets at their real heliocentric positions ─────────────────────────
-  // JPL approximate Keplerian elements (valid 1800–2050). Positions are
-  // computed per-frame-ish (each globe view + every 60s) and rendered in
-  // ecliptic coords rotated into the equatorial frame shared with the sun.
-  // Visible when the camera zooms out past ~EARTH_R*4; scale exaggeration is
-  // minimal and sizes are illustrative (real planet sizes are invisible at
-  // this scale: ~1px per 1000 km at this distance).
-  const PLANETS = [
-    { name: "Mercurio", color: 0xb8a99a, size: 1.6, a: 0.38709927, e: 0.20563593, i: 7.00497902, L: 252.25032350, lp: 77.45779628, ln: 48.33076593, da: 0.00000037, de: 0.00001906, di: -0.00594749, dL: 149472.67411175, dlp: 0.16047689, dln: -0.12534081 },
-    { name: "Venus", color: 0xe8d5a3, size: 2.4, a: 0.72333566, e: 0.00677672, i: 3.39467605, L: 181.97909950, lp: 131.60246718, ln: 76.67984255, da: 0.00000390, de: -0.00004107, di: -0.00078890, dL: 58517.81538729, dlp: 0.00268329, dln: -0.27769418 },
-    { name: "Marte", color: 0xd1683f, size: 2.1, a: 1.52371034, e: 0.09339410, i: 1.84969142, L: -4.55343205, lp: -23.94362959, ln: 49.55953891, da: 0.00001847, de: 0.00007882, di: 0.00812131, dL: 19140.30268499, dlp: 0.29257343, dln: -0.29257343 },
-    { name: "Júpiter", color: 0xd9b38c, size: 4.4, a: 5.20288700, e: 0.04838624, i: 1.30439695, L: 34.39644051, lp: 14.72847983, ln: 100.47390909, da: -0.00011607, de: -0.00013253, di: -0.00183714, dL: 3034.74612775, dlp: 0.21262690, dln: 0.20469106 },
-    { name: "Saturno", color: 0xe3d29b, size: 3.8, a: 9.53667594, e: 0.05386179, i: 2.48599187, L: 49.95424423, lp: 92.59887831, ln: 113.66242448, da: -0.00125060, de: -0.00050991, di: 0.00193609, dL: 1222.49362201, dlp: -0.41897216, dln: -0.28867794 },
-  ];
-
-  // AU → world units: the inner planets would crowd the earth at true scale,
-  // so use a compressed log-ish mapping that preserves ORDER and direction:
-  // 1 AU ≈ 26 world units (sun at 120u sits ~4.6 AU — visually past venus,
-  // which is fine because the sun sprite is a light source, not a body).
-  const AU_UNITS = 26;
-
-  function planetHelioEcliptic(el, date) {
-    const T = (date.getTime() / 86400000 + 2440587.5 - 2451545.0) / 36525; // centuries
-    const a = el.a + el.da * T;
-    const ec = el.e + el.de * T;
-    const I = (el.i + el.di * T) * (Math.PI / 180);
-    const L = (el.L + el.dL * T) % 360;
-    const lp = el.lp + el.dlp * T;
-    const ln = el.ln + el.dln * T;
-    const w = (lp - ln) * (Math.PI / 180); // argument of perihelion
-    const O = ln * (Math.PI / 180); // ascending node
-    const M = ((L - lp) % 360) * (Math.PI / 180); // mean anomaly
-    // Kepler's equation (Newton, 8 iters is plenty at these eccentricities)
-    let E = M;
-    for (let k = 0; k < 8; k++) E = E - (E - ec * Math.sin(E) - M) / (1 - ec * Math.cos(E));
-    const xp = a * (Math.cos(E) - ec); // orbital plane, perihelion at +x
-    const yp = a * Math.sqrt(1 - ec * ec) * Math.sin(E);
-    const cw = Math.cos(w), sw = Math.sin(w), cO = Math.cos(O), sO = Math.sin(O), cI = Math.cos(I), sI = Math.sin(I);
-    // Rotate perifocal → ecliptic
-    return {
-      x: (cw * cO - sw * sO * cI) * xp + (-sw * cO - cw * sO * cI) * yp,
-      y: (cw * sO + sw * cO * cI) * xp + (-sw * sO + cw * cO * cI) * yp,
-      z: sw * sI * xp + cw * sI * yp,
-    };
-  }
-
-  // Geocentric position of a planet: heliocentric ecliptic − earth's
-  // heliocentric position. Earth's heliocentric = −sun direction (in
-  // ecliptic coords, at 1 AU). Then converted to the mesh's equatorial frame.
-  const planetNodes = []; // { group, mesh, el, label }
+  // Realistic sun: layered shader sphere (limb darkening + granulation noise)
+  // inside a big corona sprite. Not to scale; placed at the real direction.
+  const sunGroup = new THREE.Group();
   {
-    for (const el of PLANETS) {
-      const group = new THREE.Group();
-      const mesh = new THREE.Mesh(
-        new THREE.SphereGeometry(el.size, 24, 24),
-        new THREE.MeshPhongMaterial({ color: el.color, emissive: new THREE.Color(el.color).multiplyScalar(0.25), shininess: 4 }),
+    // Surface shader: limb darkening + slow-moving granulation.
+    const sunMat = new THREE.ShaderMaterial({
+      transparent: false,
+      uniforms: { time: { value: 0 } },
+      vertexShader: /* glsl */ `
+        varying vec3 vNormal;
+        varying vec3 vPos;
+        void main() {
+          vNormal = normalize(mat3(modelMatrix) * normal);
+          vPos = position;
+          gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        uniform float time;
+        varying vec3 vNormal;
+        varying vec3 vPos;
+        // Cheap 3D value-noise for granulation.
+        float hash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+        float noise(vec3 p) {
+          vec3 i = floor(p); vec3 f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          return mix(
+            mix(mix(hash(i), hash(i + vec3(1,0,0)), f.x), mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
+            mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x), mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y),
+            f.z);
+        }
+        void main() {
+          // Limb darkening: edge of the disc dims and reddens (real photosphere).
+          float mu = max(dot(normalize(vNormal), normalize(cameraPosition - vPos)), 0.0);
+          // Granulation: two octaves drifting at different speeds.
+          float g1 = noise(normalize(vPos) * 22.0 + time * 0.16);
+          float g2 = noise(normalize(vPos) * 48.0 - time * 0.28);
+          float gran = 0.72 + 0.24 * g1 + 0.12 * g2;
+          vec3 hot = vec3(1.0, 0.96, 0.86);
+          vec3 mid = vec3(1.0, 0.72, 0.30);
+          vec3 edge = vec3(0.95, 0.38, 0.12);
+          vec3 col = mix(hot, mid, smoothstep(0.35, 0.9, 1.0 - mu));
+          col = mix(col, edge, smoothstep(0.85, 0.35, mu));
+          col *= gran;
+          // Occasional sunspecks (dark cells).
+          float spots = smoothstep(0.72, 0.95, noise(normalize(vPos) * 9.0 + 41.7));
+          col *= 1.0 - spots * 0.35;
+          gl_FragColor = vec4(col * 1.25, 1.0);
+        }
+      `,
+    });
+    const sunCore = new THREE.Mesh(new THREE.SphereGeometry(4.6, 48, 48), sunMat);
+    sunGroup.add(sunCore);
+    sunGroup.userData.sunMat = sunMat;
+
+    // Corona: 3 stacked sprites (inner bright, mid halo, outer far glow).
+    const mkGlow = (size, stops) => {
+      const cnv = document.createElement("canvas");
+      cnv.width = 256;
+      cnv.height = 256;
+      const ctx = cnv.getContext("2d");
+      const grad = ctx.createRadialGradient(128, 128, 2, 128, 128, 128);
+      for (const [off, col] of stops) grad.addColorStop(off, col);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 256, 256);
+      const sprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cnv), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }),
       );
-      group.add(mesh);
-      // Label sprite (canvas text) so each planet is identifiable at zoom.
-      const lcnv = document.createElement("canvas");
-      lcnv.width = 256;
-      lcnv.height = 64;
-      const lctx = lcnv.getContext("2d");
-      lctx.font = "600 42px ui-monospace, monospace";
-      lctx.fillStyle = "rgba(200,225,255,0.95)";
-      lctx.textAlign = "center";
-      lctx.shadowColor = "rgba(0,0,0,0.9)";
-      lctx.shadowBlur = 8;
-      lctx.fillText(el.name, 128, 54);
-      const ltex = new THREE.CanvasTexture(lcnv);
-      const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: ltex, transparent: true, depthWrite: false, opacity: 0.85 }));
-      label.scale.set(7, 1.75, 1);
-      label.position.y = el.size + 2.2;
-      group.add(label);
-      group.visible = false; // LOD: revealed by camera distance
-      scene.add(group);
-      planetNodes.push({ group, mesh, el, label });
-    }
+      sprite.scale.setScalar(size);
+      return sprite;
+    };
+    sunGroup.add(mkGlow(30, [
+      [0, "rgba(255,255,245,1)"],
+      [0.25, "rgba(255,225,150,0.7)"],
+      [0.6, "rgba(255,170,60,0.18)"],
+      [1, "rgba(255,150,40,0)"],
+    ]));
+    sunGroup.add(mkGlow(64, [
+      [0, "rgba(255,210,120,0.35)"],
+      [0.4, "rgba(255,160,60,0.1)"],
+      [1, "rgba(255,140,40,0)"],
+    ]));
+    sunGroup.add(mkGlow(110, [
+      [0, "rgba(255,180,90,0.16)"],
+      [0.5, "rgba(255,150,60,0.05)"],
+      [1, "rgba(255,140,40,0)"],
+    ]));
+    // Chromosphere ring just outside the surface.
+    const chromo = new THREE.Mesh(
+      new THREE.SphereGeometry(4.85, 48, 48),
+      new THREE.MeshBasicMaterial({
+        color: 0xffb050, transparent: true, opacity: 0.5, side: THREE.BackSide, blending: THREE.AdditiveBlending, depthWrite: false,
+      }),
+    );
+    sunGroup.add(chromo);
   }
-
-  let planetsPlacedAt = 0;
-  function updatePlanets() {
-    const now = new Date();
-    // Cache: recompute at most once a minute (planets barely move).
-    if (planetsPlacedAt && now - planetsPlacedAt < 60_000) return;
-    planetsPlacedAt = now;
-    // Earth's heliocentric ecliptic position = −sun direction × 1 AU:
-    // the sun sits at direction (eq→ecl, −1) from earth, so earth from the
-    // sun is the opposite vector, at exactly 1 AU.
-    const sunEcl = sunEqToEcl(solarDirectionEquatorial(now)).multiplyScalar(-1);
-    for (const node of planetNodes) {
-      const helio = planetHelioEcliptic(node.el, now);
-      // Geocentric = helio − earthHelio.
-      const geo = new THREE.Vector3(helio.x, helio.y, helio.z).sub(sunEcl);
-      const pos = eclipticToMesh(geo).multiplyScalar(AU_UNITS);
-      node.group.position.copy(pos);
-    }
-  }
-
-  // Ecliptic (geocentric) → scene coords. Planets are celestial objects:
-  // in the earth-fixed mesh they must sit at (RA − GMST) longitude, the same
-  // convention the sun uses, so the whole sky rotates correctly with the time
-  // of day. v is in ecliptic coords; conversion chain: ecl → equatorial
-  // (RA/dec) → hour angle (RA − GMST) → latLonToVec3.
-  function eclipticToMesh(v) {
-    const now = new Date();
-    const rot = eclipticToEquatorial();
-    const p = new THREE.Vector3(v.x, v.y, v.z).applyMatrix4(rot); // equatorial
-    const n = now.getTime() / 86400000 + 2440587.5 - 2451545.0;
-    const gmst = (280.46061837 + 360.98564736629 * n) % 360;
-    const raDeg = (Math.atan2(p.y, p.x) * 180 / Math.PI + 360) % 360;
-    const decDeg = Math.asin(p.z / p.length()) * 180 / Math.PI;
-    const lonSub = ((raDeg - gmst + 540) % 360) - 180; // over-earth longitude
-    // Direction from earth toward the planet (not a surface point, but the
-    // same angular mapping keeps it aligned with the sun and the pin):
-    const r = p.length();
-    const ground = latLonToVec3(decDeg, lonSub, 1).normalize();
-    return ground.multiplyScalar(r);
-  }
-
-  function sunEqToEcl(v) {
-    // Inverse rotation of eclipticToEquatorial (rotate by −ε around X):
-    // x_ecl = x_eq, y_ecl = y_eq·cosε + z_eq·sinε, z_ecl = −y_eq·sinε + z_eq·cosε.
-    const rad = Math.PI / 180;
-    const now = new Date();
-    const jd = now.getTime() / 86400000 + 2440587.5;
-    const n = jd - 2451545.0;
-    const eps = (23.439 - 0.0000004 * n) * rad;
-    return new THREE.Vector3(v.x, v.y, v.z).applyMatrix4(new THREE.Matrix4().makeRotationX(-eps));
-  }
-
-  // LOD: planets fade in once the camera is far enough from earth.
-  function updatePlanetLod() {
-    const dist = camera.position.length();
-    const show = dist > EARTH_R * 3.2; // ~zoomed out past the GNSS shell
-    for (const node of planetNodes) {
-      node.group.visible = show;
-      node.group.children[1].material.opacity = show
-        ? Math.min(0.9, (dist - EARTH_R * 3.2) / (EARTH_R * 4))
-        : 0;
-    }
-    // Keep the sun glow readable at any distance.
-    const glowScale = dist > EARTH_R * 6 ? Math.min(3.2, dist / (EARTH_R * 8)) : 1;
-    sunMesh.scale.setScalar(46 * glowScale);
-  }
+  scene.add(sunGroup);
 
   // ─── Receiver ground point + user marker ─────────────────────────────────
   // lat/lon → ECEF-ish on the sphere. lat/lon in degrees, radius in world units.
@@ -393,7 +415,7 @@ async function main() {
   function satLabel(s) {
     // GP→GPS, GL→GLONASS, GA→Galileo, GB/BD→BeiDou
     const m = /^([A-Z]{2})?0*(\d+)$/.exec(s.prn || "");
-    const system = { GP: "GPS", GL: "GLONASS", GA: "Galileo", GB: "BeiDou", BD: "BeiDou", "" : "GNSS" }[m?.[1] || ""];
+    const system = { GP: "GPS", GL: "GLONASS", GA: "Galileo", GB: "BeiDou", BD: "BeiDou", "": "GNSS" }[m?.[1] || ""];
     return system ? `${system} ${m?.[2] || s.prn}` : s.prn;
   }
 
@@ -470,7 +492,7 @@ async function main() {
   controls.dampingFactor = 0.07;
   controls.enablePan = false;
   controls.minDistance = EARTH_R + 1.5;
-  controls.maxDistance = EARTH_R * 12; // far enough to see Jupiter's orbit
+  controls.maxDistance = SUN_DIST_UNITS * 1.4;
   controls.zoomSpeed = 1.2;
   controls.autoRotate = true;
   controls.autoRotateSpeed = 0.6;
@@ -583,6 +605,7 @@ async function main() {
   const clock = new THREE.Clock();
   let loopRunning = false;
   let globeActive = false;
+  let sunRepositionAt = 0;
   function animate() {
     if (!globeActive) {
       loopRunning = false;
@@ -604,11 +627,12 @@ async function main() {
       en.ring.scale.setScalar(1 + 0.3 * amp * Math.sin(t * 1.8 + en.group.position.x));
       en.mesh.material.opacity = 0.7 + 0.3 * amp * Math.sin(t * 2 + en.group.position.y);
     }
-    // Solar system: real sun position (and light) + planets at their real
-    // heliocentric spots, revealed by zoom-out.
-    updateSunPosition();
-    updatePlanets();
-    updatePlanetLod();
+    // Sun: real position (refreshed every 60s — it barely moves) + shader time.
+    if (!sunRepositionAt || Date.now() - sunRepositionAt > 60_000) {
+      sunRepositionAt = Date.now();
+      updateSunPosition();
+    }
+    sunGroup.userData.sunMat.uniforms.time.value = t;
     controls.update();
     renderer.render(scene, camera);
   }

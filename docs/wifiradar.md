@@ -178,6 +178,27 @@ locally-administered del primer octeto seteado). `isRandomizedMac()`
 (`oui.ts`) las detecta por bit — un lookup OUI sobre ese prefijo diría una
 marca falsa — y la UI muestra "Random MAC" en su lugar.
 
+## Pantalla física (LCD)
+
+`chat-flow/wifi-radar-mode.ts`, accesible desde el menú rápido ("Radar
+Wi-Fi"). Versión simplificada de la página web sobre el mismo
+`WifiRadarService` compartido (mismo `Aggregator`, en vivo o demo) —
+nunca una segunda captura compitiendo por el adaptador. Sin 3D ni click
+para inspeccionar (una sola tecla, pantalla chica): un disco de radar con
+un punto por AP cercano (hasta 12), radio según RSSI, ángulo determinista
+por id (`hash01`, sin significado real — a diferencia de Aircraft Radar,
+que si tiene un bearing GPS real que dibujar). Se refresca cada 3s, no más
+seguido: en pruebas reales redibujar el frame completo (240x196, SPI) en
+cada tick hacía que el botón físico dejara de registrar presses (hilo de
+GPIO compitiendo con el redibujado). Abajo, un carrusel de texto va
+nombrando un AP a la vez, con contorno blanco en su punto.
+
+**Pantalla física y web al mismo tiempo**: sí se puede — ambas son solo
+vistas sobre el mismo `WifiRadarService` singleton (arranca una vez al
+iniciar Akbal y sigue corriendo sin importar qué pantalla esté abierta),
+no hay bloqueo ni exclusividad entre ellas. Vas a ver los mismos APs en
+las dos; la web permite click para detalle, la pantalla física no.
+
 ## Perfil de recursos (medido en este dispositivo, Pi 5 8GB)
 
 Con captura real activa y ~30 APs/tráfico normal de vecindario:

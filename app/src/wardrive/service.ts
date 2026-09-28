@@ -251,6 +251,11 @@ export class DriveWardriveService extends EventEmitter {
     // attempts — the operator's recurring lab list. They get attack
     // priority over strangers AND a wider RSSI gate, so a weak lab AP
     // beats a strong neighbour AP in the targeting sort.
+    // Self-heal first: handshake flags left behind by deleted sessions
+    // (folder gone but flag set) would permanently block re-hunting those
+    // SSIDs AND inflate the counters the user sees.
+    const repaired = driveDb.repairOrphanHandshakes();
+    if (repaired > 0) console.log(`[wardrive] repaired ${repaired} orphan handshake flags`);
     this.prioritySsids = driveDb.prioritySsids();
     if (demo) {
       this.startDemoFeed();

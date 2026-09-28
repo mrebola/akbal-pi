@@ -27,6 +27,22 @@ const setText = (id, text) => {
 };
 const fmt = (n, d = 5) => (Number.isFinite(n) ? Number(n).toFixed(d) : "—");
 
+// The overlays (HUD, right panel, activity ticker) are position:fixed and
+// must start below the real header — measuring it (not a hardcoded px
+// fallback) keeps the layout right on narrow screens where the topbar
+// wraps taller. Same mechanism as wifiradar.js.
+function updateHeaderHeight() {
+  const headerEl = document.querySelector("#wd-header .topbar");
+  if (headerEl) {
+    document.documentElement.style.setProperty("--header-height", `${headerEl.offsetHeight}px`);
+  }
+}
+updateHeaderHeight();
+window.addEventListener("resize", () => {
+  updateHeaderHeight();
+  if (map) setTimeout(() => map.invalidateSize(), 60);
+});
+
 initMap();
 initHeader();
 initPanel();

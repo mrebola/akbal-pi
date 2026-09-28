@@ -208,7 +208,7 @@ function render(gps) {
     setText("gps-time", "—");
     setText("gps-sat-used", "0");
     setText("gps-sat-view", "0");
-    setText("gps-sat-need", String(gps.satellitesNeeded || 4));
+    setText("gps-sat-need", String(gps.satellitesNeeded || 3));
     setText("gps-sat-total", "—");
     renderSatDots([]);
     if (errEl) {
@@ -276,7 +276,7 @@ function setGpsAddress(text, dimmed) {
 
 function satMessage(gps) {
   const used = gps.satellitesUsed || 0;
-  const need = gps.satellitesNeeded || 4;
+  const need = gps.satellitesNeeded || 3;
   const view = gps.satellitesInView || 0;
   if (view === 0) return "Buscando satélites… (0 visibles — asegurate de tener cielo despejado)";
   if (used >= need) return "Señal insuficiente — recalculando…";
@@ -288,7 +288,7 @@ function satMessage(gps) {
 function renderSatellites(gps) {
   setText("gps-sat-used", String(gps.satellitesUsed || 0));
   setText("gps-sat-view", String(gps.satellitesInView || 0));
-  setText("gps-sat-need", String(gps.satellitesNeeded || 4));
+  setText("gps-sat-need", String(gps.satellitesNeeded || 3));
   // Total tracked by the receiver = all PRNs the GSV/GSA sentences named.
   setText("gps-sat-total", String((gps.satellites || []).length));
   renderSatDots(gps.satellites || []);

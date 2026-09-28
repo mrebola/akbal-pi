@@ -30,7 +30,7 @@ export type GpsStatus = {
   hdop: number | null; // horizontal dilution of precision (lower = better)
   satellitesUsed: number; // in the fix (GGA field 7)
   satellitesInView: number; // tracked (GSV count)
-  satellitesNeeded: number; // 4 = minimum for a 3D fix (lat/lon/alt/time)
+  satellitesNeeded: number; // 3 = operator minimum for wardriving (2D fix)
   satellites: GpsSatellite[];
   fixTime: string | null; // ISO timestamp from the fix
   // Reverse-geocoded street address of the current fix (null while
@@ -51,16 +51,17 @@ const EMPTY: GpsStatus = {
   hdop: null,
   satellitesUsed: 0,
   satellitesInView: 0,
-  satellitesNeeded: 4,
+  satellitesNeeded: 3,
   satellites: [],
   fixTime: null,
   address: null,
   error: "Sin dongle GPS conectado",
 };
 
-// Minimum satellites for a usable 3D fix (lat/lon/alt/time). The UI shows
-// "se necesitan N, hay M" against this number.
-export const MIN_SATS_FOR_FIX = 4;
+// Minimum satellites the operator considers enough for wardriving (3 = a
+// usable 2D fix: lat/lon is all the wardrive map needs — altitude may be
+// noisy with 3, that's acceptable while driving).
+export const MIN_SATS_FOR_FIX = 3;
 
 // ─── Dongle detection ────────────────────────────────────────────────────────
 // USB GNSS receivers surface as serial devices: ttyACM* (CDC-ACM, most

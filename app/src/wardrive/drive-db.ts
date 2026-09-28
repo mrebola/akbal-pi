@@ -177,7 +177,7 @@ export class DriveDb {
            ON CONFLICT(bssid) DO UPDATE SET
              ssid = CASE WHEN excluded.ssid != '(oculta)' AND ssid = '(oculta)' THEN excluded.ssid ELSE ssid END,
              security = CASE WHEN excluded.security != 'UNKNOWN' AND security IN ('UNKNOWN','') THEN excluded.security ELSE security END,
-             channel = COALESCE(NULLIF(excluded.channel, 0), channel),
+             channel = COALESCE(NULLIF(excluded.channel, 0), channel, excluded.channel),
              best_rssi = MAX(COALESCE(best_rssi, -999), excluded.best_rssi),
              lat = COALESCE(lat, excluded.lat),
              lon = COALESCE(lon, excluded.lon),
@@ -256,12 +256,33 @@ export class DriveDb {
   }
 
   // All SSIDs that already have a handshake — loaded once at session start
-  // for fast in-memory checks during capture bursts.
+  // for fast in-memory checks during capture bursts. The source of truth
+  // is the handshakes TABLE (rows only exist when an artifact was actually
+  // written), not the flag on networks_seen: a deleted session removes the
+  // table row and the SSID becomes fair game again.
   handshakeSsids(): Set<string> {
     const rows = this.db
-      .prepare(`SELECT ssid FROM networks_seen WHERE handshake = 1`)
+      .prepare(`SELECT DISTINCT ssid FROM handshakes`)
       .all() as { ssid: string }[];
     return new Set(rows.map((r) => r.ssid));
+  }
+
+  // Self-heal: rows where handshake=1 but NO real capture exists (session
+  // folders deleted from the UI left the flag orphaned). Clears the flag
+  // so the SSID becomes huntable again. Returns how many were repaired.
+  repairOrphanHandshakes(): number {
+    try {
+      const r = this.db
+        .prepare(
+          `UPDATE networks_seen SET handshake = 0, handshake_bssid = NULL, handshake_at = NULL
+           WHERE handshake = 1
+             AND bssid NOT IN (SELECT DISTINCT bssid FROM handshakes)`,
+        )
+        .run();
+      return r.changes;
+    } catch {
+      return 0;
+    }
   }
 
   // SSIDs that were ever ATTACKED in any past session (attempts > 0) — the

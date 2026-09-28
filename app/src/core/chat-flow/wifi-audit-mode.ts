@@ -1,6 +1,6 @@
 import { display, onButtonDown, onButtonUp } from "../../device/display";
-import { getWardriveService } from "../../wardrive/service";
-import { WardriveStatus } from "../../wardrive/types";
+import { getWardriveService } from "../../wifi-audit/service";
+import { WardriveStatus } from "../../wifi-audit/types";
 
 // Physical-screen companion of the web "Wardriving" tab. NOT a button-driven
 // flow state: entering/leaving wardriving is normally a web-admin action
@@ -11,11 +11,11 @@ import { WardriveStatus } from "../../wardrive/types";
 // the web can always cancel the session itself via POST /api/wardrive/exit.
 //
 // Screen: idle look — the same calm Akbal standing loop — but with a red
-// "MODO WARDRIVE" band (rendered by chatbot-ui.py's render_wardrive_screen).
-// While an audit is running the character is replaced by the wardrive
+// "MODO WIFI AUDIT" band (rendered by chatbot-ui.py's render_wardrive_screen).
+// While an audit is running the character is replaced by the wifi-audit
 // attack animation and the brief action status ("deauth", "capturando
 // handshake"...) renders over it. The service itself unloads the LLM on
-// enter (wardrive/service.ts).
+// enter (wifi-audit/service.ts).
 
 let statusListener: ((payload: any) => void) | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -36,7 +36,7 @@ function handleButtonPress(): void {
       if (buttonPressedAt !== null && Date.now() - buttonPressedAt >= 1000) {
         const st = getWardriveService().getStatus();
         if (st.mode !== "inactive") {
-          console.log("[wardrive] physical hold detected — leaving wardriving");
+          console.log("[wifi-audit] physical hold detected — leaving audit");
           buttonPressedAt = null;
           if (holdCheckTimer) {
             clearInterval(holdCheckTimer);

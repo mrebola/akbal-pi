@@ -3,7 +3,7 @@ import { promisify } from "util";
 import fs from "fs";
 import { EventEmitter } from "events";
 import { setWifiRadarMode, getWifiRadarRequestedMode, stopWifiRadarService } from "../wifiradar/service";
-import { exitMonitorMode } from "../wardrive/monitor";
+import { exitMonitorMode } from "../wifi-audit/monitor";
 import { detectMonitorAdapter } from "../wifiradar/adapter";
 import { setGpsDemoMode } from "./gps";
 import { setAircraftRadarMode } from "../services/adsb/service";

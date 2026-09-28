@@ -1601,7 +1601,7 @@ async function initPlatformToggle() {
 
 void initPlatformToggle();
 
-// ---- Audit WiFi (mode; internal API paths stay /api/wardrive/*) ----
+// ---- Wifi Audit (mode; internal API paths stay /api/wardrive/*) ----
 // Flow: enter mode → see networks → click "Auditar" → handshake captured →
 // download .cap/.hc22000 for offline cracking. That's it.
 
@@ -1732,7 +1732,7 @@ function wdRender() {
   // Networks table
   wdTableBody.innerHTML = "";
   if (!on) {
-    wdTableBody.innerHTML = '<tr><td colspan="7" class="muted">Entra al modo Audit WiFi para escanear</td></tr>';
+    wdTableBody.innerHTML = '<tr><td colspan="7" class="muted">Entra al modo Wifi Audit para escanear</td></tr>';
     return;
   }
 
@@ -3691,4 +3691,33 @@ async function openFileViewer(root, rel, name) {
   modal.addEventListener("click", (e) => {
     if (e.target === modal) hide();
   });
+})();
+
+// ---- Wardrive card (index #wardrive tab) ----
+// Live status of /wardrive on the entry card: session state + counters,
+// polled only while the tab is visible (cheap; backend aggregates).
+
+(async function wdCardInit() {
+  const card = document.getElementById("wd-card");
+  const sub = document.getElementById("wd-card-sub");
+  if (!card || !sub) return;
+  let timer = null;
+  const fmtKm = (m) => (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${m} m`);
+  async function poll() {
+    if (!document.getElementById("tab-wardrive")?.classList.contains("active")) return;
+    try {
+      const res = await fetch("/api/wardrive/drive/status");
+      if (!res.ok) return;
+      const st = await res.json();
+      if (st.running && st.session) {
+        const s = st.stats || {};
+        sub.textContent = `EN CURSO — ${fmtKm(st.session.distanceMeters)} · ${s.aps} en el aire · ${s.unique} redes · ${s.handshakes} handshakes`;
+      } else {
+        const s = st.stats || {};
+        sub.textContent = `Mapa, GPS y handshakes mientras conduces — ${s.unique} redes vistas · ${s.handshakes} con handshake`;
+      }
+    } catch { /* keep last */ }
+  }
+  timer = setInterval(poll, 4000);
+  void poll();
 })();

@@ -109,7 +109,7 @@ export interface Status {
   // chatbot-ui.py) showing whether the device is answering via OpenClaw or
   // the local model — see docs/agent-mode.md.
   top_bar_mode: "local" | "agent" | "";
-  // WARDRIVE overlay (see chat-flow/wardrive-mode.ts): a dedicated screen
+  // WARDRIVE overlay (see chat-flow/wifi-audit-mode.ts): a dedicated screen
   // type like radar_ui, drawn by chatbot-ui.py's render_wardrive_screen.
   // "view" draws the wardrive scene (title + status line + captured/total
   // counters); "" is the normal Akbal UI.
@@ -750,7 +750,7 @@ const displayInstance = new WhisplayDisplay();
 export const display = displayInstance.display.bind(displayInstance);
 
 // Physical-button edge callbacks for code outside the chat-flow state
-// machine (e.g. wardrive-mode's hold-to-exit gesture). Fan-out lists live
+// machine (e.g. wifi-audit-mode's hold-to-exit gesture). Fan-out lists live
 // at module level and are wired into the instance's handlers.
 const buttonDownListenersModule: (() => void)[] = [];
 const buttonUpListenersModule: (() => void)[] = [];

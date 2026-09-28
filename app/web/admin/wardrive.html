@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Akbal · Wardrive</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="gps.css" />
+  <link rel="stylesheet" href="wardrive.css" />
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
+</head>
+<body>
+  <div id="wd-map" class="gps-map"></div>
+
+  <!-- Same topbar as the rest of the admin UI -->
+  <div id="wd-header">
+    <header class="topbar">
+      <div class="brand-group">
+        <img id="avatar" class="avatar" src="/avatar/standing.gif" alt="Akbal" />
+        <div class="brand">AKBAL</div>
+      </div>
+      <button type="button" id="nav-toggle" class="nav-toggle" aria-label="Menú" aria-expanded="false" aria-controls="main-tabs">
+        <span></span><span></span><span></span>
+      </button>
+      <nav class="tabs" id="main-tabs">
+        <a href="/#chat" class="tab-link">Chat</a>
+        <a href="/wifiradar" class="tab-link">Radar Wi-Fi</a>
+        <a href="/aircraft-radar" class="tab-link">Aviones</a>
+        <a href="/#wardrive" class="tab-link">Wifi Audit</a>
+        <span class="tab-link active">Wardrive</span>
+        <a href="/gps" class="tab-link">GPS</a>
+        <a href="/#music" class="tab-link">OST</a>
+        <a href="/#usb" class="tab-link">Dispositivos</a>
+        <a href="/#wifi" class="tab-link">Wifi</a>
+        <a href="/#settings" class="tab-link">Ajustes</a>
+      </nav>
+      <div id="nav-backdrop" class="nav-backdrop hidden"></div>
+
+      <div class="hdr-right">
+        <div class="plx-toggle" id="platform-toggle" title="Fuente de datos: LIVE usa los dongles reales · DEMO muestra datos sintéticos y libera el hardware">
+          <span class="plx-toggle-label mode-live" data-mode="live">LIVE</span>
+          <span class="plx-toggle-label mode-demo" data-mode="demo">DEMO</span>
+        </div>
+        <button type="button" id="sys-toggle" class="hdr-summary" title="Estado del sistema">
+          <span class="hdr-dot" id="hdr-online-dot"></span>
+          <span class="hdr-model" id="hdr-model">—</span>
+          <span class="battery-indicator" id="battery-indicator" title="Batería">
+            <span id="battery-icon">🔋</span>
+            <span id="battery-pct">—</span>
+          </span>
+          <span class="hdr-gear">◉</span>
+        </button>
+        <div id="sys-popover" class="popover hidden" role="menu">
+          <div class="popover-title">Sistema</div>
+          <div class="metric-row"><span class="metric-key">CPU</span><span class="metric-val mono" id="stat-cpu">—</span></div>
+          <div class="metric-row"><span class="metric-key">RAM</span><span class="metric-val mono" id="stat-ram">—</span></div>
+          <div class="metric-row"><span class="metric-key">Disco</span><span class="metric-val mono" id="stat-disk">—</span></div>
+          <div class="metric-row"><span class="metric-key">Wi-Fi</span><span class="metric-val" id="hdr-wifi">—</span></div>
+          <div class="metric-row"><span class="metric-key">Modelo</span><span class="metric-val mono" id="hdr-model-full">—</span></div>
+          <div class="popover-sep"></div>
+          <button id="logout-btn" class="btn btn-tertiary btn-block" title="Cerrar sesión">Cerrar sesión</button>
+        </div>
+      </div>
+      <span id="status-pill" class="hidden">—</span>
+    </header>
+  </div>
+
+  <!-- Session HUD (top left): big START button + live counters -->
+  <div class="wd-hud" id="wd-hud">
+    <div class="wd-hud-title">WARDRIVE</div>
+    <button type="button" id="wd-toggle" class="wd-start">▶ INICIAR</button>
+    <div class="wd-hud-grid">
+      <div class="wd-hud-item"><span class="k">Tiempo</span><span class="v mono" id="wd-time">—</span></div>
+      <div class="wd-hud-item"><span class="k">Distancia</span><span class="v mono" id="wd-dist">—</span></div>
+      <div class="wd-hud-item"><span class="k">En el aire</span><span class="v mono" id="wd-aps">—</span></div>
+      <div class="wd-hud-item"><span class="k">Nuevas (sesión)</span><span class="v mono" id="wd-new">—</span></div>
+      <div class="wd-hud-item"><span class="k">Redes totales</span><span class="v mono" id="wd-unique">—</span></div>
+      <div class="wd-hud-item"><span class="k">Handshakes</span><span class="v mono" id="wd-hs">—</span></div>
+      <div class="wd-hud-item"><span class="k">Canal</span><span class="v mono" id="wd-ch">—</span></div>
+      <div class="wd-hud-item"><span class="k">Dongle</span><span class="v mono" id="wd-iface">—</span></div>
+    </div>
+    <div id="wd-error" class="wd-fix-msg hidden"></div>
+  </div>
+
+  <!-- GPS mini-HUD (bottom left): position + speed + sats -->
+  <div class="wd-gps" id="wd-gps">
+    <div class="wd-hud-title">GPS</div>
+    <div class="gps-coords mono" id="wd-coords">— , —</div>
+    <div class="wd-hud-grid">
+      <div class="wd-hud-item"><span class="k">Vel</span><span class="v mono" id="wd-speed">—</span></div>
+      <div class="wd-hud-item"><span class="k">Rumbo</span><span class="v mono" id="wd-heading">—</span></div>
+      <div class="wd-hud-item"><span class="k">Sats</span><span class="v mono" id="wd-sats">—</span></div>
+      <div class="wd-hud-item"><span class="k">HDOP</span><span class="v mono" id="wd-hdop">—</span></div>
+    </div>
+    <div id="wd-fix-msg" class="wd-fix-msg">Buscando satélites…</div>
+  </div>
+
+  <!-- Opportunistic deauth toggle (big, touchable from the driver seat) -->
+  <div class="wd-deauth" id="wd-deauth-panel">
+    <label class="wd-deauth-toggle" title="Deauth oportunista: solo con vel. < 25 km/h">
+      <input type="checkbox" id="wd-deauth" />
+      <span class="wd-deauth-track"><span class="wd-deauth-knob"></span></span>
+      <span class="wd-deauth-label">DEAUTH <span class="wd-deauth-speed" id="wd-speed-gate">🔒 &gt;25 km/h</span></span>
+    </label>
+  </div>
+
+  <!-- Right panel: tabs over the map (Redes en vivo / Sesiones) -->
+  <div class="wd-panel" id="wd-panel">
+    <div class="wd-panel-tabs">
+      <button class="wd-panel-tab active" data-panetab="live">REDES EN VIVO</button>
+      <button class="wd-panel-tab" data-panetab="sessions">SESIONES</button>
+      <button class="wd-panel-collapse" id="wd-panel-collapse" title="Colapsar panel">▾</button>
+    </div>
+    <div class="wd-panel-body" id="wd-panel-body">
+      <div class="wd-pane active" id="wd-pane-live">
+        <div class="wd-live-stats">
+          <span class="wd-chip"><span id="wd-count-total">0</span> redes</span>
+          <span class="wd-chip ok"><span id="wd-count-hs">0</span> ✋</span>
+          <span class="wd-chip warn" id="wd-chip-deauth" title="Bursts activos">DEAUTH —</span>
+        </div>
+        <ul id="wd-ap-list" class="wd-ap-list"></ul>
+      </div>
+      <div class="wd-pane" id="wd-pane-sessions">
+        <ul id="wd-session-list" class="wd-session-list">
+          <li class="muted">—</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Session detail drawer (map + networks + exports) -->
+  <div id="wd-session-drawer" class="wd-drawer hidden">
+    <div class="wd-drawer-head">
+      <span id="wd-drawer-title">Sesión</span>
+      <div class="wd-drawer-actions">
+        <a id="wd-exp-csv" href="#" download><button class="wd-btn-sm">CSV</button></a>
+        <a id="wd-exp-gpx" href="#" download><button class="wd-btn-sm">GPX</button></a>
+        <button id="wd-drawer-close" class="wd-btn-sm secondary">✕</button>
+      </div>
+    </div>
+    <div class="wd-drawer-body">
+      <div class="wd-drawer-summary" id="wd-drawer-summary">—</div>
+      <table class="wd-net-table">
+        <thead>
+          <tr><th>SSID</th><th>Seg</th><th>Handshake</th><th>Vista</th></tr>
+        </thead>
+        <tbody id="wd-net-body"><tr><td colspan="4" class="muted">—</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- AP detail modal (click a network row) -->
+  <div id="wd-ap-modal" class="apm hidden">
+    <div class="apm-backdrop" id="wd-ap-modal-backdrop"></div>
+    <div class="apm-card">
+      <button id="wd-ap-modal-close" class="apm-close">✕</button>
+      <div class="apm-head">
+        <div class="apm-title" id="wd-apm-title">—</div>
+        <div class="apm-sub">Red detectada</div>
+      </div>
+      <div class="apm-grid">
+        <div class="apm-row"><span>MAC Address (BSSID)</span><span id="wd-apm-bssid">—</span></div>
+        <div class="apm-row"><span>Marca / fabricante</span><span id="wd-apm-vendor">—</span></div>
+        <div class="apm-row"><span>Seguridad</span><span id="wd-apm-security">—</span></div>
+        <div class="apm-row"><span>Canal</span><span id="wd-apm-channel">—</span></div>
+        <div class="apm-row"><span>Señal (ahora / mejor)</span><span id="wd-apm-rssi">—</span></div>
+        <div class="apm-row"><span>Paquetes vistos</span><span id="wd-apm-packets">—</span></div>
+        <div class="apm-row"><span>Handshake</span><span id="wd-apm-hs">—</span></div>
+        <div class="apm-row"><span>Deauth rounds</span><span id="wd-apm-attempts">—</span></div>
+      </div>
+      <div class="apm-hint">El mapa registra dónde se vio cada red; los handshakes ya capturados no se vuelven a atacar.</div>
+    </div>
+  </div>
+
+  <div id="wd-error-banner" class="gps-error hidden"></div>
+
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script src="wardrive.js"></script>
+</body>
+</html>

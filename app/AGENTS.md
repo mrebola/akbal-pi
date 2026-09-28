@@ -85,12 +85,19 @@ whisplay-ai-chatbot/
 │   │   ├── ar9271.ts             # dongle detection by kernel driver (ath9k_htc)
 │   │   ├── monitor-control.ts    # in-place monitor mode + channel hopping
 │   │   └── demo-mode.ts          # synthetic APs/devices for demo source
-│   ├── wardrive/                 # Lab handshake capture (docs/wardrive.md)
+│   ├── wifi-audit/               # Lab handshake capture (docs/wifi-audit.md)
+│   │                             #   (renombrado de wardrive/ — era el audit de lab)
 │   │   ├── service.ts            # orchestrator: allowlist security boundary
 │   │   ├── discovery.ts          # targets from radar snapshot / iw scan
 │   │   ├── attack.ts             # airodump/aireplay/hcxdumptool runners
 │   │   ├── crack.ts              # aircrack-ng handshake validation + rockyou dict crack
 │   │   └── session.ts            # ~/wardrive-sessions persistence (incl. cracked passwords)
+│   ├── wardrive/                 # Driving capture: mapa + handshakes en movimiento (docs/wardrive.md)
+│   │   ├── service.ts            # orchestrator: sesión, hop, deauth oportunista, GPS, exportes
+│   │   ├── capture.ts            # dumpcap(+ringbuffer)|tshark → beacons/EAPOL/deauth
+│   │   ├── attack.ts             # hcxpcapngtool extractor + DeauthOpRunner (bursts cortos)
+│   │   ├── drive-db.ts           # SQLite: redes vistas / handshakes / sesiones / tracks
+│   │   └── types.ts              # DriveStatus, DriveApView, etc.
 │   ├── services/adsb/            # Aircraft Radar: ADS-B via HackRF One (docs/aircraft-radar.md)
 │   │   ├── hackrf-receiver.ts    # readsb --device-type hackrf process + SBS-1 TCP client
 │   │   ├── sbs-parser.ts         # SBS-1/BaseStation CSV → RawAdsbMessage

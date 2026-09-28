@@ -11,7 +11,9 @@ import axios from "axios";
 import { WebSocketServer, WebSocket } from "ws";
 import { getWifiRadarSnapshot, setWifiRadarMode, getWifiRadarMode, getWifiRadarRequestedMode } from "../wifiradar/service";
 import { detectMonitorAdapter } from "../wifiradar/adapter";
-import { getWardriveService } from "../wardrive/service";
+import { getWardriveService } from "../wifi-audit/service";
+import { getDriveWardriveService } from "../wardrive/service";
+import { driveDb, DRIVE_SESSIONS_ROOT } from "../wardrive/drive-db";
 import {
   getAircraftRadarSnapshot,
   getAircraftByIcao,
@@ -270,6 +272,15 @@ export class WebAdminServer {
       ctx.set("Cache-Control", "no-store");
       ctx.type = "text/html";
       ctx.body = fs.createReadStream(path.resolve(__dirname, "../..", "web", "admin", "gps.html"));
+    });
+
+    // WARDRIVE — fullscreen driving-capture map (docs/wardrive.md).
+    // Own page like /gps (same Leaflet engine + HUD overlays); live data
+    // comes from /api/wardrive/drive/* (polled by wardrive.js at 1Hz, aggregated server-side).
+    router.get("/wardrive", (ctx) => {
+      ctx.set("Cache-Control", "no-store");
+      ctx.type = "text/html";
+      ctx.body = fs.createReadStream(path.resolve(__dirname, "../..", "web", "admin", "wardrive.html"));
     });
 
     router.get("/api/gps/status", async (ctx) => {
@@ -897,7 +908,7 @@ export class WebAdminServer {
     // ── WARDRIVE (thesis/lab handshake capture) ──
     // All routes gate through the same session cookie as the rest of the
     // admin UI. Attack authorization is the service's allowlist — see
-    // wardrive/service.ts. No artifacts (handshakes, pcaps, hashes) are
+    // wifi-audit/service.ts. No artifacts (handshakes, pcaps, hashes) are
     // ever served here: they live only in ~/wardrive-sessions/ on the
     // device, and this API only reports paths/names, never file contents.
     const wardrive = getWardriveService();
@@ -1414,6 +1425,141 @@ export class WebAdminServer {
         ctx.status = 500;
         ctx.body = { ok: false, error: err?.message || String(err) };
       }
+    });
+
+    // ── WARDRIVE (driving capture — wardrive/service.ts, docs/wardrive.md)
+    // Separate module from Wifi Audit above: continuous passive discovery
+    // + opportunistic handshake capture while driving, GPS track per
+    // session, global SSID archive. Artifacts land in
+    // ~/wardrive-sessions/drive-*/; counters and "already captured" state
+    // live in data/wardrive-drive.db.
+    const drive = getDriveWardriveService();
+
+    router.get("/api/wardrive/drive/status", (ctx) => {
+      ctx.body = drive.getStatus();
+    });
+
+    router.post("/api/wardrive/drive/start", async (ctx) => {
+      ctx.body = await drive.start();
+    });
+
+    router.post("/api/wardrive/drive/stop", async (ctx) => {
+      ctx.body = await drive.stop();
+    });
+
+    router.post("/api/wardrive/drive/deauth", (ctx) => {
+      const { on } = (ctx.request.body as any) || {};
+      drive.setOpportunisticDeauth(on === true);
+      ctx.body = { ok: true, on: drive.getOpportunisticDeauth() };
+    });
+
+    // Session list (DB-backed, includes track shape flags for the UI).
+    router.get("/api/wardrive/drive/sessions", (ctx) => {
+      ctx.body = { ok: true, sessions: driveDb.sessions() };
+    });
+
+    // Track polyline for the map (live session or any past one).
+    router.get("/api/wardrive/drive/track", (ctx) => {
+      const id = String(ctx.query.id || "");
+      if (!/^drive-20\d{6}-\d{6}$/.test(id)) {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "id de sesión inválido" };
+        return;
+      }
+      const track = driveDb.trackPoints(id);
+      ctx.body = { ok: true, id, points: track };
+    });
+
+    // Networks recorded during one session (the "what did I find" table).
+    router.get("/api/wardrive/drive/session-networks", (ctx) => {
+      const id = String(ctx.query.id || "");
+      if (!/^drive-20\d{6}-\d{6}$/.test(id)) {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "id de sesión inválido" };
+        return;
+      }
+      ctx.body = { ok: true, id, networks: driveDb.sessionNetworks(id) };
+    });
+
+    // WiGLE CSV export (networks + capture positions for the session).
+    router.get("/api/wardrive/drive/export/csv", (ctx) => {
+      const id = String(ctx.query.id || "");
+      const csv = drive.sessionCsv(id);
+      if (csv == null) {
+        ctx.status = 404;
+        ctx.body = { ok: false, error: "Sesión inválida o sin datos" };
+        return;
+      }
+      ctx.set("Content-Disposition", `attachment; filename="${id}.csv"`);
+      ctx.type = "text/csv";
+      ctx.body = csv;
+    });
+
+    // GPX export (the driven track, for Google Earth / OSM).
+    router.get("/api/wardrive/drive/export/gpx", (ctx) => {
+      const id = String(ctx.query.id || "");
+      const gpx = drive.sessionGpx(id);
+      if (gpx == null) {
+        ctx.status = 404;
+        ctx.body = { ok: false, error: "Sesión inválida o sin datos" };
+        return;
+      }
+      ctx.set("Content-Disposition", `attachment; filename="${id}.gpx"`);
+      ctx.type = "application/gpx+xml";
+      ctx.body = gpx;
+    });
+
+    // Capture artifacts (.cap/.hc22000) of a drive session: same traversal-
+    // safe download contract as the lab sessions above, restricted to
+    // drive-* folders.
+    router.get("/api/wardrive/drive/files", (ctx) => {
+      const id = String(ctx.query.id || "");
+      if (!/^drive-20\d{6}-\d{6}$/.test(id)) {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "id de sesión inválido" };
+        return;
+      }
+      const dir = path.join(DRIVE_SESSIONS_ROOT, id);
+      let items: { name: string; size: number; path: string }[] = [];
+      try {
+        items = fs
+          .readdirSync(dir, { withFileTypes: true })
+          .filter((e) => e.isFile() && /\.(cap|hc22000|json|log|csv)$/i.test(e.name))
+          .map((e) => {
+            let size = 0;
+            try {
+              size = fs.statSync(path.join(dir, e.name)).size;
+            } catch {
+              // vanished
+            }
+            return { name: e.name, size, path: `${id}/${e.name}` };
+          })
+          .sort((a, b) => a.name.localeCompare(b.name));
+      } catch {
+        ctx.body = { ok: true, items: [] };
+        return;
+      }
+      ctx.body = { ok: true, id, items };
+    });
+
+    router.get("/api/wardrive/drive/files/download", (ctx) => {
+      const relative = String(ctx.query.path || "");
+      const id = relative.split("/")[0] || "";
+      const name = path.basename(relative);
+      if (!/^drive-20\d{6}-\d{6}$/.test(id) || name.includes("/") || name.includes("\\") || name.startsWith(".")) {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "Ruta inválida" };
+        return;
+      }
+      const resolved = path.join(DRIVE_SESSIONS_ROOT, id, name);
+      if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
+        ctx.status = 404;
+        ctx.body = { ok: false, error: "Archivo no encontrado" };
+        return;
+      }
+      ctx.set("Content-Disposition", `attachment; filename="${name}"`);
+      ctx.type = "application/octet-stream";
+      ctx.body = fs.createReadStream(resolved);
     });
 
     router.get("/api/usb/devices", async (ctx) => {

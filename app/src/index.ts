@@ -6,8 +6,9 @@ import { startVpnStatus } from "./status/vpn-status";
 import { WebAdminServer } from "./device/web-admin-server";
 import { registerShutdownHook } from "./device/display";
 import { startWifiRadarService, stopWifiRadarService } from "./wifiradar/service";
-import { getWardriveService } from "./wardrive/service";
-import { startWardriveDisplayMirror } from "./core/chat-flow/wardrive-mode";
+import { getWardriveService } from "./wifi-audit/service";
+import { startWardriveDisplayMirror } from "./core/chat-flow/wifi-audit-mode";
+import { getDriveWardriveService } from "./wardrive/service";
 import { startAircraftRadarService, stopAircraftRadarService } from "./services/adsb/service";
 
 dotenv.config();
@@ -37,13 +38,20 @@ if ((process.env.ADSB_ENABLED || "true").toLowerCase() !== "false") {
   registerShutdownHook(() => stopAircraftRadarService());
 }
 
-// WARDRIVE (thesis/lab handshake capture — wardrive/service.ts). Service
+// WIFI AUDIT (thesis/lab handshake capture — wifi-audit/service.ts). Service
 // only: entering the mode is a web-admin action (POST /api/wardrive/enter).
-// The physical screen mirror renders the WARDRIVE overlay while active and
+// The physical screen mirror renders the audit overlay while active and
 // clears it on exit. Its shutdown hook restores the AR9271 to managed mode
 // even if the process dies mid-session.
 getWardriveService().registerShutdown();
 startWardriveDisplayMirror();
+
+// WARDRIVE (driving capture — wardrive/service.ts, docs/wardrive.md).
+// Same service-only shape as Wifi Audit: starting/stopping a drive session
+// is a web-admin action (POST /api/wardrive/drive/start|stop). Its shutdown
+// hook restores the AR9271 out of monitor mode even if the process dies
+// mid-session.
+getDriveWardriveService().registerShutdown();
 
 // LAN-reachable chat + wifi admin UI — see docs/web-ui.md. On by default
 // (matches the physical device's own "just works" setup); set

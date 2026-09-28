@@ -1,92 +1,124 @@
-// Types for the WARDRIVE capture feature (thesis/lab use): targeted
-// handshake capture against an explicit allowlist of lab APs — see
-// wardrive/service.ts for why there is no "attack everything" mode.
+// Types for the DRIVING wardrive feature (docs/wardrive.md): passive
+// continuous discovery + opportunistic opportunistic handshake capture while
+// the operator is driving. Distinct from wardrive/ (targeted lab capture):
+// this module records EVERYTHING it sees and where it saw it, and only
+// deauths when the opportunistic-deauth toggle is on AND the car is slow.
+//
+// Privacy: only full MACs live here (device-local data/wardrive-drive.db,
+// outside the git tree). The web API anonymizes BSSIDs/SSIDs unless the
+// client asks for ?fullMac=1 with a valid session — same policy as
+// wifiradar (see wifiradar/privacy.ts).
 
-export type WardriveTarget = {
-  bssid: string; // full MAC, uppercase — the allowlist key
-  ssid: string;
-  vendor: string; // OUI lookup with Random-MAC detection (wifiradar/oui.ts)
+export type DriveSecurityKind = "OPEN" | "WEP" | "WPA" | "WPA2/3" | "UNKNOWN";
+
+// One access point as the wardrive sees it. Key: bssid.
+export type DriveApView = {
+  bssid: string; // full MAC (uppercase) — session-cookie UI only
+  ssid: string; // "(oculta)" when never seen
   channel: number;
   rssi: number; // dBm, most recent reading
-  security: string; // as reported by the discovery source
-  clients: number; // associated clients seen in the air
-  distanceMeters: number; // rough RSSI-based estimate (order of magnitude)
-  inAllowlist: boolean;
-  attackable: boolean; // signal strength heuristic for UI ordering
+  security: DriveSecurityKind;
+  vendor: string;
+  firstSeenTs: number;
+  lastSeenTs: number;
+  packets: number;
+  bestRssi: number; // strongest reading ever this session (capture gating)
+  // Handshake state (network-wide knowledge, see drive-db.ts):
+  handshakeKnown: boolean; // another AP of this SSID already has one
+  handshakeHere: boolean; // THIS bssid has a capture in this session
+  attempts: number; // deauth rounds fired at this AP this session
+  eapolFrames: number; // EAPOL/PMKID frames captured from this AP this session
+  status: "fresh" | "attack-scheduled" | "attacking" | "captured" | "exhausted" | "open";
 };
 
-export type WardriveTargetStatus = "idle" | "running" | "captured" | "failed" | "cancelled";
-
-export type WardriveSessionTarget = {
-  bssid: string;
-  ssid: string;
-  channel: number;
-  status: WardriveTargetStatus;
-  method: "" | "pmkid" | "deauth"; // which method actually produced the capture
-  attempts: number;
-  startedAt: number | null;
-  finishedAt: number | null;
+// Live GPS position for the HUD + track.
+export type DriveFix = {
+  hasFix: boolean;
+  latitude: number | null;
+  longitude: number | null;
+  speedKmh: number | null;
+  headingDeg: number | null;
+  hdop: number | null;
+  satellitesUsed: number;
+  satellitesInView: number;
   error: string;
-  files: string[]; // capture artifacts for this target, relative to the session dir
-  verified: boolean; // handshake validated with aircrack against a known password (v2)
 };
 
-export type WardriveMode = "inactive" | "ready" | "scanning" | "attacking";
-
-export type WardriveSessionInfo = {
-  id: string; // <timestamp> — also the session folder name
-  startedAt: number;
-  endedAt: number | null;
-  targets: WardriveSessionTarget[];
-  currentBssid: string | null;
-};
-
-export type WardriveStatus = {
-  mode: WardriveMode;
-  modelsUnloaded: boolean;
+// Poll payload for the driving page. Small by design (1Hz): positions are
+// per-bucket (not per-point) and networks are already aggregated.
+export type DriveStatus = {
+  running: boolean;
+  session: {
+    id: string;
+    startedAt: number;
+    durationSec: number;
+    distanceMeters: number;
+    points: number;
+  } | null;
+  gps: DriveFix;
+  opportunisticDeauth: boolean;
   iface: string | null;
   error: string;
-  session: WardriveSessionInfo | null;
-  targets: WardriveTarget[]; // live scan view (air), refreshed by scan()
-  allowlist: string[]; // BSSIDs currently authorized
+  channel: number; // current listening channel (0 = not hopping yet)
+  stats: {
+    aps: number; // APs visible right now (in-memory tracker)
+    unique: number; // all-time unique SSIDs recorded (DB)
+    newThisSession: number; // SSIDs seen for the first time ever
+    handshakes: number; // SSIDs with handshake recorded all-time
+    newHandshakes: number; // this session's new handshake SSIDs
+    points: number; // track points this session
+  };
+  recent: DriveApView[]; // strongest 40 APs on air right now
 };
 
-export type WardriveEventPayload =
-  | { type: "status"; status: WardriveStatus }
-  | { type: "target-update"; bssid: string; status: WardriveTargetStatus; method: string; error: string }
-  | { type: "attack-progress"; bssid: string; step: AttackStep; message: string; command?: string; output?: string };
-
-// Step-by-step attack progress for the UI: explains what's happening and
-// shows the exact command being run + its output.
-export type AttackStep =
-  | "scan"      // 1. scanning for target channel/clients
-  | "lock"      // 2. locking radio to channel
-  | "capture"   // 3. airodump running
-  | "deauth"    // 4. sending deauth
-  | "validate"  // 5. checking for handshake
-  | "done";     // 6. final result
-
-export const ATTACK_STEPS: Record<AttackStep, string> = {
-  scan: "Escaneando red objetivo",
-  lock: "Fijando canal del adaptador",
-  capture: "Capturando tráfico (airodump-ng)",
-  deauth: "Enviando deauth a clientes",
-  validate: "Validando handshake capturado",
-  done: "Resultado final",
+// One captured-SSID row in the wardrive DB (bssid column = the AP that
+// produced it, for the sessions listing only — matching is by SSID).
+export type DriveHandshakeRecord = {
+  ssid: string;
+  bssid: string;
+  security: string;
+  method: "deauth" | "pmkid";
+  capturedAt: number;
+  sessionDir: string;
+  sessionId: string;
+  capFile: string;
+  hashFile: string;
+  lat: number | null;
+  lon: number | null;
+  password: string | null; // only after a rockyou hit
+  cracked: 0 | 1;
 };
 
-// Client-device view for the Deauth tab (wardrive/discovery.ts). One
-// entry per distinct client MAC the WIFIRADAR capture has seen talking.
-export type WardriveDeviceView = {
-  mac: string; // full MAC — this view is only ever served behind the session cookie
-  vendor: string;
-  rssi: number;
-  associatedBssid: string | null;
-  associatedSsid: string | null;
-  clientAuthorized: boolean; // this client's MAC is in the deauth allowlist
-  apAuthorized: boolean; // its associated AP is in the attack allowlist
-  deauthAuthorized: boolean; // deauth may target this client at all
-  deauthing: boolean; // deauth currently being sent to this client
-  frames: number;
+export type DriveSessionSummary = {
+  id: string;
+  startedAt: number;
+  endedAt: number | null;
+  distanceMeters: number;
+  points: number;
+  networks: number; // distinct SSIDs recorded
+  handshakes: number; // new handshakes captured
+  hasTrack: boolean;
+};
+
+// ─── Session status per AP (in-memory during the session) ───────────────────
+
+export type ApSessionState = {
+  status: "fresh" | "attack-scheduled" | "attacking" | "captured" | "exhausted" | "open";
+  attempts: number;
+  lastAttackAt: number;
+  lastDeauthAt: number;
+  cooldownUntil: number;
+  // EAPOL/PMKID captured from THIS AP during this session
+  eapolFrames: number;
+  captured: boolean;
+  method: "" | "deauth" | "pmkid";
+  capFile: string;
+  hashFile: string;
+  lastRssi: number;
+  bestRssi: number;
   lastSeen: number;
+  firstSeen: number;
+  clients: Set<string>;
+  channel: number;
+  packets: number;
 };

@@ -161,7 +161,16 @@ export class DriveCapture extends EventEmitter {
     this.running = true;
 
     const dumpcapArgs = [
-      "sudo", "-n", "dumpcap",
+      "dumpcap", // NO sudo: dumpcap drops privileges after opening the
+      // interface (uid → SUDO_USER, caps dropped — verified on the device
+      // with strace), and the dropped set can't even traverse $HOME (0700)
+      // to create the ring files: "Permission denied". With the binary's
+      // file capabilities (sudo setcap cap_net_admin,cap_net_raw=eip
+      // /usr/bin/dumpcap, applied on the device) running it as the SERVICE
+      // USER works for both the interface capture AND writing into
+      // ~/wardrive-sessions/drive-*/ring/. The interface itself is already
+      // in monitor mode at this point (enterMonitorMode, which does use
+      // sudo for ip/iw).
       "-i", shellSingleQuote(iface),
       "-f", shellSingleQuote(CAPTURE_FILTER),
     ];
@@ -193,12 +202,12 @@ export class DriveCapture extends EventEmitter {
     ].join(" ");
 
     // Two SEPARATE processes on one monitor iface: the ringbuffer writer
-    // (--ring, no pipe at all — it only writes files) and the stdout→tshark
+    // (-b, no pipe at all — it only writes files) and the stdout→tshark
     // pipeline for field extraction (no -w). Both dumpcaps receive the same
     // frames; starting the field pipeline as `ringCmd & fieldCmd | tshark`
     // keeps them in one process group so stop() reaches everything.
     const fieldDumpcap = [
-      "sudo", "-n", "dumpcap",
+      "dumpcap", // same file-capabilities story as the ring writer above
       "-i", shellSingleQuote(iface),
       "-f", shellSingleQuote(CAPTURE_FILTER),
       "-w", "-",

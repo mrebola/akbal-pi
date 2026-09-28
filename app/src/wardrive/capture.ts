@@ -26,16 +26,20 @@ const FIELDS = [
   "wlan.fixed.capabilities.privacy",
   "wlan.rsn.version",
   "wlan.wfa.ie.wpa.version",
-  "wlan_mgt.fixed.category_code",
+  "eapol",
 ];
 
-// Beacons build the map, deauths time our bursts, data feeds EAPOL. Excludes
-// the huge encrypted-payload bulk a plain "type data" would admit: only the
-// EAPOL frames (and WPA/RSN key data) pass, which keeps tshark's CPU tiny on
-// a busy channel — most of the 802.11 chatter is ordinary encrypted data.
+// Beacons build the map, deauths time our bursts, EAPOL data frames mark
+// handshakes. Excludes the huge encrypted-payload bulk a plain "type data"
+// would admit — only null-data + EAPOL frames pass, which keeps tshark's
+// CPU tiny on a busy channel (most 802.11 chatter is ordinary encrypted
+// data). BPF syntax verified against dumpcap 4.4 on the device: "subtype
+// null" is the 802.11 null-data frame; EAPOL rides LLC/SNAP with EtherType
+// 0x888e, which the "ether proto 0x888e" primitive matches on the data
+// frames that carry it.
 const CAPTURE_FILTER =
   "type mgt subtype beacon or type mgt subtype probe-resp or type mgt subtype deauth " +
-  "or wlan type data subtype null or (type data and (wlan.wlan.epol or eapol))";
+  "or (type data and (subtype null or ether proto 0x888e))";
 
 const TYPE_SUBTYPE = {
   BEACON: "0x0008",

@@ -48,15 +48,25 @@ export class DriveDb {
   private migrate(): void {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS networks_seen (
-        ssid        TEXT PRIMARY KEY,
+        ssid        TEXT NOT NULL,
+        bssid       TEXT NOT NULL,
         security    TEXT NOT NULL,
+        channel     INTEGER,
+        best_rssi   INTEGER,
+        lat         REAL,
+        lon         REAL,
         first_seen  INTEGER NOT NULL,
         last_seen   INTEGER NOT NULL,
         times_seen  INTEGER NOT NULL DEFAULT 1,
         handshake   INTEGER NOT NULL DEFAULT 0,
+        attempts    INTEGER NOT NULL DEFAULT 0,
+        last_method TEXT,
         handshake_bssid TEXT,
-        handshake_at    INTEGER
+        handshake_at    INTEGER,
+        PRIMARY KEY (bssid)
       );
+      CREATE INDEX IF NOT EXISTS idx_networks_ssid ON networks_seen(ssid);
+      CREATE INDEX IF NOT EXISTS idx_networks_first ON networks_seen(first_seen);
       CREATE TABLE IF NOT EXISTS handshakes (
         ssid        TEXT NOT NULL,
         bssid       TEXT NOT NULL,
@@ -93,30 +103,103 @@ export class DriveDb {
       );
       CREATE INDEX IF NOT EXISTS idx_track_session ON track_points(session_id, ts);
     `);
+    // Schema evolution: the first release keyed networks by SSID; the
+    // historial needs per-BSSID rows (mac, position, rssi, channel,
+    // attempts). Rebuild the table preserving what's already recorded.
+    const cols = this.db.prepare(`PRAGMA table_info(networks_seen)`).all() as { name: string }[];
+    if (cols.length > 0 && !cols.some((c) => c.name === "bssid")) {
+      this.db.exec(`
+        BEGIN;
+        CREATE TABLE networks_seen_new (
+          ssid        TEXT NOT NULL,
+          bssid       TEXT NOT NULL,
+          security    TEXT NOT NULL,
+          channel     INTEGER,
+          best_rssi   INTEGER,
+          lat         REAL,
+          lon         REAL,
+          first_seen  INTEGER NOT NULL,
+          last_seen   INTEGER NOT NULL,
+          times_seen  INTEGER NOT NULL DEFAULT 1,
+          handshake   INTEGER NOT NULL DEFAULT 0,
+          attempts    INTEGER NOT NULL DEFAULT 0,
+          last_method TEXT,
+          handshake_bssid TEXT,
+          handshake_at    INTEGER,
+          PRIMARY KEY (bssid)
+        );
+        INSERT OR IGNORE INTO networks_seen_new (ssid, bssid, security, first_seen, last_seen, times_seen, handshake, handshake_bssid, handshake_at)
+          SELECT ssid, COALESCE(handshake_bssid, 'UNKNOWN-' || HEX(ssid)), security, first_seen, last_seen, times_seen, handshake, handshake_bssid, handshake_at FROM networks_seen;
+        DROP TABLE networks_seen;
+        ALTER TABLE networks_seen_new RENAME TO networks_seen;
+        CREATE INDEX IF NOT EXISTS idx_networks_ssid ON networks_seen(ssid);
+        CREATE INDEX IF NOT EXISTS idx_networks_first ON networks_seen(first_seen);
+        COMMIT;
+      `);
+      console.log("[wardrive] drive-db migrated: networks_seen keyed by bssid");
+    }
   }
 
   // ─── networks_seen ─────────────────────────────────────────────────────
 
-  // Returns true when this SSID had never been seen before (a "new" find
-  // worth counting in the session stats). Always refreshes last_seen.
-  recordNetwork(ssid: string, security: string): boolean {
-    if (!ssid) return false;
+  // Upsert one AP sighting, keyed by BSSID (the MAC address the historial
+  // is browsed by). Returns true when this BSSID had never been seen
+  // before (a "new" find worth counting in the session stats). Position
+  // and best-rssi are kept at their best-known values: the STRONGEST
+  // reading and the first position it was seen at win, never the last.
+  recordNetwork(rec: {
+    bssid: string;
+    ssid: string;
+    security: string;
+    channel: number;
+    rssi: number;
+    lat: number | null;
+    lon: number | null;
+  }): boolean {
+    if (!rec.bssid || rec.ssid === "(oculta)") return false;
     const now = Date.now();
     try {
       const r = this.db
         .prepare(
-          `INSERT INTO networks_seen (ssid, security, first_seen, last_seen, times_seen, handshake)
-           VALUES (?, ?, ?, ?, 1, 0)
-           ON CONFLICT(ssid) DO UPDATE SET
+          `INSERT INTO networks_seen
+             (ssid, bssid, security, channel, best_rssi, lat, lon, first_seen, last_seen, times_seen)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+           ON CONFLICT(bssid) DO UPDATE SET
+             ssid = CASE WHEN excluded.ssid != '(oculta)' AND ssid = '(oculta)' THEN excluded.ssid ELSE ssid END,
+             security = CASE WHEN excluded.security != 'UNKNOWN' AND security IN ('UNKNOWN','') THEN excluded.security ELSE security END,
+             channel = COALESCE(NULLIF(excluded.channel, 0), channel),
+             best_rssi = MAX(COALESCE(best_rssi, -999), excluded.best_rssi),
+             lat = COALESCE(lat, excluded.lat),
+             lon = COALESCE(lon, excluded.lon),
              last_seen = excluded.last_seen,
-             times_seen = times_seen + 1,
-             security = CASE WHEN excluded.security != 'UNKNOWN' AND security IN ('UNKNOWN','') THEN excluded.security ELSE security END`,
+             times_seen = times_seen + 1`,
         )
-        .run(ssid, security, now, now);
+        .run(
+          rec.ssid,
+          rec.bssid,
+          rec.security,
+          rec.channel || null,
+          rec.rssi || null,
+          rec.lat,
+          rec.lon,
+          now,
+          now,
+        );
       return r.changes > 0;
     } catch (err) {
       console.warn("[wardrive] recordNetwork failed:", (err as Error).message);
       return false;
+    }
+  }
+
+  // Count attack attempts against a BSSID (deauth rounds + PMKID windows).
+  recordAttempt(bssid: string, method: string): void {
+    try {
+      this.db
+        .prepare(`UPDATE networks_seen SET attempts = attempts + 1, last_method = ? WHERE bssid = ?`)
+        .run(method, bssid);
+    } catch {
+      // never fatal
     }
   }
 
@@ -174,9 +257,9 @@ export class DriveDb {
         );
       this.db
         .prepare(
-          `UPDATE networks_seen SET handshake = 1, handshake_bssid = ?, handshake_at = ? WHERE ssid = ?`,
+          `UPDATE networks_seen SET handshake = 1, handshake_bssid = ?, handshake_at = ?, last_method = ? WHERE ssid = ?`,
         )
-        .run(rec.bssid, now, rec.ssid);
+        .run(rec.bssid, now, rec.method, rec.ssid);
     } catch (err) {
       console.warn("[wardrive] markHandshake failed:", (err as Error).message);
     }
@@ -321,13 +404,15 @@ export class DriveDb {
       const startedAt = session?.started_at ?? 0;
       return this.db
         .prepare(
-          `SELECT n.ssid, n.security, n.handshake, n.first_seen, h.bssid, h.method, h.password, h.cracked, h.lat, h.lon
+          `SELECT n.bssid, n.ssid, n.security, n.channel, n.best_rssi, n.lat, n.lon, n.first_seen,
+                  n.handshake, n.attempts, n.last_method, n.handshake_bssid, n.handshake_at,
+                  h.method AS hs_method, h.password, h.cracked
            FROM networks_seen n
-           LEFT JOIN handshakes h ON h.ssid = n.ssid AND h.captured_at = (
-             SELECT MIN(captured_at) FROM handshakes h2 WHERE h2.ssid = n.ssid)
+           LEFT JOIN handshakes h ON h.bssid = n.bssid AND h.captured_at = (
+             SELECT MIN(captured_at) FROM handshakes h2 WHERE h2.bssid = n.bssid)
            WHERE n.first_seen >= ? AND n.first_seen <= ?
-           ORDER BY n.first_seen DESC
-           LIMIT 3000`,
+           ORDER BY n.handshake DESC, n.first_seen DESC
+           LIMIT 5000`,
         )
         .all(startedAt, Date.now() + 1000) as SessionNetworkRow[];
     } catch {
@@ -355,16 +440,20 @@ export type DriveSessionRow = {
 };
 
 export type SessionNetworkRow = {
+  bssid: string;
   ssid: string;
   security: string;
-  handshake: 0 | 1;
-  first_seen: number;
-  bssid: string | null;
-  method: string | null;
-  password: string | null;
-  cracked: 0 | 1;
+  channel: number | null;
+  best_rssi: number | null;
   lat: number | null;
   lon: number | null;
+  first_seen: number;
+  handshake: 0 | 1;
+  attempts: number;
+  last_method: string | null;
+  hs_method: string | null;
+  password: string | null;
+  cracked: 0 | 1;
 };
 
 export const driveDb = new DriveDb();

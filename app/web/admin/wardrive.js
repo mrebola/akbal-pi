@@ -382,7 +382,7 @@ async function refreshSessions() {
         </li>`;
       })
       .join("");
-    for (const row of list.querySelectorAll(".wd-session-row")) {
+    for (const row of list.querySelectorAll(".wd-map-session-row")) {
       row.addEventListener("click", () => openSession(row.dataset.id));
     }
   } catch {
@@ -411,7 +411,8 @@ async function openSession(id) {
       }
     }
   } catch { /* ignore */ }
-  // Networks table
+  // Networks table — full historial row per network: ssid, MAC, signal,
+  // channel, encryption, handshake state, capture attempts.
   try {
     const res = await fetch(`/api/wardrive/drive/session-networks?id=${encodeURIComponent(id)}`);
     const nets = res.ok ? (await res.json()).networks || [] : [];
@@ -422,22 +423,27 @@ async function openSession(id) {
     body.innerHTML = nets.length
       ? nets
           .map((n) => {
-            const hsBadge = n.handshake
-              ? n.cracked
-                ? `✋🏴 ${escapeHtml(n.password || "")}`
-                : "✋ capturado"
-              : n.security === "OPEN"
-                ? "— (abierta)"
-                : "sin handshake";
+            let hsCell = "—";
+            if (n.handshake) {
+              hsCell = n.cracked ? `✋🏴 ${escapeHtml(n.password || "")}` : `✋ ${escapeHtml(n.last_method || n.hs_method || "capturado")}`;
+            } else if (n.security === "OPEN") {
+              hsCell = "abierta";
+            } else if (n.attempts > 0) {
+              hsCell = `✕ ${n.attempts} intentos`;
+            }
             return `<tr class="${n.handshake ? "hs" : ""}">
               <td title="${escapeHtml(n.ssid)}">${escapeHtml(n.ssid)}</td>
+              <td class="mono">${escapeHtml(n.bssid || "—")}</td>
+              <td>${n.channel ?? "—"}</td>
+              <td class="${rssiClass(n.best_rssi ?? -100)}">${n.best_rssi ?? "—"}</td>
               <td>${escapeHtml(n.security)}</td>
-              <td>${hsBadge}</td>
+              <td>${hsCell}</td>
+              <td>${n.attempts || "—"}</td>
               <td><button class="wd-vista-btn" data-lat="${n.lat ?? ""}" data-lon="${n.lon ?? ""}">Ver</button></td>
             </tr>`;
           })
           .join("")
-      : '<tr><td colspan="4" class="muted">Sin redes registradas en esta sesión.</td></tr>';
+      : '<tr><td colspan="8" class="muted">Sin redes registradas en esta sesión.</td></tr>';
     for (const btn of body.querySelectorAll(".wd-vista-btn")) {
       btn.addEventListener("click", () => {
         const lat = parseFloat(btn.dataset.lat);
@@ -449,14 +455,14 @@ async function openSession(id) {
       });
     }
   } catch {
-    el("wd-net-body").innerHTML = '<tr><td colspan="4" class="muted">Error cargando redes.</td></tr>';
+    el("wd-net-body").innerHTML = '<tr><td colspan="8" class="muted">Error cargando redes.</td></tr>';
   }
 }
 
 function lastSessionDistance(id) {
   const list = el("wd-session-list");
   if (!list) return null;
-  const row = [...list.querySelectorAll(".wd-session-row")].find((r) => r.dataset.id === id);
+  const row = [...list.querySelectorAll(".wd-map-session-row")].find((r) => r.dataset.id === id);
   return row ? row.textContent : null;
 }
 

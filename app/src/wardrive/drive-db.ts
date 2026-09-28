@@ -222,6 +222,16 @@ export class DriveDb {
     return new Set(rows.map((r) => r.ssid));
   }
 
+  // SSIDs that were ever ATTACKED in any past session (attempts > 0) — the
+  // operator's recurring target list (labs). They get targeting priority
+  // and a wider RSSI gate in the next sessions.
+  prioritySsids(): Set<string> {
+    const rows = this.db
+      .prepare(`SELECT DISTINCT ssid FROM networks_seen WHERE attempts > 0`)
+      .all() as { ssid: string }[];
+    return new Set(rows.map((r) => r.ssid));
+  }
+
   markHandshake(rec: {
     ssid: string;
     bssid: string;

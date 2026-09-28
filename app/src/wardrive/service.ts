@@ -77,7 +77,7 @@ export class DriveWardriveService extends EventEmitter {
   private phy: string | null = null;
   private channels: number[] = [];
   private hopIndex = 0;
-  private hopTimer: ReturnType<typeof setInterval> | null = null;
+  private hopTimer: ReturnType<typeof setTimeout> | null = null;
   private tickTimer: ReturnType<typeof setInterval> | null = null;
   private scanTimer: ReturnType<typeof setInterval> | null = null;
   private error = "";
@@ -285,21 +285,81 @@ export class DriveWardriveService extends EventEmitter {
 
   // ─── Channel hopping ───────────────────────────────────────────────────
 
+  // HOPPING STRATEGY (docs/wardrive.md): the radio must NOT sit on one
+  // channel — the car keeps moving and networks off-channel are lost. The
+  // hopper cycles channels but weights them by how many UNCOVERED APs
+  // (no handshake, hunt-pending) each channel currently holds, refreshed
+  // every few hops from the live air picture. Dwell time adapts to speed:
+  // fast → short hops (cover more spectrum while passing), slow/parked →
+  // longer dwell (give beacons from the same channel time to land).
+  //
+  // The discovery capture (dumpcap|tshark) keeps running on EVERY channel —
+  // hopping only changes what the radio listens to; frames already seen
+  // stay recorded. Channel-hopping is discovery; only ATTACKS lock the
+  // channel (their own window, the hopper stands down via hopTimerPause).
+  private channelScores = new Map<number, number>(); // channel -> uncovered APs
+  private channelScoreAt = 0;
+
+  private scoreChannels(): void {
+    // Re-score at most every ~4s: cheap Map sweep, but avoid recomputing
+    // on every 400ms tick.
+    if (Date.now() - this.channelScoreAt < 4_000) return;
+    this.channelScoreAt = Date.now();
+    const counts = new Map<number, number>();
+    for (const [, ap] of this.air) {
+      if (ap.security === "OPEN" || !ap.ssid || ap.ssid === "(oculta)") continue;
+      if (this.knownHandshakeSsids.has(ap.ssid)) continue;
+      const st = this.apState.get(ap.bssid);
+      if (st?.captured || st?.status === "exhausted" || (st?.attempts ?? 0) >= MAX_ATTEMPTS) continue;
+      const ch = ap.channel || 0;
+      if (ch < 1 || ch > 14) continue;
+      counts.set(ch, (counts.get(ch) || 0) + 1);
+    }
+    this.channelScores = counts;
+  }
+
+  // Next channel: hop cadence over the weighted list. Channels with
+  // uncovered APs get revisited more often (their weight = 1 + apCount,
+  // so a channel with 5 targets is visited ~6x per cycle vs 1x for an
+  // empty one); empty channels stay in the rotation at base weight so
+  // NEW networks entering range still get discovered.
+  private nextChannel(): number {
+    const scored = this.channels.map((ch) => ({
+      ch,
+      weight: 1 + (this.channelScores.get(ch) || 0),
+    }));
+    const total = scored.reduce((s, e) => s + e.weight, 0);
+    let pick = (this.hopIndex * 7919) % total; // deterministic spread, not random
+    this.hopIndex += 1;
+    for (const e of scored) {
+      pick -= e.weight;
+      if (pick < 0) return e.ch;
+    }
+    return scored[scored.length - 1].ch;
+  }
+
   private startHopper(): void {
     if (this.hopTimer) return;
-    this.hopTimer = setInterval(() => {
-      if (!this.iface || this.channels.length === 0) return;
-      // During a PMKID round hcxdumptool owns the interface (channel +
-      // mode) — the hopper must not fight it.
-      if (this.hopTimerPause) return;
-      if (this.attackBssid && Date.now() < this.attackUntil) return; // dwell
-      const ch = this.channels[this.hopIndex % this.channels.length];
-      this.hopIndex += 1;
-      this.currentChannel = ch;
-      setChannel(this.iface, ch).catch((err) =>
-        console.warn(`[wardrive] setChannel(${ch}) failed:`, err?.message || err),
-      );
-    }, HOP_INTERVAL_MS);
+    // Self-rescheduling hop: the dwell between hops adapts to speed
+    // (fast → 400ms hops = spectrum coverage while passing; slow/parked →
+    // 1.2s dwell so beacons from a channel actually land before moving on).
+    const hop = () => {
+      this.hopTimer = null;
+      if (!this.running) return;
+      if (!this.hopTimerPause && !(this.attackBssid && Date.now() < this.attackUntil)) {
+        if (!this.iface || this.channels.length === 0) return;
+        if (this.hopIndex % 2 === 0) this.scoreChannels();
+        const ch = this.nextChannel();
+        this.currentChannel = ch;
+        setChannel(this.iface, ch).catch((err) =>
+          console.warn(`[wardrive] setChannel(${ch}) failed:`, err?.message || err),
+        );
+      }
+      const speed = this.gpsSpeed ?? 0;
+      const dwell = speed > DEAUTH_SPEED_MAX_KMH ? HOP_INTERVAL_MS : HOP_INTERVAL_MS * 3;
+      this.hopTimer = setTimeout(hop, dwell);
+    };
+    hop();
   }
 
   // ─── Frame ingestion ───────────────────────────────────────────────────
@@ -762,6 +822,10 @@ export class DriveWardriveService extends EventEmitter {
     if (this.demoCaptureTimer) {
       clearInterval(this.demoCaptureTimer);
       this.demoCaptureTimer = null;
+    }
+    if (this.hopTimer) {
+      clearTimeout(this.hopTimer);
+      this.hopTimer = null;
     }
   }
 

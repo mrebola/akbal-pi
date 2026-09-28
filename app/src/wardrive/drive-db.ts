@@ -417,16 +417,76 @@ export class DriveDb {
           `SELECT n.bssid, n.ssid, n.security, n.channel, n.best_rssi, n.lat, n.lon, n.first_seen,
                   n.handshake, n.attempts, n.last_method, n.handshake_bssid, n.handshake_at,
                   h.method AS hs_method, h.password, h.cracked
-           FROM networks_seen n
-           LEFT JOIN handshakes h ON h.bssid = n.bssid AND h.captured_at = (
-             SELECT MIN(captured_at) FROM handshakes h2 WHERE h2.bssid = n.bssid)
-           WHERE n.first_seen >= ? AND n.first_seen <= ?
-           ORDER BY n.handshake DESC, n.first_seen DESC
-           LIMIT 5000`,
+            FROM networks_seen n
+            LEFT JOIN handshakes h ON h.bssid = n.bssid AND h.captured_at = (
+              SELECT MIN(captured_at) FROM handshakes h2 WHERE h2.bssid = n.bssid)
+            WHERE n.first_seen >= ? AND n.first_seen <= ?
+            ORDER BY n.handshake DESC, n.first_seen DESC
+            LIMIT 5000`,
         )
         .all(startedAt, Date.now() + 1000) as SessionNetworkRow[];
     } catch {
       return [];
+    }
+  }
+
+  // Delete one drive session: its DB row, its track points and its
+  // handshake rows (networks_seen survives — it's the global archive).
+  deleteSession(sessionId: string): boolean {
+    try {
+      this.db.prepare(`DELETE FROM track_points WHERE session_id = ?`).run(sessionId);
+      this.db.prepare(`DELETE FROM handshakes WHERE session_id = ?`).run(sessionId);
+      const r = this.db.prepare(`DELETE FROM drive_sessions WHERE id = ?`).run(sessionId);
+      return r.changes > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  // All-time historial export: every network ever seen, with position,
+  // capture time, handshake state and the artifact file that holds it.
+  historialCsv(): string {
+    try {
+      const rows = this.db
+        .prepare(
+          `SELECT n.bssid, n.ssid, n.security, n.channel, n.best_rssi, n.lat, n.lon, n.first_seen,
+                  n.handshake, n.attempts, n.last_method, n.handshake_at,
+                  h.session_id, h.cap_file, h.hash_file, h.password, h.cracked
+           FROM networks_seen n
+           LEFT JOIN handshakes h ON h.bssid = n.bssid AND h.captured_at = (
+             SELECT MIN(captured_at) FROM handshakes h2 WHERE h2.bssid = n.bssid)
+           ORDER BY n.first_seen DESC
+           LIMIT 20000`,
+        )
+        .all() as HistorialRow[];
+      const lines = [
+        "MAC,SSID,Canal,Senal_dBm,Latitud,Longitud,HoraCaptura,LugarCaptura,Cifrado,Handshake,Metodo,Intentos,ArchivoHandshake,Session,Crackeada,Contrasena",
+      ];
+      for (const n of rows) {
+        const lugar = n.lat != null && n.lon != null ? `${n.lat.toFixed(6)},${n.lon.toFixed(6)}` : "";
+        lines.push(
+          [
+            n.bssid || "",
+            `"${String(n.ssid || "").replace(/"/g, '""')}"`,
+            n.channel ?? "",
+            n.best_rssi ?? "",
+            n.lat != null ? n.lat.toFixed(6) : "",
+            n.lon != null ? n.lon.toFixed(6) : "",
+            new Date(n.first_seen).toISOString(),
+            `"${n.session_id || ""}"`,
+            n.security || "",
+            n.handshake ? "SI" : "NO",
+            n.last_method || "",
+            n.attempts || 0,
+            n.handshake ? `"${n.hash_file || n.cap_file || ""}"` : "",
+            n.cracked ? "SI" : "",
+            n.password ? `"${n.password}"` : "",
+          ].join(","),
+        );
+      }
+      return lines.join("\n");
+    } catch {
+      return "MAC,SSID\n(error leyendo la base de datos)";
     }
   }
 
@@ -467,3 +527,22 @@ export type SessionNetworkRow = {
 };
 
 export const driveDb = new DriveDb();
+export type HistorialRow = {
+  bssid: string;
+  ssid: string;
+  security: string;
+  channel: number | null;
+  best_rssi: number | null;
+  lat: number | null;
+  lon: number | null;
+  first_seen: number;
+  handshake: 0 | 1;
+  attempts: number;
+  last_method: string | null;
+  handshake_at: number | null;
+  session_id: string | null;
+  cap_file: string | null;
+  hash_file: string | null;
+  password: string | null;
+  cracked: 0 | 1;
+};

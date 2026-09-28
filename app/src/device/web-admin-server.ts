@@ -1458,6 +1458,38 @@ export class WebAdminServer {
       ctx.body = { ok: true, sessions: driveDb.sessions() };
     });
 
+    // Delete one past session: its folder (captures, logs, hashes) + its
+    // DB rows (session, track, handshakes). Refused while a session runs.
+    router.post("/api/wardrive/drive/sessions/delete", async (ctx) => {
+      const { id } = (ctx.request.body as any) || {};
+      const cleaned = String(id || "").trim();
+      if (!/^drive-20\d{6}-\d{6}$/.test(cleaned)) {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "id de sesión inválido" };
+        return;
+      }
+      if (drive.getStatus().running) {
+        ctx.body = { ok: false, error: "Detené la sesión activa antes de borrar recorridos" };
+        return;
+      }
+      let ok = driveDb.deleteSession(cleaned);
+      try {
+        fs.rmSync(path.join(DRIVE_SESSIONS_ROOT, cleaned), { recursive: true, force: true });
+        ok = true;
+      } catch (err: any) {
+        console.warn(`[wardrive] session folder delete failed: ${err?.message || err}`);
+      }
+      ctx.body = { ok };
+    });
+
+    // Full all-time historial export (every network ever seen).
+    router.get("/api/wardrive/drive/export/historial", (ctx) => {
+      const stamp = new Date().toISOString().slice(0, 10);
+      ctx.set("Content-Disposition", `attachment; filename="akbal-wardrive-historial-${stamp}.csv"`);
+      ctx.type = "text/csv";
+      ctx.body = driveDb.historialCsv();
+    });
+
     // Track polyline for the map (live session or any past one).
     router.get("/api/wardrive/drive/track", (ctx) => {
       const id = String(ctx.query.id || "");

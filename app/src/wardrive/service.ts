@@ -981,31 +981,32 @@ export class DriveWardriveService extends EventEmitter {
 
   sessionCsv(sessionId: string): string | null {
     if (!sessionId.startsWith("drive-") || sessionId.includes("/") || sessionId.includes("\\")) return null;
-    const pts = driveDb.trackPoints(sessionId);
-    if (pts.length === 0) return null;
-    // WiGLE-compatible CSV: MAC, SSID, AuthMode, FirstSeen, Channel, RSSI,
-    // CurrentLatitude, CurrentLongitude, Altitude, Accuracy, Type.
+    // Full historial CSV (the user-facing export): GPS position of the
+    // sighting, SSID, MAC, capture time, capture place, handshake state and
+    // the handshake artifact file name.
     const nets = driveDb.sessionNetworks(sessionId);
-    const byFirst = new Map<string, { lat: number; lon: number; ts: number }>();
-    for (const p of pts) byFirst.set("anchor", p); // placeholder to satisfy lint
-    void byFirst;
-    const lines = ["MAC,SSID,AuthMode,FirstSeen,Channel,RSSI,CurrentLatitude,CurrentLongitude,Altitude,Accuracy,Type"];
+    if (nets.length === 0) return null;
+    const lines = [
+      "MAC,SSID,Latitud,Longitud,HoraCaptura,LugarCaptura,Canal,Senal_dBm,Cifrado,Handshake,Metodo,Intentos,ArchivoHandshake,Crackeada",
+    ];
     for (const n of nets) {
-      const anchor = pts[Math.min(1, pts.length - 1)];
-      const pos = n.lat != null && n.lon != null ? { lat: n.lat, lon: n.lon } : { lat: anchor.lat, lon: anchor.lon };
+      const lugar = n.lat != null && n.lon != null ? `${n.lat.toFixed(6)}, ${n.lon.toFixed(6)}` : "";
       lines.push(
         [
-          n.bssid || "00:00:00:00:00:00",
-          `"${n.ssid.replace(/"/g, '""')}"`,
-          n.security.replace("/", ""),
+          n.bssid || "",
+          `"${String(n.ssid || "").replace(/"/g, '""')}"`,
+          n.lat != null ? n.lat.toFixed(6) : "",
+          n.lon != null ? n.lon.toFixed(6) : "",
           new Date(n.first_seen).toISOString(),
-          "",
-          "",
-          pos.lat.toFixed(6),
-          pos.lon.toFixed(6),
-          "",
-          "",
-          "WIFI",
+          `"${lugar}"`,
+          n.channel ?? "",
+          n.best_rssi ?? "",
+          n.security || "",
+          n.handshake ? "SI" : "NO",
+          n.last_method || "",
+          n.attempts || 0,
+          n.handshake ? `"${n.hs_method === "pmkid" ? `${n.bssid.replace(/:/g, "").toLowerCase()}-pmkid.pcapng` : n.bssid.replace(/:/g, "").toLowerCase() + ".hc22000"}"` : "",
+          n.cracked ? "SI" : "",
         ].join(","),
       );
     }

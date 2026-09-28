@@ -448,7 +448,42 @@
   color: rgba(255, 255, 255, 0.7);
 }
 
+.wd-btn-sm.danger {
+  background: none;
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #ef4444;
+}
+
 .wd-btn-sm:hover { filter: brightness(1.2); }
+
+/* Plain AP dot on the map (clickable, popup with details) */
+.wd-ap-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.55);
+}
+
+/* Leaflet popup dark theme for the AP info card */
+#wd-map .leaflet-popup-content-wrapper,
+#wd-map .leaflet-popup-tip {
+  background: rgba(11, 16, 32, 0.95);
+  color: #e8eefc;
+  border: 1px solid rgba(122, 183, 255, 0.35);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.55);
+}
+
+#wd-map .leaflet-popup-content {
+  font-size: 12px;
+  line-height: 1.55;
+  font-family: ui-monospace, monospace;
+}
+
+#wd-map .leaflet-popup-content b { color: #7ab7ff; }
+
+#wd-map .leaflet-container a.leaflet-popup-close-button {
+  color: rgba(255, 255, 255, 0.6);
+}
 
 .wd-drawer-body {
   overflow-y: auto;

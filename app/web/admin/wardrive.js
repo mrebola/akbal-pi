@@ -14,6 +14,7 @@ let map = null;
 let posMarker = null;
 let trackLine = null;
 let hsLayer = null; // handshake capture dots (all sessions, "mapa general")
+let apLayer = null; // plain AP dots with position + click-info popup
 let trackPoints = []; // [[lat, lon], ...] live session only
 let firstFixSeen = false;
 let followCar = true;
@@ -62,6 +63,7 @@ function initMap() {
   });
   // Handshake dots sit on their own layer (global "todas las capturas" view).
   hsLayer = L.layerGroup().addTo(map);
+  apLayer = L.layerGroup().addTo(map);
   // Stop following when the user pans; a control button re-centers.
   map.on("dragstart", () => {
     followCar = false;
@@ -154,8 +156,9 @@ function render(st) {
     updateCar(gps.latitude, gps.longitude);
     if (st.session && !trackLine) loadLiveTrack(st.session.id);
   }
-  // Handshake dots refresh rarely; poll piggybacks cheaply
-  if (!render.dotsAt || Date.now() - render.dotsAt > 10000) {
+  // Map dots (APs + handshakes across ALL sessions) refresh every ~5s —
+  // the authoritative sighting positions come from session-networks.
+  if (!render.dotsAt || Date.now() - render.dotsAt > 5000) {
     render.dotsAt = Date.now();
     void refreshHandshakeDots();
   }
@@ -225,8 +228,10 @@ function drawLiveTrack() {
 
 // ---- Handshake dots (global map view) ----
 
-// All-time capture positions: one dot per handshake SSID (from the sessions
-// endpoint, which carries lat/lon per capture). Cheap: a handful of rows.
+// All-time capture positions + live AP positions on the map. Two layers:
+//   apLayer   — one dot per AP with a known position (live + past), click
+//               opens the AP detail modal (same card as the live list)
+//   hsLayer   — handshake captures, bigger green dot
 async function refreshHandshakeDots() {
   if (!map || !hsLayer) return;
   try {
@@ -236,25 +241,44 @@ async function refreshHandshakeDots() {
     const sessions = data.sessions || [];
     let dots = 0;
     hsLayer.clearLayers();
+    apLayer.clearLayers();
     for (const s of sessions) {
-      // Track the newest sessions' captures only (the DB query would be
-      // nicer, but sessions carry handshakes count — dots come per session).
-      if (!s.handshakes) continue;
       const res2 = await fetch(`/api/wardrive/drive/session-networks?id=${encodeURIComponent(s.id)}`);
       if (!res2.ok) continue;
       const nets = (await res2.json()).networks || [];
       for (const n of nets) {
-        if (!n.handshake || n.lat == null || n.lon == null) continue;
-        L.marker([n.lat, n.lon], {
-          icon: L.divIcon({
-            className: "",
-            html: '<div class="wd-hs-dot" style="width:10px;height:10px;"></div>',
-            iconSize: [10, 10],
-            iconAnchor: [5, 5],
-          }),
-          title: `✋ ${n.ssid} — ${s.id}`,
-        }).addTo(hsLayer);
-        dots += 1;
+        if (n.lat == null || n.lon == null) continue;
+        if (n.handshake) {
+          L.marker([n.lat, n.lon], {
+            icon: L.divIcon({
+              className: "",
+              html: '<div class="wd-hs-dot" style="width:10px;height:10px;"></div>',
+              iconSize: [10, 10],
+              iconAnchor: [5, 5],
+            }),
+            title: `✋ ${n.ssid} — ${s.id}`,
+          }).addTo(hsLayer);
+          dots += 1;
+        } else if (dots < 400) {
+          // Plain AP dot: color by encryption (red WPA, yellow WPA/3, blue open)
+          const col = n.security === "OPEN" ? "#7ab7ff" : n.security === "WPA2/3" ? "#ff9500" : "#ffd166";
+          const m = L.marker([n.lat, n.lon], {
+            icon: L.divIcon({
+              className: "",
+              html: `<div class="wd-ap-dot" style="background:${col};box-shadow:0 0 6px ${col}"></div>`,
+              iconSize: [7, 7],
+              iconAnchor: [3.5, 3.5],
+            }),
+          }).addTo(apLayer);
+          m.bindPopup(
+            `<b>${escapeHtml(n.ssid)}</b><br>` +
+              `MAC: ${escapeHtml(n.bssid || "—")}<br>` +
+              `Canal: ${n.channel ?? "—"} · ${n.best_rssi ?? "—"} dBm<br>` +
+              `Cifrado: ${escapeHtml(n.security || "—")}<br>` +
+              `Handshake: ${n.handshake ? "✋ SI" : "NO"} · Intentos: ${n.attempts || 0}<br>` +
+              `<small>${new Date(n.first_seen).toLocaleString("es-MX")} · ${escapeHtml(s.id.replace("drive-", ""))}</small>`,
+          );
+        }
         if (dots > 400) return; // sane cap for the browser
       }
     }
@@ -397,6 +421,45 @@ async function openSession(id) {
   setText("wd-drawer-title", id);
   el("wd-exp-csv").href = `/api/wardrive/drive/export/csv?id=${encodeURIComponent(id)}`;
   el("wd-exp-gpx").href = `/api/wardrive/drive/export/gpx?id=${encodeURIComponent(id)}`;
+  el("wd-exp-hist").href = `/api/wardrive/drive/export/historial`;
+  // Delete button: confirm in-place, POST, then refresh the list + map.
+  const delBtn = el("wd-session-delete");
+  if (delBtn) {
+    delBtn.onclick = async () => {
+      if (!delBtn.dataset.confirm) {
+        delBtn.dataset.confirm = "1";
+        delBtn.textContent = "¿Borrar?";
+        setTimeout(() => {
+          if (delBtn.dataset.confirm) {
+            delBtn.dataset.confirm = "";
+            delBtn.textContent = "🗑";
+          }
+        }, 3000);
+        return;
+      }
+      delBtn.dataset.confirm = "";
+      delBtn.textContent = "🗑";
+      try {
+        const res = await fetch("/api/wardrive/drive/sessions/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+        const data = await res.json();
+        if (!data.ok) {
+          alert(data.error || "No se pudo borrar la sesión");
+          return;
+        }
+        drawer.classList.add("hidden");
+        if (trackLine) trackLine.remove();
+        trackLine = null;
+        void refreshSessions();
+        void refreshHandshakeDots();
+      } catch {
+        /* ignore */
+      }
+    };
+  }
   // Track on the map (replaces the live line)
   try {
     const res = await fetch(`/api/wardrive/drive/track?id=${encodeURIComponent(id)}`);

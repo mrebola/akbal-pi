@@ -749,3 +749,28 @@
 }
 
 .wd-home-guard.hidden { display: none; }
+
+/* ---- Drawer states: normal (bottom sheet) / minimized (title bar only) /
+   maximized (fullscreen) ---- */
+
+.wd-drawer.maximized {
+  inset: calc(var(--header-height, 64px) + 10px) 14px 14px 14px;
+  width: auto;
+  max-height: none;
+  transform: none;
+  left: auto;
+  bottom: auto;
+}
+
+.wd-drawer.minimized {
+  max-height: none;
+  bottom: 8px;
+  max-width: 520px;
+}
+
+.wd-drawer.minimized .wd-drawer-body { display: none; }
+
+.wd-drawer.maximized .wd-drawer-body {
+  flex: 1;
+  min-height: 0;
+}

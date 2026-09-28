@@ -1055,8 +1055,10 @@ export class WebAdminServer {
     });
 
     router.post("/api/wardrive/attack/one", async (ctx) => {
-      const { bssid } = (ctx.request.body as any) || {};
-      ctx.body = await wardrive.attackOne(String(bssid || ""));
+      const { bssid, method } = (ctx.request.body as any) || {};
+      // method: undefined|"auto" = full cycle (PMKID+deauth), "pmkid" = PMKID
+      // explicit, "deauth" = deauth-only cycle.
+      ctx.body = await wardrive.attackOne(String(bssid || ""), method);
     });
 
     router.post("/api/wardrive/attack/many", async (ctx) => {

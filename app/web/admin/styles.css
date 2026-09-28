@@ -2711,3 +2711,41 @@ body { font-family: var(--font-sans); }
 }
 
 
+
+/* ---- Separate attack buttons (PMKID / Deauth / Ambos) in the audit table ---- */
+
+.wd-action-group {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.wd-audit-btn,
+.wd-deauth-btn,
+.wd-both-btn {
+  font-size: 11px;
+  padding: 4px 10px;
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.wd-deauth-btn {
+  background: #ffd166;
+}
+
+.wd-both-btn {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+
+.wd-audit-btn:hover,
+.wd-deauth-btn:hover,
+.wd-both-btn:hover { opacity: 0.9; }
+
+.wd-audit-btn:disabled,
+.wd-deauth-btn:disabled,
+.wd-both-btn:disabled { opacity: 0.5; cursor: wait; }

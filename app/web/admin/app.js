@@ -1807,7 +1807,11 @@ function wdRender() {
       ? '<span class="muted">✓ Listo</span>'
       : attacking
         ? "—"
-        : `<button class="wd-audit-btn" data-bssid="${t.bssid}" data-ssid="${escapeHtml(t.ssid || "")}">Auditar</button>`;
+        : `<div class="wd-action-group">
+            <button class="wd-audit-btn" data-bssid="${t.bssid}" data-ssid="${escapeHtml(t.ssid || "")}" title="PMKID: pide el hash directo al AP — no necesita clientes">PMKID</button>
+            <button class="wd-deauth-btn" data-bssid="${t.bssid}" data-ssid="${escapeHtml(t.ssid || "")}" title="Deauth: fuerza la reasociación de clientes conectados">Deauth</button>
+            <button class="wd-both-btn" data-bssid="${t.bssid}" data-ssid="${escapeHtml(t.ssid || "")}" title="Ciclo completo: PMKID y luego deauth">Ambos</button>
+          </div>`;
 
     tr.innerHTML = `
       <td class="wd-ssid">${wdSource === "demo" ? '<span class="demo-badge">DEMO</span> ' : ""}${escapeHtml(t.ssid || "(oculta)")}</td>
@@ -2796,10 +2800,15 @@ wdInitSubtabs();
 window.wdReopenProgress = wdReopenProgress;
 
 wdTableBody.addEventListener("click", async (ev) => {
-  const btn = ev.target.closest(".wd-audit-btn");
+  const pmkidBtn = ev.target.closest(".wd-audit-btn");
+  const deauthBtn = ev.target.closest(".wd-deauth-btn");
+  const bothBtn = ev.target.closest(".wd-both-btn");
+  const btn = pmkidBtn || deauthBtn || bothBtn;
   if (!btn) return;
   const bssid = btn.dataset.bssid;
   const ssid = btn.dataset.ssid;
+  const method = pmkidBtn ? "pmkid" : bothBtn ? undefined : "deauth";
+  const label = pmkidBtn ? "PMKID..." : bothBtn ? "Auditando..." : "Deauth...";
   wdError.textContent = "";
 
   // Show progress panel
@@ -2807,14 +2816,14 @@ wdTableBody.addEventListener("click", async (ev) => {
 
   // Auto-authorize + attack in one go
   btn.disabled = true;
-  btn.textContent = "Auditando...";
+  btn.textContent = label;
 
   await wdApi("allowlist", { bssid });
-  const res = await wdApi("attack/one", { bssid });
+  const res = await wdApi("attack/one", { bssid, method });
   if (res?.error) {
     wdError.textContent = res.error;
     btn.disabled = false;
-    btn.textContent = "Auditar";
+    btn.textContent = pmkidBtn ? "PMKID" : bothBtn ? "Ambos" : "Deauth";
     wdHideProgress();
   }
   void wdRefresh();
@@ -2824,7 +2833,7 @@ wdTableBody.addEventListener("click", async (ev) => {
 wdTableBody.addEventListener("click", (ev) => {
   const tr = ev.target.closest("tr[data-bssid]");
   if (!tr) return;
-  if (ev.target.closest(".wd-audit-btn")) return; // the button has its own handler
+  if (ev.target.closest(".wd-audit-btn") || ev.target.closest(".wd-deauth-btn") || ev.target.closest(".wd-both-btn")) return; // buttons have their own handler
   openWdNetInfoModal(tr.dataset);
 });
 

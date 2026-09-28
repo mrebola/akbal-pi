@@ -683,12 +683,43 @@ function lastSessionDistance(id) {
 }
 
 el("wd-drawer-close")?.addEventListener("click", () => {
-  el("wd-session-drawer").classList.add("hidden");
+  const drawer = el("wd-session-drawer");
+  drawer.classList.add("hidden");
+  drawer.classList.remove("minimized", "maximized");
   // Back to the live session view
   trackPoints = [];
   if (trackLine) trackLine.remove();
   trackLine = null;
   if (lastStatus?.session) void loadLiveTrack(lastStatus.session.id);
+});
+
+// ---- Drawer window states: normal / minimized (title bar only) / maximized
+// (fullscreen). Clicking a minimized bar restores the normal state.
+
+function setDrawerState(state) {
+  const drawer = el("wd-session-drawer");
+  if (!drawer) return;
+  drawer.classList.remove("minimized", "maximized");
+  if (state) drawer.classList.add(state);
+  // Icons: ▁ (minimize) becomes ▲ (restore) while minimized; ⛶ becomes ▢
+  // while maximized. Keep both buttons visible — each toggles back.
+  const minBtn = el("wd-drawer-min");
+  const maxBtn = el("wd-drawer-max");
+  if (minBtn) minBtn.textContent = state === "minimized" ? "▲" : "▁";
+  if (maxBtn) maxBtn.textContent = state === "maximized" ? "▢" : "⛶";
+  if (map) setTimeout(() => map.invalidateSize(), 60);
+}
+
+el("wd-drawer-min")?.addEventListener("click", () => {
+  const drawer = el("wd-session-drawer");
+  if (!drawer) return;
+  setDrawerState(drawer.classList.contains("minimized") ? "" : "minimized");
+});
+
+el("wd-drawer-max")?.addEventListener("click", () => {
+  const drawer = el("wd-session-drawer");
+  if (!drawer) return;
+  setDrawerState(drawer.classList.contains("maximized") ? "" : "maximized");
 });
 
 // ---- Controls ----

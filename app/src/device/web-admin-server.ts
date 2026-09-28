@@ -1451,6 +1451,19 @@ export class WebAdminServer {
     // and the deauth fallback fires automatically when slow/stopped. This
     // route stays as a no-op for older clients that POST to it.
 
+    // Dongle selection: list the USB wifi adapters present and pin the one
+    // wardrive should use. Only changeable with the attack stopped.
+    router.get("/api/wardrive/drive/adapters", async (ctx) => {
+      ctx.body = await drive.listAdapters();
+    });
+
+    router.post("/api/wardrive/drive/adapter", (ctx) => {
+      const { iface } = (ctx.request.body as any) || {};
+      ctx.body = drive.setPreferredAdapter(
+        iface == null || String(iface).trim() === "" ? null : String(iface),
+      );
+    });
+
     // Session list (DB-backed, includes track shape flags for the UI).
     router.get("/api/wardrive/drive/sessions", (ctx) => {
       ctx.body = { ok: true, sessions: driveDb.sessions() };

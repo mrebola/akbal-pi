@@ -78,6 +78,15 @@
       <div class="wd-hud-item"><span class="k">Canal</span><span class="v mono" id="wd-ch">—</span></div>
       <div class="wd-hud-item"><span class="k">Dongle</span><span class="v mono" id="wd-iface">—</span></div>
     </div>
+    <!-- Dongle picker: only changeable while stopped (the radio is busy
+         during a session) -->
+    <label class="wd-dongle" title="Adaptador USB a usar — default: AR9271 (captura EAPOL determinística)">
+      <span class="k">Dongle</span>
+      <select id="wd-dongle-select">
+        <option value="">auto</option>
+      </select>
+    </label>
+    <div id="wd-dongle-msg" class="wd-dongle-msg"></div>
     <div id="wd-error" class="wd-fix-msg hidden"></div>
   </div>
 

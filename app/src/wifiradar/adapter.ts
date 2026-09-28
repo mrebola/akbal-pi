@@ -87,12 +87,34 @@ const supportsMonitor = async (phy: string): Promise<boolean> => {
   }
 };
 
-export async function detectMonitorAdapter(): Promise<MonitorAdapter> {
+export async function detectMonitorAdapter(preferredIface?: string | null): Promise<MonitorAdapter> {
   let ifaces: string[] = [];
   try {
     ifaces = await fs.promises.readdir(NET_CLASS_DIR);
   } catch {
     return NONE;
+  }
+
+  // The operator can pin a specific dongle for wardrive (POST
+  // /api/wardrive/drive/adapter): if it's present and monitor-capable it
+  // wins regardless of enumeration order; if it's missing the normal
+  // detection applies (failover, never a hard failure).
+  if (preferredIface) {
+    const want = String(preferredIface).trim();
+    if (ifaces.includes(want)) {
+      const phy = await phyOf(want);
+      if (phy && (await isUsbIface(want)) && (await supportsMonitor(phy))) {
+        return {
+          present: true,
+          monitorSupported: true,
+          iface: want,
+          phy,
+          driver: await driverOf(want),
+          description: await describe(want, await driverOf(want)),
+        };
+      }
+    }
+    // Preferred dongle missing → fall through to auto-detect (never fail).
   }
 
   let firstUsb: MonitorAdapter | null = null;

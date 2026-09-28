@@ -47,6 +47,7 @@ initMap();
 initHeader();
 initPanel();
 initControls();
+initDonglePicker();
 void refresh();
 setInterval(() => void refresh(), POLL_MS);
 
@@ -135,6 +136,12 @@ function render(st) {
 
   // Activity ticker: always-visible strip at the bottom center of the map
   renderActivityTicker(st);
+
+  // Dongle picker state: disabled while running, refreshed occasionally
+  if (!render.dongleAt || Date.now() - render.dongleAt > 8000) {
+    render.dongleAt = Date.now();
+    void refreshDongleList();
+  }
 
   // Error line (dongle missing, capture interrupted…)
   const errEl = el("wd-error");
@@ -315,6 +322,64 @@ function initPanel() {
     if (map) setTimeout(() => map.invalidateSize(), 60);
   });
   void refreshSessions();
+}
+
+// ---- Dongle picker ----
+// The wardrive adapter can be pinned; only while stopped. Default
+// recommendation: ath9k_htc (AR9271) — deterministic EAPOL capture.
+
+async function refreshDongleList() {
+  const sel = el("wd-dongle-select");
+  if (!sel) return;
+  try {
+    const res = await fetch("/api/wardrive/drive/adapters");
+    if (!res.ok) return;
+    const data = await res.json();
+    const cur = data.preferred || "";
+    sel.innerHTML =
+      '<option value="">auto</option>' +
+      (data.adapters || [])
+        .map((a) => {
+          const tag = a.driver === "ath9k_htc" ? " ← recomendado" : "";
+          const label = `${a.iface} · ${a.driver || "?"}${tag}${a.monitorSupported ? "" : " (sin monitor)"}`;
+          return `<option value="${escapeHtml(a.iface)}"${a.isPreferred ? " selected" : ""}>${escapeHtml(label)}</option>`;
+        })
+        .join("");
+    // Reflect the pinned value even if the list came back without it.
+    if (cur && !sel.querySelector(`option[value="${CSS.escape(cur)}"]`)) {
+      const o = document.createElement("option");
+      o.value = cur;
+      o.textContent = `${cur} (no presente)`;
+      o.selected = true;
+      sel.appendChild(o);
+    } else if (!cur) {
+      sel.value = "";
+    }
+    sel.dataset.running = lastStatus?.running ? "1" : "0";
+    sel.disabled = Boolean(lastStatus?.running);
+  } catch { /* picker is optional */ }
+}
+
+function initDonglePicker() {
+  const sel = el("wd-dongle-select");
+  const msg = el("wd-dongle-msg");
+  sel?.addEventListener("change", async (ev) => {
+    const iface = ev.target.value || null;
+    try {
+      const res = await fetch("/api/wardrive/drive/adapter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ iface }),
+      });
+      const data = await res.json();
+      if (msg) {
+        msg.textContent = data.ok ? "" : data.error || "No se pudo fijar el dongle";
+      }
+      void refreshDongleList();
+    } catch {
+      if (msg) msg.textContent = "Error de red";
+    }
+  });
 }
 
 function renderApList(st) {

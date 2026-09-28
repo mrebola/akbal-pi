@@ -75,6 +75,12 @@ export class DriveWardriveService extends EventEmitter {
   private running = false;
   private iface: string | null = null;
   private phy: string | null = null;
+  // Dongle pinned by the operator for wardrive (null = auto). Applied only
+  // at session start; changing it while running is refused (the radio is
+  // busy). Default preference when unset: AR9271 (ath9k_htc) — its TX
+  // feedback in monitor mode makes PMKID/EAPOL capture deterministic, vs
+  // rt2800usb which loses the driver's own TX frames to userland.
+  private preferredIface: string | null = null;
   private channels: number[] = [];
   private hopIndex = 0;
   private hopTimer: ReturnType<typeof setTimeout> | null = null;
@@ -148,7 +154,7 @@ export class DriveWardriveService extends EventEmitter {
       return { ok: true };
     }
     try {
-      const info = await detectMonitorAdapter();
+      const info = await detectMonitorAdapter(this.preferredIface);
       if (!info.present) {
         this.error = "No hay adaptador WiFi USB conectado — enchufá el dongle para wardrive";
         return { ok: false, error: this.error };
@@ -168,7 +174,8 @@ export class DriveWardriveService extends EventEmitter {
       this.startHopper();
       this.startTimers();
       this.broadcastStatus();
-      console.log(`[wardrive] started (iface=${this.iface}, ${this.channels.length} channels)`);
+      const pinned = this.preferredIface === info.iface ? " (dongle fijado)" : "";
+      console.log(`[wardrive] started (iface=${this.iface}, ${this.channels.length} channels)${pinned}`);
       return { ok: true };
     } catch (err: any) {
       this.error = err?.message || String(err);
@@ -217,6 +224,70 @@ export class DriveWardriveService extends EventEmitter {
     if (this.demo === demo) return;
     if (this.running) void this.stop();
     this.demo = demo;
+  }
+
+  // ─── Dongle selection ──────────────────────────────────────────────────
+
+  // List every USB wifi adapter present, monitor-capability + "is this the
+  // one the current/last session used" flags, for the dongle picker UI.
+  async listAdapters(): Promise<{
+    adapters: {
+      iface: string;
+      driver: string;
+      description: string;
+      monitorSupported: boolean;
+      isPreferred: boolean;
+    }[];
+    preferred: string | null;
+  }> {
+    const { detectMonitorAdapter } = await import("../wifiradar/adapter");
+    const out: {
+      iface: string;
+      driver: string;
+      description: string;
+      monitorSupported: boolean;
+      isPreferred: boolean;
+    }[] = [];
+    // Enumerate by probing each USB iface directly through the preferred
+    // path, then finish with a plain auto-detect for anything unvisited.
+    const seen = new Set<string>();
+    for (const iface of await fs.promises.readdir("/sys/class/net").catch(() => [])) {
+      const info = await detectMonitorAdapter(iface);
+      if (info.present && info.iface === iface && !seen.has(iface)) {
+        seen.add(iface);
+        out.push({
+          iface,
+          driver: info.driver,
+          description: info.description,
+          monitorSupported: info.monitorSupported,
+          isPreferred: this.preferredIface === iface,
+        });
+      }
+    }
+    // Sort: monitor-capable first; among equals, the pinned one, then
+    // ath9k (AR9271) as the default recommendation, then the rest.
+    const rank = (a: (typeof out)[number]) =>
+      (a.monitorSupported ? 0 : 2) +
+      (a.isPreferred ? -1 : 0) +
+      (a.driver === "ath9k_htc" ? 0 : 1);
+    out.sort((a, b) => rank(a) - rank(b) || a.iface.localeCompare(b.iface));
+    return { adapters: out, preferred: this.preferredIface };
+  }
+
+  // Pin (or unpin with null) the wardrive dongle. Refused while a session
+  // runs — changing the radio mid-attack would kill the capture.
+  setPreferredAdapter(iface: string | null): { ok: boolean; error?: string } {
+    if (this.running) {
+      return { ok: false, error: "Detené la sesión activa antes de cambiar de dongle" };
+    }
+    const clean = iface === null || String(iface).trim() === "" ? null : String(iface).trim();
+    if (clean && !/^wlan\d+$/.test(clean)) {
+      return { ok: false, error: "Nombre de interfaz inválido" };
+    }
+    this.preferredIface = clean;
+    this.broadcastStatus();
+    console.log(`[wardrive] dongle fijado: ${clean || "auto"}`);
+    return { ok: true };
   }
 
   private beginSession(demo: boolean): void {
@@ -1101,6 +1172,7 @@ export class DriveWardriveService extends EventEmitter {
         error: this.gpsError,
       },
       iface: this.iface,
+      preferredIface: this.preferredIface,
       error: this.error,
       channel: this.currentChannel,
       // Live activity feed for the status screen: what the engine is doing

@@ -994,36 +994,39 @@ export class DriveWardriveService extends EventEmitter {
   }
 
   private pickTarget(): void {
-    // The attack engine is ALWAYS on during a session (the toggle only
-    // gates the deauth FALLBACK's speed limit — PMKID is a passive-ish
-    // request to the AP, no clients get hurt at any speed). Without this,
-    // parked home tests with the toggle off would never capture anything.
+    // Targeting rules (docs/wardrive.md):
+    //   1. NEW SSIDs first: a network never attacked before beats a
+    //      previously-attempted one (that attempt failed — don't starve
+    //      fresh targets behind old failures). Only when NO new SSIDs are
+    //      in range do we fall back to retrying the old ones.
+    //   2. Within each tier: priority SSIDs (operator's recurring labs)
+    //      first, then by best RSSI.
+    //   3. SSIDs with a handshake are NEVER re-attacked — the dedup check
+    //      (knownHandshakeSsids, table-driven) skips them entirely.
     if (!this.running) return;
     if (this.demo) {
       this.demoCapture();
       return;
     }
     if (this.attackBusy || (this.attackBssid && Date.now() < this.attackUntil)) return;
-    // Candidates: uncovered, strong-enough APs. Sort priority:
-    //   1. SSIDs the operator has attacked before (priority list, loaded
-    //      from the DB at session start — the labs you keep coming back to)
-    //   2. everything else by best RSSI
-    // A weak known AP beats a strong stranger: it's a target you explicitly
-    // care about (home lab tests would otherwise starve behind whatever
-    // neighbour AP is stronger right now).
-    const candidates: { ap: AirAp; st: ApSessionState; prio: number }[] = [];
+    const candidates: { ap: AirAp; st: ApSessionState; tier: number; prio: number }[] = [];
     for (const [, ap] of this.air) {
       if (ap.security === "OPEN" || ap.security === "UNKNOWN") continue;
       if (!ap.ssid || ap.ssid === "(oculta)") continue;
-      if (this.knownHandshakeSsids.has(ap.ssid)) continue;
+      if (this.knownHandshakeSsids.has(ap.ssid)) continue; // already have it
       const st = this.stateFor(ap.bssid);
       if (st.captured || st.status === "exhausted" || st.attempts >= MAX_ATTEMPTS) continue;
       if (Date.now() < st.cooldownUntil) continue;
       const gate = this.prioritySsids.has(ap.ssid) ? RSSI_GATE_KNOWN_DBM : RSSI_GATE_DBM;
       if (ap.bestRssi < gate) continue;
-      candidates.push({ ap, st, prio: this.prioritySsids.has(ap.ssid) ? 1 : 0 });
+      // tier 0 = never attacked in any session (fresh); tier 1 = tried
+      // before (attempts > 0 in the DB) and failed
+      const hist = driveDb.methodHistory(ap.bssid);
+      const tier = hist.pmkid + hist.deauth > 0 ? 1 : 0;
+      candidates.push({ ap, st, tier, prio: this.prioritySsids.has(ap.ssid) ? 1 : 0 });
     }
-    candidates.sort((a, b) => (b.prio - a.prio) || (b.ap.bestRssi - a.ap.bestRssi));
+    // Fresh targets first; among equals, operator-priority SSIDs; then signal.
+    candidates.sort((a, b) => a.tier - b.tier || b.prio - a.prio || b.ap.bestRssi - a.ap.bestRssi);
     if (candidates.length > 0 && !this.attackBssid) {
       void this.attackAp(candidates[0].ap, candidates[0].st);
     }

@@ -82,15 +82,29 @@
     <div id="wd-error" class="wd-fix-msg hidden"></div>
   </div>
 
-  <!-- GPS mini-HUD (bottom left): position + speed + sats -->
+  <!-- GPS mini-HUD (bottom left): position + speed + satellite sky plot -->
   <div class="wd-gps" id="wd-gps">
     <div class="wd-hud-title">GPS</div>
     <div class="gps-coords mono" id="wd-coords">— , —</div>
     <div class="wd-hud-grid">
       <div class="wd-hud-item"><span class="k">Vel</span><span class="v mono" id="wd-speed">—</span></div>
       <div class="wd-hud-item"><span class="k">Rumbo</span><span class="v mono" id="wd-heading">—</span></div>
-      <div class="wd-hud-item"><span class="k">Sats</span><span class="v mono" id="wd-sats">—</span></div>
       <div class="wd-hud-item"><span class="k">HDOP</span><span class="v mono" id="wd-hdop">—</span></div>
+    </div>
+    <!-- Satellite sky plot: same design as the /gps page's panel -->
+    <div class="wd-sat-row">
+      <div class="gps-sat-plot" id="wd-sat-plot">
+        <div class="gps-sat-ring r1"></div>
+        <div class="gps-sat-ring r2"></div>
+        <div class="gps-sat-ring r3"></div>
+        <div class="gps-sat-cross"></div>
+        <div class="gps-sat-n">N</div>
+        <div id="wd-sat-dots"></div>
+      </div>
+      <div class="gps-sat-counters" style="flex-direction: column; display: flex; gap: 4px;">
+        <span class="gps-sat-counter used"><span id="wd-sat-used">0</span>/<span id="wd-sat-need">4</span> en fix</span>
+        <span class="gps-sat-counter view"><span id="wd-sat-view">0</span>/<span id="wd-sat-total">—</span> visibles</span>
+      </div>
     </div>
     <div id="wd-fix-msg" class="wd-fix-msg">Buscando satélites…</div>
   </div>

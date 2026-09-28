@@ -731,3 +731,25 @@
   border-color: rgba(122, 183, 255, 0.4);
   background: rgba(122, 183, 255, 0.1);
 }
+
+/* ---- Satellite sky plot in the GPS HUD (styles from gps.css) ---- */
+
+.wd-sat-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.wd-gps .gps-sat-plot {
+  width: 96px;
+  height: 96px;
+  margin-top: 0;
+  flex-shrink: 0;
+}
+
+.wd-gps .gps-sat-counters {
+  font-size: 10.5px;
+  font-family: ui-monospace, monospace;
+  white-space: nowrap;
+}

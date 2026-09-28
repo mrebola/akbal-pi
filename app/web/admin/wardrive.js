@@ -134,8 +134,8 @@ function render(st) {
   setText("wd-coords", gps.hasFix ? `${fmt(gps.latitude)}, ${fmt(gps.longitude)}` : "— , —");
   setText("wd-speed", gps.speedKmh != null ? `${gps.speedKmh.toFixed(1)} km/h` : "—");
   setText("wd-heading", gps.headingDeg != null ? `${Math.round(gps.headingDeg)}°` : "—");
-  setText("wd-sats", `${gps.satellitesUsed ?? 0}/${gps.satellitesInView ?? 0}`);
   setText("wd-hdop", gps.hdop != null ? gps.hdop.toFixed(1) : "—");
+  renderSatellites(gps);
   const fix = el("wd-fix-msg");
   if (gps.hasFix) {
     fix.textContent = "";
@@ -351,6 +351,40 @@ function rssiClass(rssi) {
   if (rssi >= -55) return "strong";
   if (rssi >= -75) return "mid";
   return "weak";
+}
+
+// ---- Satellite sky plot (same design as /gps's bottom-left panel) ----
+
+function renderSatellites(gps) {
+  const sats = gps.satellites || [];
+  setText("wd-sat-used", String(gps.satellitesUsed || 0));
+  setText("wd-sat-view", String(gps.satellitesInView || 0));
+  setText("wd-sat-need", String(gps.satellitesNeeded || 4));
+  setText("wd-sat-total", String(satsTracked(sats)));
+  const host = document.getElementById("wd-sat-dots");
+  if (!host) return;
+  host.innerHTML = sats
+    .map((s) => {
+      if (s.elevation < 0) return ""; // unknown elevation → skip on the plot
+      const r = (1 - s.elevation / 90) * 46; // % of the plot's half-size
+      const angle = ((s.azimuth - 90) * Math.PI) / 180; // 0° az = up (N)
+      const x = 50 + r * Math.cos(angle);
+      const y = 50 + r * Math.sin(angle);
+      const strength = Math.max(0, Math.min(1, s.snr / 45));
+      const cls = s.used ? "sat-dot used" : s.snr > 0 ? "sat-dot" : "sat-dot idle";
+      return `<div class="${cls}" style="left:${x.toFixed(1)}%;top:${y.toFixed(1)}%;--sat-strength:${strengthColor(strength)}" title="${escapeHtml(s.prn)} · ${s.elevation}° el · ${s.azimuth}° az · ${s.snr} dB${s.used ? " · en fix" : ""}"></div>`;
+    })
+    .join("");
+}
+
+// All tracked = every PRN the GSV/GSA named; the endpoint's list IS that.
+function satsTracked(sats) {
+  return (sats || []).length || "—";
+}
+
+function strengthColor(strength) {
+  const hue = 130 * strength;
+  return `hsl(${hue.toFixed(0)}, 85%, ${45 + 10 * strength}%)`;
 }
 
 function escapeHtml(text) {

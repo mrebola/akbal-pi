@@ -32,6 +32,14 @@ export type DriveApView = {
 };
 
 // Live GPS position for the HUD + track.
+export type DriveSatellite = {
+  prn: string;
+  elevation: number; // degrees above horizon (0-90), -1 unknown
+  azimuth: number; // degrees from true north (0-359), -1 unknown
+  snr: number; // signal strength dB-Hz, 0 = not tracking
+  used: boolean; // part of the current position solution
+};
+
 export type DriveFix = {
   hasFix: boolean;
   latitude: number | null;
@@ -41,6 +49,8 @@ export type DriveFix = {
   hdop: number | null;
   satellitesUsed: number;
   satellitesInView: number;
+  satellitesNeeded: number;
+  satellites: DriveSatellite[];
   error: string;
 };
 

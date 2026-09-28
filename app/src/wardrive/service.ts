@@ -5,7 +5,7 @@ import fs from "fs";
 import path from "path";
 import { detectMonitorAdapter } from "../wifiradar/adapter";
 import { enterMonitorMode, exitMonitorMode, setChannel, getAvailable24GhzChannels } from "../wifiradar/monitor-control";
-import { getGpsStatus } from "../utils/gps";
+import { getGpsStatus, type GpsSatellite } from "../utils/gps";
 import { registerShutdownHook } from "../device/display";
 import { lookupVendorOrRandom } from "../wifiradar/oui";
 import { stopWifiRadarService, startWifiRadarService } from "../wifiradar/service";
@@ -112,6 +112,8 @@ export class DriveWardriveService extends EventEmitter {
   private gpsHdop: number | null = null;
   private gpsSatsUsed = 0;
   private gpsSatsInView = 0;
+  private gpsSatsNeeded = 4;
+  private gpsSatellites: GpsSatellite[] = [];
   private gpsError = "GPS sin datos";
   private currentChannel = 0;
 
@@ -735,6 +737,8 @@ export class DriveWardriveService extends EventEmitter {
       this.gpsHdop = gps.hdop;
       this.gpsSatsUsed = gps.satellitesUsed;
       this.gpsSatsInView = gps.satellitesInView;
+      this.gpsSatsNeeded = gps.satellitesNeeded;
+      this.gpsSatellites = gps.satellites;
       this.gpsError = gps.hasFix ? "" : gps.error || "Sin fix GPS";
     } catch {
       this.gpsError = "GPS sin datos";
@@ -958,6 +962,8 @@ export class DriveWardriveService extends EventEmitter {
         hdop: this.gpsHdop,
         satellitesUsed: this.gpsSatsUsed,
         satellitesInView: this.gpsSatsInView,
+        satellitesNeeded: this.gpsSatsNeeded,
+        satellites: this.gpsSatellites,
         error: this.gpsError,
       },
       iface: this.iface,

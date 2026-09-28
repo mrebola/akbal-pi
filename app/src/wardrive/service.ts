@@ -468,10 +468,34 @@ export class DriveWardriveService extends EventEmitter {
     this.attackMethod = "pmkid";
     let capturedHere = false;
 
-    // ── 1. PMKID round: hcxdumptool + BPF for this AP ────────────────────
+    // Cross-session method memory: if this BSSID was already attacked with
+    // a method in a PAST session, start with the OTHER one — no point
+    // burning a 30s PMKID window on an AP that already proved it ignores
+    // PMKID requests, and no point deauthing one that already handed over
+    // its PMKID request without answering.
+    const hist = driveDb.methodHistory(ap.bssid);
+    const triedPmkid = hist.pmkid > 0;
+    const triedDeauth = hist.deauth > 0;
+    let startWithDeauth = triedDeauth && !triedPmkid; // PMKID failed before → deauth first
+    const skipPmkid = triedPmkid && !triedDeauth; // AP already ignored PMKID
+    const skipDeauth = triedDeauth && !triedPmkid; // deauth already failed
+    if (startWithDeauth || (skipPmkid && triedDeauth)) {
+      // history says PMKID fails on this AP — go straight to deauth
+      startWithDeauth = true;
+    }
+
+    // ── Round 1: the method the history favours (PMKID by default) ───────
     const sessionDir = this.sessionDir;
     const ringDir = this.ringDir;
-    if (sessionDir && ringDir) {
+    if (!sessionDir || !ringDir) return;
+
+    const doPmkid = !skipPmkid;
+    const doDeauth = !skipDeauth;
+
+    if (startWithDeauth && doDeauth) {
+      driveDb.recordAttempt(ap.bssid, "deauth");
+      capturedHere = await this.runDeauthRound(ap, st);
+    } else if (doPmkid) {
       const prefix = ap.bssid.replace(/:/g, "").toLowerCase();
       const pcapngPath = path.join(sessionDir, `${prefix}-pmkid.pcapng`);
       const bpfFile = `${pcapngPath}.bpf`;
@@ -489,18 +513,33 @@ export class DriveWardriveService extends EventEmitter {
       } else {
         console.warn(`[wardrive] PMKID skip ${ap.ssid}: BPF compile failed`);
       }
-    } else {
-      return;
     }
-    // ── 2. Deauth fallback (hcxdumptool deauth+capture): automatic second
-    // attempt for every AP that didn't hand over a PMKID — gated only by
-    // speed (the AP needs the client's reassociation to land inside the
-    // window; while driving fast the deauth would just waste the window).
+    // ── Round 2 (the other method), if round 1 didn't capture and history
+    // allows it: never repeat a method this AP already ignored before.
     if (!capturedHere && this.running && !st.captured) {
       const slowEnough = this.demo || this.gpsSpeed == null || this.gpsSpeed <= DEAUTH_SPEED_MAX_KMH;
-      if (slowEnough) {
+      const pmkidAlreadyTried = startWithDeauth || !doPmkid;
+      const deauthAlreadyTried = !startWithDeauth && skipDeauth;
+      if (slowEnough && !deauthAlreadyTried && (!startWithDeauth || hist.deauth === 0 || hist.pmkid > 0)) {
         driveDb.recordAttempt(ap.bssid, "deauth");
         capturedHere = await this.runDeauthRound(ap, st);
+      } else if (slowEnough && pmkidAlreadyTried && !triedPmkid) {
+        // deauth was first (history) — PMKID as the second shot
+        driveDb.recordAttempt(ap.bssid, "pmkid");
+        const prefix = ap.bssid.replace(/:/g, "").toLowerCase();
+        const pcapngPath = path.join(sessionDir, `${prefix}-pmkid.pcapng`);
+        const bpfFile = `${pcapngPath}.bpf`;
+        const bpfPath = await writeBpfForAp(ap.bssid, bpfFile);
+        if (bpfPath) {
+          this.capture?.stop();
+          this.capture = null;
+          this.hopTimerPause = true;
+          try {
+            capturedHere = await this.runPmkidRound(ap, pcapngPath, bpfPath, st);
+          } finally {
+            this.hopTimerPause = false;
+          }
+        }
       }
     }
 
@@ -987,6 +1026,7 @@ export class DriveWardriveService extends EventEmitter {
 
   private apView(ap: AirAp, st: ApSessionState | undefined): DriveApView {
     const known = this.knownHandshakeSsids.has(ap.ssid);
+    const hist = driveDb.methodHistory(ap.bssid);
     return {
       bssid: ap.bssid,
       ssid: ap.ssid,
@@ -1001,6 +1041,9 @@ export class DriveWardriveService extends EventEmitter {
       handshakeKnown: known,
       handshakeHere: st?.captured === true,
       attempts: st?.attempts ?? 0,
+      pmkidAttempts: hist.pmkid,
+      deauthAttempts: hist.deauth,
+      lastMethod: hist.last,
       eapolFrames: st?.eapolFrames ?? 0,
       status: st?.captured
         ? "captured"

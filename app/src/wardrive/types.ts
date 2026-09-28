@@ -26,7 +26,10 @@ export type DriveApView = {
   // Handshake state (network-wide knowledge, see drive-db.ts):
   handshakeKnown: boolean; // another AP of this SSID already has one
   handshakeHere: boolean; // THIS bssid has a capture in this session
-  attempts: number; // deauth rounds fired at this AP this session
+  attempts: number; // total rounds this session (pmkid + deauth)
+  pmkidAttempts: number; // cross-session PMKID windows against this AP
+  deauthAttempts: number; // cross-session deauth rounds against this AP
+  lastMethod: string | null; // last attack method used ("pmkid" | "deauth")
   eapolFrames: number; // EAPOL/PMKID frames captured from this AP this session
   status: "fresh" | "attack-scheduled" | "attacking" | "captured" | "exhausted" | "open";
 };

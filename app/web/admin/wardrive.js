@@ -269,7 +269,8 @@ async function refreshHandshakeDots() {
               `MAC: ${escapeHtml(n.bssid || "—")}<br>` +
               `Canal: ${n.channel ?? "—"} · ${n.best_rssi ?? "—"} dBm<br>` +
               `Cifrado: ${escapeHtml(n.security || "—")}<br>` +
-              `Handshake: ${n.handshake ? "✋ SI" : "NO"} · Intentos: ${n.attempts || 0}<br>` +
+              `Handshake: ${n.handshake ? "🏴 SI" : "NO"} · Método: ${escapeHtml(n.last_method || n.hs_method || "—")}<br>` +
+              `Intentos: ${n.attempts || 0} (PMKID ${n.pmkid_attempts || 0} · deauth ${n.deauth_attempts || 0})<br>` +
               `<small>${new Date(n.first_seen).toLocaleString("es-MX")} · ${escapeHtml(s.id.replace("drive-", ""))}</small>`,
           );
         }
@@ -428,7 +429,10 @@ function showApModal(ap) {
     "wd-apm-hs",
     ap.handshakeHere ? "🏴 Handshake capturado" : ap.handshakeKnown ? "✋ Cubierto (otro AP del SSID)" : "Sin handshake aún",
   );
-  setText("wd-apm-attempts", `${ap.attempts ?? 0} intentos`);
+  setText(
+    "wd-apm-attempts",
+    `${ap.attempts ?? 0} esta sesión · PMKID ${ap.pmkidAttempts ?? 0} · deauth ${ap.deauthAttempts ?? 0} históricos`,
+  );
   el("wd-ap-modal").classList.remove("hidden");
 }
 
@@ -538,11 +542,13 @@ async function openSession(id) {
           .map((n) => {
             let hsCell = "—";
             if (n.handshake) {
-              hsCell = n.cracked ? `✋🏴 ${escapeHtml(n.password || "")}` : `✋ ${escapeHtml(n.last_method || n.hs_method || "capturado")}`;
+              hsCell = n.cracked ? `🏴🏴 ${escapeHtml(n.password || "")}` : `🏴 ${escapeHtml(n.last_method || n.hs_method || "capturado")}`;
             } else if (n.security === "OPEN") {
               hsCell = "abierta";
             } else if (n.attempts > 0) {
-              hsCell = `✕ ${n.attempts} intentos`;
+              // What was already tried and with which method — so the next
+              // session knows what NOT to repeat.
+              hsCell = `✕ PMKID ${n.pmkid_attempts || 0} · deauth ${n.deauth_attempts || 0}`;
             }
             return `<tr class="${n.handshake ? "hs" : ""}">
               <td title="${escapeHtml(n.ssid)}">${escapeHtml(n.ssid)}</td>

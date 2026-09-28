@@ -103,10 +103,10 @@ export class DriveDb {
       );
       CREATE INDEX IF NOT EXISTS idx_track_session ON track_points(session_id, ts);
     `);
-    // Schema evolution: the first release keyed networks by SSID; the
+    // Schema evolution 1: the first release keyed networks by SSID; the
     // historial needs per-BSSID rows (mac, position, rssi, channel,
     // attempts). Rebuild the table preserving what's already recorded.
-    const cols = this.db.prepare(`PRAGMA table_info(networks_seen)`).all() as { name: string }[];
+    let cols = this.db.prepare(`PRAGMA table_info(networks_seen)`).all() as { name: string }[];
     if (cols.length > 0 && !cols.some((c) => c.name === "bssid")) {
       this.db.exec(`
         BEGIN;
@@ -137,6 +137,16 @@ export class DriveDb {
         COMMIT;
       `);
       console.log("[wardrive] drive-db migrated: networks_seen keyed by bssid");
+      cols = this.db.prepare(`PRAGMA table_info(networks_seen)`).all() as { name: string }[];
+    }
+    // Schema evolution 2: per-method attempt counters (PMKID windows vs
+    // deauth rounds) for "already attacked with X" knowledge across sessions.
+    if (cols.length > 0 && !cols.some((c) => c.name === "pmkid_attempts")) {
+      this.db.exec(`
+        ALTER TABLE networks_seen ADD COLUMN pmkid_attempts INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE networks_seen ADD COLUMN deauth_attempts INTEGER NOT NULL DEFAULT 0;
+      `);
+      console.log("[wardrive] drive-db migrated: per-method attempt counters");
     }
   }
 
@@ -192,15 +202,47 @@ export class DriveDb {
     }
   }
 
-  // Count attack attempts against a BSSID (deauth rounds + PMKID windows).
+  // Count attack attempts against a BSSID, per method (PMKID windows vs
+  // deauth rounds) — "already attacked with X" knowledge for subsequent
+  // sessions so a round never repeats a method that already failed.
   recordAttempt(bssid: string, method: string): void {
     try {
-      this.db
-        .prepare(`UPDATE networks_seen SET attempts = attempts + 1, last_method = ? WHERE bssid = ?`)
-        .run(method, bssid);
+      if (method === "pmkid") {
+        this.db
+          .prepare(
+            `UPDATE networks_seen SET
+               attempts = attempts + 1,
+               pmkid_attempts = pmkid_attempts + 1,
+               last_method = ?
+             WHERE bssid = ?`,
+          )
+          .run(method, bssid);
+      } else {
+        this.db
+          .prepare(
+            `UPDATE networks_seen SET
+               attempts = attempts + 1,
+               deauth_attempts = deauth_attempts + 1,
+               last_method = ?
+             WHERE bssid = ?`,
+          )
+          .run(method, bssid);
+      }
     } catch {
       // never fatal
     }
+  }
+
+  // Per-BSSID attack history: which methods were already tried and how
+  // many times. Drives the "skip the method that already failed" rule.
+  methodHistory(bssid: string): { pmkid: number; deauth: number; last: string | null } {
+    const row = this.db
+      .prepare(
+        `SELECT pmkid_attempts, deauth_attempts, last_method FROM networks_seen WHERE bssid = ?`,
+      )
+      .get(bssid) as { pmkid_attempts: number; deauth_attempts: number; last_method: string | null } | undefined;
+    if (!row) return { pmkid: 0, deauth: 0, last: null };
+    return { pmkid: row.pmkid_attempts, deauth: row.deauth_attempts, last: row.last_method };
   }
 
   // Global "do I already have a handshake for this SSID?" check. The DB is
@@ -415,7 +457,7 @@ export class DriveDb {
       return this.db
         .prepare(
           `SELECT n.bssid, n.ssid, n.security, n.channel, n.best_rssi, n.lat, n.lon, n.first_seen,
-                  n.handshake, n.attempts, n.last_method, n.handshake_bssid, n.handshake_at,
+                  n.handshake, n.attempts, n.pmkid_attempts, n.deauth_attempts, n.last_method, n.handshake_bssid, n.handshake_at,
                   h.method AS hs_method, h.password, h.cracked
             FROM networks_seen n
             LEFT JOIN handshakes h ON h.bssid = n.bssid AND h.captured_at = (
@@ -450,7 +492,7 @@ export class DriveDb {
       const rows = this.db
         .prepare(
           `SELECT n.bssid, n.ssid, n.security, n.channel, n.best_rssi, n.lat, n.lon, n.first_seen,
-                  n.handshake, n.attempts, n.last_method, n.handshake_at,
+                  n.handshake, n.attempts, n.pmkid_attempts, n.deauth_attempts, n.last_method, n.handshake_at,
                   h.session_id, h.cap_file, h.hash_file, h.password, h.cracked
            FROM networks_seen n
            LEFT JOIN handshakes h ON h.bssid = n.bssid AND h.captured_at = (
@@ -460,7 +502,7 @@ export class DriveDb {
         )
         .all() as HistorialRow[];
       const lines = [
-        "MAC,SSID,Canal,Senal_dBm,Latitud,Longitud,HoraCaptura,LugarCaptura,Cifrado,Handshake,Metodo,Intentos,ArchivoHandshake,Session,Crackeada,Contrasena",
+        "MAC,SSID,Canal,Senal_dBm,Latitud,Longitud,HoraCaptura,LugarCaptura,Cifrado,Handshake,Metodo,Intentos,IntentosPMKID,IntentosDeauth,ArchivoHandshake,Session,Crackeada,Contrasena",
       ];
       for (const n of rows) {
         const lugar = n.lat != null && n.lon != null ? `${n.lat.toFixed(6)},${n.lon.toFixed(6)}` : "";
@@ -478,6 +520,8 @@ export class DriveDb {
             n.handshake ? "SI" : "NO",
             n.last_method || "",
             n.attempts || 0,
+            n.pmkid_attempts || 0,
+            n.deauth_attempts || 0,
             n.handshake ? `"${n.hash_file || n.cap_file || ""}"` : "",
             n.cracked ? "SI" : "",
             n.password ? `"${n.password}"` : "",
@@ -520,6 +564,8 @@ export type SessionNetworkRow = {
   first_seen: number;
   handshake: 0 | 1;
   attempts: number;
+  pmkid_attempts: number;
+  deauth_attempts: number;
   last_method: string | null;
   hs_method: string | null;
   password: string | null;
@@ -538,6 +584,8 @@ export type HistorialRow = {
   first_seen: number;
   handshake: 0 | 1;
   attempts: number;
+  pmkid_attempts: number;
+  deauth_attempts: number;
   last_method: string | null;
   handshake_at: number | null;
   session_id: string | null;

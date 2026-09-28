@@ -142,6 +142,13 @@ function render(st) {
     render.dongleAt = Date.now();
     void refreshDongleList();
   }
+  // Home-network guard badge: which SSID is protected
+  const homeGuard = el("wd-home-guard");
+  if (homeGuard) {
+    const home = st.homeSsid;
+    homeGuard.classList.toggle("hidden", !home);
+    if (home) setText("wd-home-ssid", home.length > 18 ? home.slice(0, 17) + "…" : home);
+  }
 
   // Error line (dongle missing, capture interrupted…)
   const errEl = el("wd-error");
@@ -216,7 +223,16 @@ function updateCar(lat, lon) {
     firstFixSeen = true;
     map.setView(pos, FIX_ZOOM);
   } else if (followCar) {
-    map.panTo(pos, { animate: true, duration: 0.5 });
+    // Keep the car CENTERED while driving: panTo with high-duration
+    // animation smooths the 1s poll steps into a continuous glide, and
+    // setView re-centers hard when the fix jumps (tunnel/garage re-lock).
+    const center = map.getCenter();
+    const jumped = map.distance(center, pos) > 50; // meters — GPS re-lock
+    if (jumped) {
+      map.setView(pos, map.getZoom(), { animate: false });
+    } else {
+      map.panTo(pos, { animate: true, duration: 0.9, easeLinearity: 1 });
+    }
   }
 }
 

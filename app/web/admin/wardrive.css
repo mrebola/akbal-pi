@@ -730,3 +730,22 @@
 }
 
 .wd-dongle-msg:empty { display: none; }
+
+/* ---- Home-network guard badge (in the session HUD) ---- */
+
+.wd-home-guard {
+  margin-top: 6px;
+  padding: 4px 8px;
+  border-radius: 7px;
+  background: rgba(52, 211, 153, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  color: #34d351;
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wd-home-guard.hidden { display: none; }

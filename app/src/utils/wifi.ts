@@ -294,3 +294,51 @@ export async function getSavedWifiPassword(
     return { ok: false, error: message };
   }
 }
+
+// ─── Home-network watchdog ───────────────────────────────────────────────────
+// Remembers the SSID wlan0 is connected to and, if that connection drops
+// while the wardrive engine is running (a stray deauth, an AP reboot),
+// brings the SAME network back up — not just any saved network. NetworkManager
+// normally handles this itself, but an interrupted session or a monitor-mode
+// interface can confuse it; this is the safety net. Never touches the radio
+// the wardrive engine owns (pinned to WIFI_IFNAME).
+let homeNetwork: { ssid: string; connectionName: string | null } | null = null;
+let watchdogTimer: ReturnType<typeof setInterval> | null = null;
+let watchdogBusy = false;
+
+export function armHomeNetworkWatchdog(): void {
+  if (watchdogTimer) return;
+  // Remember what we're connected to NOW (called right after wardrive
+  // start, before the radio moves).
+  void (async () => {
+    const st = await getWifiStatus();
+    if (st.connected && st.ssid) {
+      homeNetwork = { ssid: st.ssid, connectionName: await findWifiConnectionName(st.ssid).catch(() => null) };
+      console.log(`[wifi] watchdog armado: reconexión a "${st.ssid}" si se cae`);
+    } else {
+      console.log("[wifi] watchdog: sin red activa al armar — nada que reconectar");
+    }
+  })();
+}
+
+export function disarmHomeNetworkWatchdog(): void {
+  homeNetwork = null;
+  console.log("[wifi] watchdog desarmado");
+}
+
+export async function checkHomeNetwork(): Promise<void> {
+  const home = homeNetwork;
+  if (!home) return;
+  const st = await getWifiStatus().catch(() => ({ connected: false, ssid: null }));
+  if (st.connected) return; // fine (whatever network — user may have changed it)
+  // Only reconnect to the remembered network, never another one — if the
+  // user switched wifi while wardriving, armHomeNetworkWatchdog was NOT
+  // re-armed, and this stays passive.
+  console.warn(`[wifi] reconectando a la red de casa: ${home.ssid}`);
+  const res = await connectToWifi(home.ssid).catch(() => ({ ok: false }));
+  if (res.ok) console.log(`[wifi] reconectado a ${home.ssid}`);
+}
+
+export function getHomeNetworkSsid(): string | null {
+  return homeNetwork?.ssid ?? null;
+}

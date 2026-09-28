@@ -6,6 +6,7 @@ import path from "path";
 import { detectMonitorAdapter } from "../wifiradar/adapter";
 import { enterMonitorMode, exitMonitorMode, setChannel, getAvailable24GhzChannels } from "../wifiradar/monitor-control";
 import { getGpsStatus, type GpsSatellite } from "../utils/gps";
+import { getWifiStatus, armHomeNetworkWatchdog, disarmHomeNetworkWatchdog, checkHomeNetwork } from "../utils/wifi";
 import { registerShutdownHook } from "../device/display";
 import { lookupVendorOrRandom } from "../wifiradar/oui";
 import { stopWifiRadarService, startWifiRadarService } from "../wifiradar/service";
@@ -81,6 +82,12 @@ export class DriveWardriveService extends EventEmitter {
   // feedback in monitor mode makes PMKID/EAPOL capture deterministic, vs
   // rt2800usb which loses the driver's own TX frames to userland.
   private preferredIface: string | null = null;
+  // SSID the Pi's wlan0 is connected to at session start — PROTECTED. The
+  // engine refuses to attack it (deauth/PMKID would drop Akbal's own link
+  // and the operator's access to this web UI). Checked at start; if the
+  // operator later changes wifi through the settings tab, that's fine —
+  // the guard only protects the SSID captured at session start.
+  private homeSsid: string | null = null;
   private channels: number[] = [];
   private hopIndex = 0;
   private hopTimer: ReturnType<typeof setTimeout> | null = null;
@@ -154,6 +161,18 @@ export class DriveWardriveService extends EventEmitter {
       return { ok: true };
     }
     try {
+      // HOME NETWORK GUARD (before touching any radio): remember the SSID
+      // wlan0 is connected to. The wardrive engine NEVER attacks it — a
+      // deauth/PMKID round against the home AP would drop Akbal's own
+      // connection (and the operator's access to this web UI while driving).
+      const wifi = await getWifiStatus().catch(() => ({ connected: false, ssid: null }));
+      this.homeSsid = wifi.connected ? wifi.ssid : null;
+      // Watchdog: if the home connection drops mid-drive (stray deauth),
+      // bring the SAME network back up — not another saved one.
+      armHomeNetworkWatchdog();
+      if (this.homeSsid) {
+        console.log(`[wardrive] red de casa protegida: ${this.homeSsid} — nunca se atacará`);
+      }
       const info = await detectMonitorAdapter(this.preferredIface);
       if (!info.present) {
         this.error = "No hay adaptador WiFi USB conectado — enchufá el dongle para wardrive";
@@ -201,6 +220,11 @@ export class DriveWardriveService extends EventEmitter {
     this.air.clear();
     this.apState.clear();
     this.attackBssid = null;
+    // The home-network watchdog is a wardrive-scope safety net: disarmed
+    // when the session ends (NetworkManager handles reconnection on its own
+    // in normal operation).
+    disarmHomeNetworkWatchdog();
+    this.homeSsid = null;
     if (restore && this.iface) {
       const iface = this.iface;
       this.iface = null;
@@ -573,6 +597,11 @@ export class DriveWardriveService extends EventEmitter {
       st.status = "captured"; // covered by another AP of this SSID
       return;
     }
+    // HOME NETWORK GUARD: never attack the SSID Akbal is connected through.
+    if (this.homeSsid && ssid === this.homeSsid) {
+      st.status = "open"; // neutral status — excluded from targeting
+      return;
+    }
     if (Date.now() < st.cooldownUntil) return;
     if (st.attempts >= MAX_ATTEMPTS) {
       st.status = "exhausted";
@@ -929,6 +958,9 @@ export class DriveWardriveService extends EventEmitter {
       this.demoTick();
       return;
     }
+    // Home-network watchdog tick: if the connection dropped mid-drive,
+    // bring the SAME network back (never another saved one).
+    void checkHomeNetwork().catch(() => {});
     try {
       const gps = await getGpsStatus();
       this.gpsHasFix = gps.hasFix;
@@ -1108,6 +1140,8 @@ export class DriveWardriveService extends EventEmitter {
       if (ap.security === "OPEN" || ap.security === "UNKNOWN") continue;
       if (!ap.ssid || ap.ssid === "(oculta)") continue;
       if (this.knownHandshakeSsids.has(ap.ssid)) continue; // already have it
+      // HOME NETWORK GUARD: the SSID wlan0 is connected to is untouchable.
+      if (this.homeSsid && ap.ssid === this.homeSsid) continue;
       const st = this.stateFor(ap.bssid);
       if (st.captured || st.status === "exhausted" || st.attempts >= MAX_ATTEMPTS) continue;
       if (Date.now() < st.cooldownUntil) continue;
@@ -1173,6 +1207,7 @@ export class DriveWardriveService extends EventEmitter {
       },
       iface: this.iface,
       preferredIface: this.preferredIface,
+      homeSsid: this.homeSsid,
       error: this.error,
       channel: this.currentChannel,
       // Live activity feed for the status screen: what the engine is doing

@@ -71,6 +71,7 @@ export type DriveStatus = {
   gps: DriveFix;
   iface: string | null;
   preferredIface: string | null; // dongle pinned by the operator (null = auto)
+  homeSsid: string | null; // SSID wlan0 is connected to — PROTECTED, never attacked
   error: string;
   channel: number; // current listening channel (0 = not hopping yet)
   // Live activity ticker: what the engine is doing right now (newest

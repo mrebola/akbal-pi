@@ -1,4 +1,4 @@
-import { execFile } from "child_process";
+import { exec, execFile } from "child_process";
 import { promisify } from "util";
 import { EventEmitter } from "events";
 import fs from "fs";
@@ -10,12 +10,22 @@ import { registerShutdownHook } from "../device/display";
 import { lookupVendorOrRandom } from "../wifiradar/oui";
 import { stopWifiRadarService, startWifiRadarService } from "../wifiradar/service";
 import { getPlatformMode } from "../utils/platform-mode";
-import { DriveCapture, newestRingFile, type DriveFrame } from "./capture";
+import { DriveCapture, type DriveFrame } from "./capture";
 import { extractEapolToSession, DeauthOpRunner } from "./attack";
 import { driveDb, DRIVE_SESSIONS_ROOT } from "./drive-db";
 import type { DriveStatus, DriveApView, ApSessionState } from "./types";
 
 const execFileAsync = promisify(execFile);
+
+// Kill any leftover dumpcap/tshark still bound to this interface before
+// asking ip/iw to switch it back to managed mode (their sudo parents die
+// with the process group, but an already-dropped-privilege child can
+// briefly survive; while it holds the iface the restore fails).
+function killStrayCaptures(iface: string): Promise<void> {
+  return new Promise((resolve) => {
+    exec(`pgrep -f "dumpcap -i ${iface}" | xargs -r kill 2>/dev/null; pgrep -f "tshark -r -" | xargs -r kill 2>/dev/null`, () => resolve());
+  });
+}
 
 // ─── Policy constants (docs/wardrive.md) ───────────────────────────────
 const HOP_INTERVAL_MS = 400; // same cadence wifiradar proves works on this phy
@@ -179,6 +189,12 @@ export class DriveWardriveService extends EventEmitter {
     if (restore && this.iface) {
       const iface = this.iface;
       this.iface = null;
+      // Any dumpcap left holding the interface makes the managed-mode switch
+      // fail (observed on the device: "failed to restore ... iw set type
+      // managed" while an orphaned capture kept wlan1 busy). Group-kill
+      // stragglers first; the capture's own stop() should already have
+      // covered its children, this is the belt-and-suspenders pass.
+      await killStrayCaptures(iface);
       await exitMonitorMode(iface).catch((err) =>
         console.warn(`[wardrive] failed to restore ${iface}:`, err?.message || err),
       );

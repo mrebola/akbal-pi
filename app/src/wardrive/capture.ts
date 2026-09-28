@@ -274,28 +274,22 @@ export class DriveCapture extends EventEmitter {
   }
 }
 
-// The newest ringbuffer file (dumpcap names drive-00001_20260926...pcapng).
+// The newest ringbuffer file. dumpcap 4.4 on the device names them
+// drive-_00001_<timestamp> WITHOUT the .pcapng extension — match by prefix,
+// not extension (dirs excluded).
 export function newestRingFile(ringDir: string): string | null {
-  try {
-    const files = fs
-      .readdirSync(ringDir)
-      .filter((f) => f.startsWith("drive-") && f.endsWith(".pcapng"))
-      .sort();
-    const last = files[files.length - 1];
-    return last ? `${ringDir}/${last}` : null;
-  } catch {
-    return null;
-  }
+  const files = ringFiles(ringDir);
+  return files.length > 0 ? files[files.length - 1] : null;
 }
 
 // All ring files, oldest first (per-target extraction searches them all).
 export function ringFiles(ringDir: string): string[] {
   try {
     return fs
-      .readdirSync(ringDir)
-      .filter((f) => f.startsWith("drive-") && f.endsWith(".pcapng"))
-      .sort()
-      .map((f) => `${ringDir}/${f}`);
+      .readdirSync(ringDir, { withFileTypes: true })
+      .filter((e) => e.isFile() && e.name.startsWith("drive-"))
+      .map((e) => `${ringDir}/${e.name}`)
+      .sort();
   } catch {
     return [];
   }

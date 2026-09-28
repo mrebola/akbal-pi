@@ -507,20 +507,28 @@ export class DriveWardriveService extends EventEmitter {
       st.status = "exhausted";
       return;
     }
+    // Cross-session budget: an AP already attacked MAX_ATTEMPTS times EVER
+    // (hist total) is exhausted for this session too — the DB carries the
+    // lesson; don't re-burn the radio on it.
+    const hist = driveDb.methodHistory(bssid);
+    if (hist.pmkid + hist.deauth >= MAX_ATTEMPTS) {
+      st.status = "exhausted";
+      return;
+    }
     if (ap.bestRssi < RSSI_GATE_DBM) return; // too weak while moving
     if (this.attackBssid) return;
     void this.attackAp(ap, st);
   }
 
-  // One attack round against ONE AP. Primary mechanism: hcxdumptool PMKID
-  // request — works with ZERO clients, no deauth noise (the AP is asked
-  // directly for the RSN IE PMKID). Fallback: directed deauth bursts to
-  // force a client to reassociate (only when slow/stopped; while driving
-  // fast the deauth would just waste the window).
-  // The continuous discovery capture (dumpcap|tshark) is PAUSED while the
-  // hcxdumptool round runs — hcxdumptool owns the interface exclusively —
-  // and restarted right after, so beacon discovery never loses more than
-  // ~30s per target.
+  // One attack round against ONE AP.
+  //
+  // ROUND BUDGET (the 20-min-run lesson): each AP gets AT MOST one PMKID
+  // window + one deauth window per session TOTAL, regardless of history.
+  // Previously the engine re-attacked the same 5 visible APs forever
+  // (193 rounds ≈ 3.4h of radio) while fresh targets starved and the
+  // hopper never left ch1 — 20 min of driving produced 0 handshakes.
+  // Now: attack → cooldown → next candidate. A previously-failed AP is
+  // only retried once the FRESH tier is empty (see pickTarget tiers).
   private async attackAp(ap: AirAp, st: ApSessionState): Promise<void> {
     if (!this.iface || !this.running || this.attackBusy) return;
     this.attackBusy = true;

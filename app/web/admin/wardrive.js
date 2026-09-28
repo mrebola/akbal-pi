@@ -117,8 +117,8 @@ function render(st) {
   setText("wd-ch", st.channel ? `CH ${st.channel}` : "—");
   setText("wd-iface", st.iface ? st.iface.toUpperCase() : st.running ? "DEMO" : "—");
 
-  // Activity feed + current attack: push to the open status screen
-  window.__akbalWardriveStatus?.update?.(st);
+  // Activity ticker: always-visible strip at the bottom center of the map
+  renderActivityTicker(st);
 
   // Error line (dongle missing, capture interrupted…)
   const errEl = el("wd-error");
@@ -387,6 +387,29 @@ function strengthColor(strength) {
   return `hsl(${hue.toFixed(0)}, 85%, ${45 + 10 * strength}%)`;
 }
 
+// ---- Activity ticker (floating box, bottom center of the map) ----
+// Always visible: what the engine is doing right now. One line per event,
+// newest first, same floating-card design as the rest of the HUD overlays.
+
+let tickerLastTs = 0;
+function renderActivityTicker(st) {
+  const box = document.getElementById("wd-activity");
+  if (!box) return;
+  const act = st?.activity || [];
+  if (box._akbalTs === act[0]?.ts) return; // nothing new, skip reflow
+  box._akbalTs = act[0]?.ts || 0;
+  box.classList.toggle("has-activity", act.length > 0);
+  box.innerHTML = act.length
+    ? act
+        .slice(0, 4)
+        .map(
+          (a) =>
+            `<div class="wd-activity-line ${escapeHtml(a.kind)}">${escapeHtml(a.text)}<span class="wd-activity-ts">${new Date(a.ts).toLocaleTimeString("es-MX")}</span></div>`,
+        )
+        .join("")
+    : '<div class="wd-activity-line idle">Escaneando redes…</div>';
+}
+
 function escapeHtml(text) {
   const div = document.createElement("div");
   div.textContent = String(text ?? "");
@@ -589,16 +612,6 @@ function initControls() {
     }
     btn.disabled = false;
     void refresh();
-  });
-
-  // Status screen toggle (S key or the 📡 STATUS button)
-  const statusScreen = el("wd-status-screen");
-  el("wd-status-btn")?.addEventListener("click", () => statusScreen?.classList.toggle("hidden"));
-  statusScreen?.addEventListener("click", () => statusScreen.classList.add("hidden"));
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "s" || e.key === "S") {
-      statusScreen?.classList.toggle("hidden");
-    }
   });
 
   const apModal = el("wd-ap-modal");

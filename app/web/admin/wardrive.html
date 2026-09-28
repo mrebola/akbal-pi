@@ -132,19 +132,9 @@
     </div>
   </div>
 
-  <!-- STATUS overlay (fullscreen, Three.js): what the engine is doing right
-       now — "Atacando PMKID → akbal_lab", "🏴 Handshake capturado", etc.
-       Toggled with the S key or the status chip in the HUD. -->
-  <div id="wd-status-screen" class="wd-status hidden">
-    <canvas id="wd-status-canvas"></canvas>
-    <div class="wd-status-content">
-      <div class="wd-status-title" id="wd-status-title">EN OPERACIÓN</div>
-      <div class="wd-status-current" id="wd-status-current">—</div>
-      <div class="wd-status-feed" id="wd-status-feed"></div>
-      <div class="wd-status-hint">click en cualquier lado para volver al mapa · S para abrir</div>
-    </div>
-  </div>
-  <button type="button" id="wd-status-btn" class="wd-status-btn" title="Ver estado de la operación (S)">📡 STATUS</button>
+  <!-- Activity ticker: floating card, bottom center of the map — always
+       visible: what the engine is doing right now -->
+  <div class="wd-activity" id="wd-activity"></div>
 
   <!-- Session detail drawer (map + networks + exports) -->
   <div id="wd-session-drawer" class="wd-drawer hidden">
@@ -195,10 +185,6 @@
   <div id="wd-error-banner" class="gps-error hidden"></div>
 
   <script src="vendor/leaflet/leaflet.js"></script>
-  <script type="importmap">
-    { "imports": { "three": "./vendor/three.module.min.js" } }
-  </script>
   <script src="wardrive.js"></script>
-  <script type="module" src="wardrive-status.js"></script>
 </body>
 </html>

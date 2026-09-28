@@ -1447,11 +1447,9 @@ export class WebAdminServer {
       ctx.body = await drive.stop();
     });
 
-    router.post("/api/wardrive/drive/deauth", (ctx) => {
-      const { on } = (ctx.request.body as any) || {};
-      drive.setOpportunisticDeauth(on === true);
-      ctx.body = { ok: true, on: drive.getOpportunisticDeauth() };
-    });
+    // The deauth toggle is gone from the UI: the engine runs PMKID first
+    // and the deauth fallback fires automatically when slow/stopped. This
+    // route stays as a no-op for older clients that POST to it.
 
     // Session list (DB-backed, includes track shape flags for the UI).
     router.get("/api/wardrive/drive/sessions", (ctx) => {

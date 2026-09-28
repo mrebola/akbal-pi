@@ -95,15 +95,6 @@
     <div id="wd-fix-msg" class="wd-fix-msg">Buscando satélites…</div>
   </div>
 
-  <!-- Opportunistic deauth toggle (big, touchable from the driver seat) -->
-  <div class="wd-deauth" id="wd-deauth-panel">
-    <label class="wd-deauth-toggle" title="Deauth oportunista: solo con vel. < 25 km/h">
-      <input type="checkbox" id="wd-deauth" />
-      <span class="wd-deauth-track"><span class="wd-deauth-knob"></span></span>
-      <span class="wd-deauth-label">DEAUTH <span class="wd-deauth-speed" id="wd-speed-gate">🔒 &gt;25 km/h</span></span>
-    </label>
-  </div>
-
   <!-- Right panel: tabs over the map (Redes en vivo / Sesiones) -->
   <div class="wd-panel" id="wd-panel">
     <div class="wd-panel-tabs">
@@ -116,7 +107,6 @@
         <div class="wd-live-stats">
           <span class="wd-chip"><span id="wd-count-total">0</span> redes</span>
           <span class="wd-chip ok"><span id="wd-count-hs">0</span> ✋</span>
-          <span class="wd-chip warn" id="wd-chip-deauth" title="Bursts activos">DEAUTH —</span>
         </div>
         <ul id="wd-ap-list" class="wd-ap-list"></ul>
       </div>
@@ -127,6 +117,20 @@
       </div>
     </div>
   </div>
+
+  <!-- STATUS overlay (fullscreen, Three.js): what the engine is doing right
+       now — "Atacando PMKID → akbal_lab", "🏴 Handshake capturado", etc.
+       Toggled with the S key or the status chip in the HUD. -->
+  <div id="wd-status-screen" class="wd-status hidden">
+    <canvas id="wd-status-canvas"></canvas>
+    <div class="wd-status-content">
+      <div class="wd-status-title" id="wd-status-title">EN OPERACIÓN</div>
+      <div class="wd-status-current" id="wd-status-current">—</div>
+      <div class="wd-status-feed" id="wd-status-feed"></div>
+      <div class="wd-status-hint">click en cualquier lado para volver al mapa · S para abrir</div>
+    </div>
+  </div>
+  <button type="button" id="wd-status-btn" class="wd-status-btn" title="Ver estado de la operación (S)">📡 STATUS</button>
 
   <!-- Session detail drawer (map + networks + exports) -->
   <div id="wd-session-drawer" class="wd-drawer hidden">
@@ -177,6 +181,10 @@
   <div id="wd-error-banner" class="gps-error hidden"></div>
 
   <script src="vendor/leaflet/leaflet.js"></script>
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three.module.min.js" } }
+  </script>
   <script src="wardrive.js"></script>
+  <script type="module" src="wardrive-status.js"></script>
 </body>
 </html>

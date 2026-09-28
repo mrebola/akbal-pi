@@ -609,3 +609,125 @@
   }
   .wd-deauth { bottom: 90px; }
 }
+/* ---- STATUS screen (fullscreen, Three.js backdrop) ---- */
+
+.wd-status {
+  position: fixed;
+  inset: 0;
+  z-index: 950;
+  background: radial-gradient(ellipse at 50% 40%, #101a2e 0%, #060a14 60%, #03060c 100%);
+  cursor: pointer;
+}
+
+.wd-status.hidden { display: none; }
+
+.wd-status-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.wd-status-content {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  pointer-events: none;
+  text-align: center;
+}
+
+.wd-status-title {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.wd-status-current {
+  font-family: ui-monospace, monospace;
+  font-size: 34px;
+  font-weight: 700;
+  color: #34d351;
+  text-shadow: 0 0 24px rgba(52, 211, 153, 0.6);
+  letter-spacing: 0.02em;
+  min-height: 44px;
+}
+
+.wd-status-current.captured {
+  color: #ffd166;
+  text-shadow: 0 0 24px rgba(255, 209, 102, 0.6);
+}
+
+.wd-status-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 620px;
+  width: calc(100vw - 80px);
+}
+
+.wd-status-line {
+  font-family: ui-monospace, monospace;
+  font-size: 12.5px;
+  color: rgba(232, 238, 252, 0.85);
+  background: rgba(11, 16, 32, 0.7);
+  border: 1px solid rgba(122, 183, 255, 0.18);
+  border-radius: 8px;
+  padding: 7px 14px;
+  animation: wd-line-in 0.3s ease;
+}
+
+.wd-status-line.attack { border-color: rgba(239, 68, 68, 0.35); color: #ff9a8a; }
+.wd-status-line.captured { border-color: rgba(52, 211, 153, 0.5); color: #34d351; font-weight: 700; }
+
+@keyframes wd-line-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.wd-status-hint {
+  position: absolute;
+  bottom: 16px;
+  font-family: ui-monospace, monospace;
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.wd-status-btn {
+  position: fixed;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 910;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  background: rgba(11, 16, 32, 0.88);
+  color: #34d351;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+
+.wd-status-btn:hover { background: rgba(52, 211, 153, 0.15); }
+
+/* AP row highlight while being attacked */
+.wd-ap-row.attacking {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.wd-map-badge.scheduled {
+  color: #7ab7ff;
+  border-color: rgba(122, 183, 255, 0.4);
+  background: rgba(122, 183, 255, 0.1);
+}

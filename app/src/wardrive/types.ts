@@ -56,10 +56,13 @@ export type DriveStatus = {
     points: number;
   } | null;
   gps: DriveFix;
-  opportunisticDeauth: boolean;
   iface: string | null;
   error: string;
   channel: number; // current listening channel (0 = not hopping yet)
+  // Live activity ticker: what the engine is doing right now (newest
+  // first). kind: "attack" | "captured" | "info"
+  activity: { ts: number; text: string; kind: string }[];
+  currentAttack: string | null; // "PMKID → akbal_lab" style one-liner
   stats: {
     aps: number; // APs visible right now (in-memory tracker)
     unique: number; // all-time unique SSIDs recorded (DB)
@@ -68,7 +71,7 @@ export type DriveStatus = {
     newHandshakes: number; // this session's new handshake SSIDs
     points: number; // track points this session
   };
-  recent: DriveApView[]; // strongest 40 APs on air right now
+  recent: DriveApView[]; // ALL APs this session, attack status first
 };
 
 // One captured-SSID row in the wardrive DB (bssid column = the AP that

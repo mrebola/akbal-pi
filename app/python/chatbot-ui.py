@@ -588,7 +588,10 @@ class RenderThread(threading.Thread):
         this only renders."""
         self.render_top_bar()
 
-        label = "AUDIT WIFI MODE"
+        # Node manda el label por modo: "WARDRIVE <IFACE>" (drive) o
+        # "AUDIT WIFI <IFACE>" (audit) — el overlay es el mismo para ambos.
+        label = current_wardrive_label or "WARDRIVE MODE"
+        is_drive = label.upper().startswith("WARDRIVE")
         status_line = current_wardrive_status_text or "..."
         captured = current_wardrive_captured or 0
         total = current_wardrive_total or 0
@@ -635,12 +638,12 @@ class RenderThread(threading.Thread):
         rgb = ImageUtils.image_to_rgb565(overlay, VIDEO_WIDTH, band_h)
         self.whisplay.draw_image(0, TOP_BAR_HEIGHT + VIDEO_HEIGHT - band_h, VIDEO_WIDTH, band_h, rgb)
 
-        # Bottom band: red "MODO WARDRIVE" (kept for scanability), plus
-        # handshake counters on the right.
+        # Bottom band: red mode label (kept for scanability), plus the
+        # session counter — handshakes for audit, redes para wardrive.
         band = Image.new("RGBA", (VIDEO_WIDTH, TEXT_BAND_HEIGHT), (0, 0, 0, 255))
         bdraw = ImageDraw.Draw(band)
         self._draw_centered(bdraw, label, self.model_ui_label_font, 10, center_x, (255, 60, 40, 255))
-        counters = f"{captured}/{total} handshakes"
+        counters = f"{captured}/{total} handshakes" if not is_drive else f"{captured} handshakes · {total} redes"
         self._draw_centered(bdraw, counters, self.model_ui_hint_font, 34, center_x, TEXT_SECONDARY)
         rgb = ImageUtils.image_to_rgb565(band, VIDEO_WIDTH, TEXT_BAND_HEIGHT)
         self.whisplay.draw_image(0, TOP_BAR_HEIGHT + VIDEO_HEIGHT, VIDEO_WIDTH, TEXT_BAND_HEIGHT, rgb)
@@ -806,7 +809,7 @@ class RenderThread(threading.Thread):
         return False  # static screen; redraws only when content changes
 
     def render_top_bar(self):
-        cache_key = (current_wifi_signal_level, current_battery_level, current_battery_color, current_top_bar_mode)
+        cache_key = (current_wifi_signal_level, current_battery_level, current_battery_color, current_top_bar_mode, current_wardrive_label)
         if cache_key == self.top_bar_cache_key:
             return
         self.top_bar_cache_key = cache_key
@@ -841,11 +844,11 @@ class RenderThread(threading.Thread):
         text_h = bbox[3] - bbox[1]
         draw.text((TOP_BAR_MARGIN_X + BRAND_LEFT_PADDING, (TOP_BAR_HEIGHT - text_h) // 2 - bbox[1]), BRAND_LABEL, font=self.top_bar_mode_font, fill=brand_color)
 
-        # In audit-wifi mode the brand line extends: "AKBAL - audit wifi"
-        # — the dash separates them, wardriving in red right after the green
-        # AKBAL (mode spec: same line, small, impossible to miss).
+        # In audit/wardrive mode the brand line extends: "AKBAL - audit wifi"
+        # or "AKBAL - wardrive" — the dash separates them, in red right after
+        # the green AKBAL (mode spec: same line, small, impossible to miss).
         if current_wardrive_ui:
-            extra = " - audit wifi"
+            extra = " - wardrive" if current_wardrive_label.upper().startswith("WARDRIVE") else " - audit wifi"
             ex_bbox = draw.textbbox((0, 0), extra, font=self.top_bar_mode_font)
             ex_w = ex_bbox[2] - ex_bbox[0]
             ex_x = TOP_BAR_MARGIN_X + BRAND_LEFT_PADDING + (bbox[2] - bbox[0]) + 2

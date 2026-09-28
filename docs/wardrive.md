@@ -102,3 +102,21 @@
   pasada del mismo AP dentro de la ventana/cooldown).
 - La posición guardada de cada red es la del GPS al momento de verla por
   primera/última vez (ancla de sesión); el CSV WiGLE lleva esa posición.
+## Pantalla física de la Pi
+
+La opción **Wardrive** del menú rápido (click corto en reposo) abre la
+pantalla de wardrive en la LCD: tarjeta "Iniciar captura" si no hay sesión
+(mantener ~0.9s inicia), overlay vivo con contadores si hay sesión
+(mantener ~0.9s detiene). Doble clic sale de la pantalla — y si la sesión
+estaba corriendo, también la detiene.
+
+**Iniciar/detener desde la web o desde la Pi es indistinto**: ambos llaman
+al mismo servicio (`wardrive/service.ts`), y un espejo LCD
+(`startWardriveDisplayMirror` en `chat-flow/wardrive-mode.ts`) pinta el
+overlay cuando la sesión se arrancó desde la web. La sesión activa aparece
+en la pantalla aunque nadie la esté mirando desde el navegador.
+
+El overlay del LCD se comparte con Wifi Audit (`render_wardrive_screen` en
+`chatbot-ui.py`): Node manda `wardrive_label` ("WARDRIVE <IFACE>" o
+"AUDIT WIFI <IFACE>") y la banda inferior cambia el contador — "N handshakes ·
+M redes" para wardrive, "N/M handshakes" para audit.

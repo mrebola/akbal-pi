@@ -9,6 +9,7 @@ import { startWifiRadarService, stopWifiRadarService } from "./wifiradar/service
 import { getWardriveService } from "./wifi-audit/service";
 import { startWardriveDisplayMirror } from "./core/chat-flow/wifi-audit-mode";
 import { getDriveWardriveService } from "./wardrive/service";
+import { startWardriveDisplayMirror as startDriveMirror } from "./core/chat-flow/wardrive-mode";
 import { startAircraftRadarService, stopAircraftRadarService } from "./services/adsb/service";
 
 dotenv.config();
@@ -48,10 +49,12 @@ startWardriveDisplayMirror();
 
 // WARDRIVE (driving capture — wardrive/service.ts, docs/wardrive.md).
 // Same service-only shape as Wifi Audit: starting/stopping a drive session
-// is a web-admin action (POST /api/wardrive/drive/start|stop). Its shutdown
-// hook restores the AR9271 out of monitor mode even if the process dies
-// mid-session.
+// is a web-admin action (POST /api/wardrive/drive/start|stop) OR a physical
+// one (quick menu → Wardrive). The LCD mirror paints the wardrive overlay
+// for sessions started from the web too. Its shutdown hook restores the
+// AR9271 out of monitor mode even if the process dies mid-session.
 getDriveWardriveService().registerShutdown();
+startDriveMirror();
 
 // LAN-reachable chat + wifi admin UI — see docs/web-ui.md. On by default
 // (matches the physical device's own "just works" setup); set

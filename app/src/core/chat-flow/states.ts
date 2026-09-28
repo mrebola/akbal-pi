@@ -118,6 +118,14 @@ import {
   handleAircraftRadarRelease,
   onAircraftRadarExit,
 } from "./aircraft-radar-mode";
+import {
+  enterWardriveMode,
+  handleWardriveDoubleClick,
+  handleWardrivePress,
+  handleWardriveRelease,
+  onWardriveExit,
+} from "./wardrive-mode";
+import { getDriveWardriveService } from "../../wardrive/service";
 import { isAgentMode, setDeviceMode } from "../../config/device-mode";
 import { setAudioOutputTarget } from "../../config/audio-output";
 import { connectSpeaker } from "../../device/bluetooth-audio";
@@ -272,6 +280,10 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       }
       if (key === "aircraft_radar") {
         ctx.transitionTo("aircraft_radar");
+        return;
+      }
+      if (key === "wardrive") {
+        ctx.transitionTo("wardrive");
         return;
       }
       const captureImgPath = `${cameraDir}/capture-${moment().format(
@@ -1286,5 +1298,22 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     onButtonPressed(() => handleAircraftRadarPress());
     onButtonReleased(() => handleAircraftRadarRelease());
     enterAircraftRadarMode();
+  },
+  wardrive: (ctx: ChatFlowContext) => {
+    onWardriveExit(() => {
+      // The service is the single source of truth: whether the session was
+      // started from here or the web, an exit stops it (fire-and-forget —
+      // the service restores the radio on its own when the session ends).
+      if (getDriveWardriveService().getStatus().running) {
+        void getDriveWardriveService().stop();
+      }
+      if (ctx.currentFlowName === "wardrive") {
+        ctx.transitionTo("sleep");
+      }
+    });
+    onButtonDoubleClick(() => handleWardriveDoubleClick());
+    onButtonPressed(() => handleWardrivePress());
+    onButtonReleased(() => handleWardriveRelease());
+    enterWardriveMode();
   },
 };

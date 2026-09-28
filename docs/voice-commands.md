@@ -19,13 +19,24 @@ confirmar en los menús.
 ## Menú rápido
 
 Click corto en reposo abre un carrusel con **Modelo → Modo → Audio → Música →
-Ayuda → Cámara → Volumen → Wifi connect → Conexión web → WiFi Radar**
+Ayuda → Cámara → Volumen → Wifi connect → Conexión web → WiFi Radar →
+Aviones → Wardrive**
 (cámara solo si `ENABLE_CAMERA=true`). Click pasa entre opciones, mantener
 ~0.9s confirma la resaltada y entra a esa pantalla — mismo mecanismo que el
 selector de modelo/modo de abajo. Reemplaza al doble clic que antes abría la
 cámara directo desde reposo; ahora todo pasa por aquí. "Wifi connect" activa
 un punto de acceso directo en la propia Pi (SSID `akbal-pi`, con QR en
 pantalla) — ver [`wifi.md`](./wifi.md).
+
+### Wardrive desde el menú rápido
+
+La opción **Wardrive** abre la pantalla de captura en el auto
+([`wardrive.md`](./wardrive.md)): mantener ~0.9s **inicia** la sesión (toma
+la radio del radar, monitor + GPS), y manteniendo otro tanto **se detiene**.
+Mientras una sesión corre, la pantalla muestra el overlay de wardrive
+(redes, handshakes y estado) y la web refleja lo mismo — iniciar/parar desde
+cualquier lado es equivalente. Doble clic sale de la pantalla (y detiene la
+sesión si estaba corriendo).
 
 ### Volumen desde el menú rápido
 

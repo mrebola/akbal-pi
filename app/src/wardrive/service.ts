@@ -11,7 +11,7 @@ import { lookupVendorOrRandom } from "../wifiradar/oui";
 import { stopWifiRadarService, startWifiRadarService } from "../wifiradar/service";
 import { getPlatformMode } from "../utils/platform-mode";
 import { DriveCapture, type DriveFrame } from "./capture";
-import { extractEapolToSession, convertCaptureToHash, PmkidDriveRunner, writeBpfForAp } from "./attack";
+import { extractEapolToSession, convertCaptureToHash, extractApFrames, PmkidDriveRunner, writeBpfForAp } from "./attack";
 import { driveDb, DRIVE_SESSIONS_ROOT } from "./drive-db";
 import type { DriveStatus, DriveApView, ApSessionState } from "./types";
 
@@ -666,32 +666,11 @@ export class DriveWardriveService extends EventEmitter {
     runner.stop();
     this.pmkidRunner = null;
     await sleep(ATTACK_SETTLE_MS);
-    // Validate: hcxpcapngtool over the capture; ANY EAPOL/PMKID material
-    // marks this SSID captured (PMKID = 1 pair, full 4-way = 2).
-    const hashPath = pcapngPath.replace(/\.pcapng$/, ".hc22000");
-    const conv = await convertCaptureToHash(pcapngPath, hashPath);
-    if (conv.ok) {
-      st.captured = true;
-      st.eapolFrames += Math.max(conv.eapolPairs, conv.pmkidCount);
-      st.method = conv.pmkidCount > 0 ? "pmkid" : "deauth";
-      st.capFile = path.basename(pcapngPath);
-      st.hashFile = path.basename(hashPath);
-      this.markCaptured(ap, st, "pmkid", pcapngPath, hashPath);
-      return true;
-    }
-    // No PMKID from the AP (old firmware): the capture may still hold the
-    // deauth-triggered frames of a client reconnecting — leave the pcapng
-    // in the session dir for offline review, fall through to deauth.
-    this.activity(`PMKID sin respuesta → ${ap.ssid}, intentando deauth`, "info");
-    return false;
+    return await this.validateRound(ap, st, pcapngPath, "pmkid");
   }
 
-  // Secondary mechanism: deauth + capture in ONE hcxdumptool window. The
-  // old approach (aireplay burst + hope the 4-way lands in the discovery
-  // ring) failed on the device: the discovery ring only held beacons, so
-  // the EAPOL M1M2M3 from the reconnecting client was never on disk. Now
-  // hcxdumptool does BOTH: its own directed deauths to the AP's clients +
-  // full EAPOL capture, validated with hcxpcapngtool after the window.
+  // Secondary mechanism: deauth + capture in ONE window. Same writer
+  // split as the PMKID round: hcxdumptool attacks (no -w), dumpcap writes.
   private async runDeauthRound(ap: AirAp, st: ApSessionState): Promise<boolean> {
     if (!this.iface || !this.running || !this.sessionDir) return false;
     st.lastDeauthAt = Date.now();
@@ -730,23 +709,59 @@ export class DriveWardriveService extends EventEmitter {
       runner.stop();
       this.pmkidRunner = null;
       await sleep(ATTACK_SETTLE_MS);
-      const hashPath = pcapngPath.replace(/\.pcapng$/, ".hc22000");
-      const conv = await convertCaptureToHash(pcapngPath, hashPath);
-      if (conv.ok) {
-        st.captured = true;
-        st.eapolFrames += Math.max(conv.eapolPairs, conv.pmkidCount);
-        st.method = "deauth";
-        st.capFile = path.basename(pcapngPath);
-        st.hashFile = path.basename(hashPath);
-        this.markCaptured(ap, st, "deauth", pcapngPath, hashPath);
-        return true;
-      }
-      return false;
+      return await this.validateRound(ap, st, pcapngPath, "deauth");
     } finally {
       // The unified restart at the end of attackAp() brings discovery back;
       // this finally only guarantees we never leave the iface owned by a
       // dead hcxdumptool.
     }
+  }
+
+  // Post-window validation, shared by both methods: the attack-window
+  // dumpcap wrote EVERYTHING on the channel — extract this AP's frames
+  // with tshark, convert with hcxpcapngtool --all, and decide.
+  private async validateRound(
+    ap: AirAp,
+    st: ApSessionState,
+    fullPcapng: string,
+    method: string,
+  ): Promise<boolean> {
+    const sessionDir = this.sessionDir;
+    if (!sessionDir) return false;
+    const prefix = ap.bssid.replace(/:/g, "").toLowerCase();
+    const perApPath = path.join(sessionDir, `${prefix}-${method}.pcapng`);
+    const hashPath = path.join(sessionDir, `${prefix}-${method}.hc22000`);
+    const hashFileBase = path.basename(hashPath);
+    const capFileBase = path.basename(perApPath);
+
+    const conv = await convertCaptureToHash(fullPcapng, hashPath);
+    if (conv.ok) {
+      st.captured = true;
+      st.eapolFrames += Math.max(conv.eapolPairs, conv.pmkidCount);
+      st.method = (conv.pmkidCount > 0 ? "pmkid" : method) as ApSessionState["method"];
+      st.capFile = path.basename(fullPcapng);
+      st.hashFile = hashFileBase;
+      this.markCaptured(ap, st, method, fullPcapng, hashPath);
+      return true;
+    }
+    // hcx didn't find hashable pairs directly (full-channel capture with
+    // several APs' handshakes mixed can confuse the parser): extract this
+    // AP's frames alone and retry.
+    const ex = await extractApFrames(ap.bssid, fullPcapng, perApPath);
+    if (ex.ok) {
+      const conv2 = await convertCaptureToHash(perApPath, hashPath);
+      if (conv2.ok) {
+        st.captured = true;
+        st.eapolFrames += Math.max(conv2.eapolPairs, conv2.pmkidCount);
+        st.method = (conv2.pmkidCount > 0 ? "pmkid" : method) as ApSessionState["method"];
+        st.capFile = capFileBase;
+        st.hashFile = hashFileBase;
+        this.markCaptured(ap, st, method, perApPath, hashPath);
+        return true;
+      }
+    }
+    this.activity(`${method === "pmkid" ? "PMKID sin respuesta" : "Deauth sin handshake"} → ${ap.ssid}`, "info");
+    return false;
   }
 
   private async markCaptured(

@@ -19,6 +19,7 @@
       <button class="tab-btn active" data-tab="chat">Chat</button>
       <a href="/wifiradar" class="tab-link" title="Visualización Wi-Fi en 3D">Radar Wi-Fi</a>
       <a href="/aircraft-radar" class="tab-link" title="Aeronaves cercanas vía ADS-B">Aviones</a>
+      <a href="/wardrive" class="tab-link" title="Wardrive: mapa + handshakes en el auto">Wardrive</a>
       <button class="tab-btn" data-tab="wardrive">Wifi Audit</button>
       <a href="/gps" class="tab-link" title="Posición GPS del dispositivo">GPS</a>
       <button class="tab-btn" data-tab="music">OST</button>
@@ -176,18 +177,6 @@
     </section>
 
     <section id="tab-wardrive" class="tab-panel">
-      <!-- Driving wardrive entry card: the map/fullscreen capture mode for the
-           vehicle (docs/wardrive-drive.md). This tab stays the lab audit
-           workflow; /wardrive is the moving-car one. -->
-      <div class="card wd-card" id="wd-card">
-        <div class="wd-card-row">
-          <div>
-            <div class="wd-card-title">🚗 WARDRIVE</div>
-            <div class="wd-card-sub" id="wd-card-sub">Mapa, GPS y handshakes mientras conduces — abre /wardrive</div>
-          </div>
-          <a href="/wardrive" class="wd-card-btn">Abrir mapa</a>
-        </div>
-      </div>
       <div class="wd-mode-banner" id="wd-mode-banner">
         <div class="wd-banner-text">
           <div class="wd-banner-title">MODO WIFI AUDIT <span id="wd-iface" class="wd-iface"></span></div>

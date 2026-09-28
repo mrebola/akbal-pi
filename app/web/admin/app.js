@@ -2957,8 +2957,10 @@ for (const btn of document.querySelectorAll(".tab-btn")) {
 
 let wdTimer = null;
 
-// Boot if direct link
-if (window.location.hash === "#wardrive") {
+// Boot if direct link — the tab was renamed (wardrive → wifi-audit; the
+// driving capture owns the /wardrive page now), old bookmarks redirect.
+if (window.location.hash === "#wardrive" || window.location.hash === "#wifi-audit") {
+  history.replaceState(null, "", "#wifi-audit");
   void loadMonitorCap();
   void wdRefresh();
   wdStartSessionsTimer();
@@ -3634,6 +3636,10 @@ pwForm?.addEventListener("submit", async (e) => {
 if (initialTab === "wifi") {
   activateTab("settings");
   document.querySelector('.cfg-nav-btn[data-cfg="wifi"]')?.click();
+} else if (initialTab === "wardrive") {
+  // Old bookmark: the tab is "wifi-audit" now (/wardrive is the driving map)
+  history.replaceState(null, "", "#wifi-audit");
+  activateTab("wardrive");
 } else if (initialTab) {
   activateTab(initialTab);
 }
@@ -3693,31 +3699,3 @@ async function openFileViewer(root, rel, name) {
   });
 })();
 
-// ---- Wardrive card (index #wardrive tab) ----
-// Live status of /wardrive on the entry card: session state + counters,
-// polled only while the tab is visible (cheap; backend aggregates).
-
-(async function wdCardInit() {
-  const card = document.getElementById("wd-card");
-  const sub = document.getElementById("wd-card-sub");
-  if (!card || !sub) return;
-  let timer = null;
-  const fmtKm = (m) => (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${m} m`);
-  async function poll() {
-    if (!document.getElementById("tab-wardrive")?.classList.contains("active")) return;
-    try {
-      const res = await fetch("/api/wardrive/drive/status");
-      if (!res.ok) return;
-      const st = await res.json();
-      if (st.running && st.session) {
-        const s = st.stats || {};
-        sub.textContent = `EN CURSO — ${fmtKm(st.session.distanceMeters)} · ${s.aps} en el aire · ${s.unique} redes · ${s.handshakes} handshakes`;
-      } else {
-        const s = st.stats || {};
-        sub.textContent = `Mapa, GPS y handshakes mientras conduces — ${s.unique} redes vistas · ${s.handshakes} con handshake`;
-      }
-    } catch { /* keep last */ }
-  }
-  timer = setInterval(poll, 4000);
-  void poll();
-})();

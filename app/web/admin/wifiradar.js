@@ -689,9 +689,13 @@ function applySnapshot(snapshot) {
 
   // Devices: pick up to MAX_DEVICES among devices whose AP is visible (or
   // unassociated — those anchor to the core), orbiting their AP node.
+  // Orphans have no security class of their own, so they don't get pruned
+  // by any single toggle — but with all three off there's nothing left to
+  // anchor "everything is hidden" against, so hide them too in that case.
+  const anySecurityVisible = Object.values(securityVisible).some(Boolean);
   const visibleBssids = new Set(visibleAps.map((ap) => ap.bssid));
   const devices = snapshot.devices
-    .filter((d) => !d.associatedBssid || visibleBssids.has(d.associatedBssid))
+    .filter((d) => (d.associatedBssid ? visibleBssids.has(d.associatedBssid) : anySecurityVisible))
     .slice(0, MAX_DEVICES);
   deviceMesh.count = devices.length;
   deviceOrbitState = devices.map((d, i) => {

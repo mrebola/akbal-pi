@@ -2997,8 +2997,10 @@ const mpList = document.getElementById("mp-list");
 const mpVisual = document.getElementById("mp-visual");
 const mpSeek = document.getElementById("mp-seek");
 const mpSeekKnob = document.getElementById("mp-seek-knob");
+const mpStatusDot = document.getElementById("mp-status-dot");
 let musicDurationMs = 0;
 let lastMusicStatus = null;
+let lastScrolledTrackIndex = -1;
 
 let musicPollTimer = null;
 let musicTracksLoaded = false;
@@ -3027,7 +3029,7 @@ async function loadMusicTracks() {
       li.dataset.index = String(t.index);
       const idx = document.createElement("span");
       idx.className = "mp-idx";
-      idx.textContent = String(t.index + 1).padStart(2, "0");
+      idx.textContent = `0x${t.index.toString(16).toUpperCase().padStart(2, "0")}`;
       const name = document.createElement("span");
       name.textContent = t.title;
       const eq = document.createElement("span");
@@ -3051,6 +3053,7 @@ function renderMusicStatus(s) {
   lastMusicStatus = s;
   const stateClass = !s.playing ? "stopped" : s.paused ? "paused" : "playing";
   if (mpVisual) mpVisual.className = `mx-visual ${stateClass}`;
+  if (mpStatusDot) mpStatusDot.className = `mx-status-dot ${s.playing ? (s.paused ? "is-paused" : "is-playing") : ""}`.trim();
   musicDurationMs = s.durationMs || 0;
   if (s.playing && s.title) {
     mpTitle.textContent = s.title;
@@ -3065,8 +3068,15 @@ function renderMusicStatus(s) {
   if (mpSeekKnob) mpSeekKnob.style.left = `${pct}%`;
   if (mpCur) mpCur.textContent = fmtTime(s.positionMs);
   if (mpDur) mpDur.textContent = s.durationMs > 0 ? fmtTime(s.durationMs) : "0:00";
+  let activeLi = null;
   for (const li of mpList ? mpList.querySelectorAll("li[data-index]") : []) {
-    li.classList.toggle("active", s.playing && Number(li.dataset.index) === s.index);
+    const isActive = s.playing && Number(li.dataset.index) === s.index;
+    li.classList.toggle("active", isActive);
+    if (isActive) activeLi = li;
+  }
+  if (activeLi && s.index !== lastScrolledTrackIndex) {
+    lastScrolledTrackIndex = s.index;
+    activeLi.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
   syncLyrics();
 }

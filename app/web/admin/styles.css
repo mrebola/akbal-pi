@@ -2022,13 +2022,6 @@ button.secondary {
   padding: 14px 16px 14px;
   box-shadow: inset 0 0 40px rgba(80,255,120,0.06), 0 0 0 1px rgba(0,0,0,0.4);
 }
-/* Player top: cover + info side by side, visual compact, controls closer. */
-.mx-now { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
-.mx-visual { height: 56px; display: flex; align-items: center; justify-content: center; position: relative; margin-bottom: 8px; }
-.mx-eq { height: 48px; }
-@keyframes mx-bounce { 0%,100% { height: 6px; opacity: 0.55; } 50% { height: 46px; opacity: 1; } }
-.mx-time { margin-bottom: 8px; }
-.mx-extra { margin-top: 10px; }
 .mx-scan {
   pointer-events: none;
   position: absolute;
@@ -2044,11 +2037,40 @@ button.secondary {
   opacity: 0.5;
 }
 @keyframes mx-scan { from { background-position-y: 0; } to { background-position-y: 200px; } }
-.mx-head { font-size: 13px; color: var(--accent); text-shadow: 0 0 10px rgba(80,255,120,0.5); margin-bottom: 14px; position: relative; }
+.mx-head { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--accent); text-shadow: 0 0 10px rgba(80,255,120,0.5); margin-bottom: 14px; position: relative; }
 .mx-cwd { color: var(--text-secondary); }
 .mx-cmd { color: #fff; }
 .mx-cursor { animation: mx-blink 1s steps(1) infinite; }
 @keyframes mx-blink { 50% { opacity: 0; } }
+/* Status LED: quick-glance play state without reading any text — dim grey
+   idle, solid pulsing green while playing, slow amber blink while paused. */
+.mx-status-dot {
+  margin-left: auto;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  box-shadow: none;
+  flex: none;
+}
+.mx-status-dot.is-playing { background: var(--accent); box-shadow: 0 0 8px rgba(80,255,120,0.9); animation: mx-pulse 1.4s ease-in-out infinite; }
+.mx-status-dot.is-paused { background: #ffcf5c; box-shadow: 0 0 6px rgba(255,207,92,0.7); animation: mx-blink 1.2s steps(1) infinite; }
+@keyframes mx-pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.55; transform: scale(0.85); } }
+
+/* ---- Now-playing: cover glyph + title/subtitle side by side ---- */
+.mx-now { display: flex; align-items: center; gap: 14px; text-align: left; margin-bottom: 12px; }
+.mx-cover {
+  flex: none; width: 84px; height: 84px; border-radius: 10px;
+  background: linear-gradient(145deg, #0e2a19, #06120c);
+  border: 1px solid var(--accent-dim);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  box-shadow: inset 0 0 24px rgba(80,255,120,0.12);
+}
+.mx-cover-glyph { font-size: 30px; color: var(--accent); text-shadow: 0 0 14px rgba(80,255,120,0.6); line-height: 1; }
+.mx-cover-tag { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; color: var(--text-secondary); }
+.mx-nowinfo { min-width: 0; flex: 1; overflow: hidden; }
+.mx-now .mx-title,
+.mx-now .mx-sub { text-align: left; }
+
 .mx-label, .mx-list-head {
   font-size: 11px;
   letter-spacing: 0.12em;
@@ -2091,8 +2113,12 @@ button.secondary {
 .mx-glyph { display: none; position: absolute; font-size: 40px; color: var(--accent); text-shadow: 0 0 16px rgba(80,255,120,0.6); }
 .mx-visual.paused .mx-eq i { animation-play-state: paused; opacity: 0.2; }
 .mx-visual.paused .mx-pause { display: block; }
-.mx-visual.stopped .mx-eq { display: none; }
-.mx-visual.stopped .mx-stop { display: block; color: var(--text-secondary); text-shadow: none; }
+/* Stopped: same frozen bars as paused (no separate glyph) — a flat gray
+   square here used to read as a rendering glitch, and the title/subtitle
+   already say "stopped" in words ("Selecciona una pista para empezar"). */
+.mx-visual.stopped .mx-eq { display: flex; }
+.mx-visual.stopped .mx-eq i { animation-play-state: paused; opacity: 0.12; height: 14px; }
+.mx-visual.stopped .mx-stop { display: none; }
 .mx-seek {
   position: relative;
   height: 10px;
@@ -2286,7 +2312,7 @@ button.secondary {
   color: var(--accent);
   text-shadow: 0 0 8px rgba(80,255,120,0.4);
 }
-.mx-list .mp-idx { color: var(--text-secondary); min-width: 26px; }
+.mx-list .mp-idx { color: var(--text-secondary); min-width: 38px; font-size: 11px; }
 .mx-list li.active .mp-idx { color: var(--accent); }
 .mx-list .mp-eq-mini { margin-left: auto; display: none; }
 .mx-list li.active .mp-eq-mini { display: inline; animation: mx-blink 1s steps(1) infinite; }
@@ -2583,11 +2609,13 @@ body { font-family: var(--font-sans); }
 
   /* OST player: smaller cover art / title leave more room for the track
      name before ellipsis has to kick in, and the transport row can't be
-     wider than the screen either. */
+     wider than the screen either. Tracklist rows get the same 40px touch
+     target as the other tap lists above. */
   .mx-cover { width: 60px; height: 60px; }
   .mx-cover-glyph { font-size: 22px; }
   .mx-title { font-size: 17px; }
   .mx-controls { gap: 10px; }
+  .mx-list li { min-height: 40px; }
 }
 
 /* ---- Chat: chip de modelo + empty state ---- */
@@ -2603,21 +2631,6 @@ body { font-family: var(--font-sans); }
 .dev-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
 .dev-grid .usb-devices-list li:only-child.muted,
 .usb-devices-list li.muted { color: var(--text-secondary); background: transparent; border: 1px dashed var(--border); }
-
-/* ---- Música: portada + fila now-playing ---- */
-.mx-now { display: flex; align-items: center; gap: 14px; text-align: left; margin-bottom: 12px; }
-.mx-cover {
-  flex: none; width: 84px; height: 84px; border-radius: 10px;
-  background: linear-gradient(145deg, #0e2a19, #06120c);
-  border: 1px solid var(--accent-dim);
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
-  box-shadow: inset 0 0 24px rgba(80,255,120,0.12);
-}
-.mx-cover-glyph { font-size: 30px; color: var(--accent); text-shadow: 0 0 14px rgba(80,255,120,0.6); line-height: 1; }
-.mx-cover-tag { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; color: var(--text-secondary); }
-.mx-nowinfo { min-width: 0; flex: 1; overflow: hidden; }
-.mx-now .mx-title { text-align: left; }
-.mx-now .mx-sub { text-align: left; }
 
 /* ===== Navbar moderno (override) — texto, hover en texto, activo = rect tenue ===== */
 .tab-btn, .tab-link {
@@ -2647,11 +2660,6 @@ body { font-family: var(--font-sans); }
   vertical-align: middle;
   box-shadow: 0 0 6px rgba(80,255,120,0.6);
 }
-
-/* ===== Player: quitar el cuadro gris cuando está detenido ===== */
-.mx-visual.stopped .mx-eq { display: flex; }
-.mx-visual.stopped .mx-eq i { animation-play-state: paused; opacity: 0.12; height: 14px; }
-.mx-visual.stopped .mx-stop { display: none; }
 
 /* ===== Visor de archivos ===== */
 .fm-viewer-card { max-width: 900px; width: 92%; max-height: 88vh; display: flex; flex-direction: column; }

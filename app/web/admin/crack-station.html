@@ -65,59 +65,67 @@
         <p class="muted" style="margin: -6px 0 10px; font-size: 12px;" data-i18n="crackstation.subtitle">
           Handshakes capturados por Wifi Audit y por Wardrive — un solo inventario para crackearlos.
         </p>
-        <div class="wd-crack-toolbar">
-          <button id="wd-crack-refresh" class="secondary" data-i18n="crackstation.refresh">Refrescar inventario</button>
-          <span id="wd-crack-status" class="muted"></span>
-        </div>
-        <div class="wd-list-wrap">
-          <table class="wd-table wd-crack-table">
-            <thead>
-              <tr>
-                <th data-sort="ssid" data-i18n="crackstation.col_ssid">SSID</th>
-                <th data-sort="bssid" data-i18n="crackstation.col_mac">MAC (BSSID)</th>
-                <th data-sort="source" data-i18n="crackstation.col_origin">Origen</th>
-                <th data-sort="capturedAt" data-i18n="crackstation.col_when">Fecha y hora</th>
-                <th data-sort="lat" data-i18n="crackstation.col_gps">GPS</th>
-                <th data-i18n="crackstation.col_hs">Handshake</th>
-                <th data-sort="password" data-i18n="crackstation.col_pass">Contraseña</th>
-                <th data-i18n="crackstation.col_actions">Ataques</th>
-                <th data-i18n="crackstation.col_files">Archivos</th>
-              </tr>
-            </thead>
-            <tbody id="wd-crack-body">
-              <tr><td colspan="9" class="muted">—</td></tr>
-            </tbody>
-          </table>
+
+        <!-- Same subtab pattern as Wifi Audit's Auditoría/Sesiones. -->
+        <div class="wd-subtabs">
+          <button class="wd-subtab active" data-subtab="inventory" data-i18n="crackstation.subtab_inventory">Inventario</button>
+          <button class="wd-subtab" data-subtab="masks" data-i18n="crackstation.subtab_masks">Administrar máscaras</button>
         </div>
 
-        <!-- Dictionary attack (rockyou) progress -->
-        <div class="wd-session-title" style="margin-top:16px;" data-i18n="crackstation.dict_title">ATAQUE DE DICCIONARIO (ROCKYOU)</div>
-        <div class="wd-mask-panel" id="wd-dict-panel">
-          <div class="wd-mask-run-status" id="wd-dict-run-status"></div>
-          <div class="wd-mask-run" id="wd-dict-run"></div>
+        <div id="wd-sub-inventory" class="wd-subtab-panel active">
+          <div class="wd-crack-toolbar">
+            <button id="wd-crack-refresh" class="secondary" data-i18n="crackstation.refresh">Refrescar inventario</button>
+            <span id="wd-crack-status" class="muted"></span>
+          </div>
+          <div class="wd-list-wrap">
+            <table class="wd-table wd-crack-table">
+              <thead>
+                <tr>
+                  <th data-sort="ssid" data-i18n="crackstation.col_ssid">SSID</th>
+                  <th data-sort="bssid" data-i18n="crackstation.col_mac">MAC (BSSID)</th>
+                  <th data-sort="source" data-i18n="crackstation.col_origin">Origen</th>
+                  <th data-sort="capturedAt" data-i18n="crackstation.col_when">Fecha y hora</th>
+                  <th data-sort="lat" data-i18n="crackstation.col_gps">GPS</th>
+                  <th data-i18n="crackstation.col_hs">Handshake</th>
+                  <th data-sort="password" data-i18n="crackstation.col_pass">Contraseña</th>
+                  <th data-i18n="crackstation.col_actions">Ataques</th>
+                  <th data-i18n="crackstation.col_files">Archivos</th>
+                </tr>
+              </thead>
+              <tbody id="wd-crack-body">
+                <tr><td colspan="9" class="muted">—</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Dictionary attack (rockyou/weakpass) progress -->
+          <div class="wd-session-title" style="margin-top:16px;" data-i18n="crackstation.dict_title">ATAQUE DE DICCIONARIO (ROCKYOU)</div>
+          <div class="wd-mask-panel" id="wd-dict-panel">
+            <div class="wd-mask-run-status" id="wd-dict-run-status"></div>
+            <div class="wd-mask-run" id="wd-dict-run"></div>
+          </div>
+
+          <!-- Mask brute-force: running-attack progress — launching itself
+               happens from a row's "máscara…" button (opens the picker
+               modal below), never from here. -->
+          <div class="wd-session-title" style="margin-top:16px;" data-i18n="crackstation.mask_title">ATAQUE DE FUERZA BRUTA (MÁSCARA)</div>
+          <div class="wd-mask-panel" id="wd-mask-panel">
+            <div class="wd-mask-run-status" id="wd-mask-run-status"></div>
+            <div class="wd-mask-run" id="wd-mask-run"></div>
+          </div>
         </div>
 
-        <!-- Mask brute-force: running-attack progress stays at top level —
-             launching happens from a row's "máscara…" button (opens the
-             picker modal below), never from here. -->
-        <div class="wd-session-title" style="margin-top:16px;" data-i18n="crackstation.mask_title">ATAQUE DE FUERZA BRUTA (MÁSCARA)</div>
-        <div class="wd-mask-panel" id="wd-mask-panel">
-          <div class="wd-mask-run-status" id="wd-mask-run-status"></div>
-          <div class="wd-mask-run" id="wd-mask-run"></div>
-        </div>
-
-        <!-- Manage masks (add/edit/delete) — tucked into its own collapsed
-             sub-section so it doesn't compete with the table for attention;
-             it's catalog upkeep, not something done per-handshake. -->
-        <details class="wd-mask-manage" id="wd-mask-manage">
-          <summary data-i18n="crackstation.mask_manage_title">Administrar máscaras (agregar, editar, borrar)</summary>
+        <!-- Manage masks (add/edit/delete) — its own subtab, same reasoning
+             as Sesiones being separate from Auditoría: catalog upkeep, not
+             something done per-handshake. -->
+        <div id="wd-sub-masks" class="wd-subtab-panel">
           <div class="wd-mask-presets" id="wd-mask-presets"></div>
 
           <!-- New/edit mask recipe form — the same form serves both:
                wd-mask-edit-id holds a preset id while editing, empty while
                creating a new one. -->
           <div class="wd-mask-new" id="wd-mask-new">
-            <div class="wd-session-title" style="font-size:12px; margin-top:14px;" id="wd-mask-form-title" data-i18n="crackstation.mask_new_title">+ NUEVA MÁSCARA</div>
+            <div class="wd-session-title" style="font-size:12px; margin-top:0;" id="wd-mask-form-title" data-i18n="crackstation.mask_new_title">+ NUEVA MÁSCARA</div>
             <div class="wd-mask-form">
               <input type="hidden" id="wd-mask-edit-id" value="" />
               <label><span data-i18n="crackstation.mask_form_name">Nombre</span>
@@ -139,7 +147,7 @@
             </div>
             <div id="wd-mask-msg" class="muted" style="font-size:11px; margin-top:6px;"></div>
           </div>
-        </details>
+        </div>
       </div>
     </section>
   </main>

@@ -168,6 +168,24 @@ function wdSortedCrackItems() {
   });
 }
 
+// ---- Subtabs (Inventario / Administrar máscaras) — same pattern as Wifi
+// Audit's Auditoría/Sesiones (app.js's wdInitSubtabs): click a button,
+// toggle .active on it and on the matching .wd-subtab-panel. ----
+
+function wdActivateSubtab(target) {
+  document.querySelectorAll("#wd-crack-block .wd-subtab").forEach((t) => {
+    t.classList.toggle("active", t.dataset.subtab === target);
+  });
+  el("wd-sub-inventory")?.classList.toggle("active", target === "inventory");
+  el("wd-sub-masks")?.classList.toggle("active", target === "masks");
+}
+
+function wdInitSubtabs() {
+  document.querySelectorAll("#wd-crack-block .wd-subtab").forEach((tab) => {
+    tab.addEventListener("click", () => wdActivateSubtab(tab.dataset.subtab));
+  });
+}
+
 function wdInitCrackSort() {
   document.querySelectorAll("#wd-crack-block .wd-crack-table th[data-sort]").forEach((th) => {
     th.style.cursor = "pointer";
@@ -611,8 +629,7 @@ function wdStartMaskEdit(preset) {
   el("wd-mask-save").textContent = t("crackstation.mask_form_save_edit", "Guardar cambios");
   el("wd-mask-form-title").textContent = t("crackstation.mask_edit_title", "EDITAR MÁSCARA");
   el("wd-mask-cancel-edit")?.classList.remove("hidden");
-  const manage = el("wd-mask-manage");
-  if (manage && !manage.open) manage.open = true;
+  wdActivateSubtab("masks");
   el("wd-mask-new")?.scrollIntoView({ block: "center", behavior: "smooth" });
 }
 
@@ -793,6 +810,7 @@ el("wd-mask-run")?.addEventListener("click", async (ev) => {
 
 // ---- Boot ----
 
+wdInitSubtabs();
 wdInitCrackSort();
 wdWatchDict(); // recovers an in-flight dictionary attack after a reload
 void wdRenderMaskPresets(); // populate "Administrar máscaras" once at load

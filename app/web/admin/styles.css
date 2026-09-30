@@ -3060,35 +3060,6 @@ body { font-family: var(--font-sans); }
 }
 .wd-mask-edit:hover { color: var(--text-primary); background: var(--bg-elevated); }
 
-/* Manage masks (add/edit/delete) — collapsed by default, a catalog-upkeep
-   sub-section separate from the per-handshake launch flow (picker modal
-   below). */
-.wd-mask-manage {
-  margin-top: 14px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-raised);
-  padding: 4px 14px;
-}
-.wd-mask-manage summary {
-  cursor: pointer;
-  padding: 10px 0;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
-  list-style: none;
-}
-.wd-mask-manage summary::-webkit-details-marker { display: none; }
-.wd-mask-manage summary::before {
-  content: "▸";
-  display: inline-block;
-  margin-right: 8px;
-  color: var(--text-secondary);
-  transition: transform 0.15s ease;
-}
-.wd-mask-manage[open] summary::before { transform: rotate(90deg); }
-.wd-mask-manage > *:not(summary) { padding-bottom: 14px; }
-
 /* Mask picker modal (row's "máscara…" button) */
 .wd-mask-picker-target {
   font-size: 12px;

@@ -3,7 +3,7 @@ import { promisify } from "util";
 import { EventEmitter } from "events";
 import fs from "fs";
 import path from "path";
-import { detectMonitorAdapter } from "../wifiradar/adapter";
+import { detectMonitorAdapter, listAdaptersForUI } from "../wifiradar/adapter";
 import { enterMonitorMode, exitMonitorMode, setChannel, getAvailable24GhzChannels } from "../wifiradar/monitor-control";
 import { getGpsStatus, type GpsSatellite } from "../utils/gps";
 import { getWifiStatus, armHomeNetworkWatchdog, disarmHomeNetworkWatchdog, checkHomeNetwork } from "../utils/wifi";
@@ -254,48 +254,8 @@ export class DriveWardriveService extends EventEmitter {
 
   // List every USB wifi adapter present, monitor-capability + "is this the
   // one the current/last session used" flags, for the dongle picker UI.
-  async listAdapters(): Promise<{
-    adapters: {
-      iface: string;
-      driver: string;
-      description: string;
-      monitorSupported: boolean;
-      isPreferred: boolean;
-    }[];
-    preferred: string | null;
-  }> {
-    const { detectMonitorAdapter } = await import("../wifiradar/adapter");
-    const out: {
-      iface: string;
-      driver: string;
-      description: string;
-      monitorSupported: boolean;
-      isPreferred: boolean;
-    }[] = [];
-    // Enumerate by probing each USB iface directly through the preferred
-    // path, then finish with a plain auto-detect for anything unvisited.
-    const seen = new Set<string>();
-    for (const iface of await fs.promises.readdir("/sys/class/net").catch(() => [])) {
-      const info = await detectMonitorAdapter(iface);
-      if (info.present && info.iface === iface && !seen.has(iface)) {
-        seen.add(iface);
-        out.push({
-          iface,
-          driver: info.driver,
-          description: info.description,
-          monitorSupported: info.monitorSupported,
-          isPreferred: this.preferredIface === iface,
-        });
-      }
-    }
-    // Sort: monitor-capable first; among equals, the pinned one, then
-    // ath9k (AR9271) as the default recommendation, then the rest.
-    const rank = (a: (typeof out)[number]) =>
-      (a.monitorSupported ? 0 : 2) +
-      (a.isPreferred ? -1 : 0) +
-      (a.driver === "ath9k_htc" ? 0 : 1);
-    out.sort((a, b) => rank(a) - rank(b) || a.iface.localeCompare(b.iface));
-    return { adapters: out, preferred: this.preferredIface };
+  async listAdapters(): ReturnType<typeof listAdaptersForUI> {
+    return listAdaptersForUI(this.preferredIface);
   }
 
   // Pin (or unpin with null) the wardrive dongle. Refused while a session
@@ -360,7 +320,19 @@ export class DriveWardriveService extends EventEmitter {
     this.capture = new DriveCapture();
     this.capture.on("frame", (frame: DriveFrame) => this.onFrame(frame));
     this.capture.on("exit", () => {
-      if (this.running) this.error = "Captura interrumpida — revisá el dongle";
+      if (!this.running) return;
+      // Unplugged mid-drive vs. some other capture failure: only the
+      // former should end the session outright — otherwise it's left
+      // "running" pointed at a dead capture until the operator notices and
+      // stops manually. stop() already no-ops exitMonitorMode failures, so
+      // it's safe to call even though the interface is gone.
+      const gone = this.iface && !fs.existsSync(`/sys/class/net/${this.iface}`);
+      if (gone) {
+        this.error = `Dongle desconectado (${this.iface}) — sesión detenida`;
+        void this.stop();
+      } else {
+        this.error = "Captura interrumpida — revisá el dongle";
+      }
     });
     this.capture.start(this.iface!, this.ringDir);
   }

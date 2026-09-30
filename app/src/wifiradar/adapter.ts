@@ -142,6 +142,43 @@ export async function detectMonitorAdapter(preferredIface?: string | null): Prom
   return firstUsb || NONE;
 }
 
+export type AdapterUiEntry = {
+  iface: string;
+  driver: string;
+  description: string;
+  monitorSupported: boolean;
+  isPreferred: boolean;
+};
+
+// Shared dongle-picker listing for every feature that grabs the audit
+// radio (WiFi Radar, Wifi Audit, Wardrive): every USB wifi adapter
+// present, monitor-capability + whether it's the pinned one, ranked
+// monitor-capable-first / pinned-first / ath9k_htc (AR9271, this
+// project's reference dongle) as the default recommendation.
+export async function listAdaptersForUI(
+  preferredIface: string | null,
+): Promise<{ adapters: AdapterUiEntry[]; preferred: string | null }> {
+  const out: AdapterUiEntry[] = [];
+  const seen = new Set<string>();
+  for (const iface of await fs.promises.readdir(NET_CLASS_DIR).catch(() => [] as string[])) {
+    const info = await detectMonitorAdapter(iface);
+    if (info.present && info.iface === iface && !seen.has(iface)) {
+      seen.add(iface);
+      out.push({
+        iface,
+        driver: info.driver,
+        description: info.description,
+        monitorSupported: info.monitorSupported,
+        isPreferred: preferredIface === iface,
+      });
+    }
+  }
+  const rank = (a: AdapterUiEntry) =>
+    (a.monitorSupported ? 0 : 2) + (a.isPreferred ? -1 : 0) + (a.driver === "ath9k_htc" ? 0 : 1);
+  out.sort((a, b) => rank(a) - rank(b) || a.iface.localeCompare(b.iface));
+  return { adapters: out, preferred: preferredIface };
+}
+
 // Back-compat shape for callers that used detectAr9271().
 export async function detectAuditAdapter(): Promise<{
   present: boolean;

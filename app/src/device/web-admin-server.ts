@@ -9,7 +9,14 @@ import bodyParser from "koa-bodyparser";
 import serve from "koa-static";
 import axios from "axios";
 import { WebSocketServer, WebSocket } from "ws";
-import { getWifiRadarSnapshot, setWifiRadarMode, getWifiRadarMode, getWifiRadarRequestedMode } from "../wifiradar/service";
+import {
+  getWifiRadarSnapshot,
+  setWifiRadarMode,
+  getWifiRadarMode,
+  getWifiRadarRequestedMode,
+  getWifiRadarAdapters,
+  setWifiRadarPreferredAdapter,
+} from "../wifiradar/service";
 import { detectMonitorAdapter } from "../wifiradar/adapter";
 import { getWardriveService } from "../wifi-audit/service";
 import { getDriveWardriveService } from "../wardrive/service";
@@ -328,6 +335,19 @@ export class WebAdminServer {
     router.get("/api/wifiradar/snapshot", (ctx) => {
       const revealFullMac = ctx.query.fullMac === "1";
       ctx.body = getWifiRadarSnapshot(revealFullMac);
+    });
+
+    // Dongle selection for WiFi Radar — same picker pattern as Wifi Audit's
+    // and wardrive's driving mode.
+    router.get("/api/wifiradar/adapters", async (ctx) => {
+      ctx.body = await getWifiRadarAdapters();
+    });
+
+    router.post("/api/wifiradar/adapter", async (ctx) => {
+      const { iface } = (ctx.request.body as any) || {};
+      ctx.body = await setWifiRadarPreferredAdapter(
+        iface == null || String(iface).trim() === "" ? null : String(iface),
+      );
     });
 
     router.get("/api/status", async (ctx) => {
@@ -681,6 +701,10 @@ export class WebAdminServer {
         return;
       }
       const res = await storageDelete(String(root || ""), String(rel || ""));
+      // Jukebox caches its track list (see Jukebox.getTracks() in
+      // music-jukebox.ts) — a delete through the shared file manager must
+      // invalidate it or the removed track keeps "playing" from the cache.
+      if (res.ok && root === "music") jukebox.rescan();
       ctx.status = res.ok ? 200 : 400;
       ctx.body = res;
     });
@@ -709,6 +733,7 @@ export class WebAdminServer {
           out.on("finish", () => resolve());
           ctx.req.pipe(out);
         });
+        if (root === "music") jukebox.rescan();
         ctx.body = { ok: true };
       } catch (err: any) {
         ctx.status = 500;
@@ -1051,6 +1076,19 @@ export class WebAdminServer {
 
     router.post("/api/wardrive/exit", async (ctx) => {
       ctx.body = await wardrive.exit();
+    });
+
+    // Dongle selection for Wifi Audit — same picker pattern as wardrive's
+    // driving mode (/api/wardrive/drive/adapter*) and WiFi Radar's.
+    router.get("/api/wardrive/adapters", async (ctx) => {
+      ctx.body = await wardrive.listAdapters();
+    });
+
+    router.post("/api/wardrive/adapter", (ctx) => {
+      const { iface } = (ctx.request.body as any) || {};
+      ctx.body = wardrive.setPreferredAdapter(
+        iface == null || String(iface).trim() === "" ? null : String(iface),
+      );
     });
 
     router.post("/api/wardrive/allowlist", (ctx) => {

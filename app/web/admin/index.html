@@ -16,14 +16,13 @@
       <span></span><span></span><span></span>
     </button>
     <nav class="tabs" id="main-tabs">
-      <button class="tab-btn active" data-tab="chat" data-i18n="topbar.tab_chat">Chat</button>
+      <button class="tab-btn active" data-tab="chat" data-i18n="topbar.tab_chat">IA Local</button>
       <a href="/wifiradar" class="tab-link" title="Visualización Wi-Fi en 3D" data-i18n="topbar.tab_wifiradar" data-i18n-title="topbar.tab_wifiradar_title">Radar Wi-Fi</a>
       <a href="/aircraft-radar" class="tab-link" title="Aeronaves cercanas vía ADS-B" data-i18n="topbar.tab_aircraft" data-i18n-title="topbar.tab_aircraft_title">Radar de Aviones</a>
       <a href="/wardrive" class="tab-link" title="Wardrive: mapa + handshakes en el auto" data-i18n="topbar.tab_wardrive" data-i18n-title="topbar.tab_wardrive_title">Wardrive</a>
       <button class="tab-btn" data-tab="wifi-audit" data-i18n="topbar.tab_wifiaudit">Wifi Audit</button>
       <a href="/gps" class="tab-link" title="Posición GPS del dispositivo" data-i18n="topbar.tab_gps" data-i18n-title="topbar.tab_gps_title">GPS</a>
-      <button class="tab-btn" data-tab="music" data-i18n="topbar.tab_music">OST</button>
-      <button class="tab-btn" data-tab="usb" data-i18n="topbar.tab_usb">Dispositivos</button>
+      <button class="tab-btn" data-tab="music" data-i18n="topbar.tab_music">Jukebox</button>
       <button class="tab-btn" data-tab="settings" title="Ajustes" data-i18n="topbar.tab_settings" data-i18n-title="topbar.tab_settings">Ajustes</button>
     </nav>
     <div id="nav-backdrop" class="nav-backdrop hidden"></div>
@@ -78,35 +77,6 @@
         <button type="submit" id="chat-send" data-i18n="chat.send">Enviar</button>
         <button type="button" id="chat-cancel" class="secondary hidden" data-i18n="chat.cancel">Cancelar</button>
       </form>
-    </section>
-
-    <section id="tab-usb" class="tab-panel">
-      <div class="usb-toolbar">
-        <button id="usb-scan-btn" class="btn btn-secondary" data-i18n="usb.scan_btn">Buscar dispositivos</button>
-        <span id="usb-scan-status" class="muted"></span>
-      </div>
-
-      <div class="dev-grid">
-        <div class="card">
-          <div class="usb-block-title" data-i18n="usb.title_usb">USB</div>
-          <ul id="usb-devices-list" class="usb-devices-list"></ul>
-        </div>
-
-        <div class="card">
-          <div class="usb-block-title" data-i18n="usb.title_wifi_adapters">Adaptadores Wi-Fi</div>
-          <ul id="usb-wifi-list" class="usb-devices-list"></ul>
-        </div>
-
-        <div class="card">
-          <div class="usb-block-title" data-i18n="usb.title_storage">Almacenamiento</div>
-          <ul id="usb-volumes-list" class="usb-devices-list"></ul>
-        </div>
-      </div>
-
-      <div class="card" style="margin-top:16px;">
-        <div class="usb-block-title" data-i18n="usb.title_filemgr">Explorador de archivos</div>
-        <div id="fm-usb" class="filemgr"></div>
-      </div>
     </section>
 
     <section id="tab-music" class="tab-panel">
@@ -170,7 +140,10 @@
         </div>
         <div class="mx-lower">
           <div class="mx-col-tracks">
-            <div class="mx-list-head" data-i18n="music.tracklist_label">// TRACKLIST</div>
+            <div class="mx-list-head-row">
+              <div class="mx-list-head" data-i18n="music.tracklist_label">// TRACKLIST</div>
+              <button type="button" id="mp-library-btn" class="mx-lib-btn" data-i18n="music.manage_btn">+ administrar</button>
+            </div>
             <ul id="mp-list" class="mx-list"></ul>
           </div>
           <div class="mx-col-lyrics">
@@ -188,6 +161,11 @@
         <div class="wd-banner-text">
           <div class="wd-banner-title"><span data-i18n="wifiaudit.banner_title">MODO WIFI AUDIT</span> <span id="wd-iface" class="wd-iface"></span></div>
           <div id="wd-banner-status" class="wd-banner-status">—</div>
+          <label class="wd-dongle" title="Adaptador USB a usar — se sugiere el más compatible con modo monitor. Solo cambiable fuera de modo Wifi Audit.">
+            <span class="k">Dongle</span>
+            <select id="wd-dongle-select"><option value="">auto</option></select>
+          </label>
+          <div id="wd-dongle-msg" class="wd-dongle-msg"></div>
         </div>
         <button id="wd-exit-btn" class="secondary hidden" data-i18n="wifiaudit.exit_btn">Salir</button>
         <button id="wd-enter-btn" class="hidden" data-i18n="wifiaudit.enter_btn">Entrar</button>
@@ -422,6 +400,7 @@
           <button class="cfg-nav-btn" data-cfg="audio" data-i18n="settings.nav_audio">Audio</button>
           <button class="cfg-nav-btn" data-cfg="ia" data-i18n="settings.nav_ia">IA</button>
           <button class="cfg-nav-btn" data-cfg="almacenamiento" data-i18n="settings.nav_storage">Almacenamiento</button>
+          <button class="cfg-nav-btn" data-cfg="dispositivos" data-i18n="settings.nav_devices">Dispositivos</button>
           <button class="cfg-nav-btn" data-cfg="sistema" data-i18n="settings.nav_system">Sistema</button>
         </nav>
 
@@ -617,6 +596,27 @@
           </div>
         </div>
 
+        <!-- DISPOSITIVOS: qué hay conectado por USB — el explorador de
+             archivos y el eyect de volúmenes viven en Almacenamiento (arriba),
+             para no tener dos exploradores/dos listas de volúmenes montados
+             a la vez apuntando al mismo backend. -->
+        <div class="cfg-panel" data-cfg-panel="dispositivos">
+          <div class="usb-toolbar">
+            <button id="usb-scan-btn" class="btn btn-secondary" data-i18n="usb.scan_btn">Buscar dispositivos</button>
+            <span id="usb-scan-status" class="muted"></span>
+          </div>
+          <div class="dev-grid">
+            <div class="card">
+              <div class="usb-block-title" data-i18n="usb.title_usb">USB</div>
+              <ul id="usb-devices-list" class="usb-devices-list"></ul>
+            </div>
+            <div class="card">
+              <div class="usb-block-title" data-i18n="usb.title_wifi_adapters">Adaptadores Wi-Fi</div>
+              <ul id="usb-wifi-list" class="usb-devices-list"></ul>
+            </div>
+          </div>
+        </div>
+
         <!-- SISTEMA -->
         <div class="cfg-panel" data-cfg-panel="sistema">
           <div class="cfg-card">
@@ -678,6 +678,17 @@
       <div class="modal-actions">
         <button id="image-preview-close" class="secondary" data-i18n="modal.image_preview_close">Cerrar</button>
       </div>
+    </div>
+  </div>
+
+  <div id="mp-library-modal" class="modal hidden">
+    <div class="modal-card mp-library-card">
+      <div class="mp-library-head">
+        <span data-i18n="music.manage_title">// ADMINISTRAR CANCIONES</span>
+        <button id="mp-library-close" class="btn btn-secondary" data-i18n="modal.fm_close">Cerrar</button>
+      </div>
+      <p class="mp-library-hint" data-i18n="music.manage_hint">Sube o borra mp3/wav/flac/ogg/m4a (y su .txt de letra) — se reflejan en la tracklist al cerrar.</p>
+      <div id="mp-library-fm" class="filemgr"></div>
     </div>
   </div>
 

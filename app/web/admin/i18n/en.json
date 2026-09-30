@@ -1,7 +1,7 @@
 {
   "topbar": {
     "menu_aria": "Menu",
-    "tab_chat": "Chat",
+    "tab_chat": "Local AI",
     "tab_wifiradar": "Wi-Fi Radar",
     "tab_wifiradar_title": "3D Wi-Fi visualization",
     "tab_aircraft": "Aircraft Radar",
@@ -13,7 +13,7 @@
     "tab_gps_title": "Device GPS position",
     "tab_gnss": "GNSS",
     "tab_gnss_title": "GNSS satellite metadata (offline-first)",
-    "tab_music": "OST",
+    "tab_music": "Jukebox",
     "tab_usb": "Devices",
     "tab_settings": "Settings",
     "platform_toggle_title": "Data source: LIVE uses the real dongles · DEMO shows synthetic data and releases the hardware",
@@ -58,6 +58,9 @@
     "vol_up_title": "Volume up",
     "output_label": "// OUTPUT",
     "tracklist_label": "// TRACKLIST",
+    "manage_btn": "+ manage",
+    "manage_title": "// MANAGE TRACKS",
+    "manage_hint": "Upload or delete mp3/wav/flac/ogg/m4a (and its .txt lyrics) — reflected in the tracklist on close.",
     "lyrics_label": "// LYRICS",
     "lyrics_hint": "Play a track to see its lyrics."
   },
@@ -122,6 +125,7 @@
     "nav_audio": "Audio",
     "nav_ia": "AI",
     "nav_storage": "Storage",
+    "nav_devices": "Devices",
     "nav_system": "System",
     "general": {
       "summary_title": "Device summary",

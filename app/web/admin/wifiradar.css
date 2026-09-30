@@ -215,6 +215,41 @@ html, body {
   line-height: 1.3;
 }
 
+/* ---- Dongle picker (same pattern as wardrive.css's .wd-dongle) ---- */
+
+.hud-dongle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--as-border);
+}
+
+.hud-dongle select {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--as-border);
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--as-text);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.hud-dongle select:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.hud-dongle-msg {
+  font-size: 10px;
+  color: var(--as-alert);
+  min-height: 12px;
+  margin-top: 2px;
+}
+
+.hud-dongle-msg:empty { display: none; }
+
 /* ---- network info modal (click a node → detail card) ---- */
 
 .apm {

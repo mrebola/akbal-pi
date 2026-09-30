@@ -1,5 +1,5 @@
 import { EventEmitter } from "events";
-import { detectMonitorAdapter } from "./adapter";
+import { detectMonitorAdapter, listAdaptersForUI } from "./adapter";
 import { enterMonitorMode, exitMonitorMode, getAvailable24GhzChannels } from "./monitor-control";
 import { Ar9271Capture } from "./capture";
 import { ChannelHopper } from "./channel-hopper";
@@ -24,6 +24,9 @@ export class WifiRadarService extends EventEmitter {
   private demo: DemoGenerator | null = null;
   private sweepTimer: ReturnType<typeof setInterval> | null = null;
   private monitorIface: string | null = null;
+  // Dongle pinned by the operator via the web picker (null = auto-detect,
+  // same ranking wifi-audit/wardrive use — see adapter.ts).
+  private preferredIface: string | null = null;
   private mode: WifiRadarMode = "starting";
   private hardware: string | null = null;
   private lastError: string | undefined;
@@ -118,7 +121,7 @@ export class WifiRadarService extends EventEmitter {
   }
 
   private async tryRealCapture(): Promise<void> {
-    const info = await detectMonitorAdapter();
+    const info = await detectMonitorAdapter(this.preferredIface);
     if (!info.present) {
       throw new Error("No hay adaptador WiFi USB conectado");
     }
@@ -238,6 +241,35 @@ export class WifiRadarService extends EventEmitter {
   getRequestedMode(): "live" | "demo" {
     return this.requestedMode;
   }
+
+  async listAdapters(): ReturnType<typeof listAdaptersForUI> {
+    return listAdaptersForUI(this.preferredIface);
+  }
+
+  // Pin (or unpin with null) the radar dongle. Unlike wifi-audit/wardrive
+  // this service runs continuously, so a change takes effect right away
+  // instead of being refused mid-session: tear down whatever's capturing
+  // now and let tryRealCapture() re-detect with the new preference. Only
+  // matters while the operator asked for live — if they're in forced demo,
+  // just remember the preference for whenever they switch back.
+  async setPreferredAdapter(iface: string | null): Promise<{ ok: boolean; error?: string }> {
+    const clean = iface === null || String(iface).trim() === "" ? null : String(iface).trim();
+    if (clean && !/^wlan\d+$/.test(clean)) {
+      return { ok: false, error: "Nombre de interfaz inválido" };
+    }
+    this.preferredIface = clean;
+    console.log(`[wifiradar] dongle fijado: ${clean || "auto"}`);
+    if (this.requestedMode === "live") {
+      await this.teardownRealCapture();
+      try {
+        await this.tryRealCapture();
+      } catch (err: any) {
+        this.fallbackToDemo(String(err?.message || err));
+        this.startRetryLoop();
+      }
+    }
+    return { ok: true };
+  }
 }
 
 // Single shared instance — the AR9271 can only be captured by one thing at
@@ -255,6 +287,14 @@ export function startWifiRadarService(): void {
 
 export function stopWifiRadarService(): Promise<void> {
   return sharedWifiRadarService.stop();
+}
+
+export function getWifiRadarAdapters(): ReturnType<WifiRadarService["listAdapters"]> {
+  return sharedWifiRadarService.listAdapters();
+}
+
+export function setWifiRadarPreferredAdapter(iface: string | null): Promise<{ ok: boolean; error?: string }> {
+  return sharedWifiRadarService.setPreferredAdapter(iface);
 }
 
 export function getWifiRadarSnapshot(revealFullMac = false): WifiRadarSnapshot {

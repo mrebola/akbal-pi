@@ -1047,3 +1047,56 @@ fetch("/api/wifiradar/snapshot")
     bootSub.textContent = `error: ${err.message}`;
     connectWs();
   });
+
+// ---- Dongle picker: same pattern as wardrive.js's, against
+// /api/wifiradar/adapter(s) — changing it here switches the live radar
+// capture over immediately (no "stop first" like wardrive/wifi-audit,
+// this service runs continuously).
+async function refreshRadarDongleList() {
+  const sel = document.getElementById("hud-dongle-select");
+  if (!sel || document.activeElement === sel) return; // don't yank focus mid-pick
+  try {
+    const res = await fetch("/api/wifiradar/adapters");
+    if (!res.ok) return;
+    const data = await res.json();
+    const cur = data.preferred || "";
+    sel.innerHTML =
+      '<option value="">auto</option>' +
+      (data.adapters || [])
+        .map((a) => {
+          const tag = a.driver === "ath9k_htc" ? " ← recomendado" : "";
+          const label = `${a.iface} · ${a.driver || "?"}${tag}${a.monitorSupported ? "" : " (sin monitor)"}`;
+          return `<option value="${a.iface}"${a.isPreferred ? " selected" : ""}>${label}</option>`;
+        })
+        .join("");
+    if (cur && !sel.querySelector(`option[value="${CSS.escape(cur)}"]`)) {
+      const o = document.createElement("option");
+      o.value = cur;
+      o.textContent = `${cur} (no presente)`;
+      o.selected = true;
+      sel.appendChild(o);
+    } else if (!cur) {
+      sel.value = "";
+    }
+  } catch { /* picker is optional */ }
+}
+
+document.getElementById("hud-dongle-select")?.addEventListener("change", async (ev) => {
+  const iface = ev.target.value || null;
+  const msg = document.getElementById("hud-dongle-msg");
+  try {
+    const res = await fetch("/api/wifiradar/adapter", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ iface }),
+    });
+    const data = await res.json();
+    if (msg) msg.textContent = data.ok ? "" : data.error || "No se pudo fijar el dongle";
+    void refreshRadarDongleList();
+  } catch {
+    if (msg) msg.textContent = "Error de red";
+  }
+});
+
+void refreshRadarDongleList();
+setInterval(refreshRadarDongleList, 5000);

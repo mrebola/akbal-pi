@@ -3,7 +3,7 @@ import { promisify } from "util";
 import { EventEmitter } from "events";
 import fs from "fs";
 import path from "path";
-import { detectMonitorAdapter } from "../wifiradar/adapter";
+import { detectMonitorAdapter, listAdaptersForUI } from "../wifiradar/adapter";
 import { enterMonitorMode, exitMonitorMode } from "./monitor";
 import { setChannel } from "./rf";
 import { AirodumpCapture, DeauthRunner, scanTarget } from "./attack";
@@ -84,6 +84,9 @@ type TargetMeta = {
 export class WardriveService extends EventEmitter {
   private mode: WardriveMode = "inactive";
   private iface: string | null = null;
+  // Dongle pinned by the operator via the web picker (null = auto-detect,
+  // same detectMonitorAdapter() ranking WiFi Radar/Wardrive use).
+  private preferredIface: string | null = null;
   private error = "";
   private modelsUnloaded = false;
   private allowlist = new Set<string>();
@@ -570,7 +573,7 @@ export class WardriveService extends EventEmitter {
       return { ok: true };
     }
     try {
-      const info = await detectMonitorAdapter();
+      const info = await detectMonitorAdapter(this.preferredIface);
       if (!info.present) {
         this.error = "No hay adaptador WiFi USB conectado — enchufá el dongle para auditar";
         this.broadcastStatus();
@@ -605,6 +608,27 @@ export class WardriveService extends EventEmitter {
       this.broadcastStatus();
       return { ok: false, error: this.error };
     }
+  }
+
+  // Dongle picker for the web UI — same shape/ranking wardrive's already
+  // uses, factored into adapter.ts so both pickers stay in sync.
+  async listAdapters(): ReturnType<typeof listAdaptersForUI> {
+    return listAdaptersForUI(this.preferredIface);
+  }
+
+  // Pin (or unpin with null) the audit dongle. Refused while a session is
+  // active — changing the radio mid-attack would kill the capture.
+  setPreferredAdapter(iface: string | null): { ok: boolean; error?: string } {
+    if (this.mode !== "inactive") {
+      return { ok: false, error: "Salí del modo Wifi Audit antes de cambiar de dongle" };
+    }
+    const clean = iface === null || String(iface).trim() === "" ? null : String(iface).trim();
+    if (clean && !/^wlan\d+$/.test(clean)) {
+      return { ok: false, error: "Nombre de interfaz inválido" };
+    }
+    this.preferredIface = clean;
+    console.log(`[wifi-audit] dongle fijado: ${clean || "auto"}`);
+    return { ok: true };
   }
 
   async exit(): Promise<{ ok: boolean }> {
@@ -999,6 +1023,14 @@ export class WardriveService extends EventEmitter {
       // capture is over (PMKID passive fallback below still applies).
       for (let attempt = 1; attempt <= DEAUTH_MAX_ATTEMPTS && !captured; attempt++) {
         if (this.attackAbort) break;
+        // Dongle pulled mid-attack: stop retrying against a dead interface
+        // instead of running the full deauth/settle timeout for nothing.
+        if (this.iface && !fs.existsSync(`/sys/class/net/${this.iface}`)) {
+          this.progress(bssid, "capture", "Dongle desconectado — abortando ataque");
+          this.updateMeta(bssid, { status: "failed", error: "Dongle desconectado durante la captura" });
+          this.attackAbort = true;
+          break;
+        }
         this.updateMeta(bssid, { attempts: attempt });
         // Prefer directed deauth at real associated clients (far more
         // effective than broadcast); fall back to the radar snapshot, then

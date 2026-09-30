@@ -2,6 +2,7 @@ import os from "os";
 import fs from "fs";
 import path from "path";
 import { listUsbVolumes, findVolume, listFiles, resolveFilePath, UsbFileEntry } from "./usb";
+import { LIBRARY_DIR as MUSIC_LIBRARY_DIR } from "../device/music-jukebox";
 
 // A single file-manager layer over several "storage roots": the Pi's internal
 // filesystem plus any mounted USB volume. The same browse/upload/download/
@@ -19,7 +20,10 @@ export interface StorageRoot {
 const INTERNAL_BASE = process.env.STORAGE_INTERNAL_ROOT || os.homedir();
 
 export const getStorageRoots = async (): Promise<StorageRoot[]> => {
-  const roots: StorageRoot[] = [{ key: "internal", label: "Memoria interna" }];
+  const roots: StorageRoot[] = [
+    { key: "internal", label: "Memoria interna" },
+    { key: "music", label: "Jukebox (Cypher OST)" },
+  ];
   try {
     for (const v of await listUsbVolumes()) {
       if (v.mounted && v.mountPath) {
@@ -34,6 +38,13 @@ export const getStorageRoots = async (): Promise<StorageRoot[]> => {
 
 const baseForRoot = async (root: string): Promise<string | null> => {
   if (root === "internal") return INTERNAL_BASE;
+  if (root === "music") {
+    // A fresh device has no library dir yet (jukebox.ts only creates it by
+    // writing into it) — the file manager needs it to exist just to list
+    // an empty folder instead of erroring on first visit.
+    await fs.promises.mkdir(MUSIC_LIBRARY_DIR, { recursive: true }).catch(() => {});
+    return MUSIC_LIBRARY_DIR;
+  }
   if (root.startsWith("usb:")) {
     const vol = await findVolume(root.slice(4));
     return vol && vol.mounted ? vol.mountPath : null;
@@ -128,12 +139,18 @@ export const storageMkdir = async (
 };
 
 // Safe absolute path to write an uploaded file to (or null if invalid).
+// Keeps the jukebox folder to what Jukebox.scan() (music-jukebox.ts) and
+// getLyrics() actually read — anything else uploaded there would just sit
+// invisible in the library with no way to tell why it never shows up.
+const MUSIC_UPLOAD_EXT = /\.(mp3|wav|flac|ogg|m4a|txt)$/i;
+
 export const storageUploadTarget = async (
   root: string,
   rel: string,
   filename: string,
 ): Promise<string | null> => {
   if (!isSegmentSafe(filename)) return null;
+  if (root === "music" && !MUSIC_UPLOAD_EXT.test(filename)) return null;
   const base = await baseForRoot(root);
   if (!base) return null;
   return resolveFilePath(base, path.join(rel || "", filename));

@@ -618,7 +618,6 @@ function activateTab(tabName) {
   if (tabName === "settings") void refreshSettings();
   if (tabName === "music") startMusicUI();
   else stopMusicPolling();
-  if (tabName === "usb") ensureUsbFileManager();
 }
 
 for (const btn of document.querySelectorAll(".tab-btn")) {
@@ -1125,7 +1124,9 @@ async function loadUsbWifiAdapters() {
 
 async function scanUsb() {
   usbScanStatus.textContent = "Buscando...";
-  await Promise.all([loadUsbDevices(), loadUsbVolumes(), loadUsbWifiAdapters()]);
+  // Volumes (mount/eject) live in Settings > Almacenamiento now
+  // (settings-usb-eject-list) — this panel is device discovery only.
+  await Promise.all([loadUsbDevices(), loadUsbWifiAdapters()]);
   usbScanStatus.textContent = `Actualizado ${new Date().toLocaleTimeString()}`;
 }
 
@@ -1234,12 +1235,6 @@ imagePreviewClose.addEventListener("click", () => {
   imagePreviewImg.src = "";
 });
 
-for (const btn of document.querySelectorAll(".tab-btn")) {
-  if (btn.dataset.tab === "usb") {
-    btn.addEventListener("click", () => void scanUsb());
-  }
-}
-
 // ---- Settings (⚙️ tab: audio output, model RAM, USB safe-eject) ----
 
 const settingsUsbEjectList = document.getElementById("settings-usb-eject-list");
@@ -1322,6 +1317,7 @@ if (cfgNav) {
       void loadSettingsUsbVolumes();
       ensureSettingsFileManager();
     }
+    else if (key === "dispositivos") void scanUsb();
     else if (key === "sistema") void loadBackups();
   });
 }
@@ -1647,6 +1643,58 @@ async function loadMonitorCap() {
   } catch { /* unknown */ }
 }
 
+// ---- Wifi Audit dongle picker (same pattern as wardrive.js's, against
+// /api/wardrive/adapter(s) — refused server-side while mode !== inactive) ----
+const wdDongleSelect = document.getElementById("wd-dongle-select");
+const wdDongleMsg = document.getElementById("wd-dongle-msg");
+
+async function wdRefreshDongleList() {
+  if (!wdDongleSelect || document.activeElement === wdDongleSelect) return;
+  try {
+    const res = await fetch("/api/wardrive/adapters");
+    if (!res.ok) return;
+    const data = await res.json();
+    const cur = data.preferred || "";
+    wdDongleSelect.innerHTML =
+      '<option value="">auto</option>' +
+      (data.adapters || [])
+        .map((a) => {
+          const tag = a.driver === "ath9k_htc" ? " ← recomendado" : "";
+          const label = `${a.iface} · ${a.driver || "?"}${tag}${a.monitorSupported ? "" : " (sin monitor)"}`;
+          return `<option value="${escapeHtml(a.iface)}"${a.isPreferred ? " selected" : ""}>${escapeHtml(label)}</option>`;
+        })
+        .join("");
+    if (cur && !wdDongleSelect.querySelector(`option[value="${CSS.escape(cur)}"]`)) {
+      const o = document.createElement("option");
+      o.value = cur;
+      o.textContent = `${cur} (no presente)`;
+      o.selected = true;
+      wdDongleSelect.appendChild(o);
+    } else if (!cur) {
+      wdDongleSelect.value = "";
+    }
+  } catch { /* picker is optional */ }
+}
+
+wdDongleSelect?.addEventListener("change", async (ev) => {
+  const iface = ev.target.value || null;
+  try {
+    const res = await fetch("/api/wardrive/adapter", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ iface }),
+    });
+    const data = await res.json();
+    if (wdDongleMsg) wdDongleMsg.textContent = data.ok ? "" : data.error || "No se pudo fijar el dongle";
+    void wdRefreshDongleList();
+  } catch {
+    if (wdDongleMsg) wdDongleMsg.textContent = "Error de red";
+  }
+});
+
+void wdRefreshDongleList();
+setInterval(wdRefreshDongleList, 5000);
+
 async function wdApi(path, body) {
   const res = await apiFetch(`/api/wardrive/${path}`, {
     method: "POST",
@@ -1673,6 +1721,7 @@ function wdRender() {
   const attacking = wdStatus.mode === "attacking";
   wdBannerTitle.classList.toggle("on", on);
   wdIface.textContent = wdStatus.iface ? `· ${wdStatus.iface.toUpperCase()}` : "";
+  if (wdDongleSelect) wdDongleSelect.disabled = on;
   const cap = wdMonitorCap;
   const monitorReady = !cap || cap.monitorSupported;
 
@@ -3484,11 +3533,7 @@ function createFileManager(container) {
   };
 }
 
-let fmUsbInstance = null;
 let fmSettingsInstance = null;
-function ensureUsbFileManager() {
-  if (!fmUsbInstance) fmUsbInstance = createFileManager(document.getElementById("fm-usb"));
-}
 function ensureSettingsFileManager() {
   if (!fmSettingsInstance) fmSettingsInstance = createFileManager(document.getElementById("fm-settings"));
 }
@@ -3663,6 +3708,11 @@ pwForm?.addEventListener("submit", async (e) => {
 if (initialTab === "wifi") {
   activateTab("settings");
   document.querySelector('.cfg-nav-btn[data-cfg="wifi"]')?.click();
+} else if (initialTab === "usb") {
+  // Old bookmark: "Dispositivos" used to be its own top-level tab — now
+  // it's a Settings subsection, same touch-up as "#wifi" above.
+  activateTab("settings");
+  document.querySelector('.cfg-nav-btn[data-cfg="dispositivos"]')?.click();
 } else if (initialTab === "wardrive") {
   // Old bookmark: the tab is "wifi-audit" now (/wardrive is the driving
   // map). try/catch: don't let a failed URL touch-up skip activating the
@@ -3727,6 +3777,34 @@ async function openFileViewer(root, rel, name) {
     if (body) body.innerHTML = "";
   };
   close?.addEventListener("click", hide);
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) hide();
+  });
+})();
+
+// ---- Music library manager (upload/delete tracks — reuses the shared
+// FileExplorer against the "music" storage root added in storage.ts) ----
+(function () {
+  const modal = document.getElementById("mp-library-modal");
+  const openBtn = document.getElementById("mp-library-btn");
+  const closeBtn = document.getElementById("mp-library-close");
+  if (!modal || !openBtn) return;
+  let fmLibraryInstance = null;
+  openBtn.addEventListener("click", async () => {
+    modal.classList.remove("hidden");
+    if (!fmLibraryInstance) {
+      fmLibraryInstance = createFileManager(document.getElementById("mp-library-fm"));
+    }
+    await fmLibraryInstance?.openRoot("music");
+  });
+  const hide = () => {
+    modal.classList.add("hidden");
+    // Pick up anything uploaded/deleted while the modal was open — the
+    // server already invalidated jukebox's cache (see /api/storage/upload
+    // and /api/storage/delete, root==="music"), this just re-fetches it.
+    void loadMusicTracks();
+  };
+  closeBtn?.addEventListener("click", hide);
   modal.addEventListener("click", (e) => {
     if (e.target === modal) hide();
   });

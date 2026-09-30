@@ -29,7 +29,7 @@ export interface JukeboxStatus {
 }
 
 const ROOT = path.resolve(__dirname, "..", "..");
-const LIBRARY_DIR = process.env.MUSIC_JUKEBOX_DIR || path.join(ROOT, "data", "music", "cypher");
+export const LIBRARY_DIR = process.env.MUSIC_JUKEBOX_DIR || path.join(ROOT, "data", "music", "cypher");
 
 const stripExt = (name: string): string => name.replace(/\.[^.]+$/, "");
 
@@ -81,6 +81,14 @@ class Jukebox {
   getTracks(): JukeboxTrack[] {
     if (this.tracks.length === 0) this.scan();
     return this.tracks;
+  }
+
+  // Force a re-scan — the cached list above only re-reads the directory
+  // while it's empty, so an upload/delete through the shared file manager
+  // (web-admin-server.ts, root "music") must call this explicitly or the
+  // change stays invisible until the next process restart.
+  rescan(): JukeboxTrack[] {
+    return this.scan();
   }
 
   private loadDuration(file: string): void {

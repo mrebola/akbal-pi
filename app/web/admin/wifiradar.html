@@ -37,14 +37,13 @@
         <span></span><span></span><span></span>
       </button>
       <nav class="tabs" id="main-tabs">
-        <a href="/#chat" class="tab-link" data-i18n="topbar.tab_chat">Chat</a>
+        <a href="/#chat" class="tab-link" data-i18n="topbar.tab_chat">IA Local</a>
         <span class="tab-link active" data-i18n="topbar.tab_wifiradar">Radar Wi-Fi</span>
         <a href="/aircraft-radar" class="tab-link" data-i18n="topbar.tab_aircraft">Radar de Aviones</a>
         <a href="/#wifi-audit" class="tab-link" data-i18n="topbar.tab_wifiaudit">Wifi Audit</a>
         <a href="/wardrive" class="tab-link" data-i18n="topbar.tab_wardrive">Wardrive</a>
         <a href="/gps" class="tab-link" data-i18n="topbar.tab_gps">GPS</a>
-        <a href="/#music" class="tab-link" data-i18n="topbar.tab_music">OST</a>
-        <a href="/#usb" class="tab-link" data-i18n="topbar.tab_usb">Dispositivos</a>
+        <a href="/#music" class="tab-link" data-i18n="topbar.tab_music">Jukebox</a>
         <a href="/#settings" class="tab-link" data-i18n="topbar.tab_settings">Ajustes</a>
       </nav>
       <div id="nav-backdrop" class="nav-backdrop hidden"></div>
@@ -111,6 +110,13 @@
     <div class="hud-row"><span class="hud-label">Alerts</span><span class="hud-value hud-alerts" id="hud-alerts">0</span></div>
     <div class="hud-spectrum" id="hud-spectrum" title="Actividad observada por canal (no es un analizador RF real)"></div>
     <div class="hud-note">actividad observada · no es un analizador RF real</div>
+    <label class="hud-dongle" title="Adaptador USB a usar — se sugiere el más compatible con modo monitor">
+      <span class="hud-label">Dongle</span>
+      <select id="hud-dongle-select">
+        <option value="">auto</option>
+      </select>
+    </label>
+    <div id="hud-dongle-msg" class="hud-dongle-msg"></div>
   </div>
 
   <!-- Network info modal: click a node → detail card (SSID, MAC, vendor,

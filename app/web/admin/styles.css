@@ -3049,6 +3049,72 @@ body { font-family: var(--font-sans); }
   cursor: pointer;
 }
 
+.wd-mask-edit {
+  font-size: 12px;
+  padding: 4px 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.wd-mask-edit:hover { color: var(--text-primary); background: var(--bg-elevated); }
+
+/* Manage masks (add/edit/delete) — collapsed by default, a catalog-upkeep
+   sub-section separate from the per-handshake launch flow (picker modal
+   below). */
+.wd-mask-manage {
+  margin-top: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  padding: 4px 14px;
+}
+.wd-mask-manage summary {
+  cursor: pointer;
+  padding: 10px 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  list-style: none;
+}
+.wd-mask-manage summary::-webkit-details-marker { display: none; }
+.wd-mask-manage summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 8px;
+  color: var(--text-secondary);
+  transition: transform 0.15s ease;
+}
+.wd-mask-manage[open] summary::before { transform: rotate(90deg); }
+.wd-mask-manage > *:not(summary) { padding-bottom: 14px; }
+
+/* Mask picker modal (row's "máscara…" button) */
+.wd-mask-picker-target {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.wd-mask-picker-target strong { color: var(--text-primary); }
+.wd-mask-picker-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+}
+.wd-mask-picker-launch {
+  font-size: 12px;
+  padding: 6px 12px;
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  width: 100%;
+}
+.wd-mask-picker-launch:hover { opacity: 0.9; }
+
 .wd-mask-stop,
 .wd-mask-clear {
   font-size: 11px;

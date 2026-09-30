@@ -22,7 +22,7 @@ import {
 } from "./types";
 import { registerShutdownHook } from "../device/display";
 import { unloadModel } from "../cloud-api/local/ollama-llm";
-import { crackCheck, resolveCapPath, DictCrack, MaskCrack, maskTotal, type CrackResult, type DictCrackState, type MaskRunState } from "./crack";
+import { crackCheck, resolveCapPath, DictCrack, MaskCrack, maskTotal, gzipLineCount, type CrackResult, type DictCrackState, type MaskRunState, type DictSource } from "./crack";
 import type { MaskPreset } from "./types";
 import { lookupVendorOrRandomAsync, macvendorsEnabled } from "../wifiradar/oui";
 import { demoTargetsWithPassword, DEMO_WD_TARGETS, type DemoWardriveTarget } from "./discovery";
@@ -128,6 +128,10 @@ export class WardriveService extends EventEmitter {
   // the Pi's CPU is precious and a second aircrack would just fight for it.
   private dictCrack: DictCrack | null = null;
   private dictCrackBssid: string | null = null;
+  // Which wordlist the running/last dict crack used — surfaced to the UI
+  // (Crack Station shows two buttons, "rockyou" and "weakpass") via
+  // dictCrackStatus().
+  private dictCrackWordlist: "rockyou" | "weakpass" | null = null;
   // Demo attack simulation: when source="demo", runTarget() doesn't touch
   // any radio — it walks the same step/progress pipeline with 3s pauses and
   // always produces a synthetic "handshake captured" (akbal_lab even
@@ -141,8 +145,18 @@ export class WardriveService extends EventEmitter {
     result: CrackResult | null;
   } | null = null;
   // rockyou on the device (~/wordlists/rockyou.txt) — overridable for tests.
+  // Kept as a plain decompressed file: small enough (~140MB) that there's
+  // no reason to stream it.
   private dictWordlist(): string {
     return process.env.WARDRIVE_WORDLIST || path.join(process.env.HOME || "/home/akbal", "wordlists", "rockyou.txt");
+  }
+
+  // weakpass_wifi_1 (~weakpass.com, WPA-length-filtered): too big to keep
+  // decompressed on the Pi's disk (10GB compressed, 30GB+ decompressed) —
+  // stored gzipped and streamed straight into aircrack-ng via `zcat | -w -`
+  // (see DictCrack's "gzip" source in crack.ts). Never decompressed to disk.
+  private weakpassWordlistGz(): string {
+    return process.env.WARDRIVE_WORDLIST_WEAKPASS || path.join(process.env.HOME || "/home/akbal", "wordlists", "weakpass_wifi_1.gz");
   }
 
   // ─── Crack Station (persistent sub-section) ────────────────────────────
@@ -261,6 +275,32 @@ export class WardriveService extends EventEmitter {
       autoMacSuffix: suffix,
     };
     this.maskPresets.push(preset);
+    this.saveMaskPresets();
+    return { ok: true, preset };
+  }
+
+  updateMaskPreset(
+    id: string,
+    raw: { name?: unknown; description?: unknown; pattern?: unknown; autoMacSuffix?: unknown },
+  ): { ok: boolean; error?: string; preset?: MaskPreset } {
+    this.loadMaskPresets();
+    if (id.startsWith("builtin-")) return { ok: false, error: "Los presets de fábrica no se pueden editar" };
+    const preset = this.maskPresets.find((m) => m.id === id);
+    if (!preset) return { ok: false, error: "Máscara no encontrada" };
+    const name = String(raw.name || "").trim();
+    const pattern = String(raw.pattern || "").trim();
+    if (!name) return { ok: false, error: "Nombre requerido" };
+    if (!pattern || !/^[@#a-zA-Z0-9]*$/.test(pattern)) {
+      return { ok: false, error: "Patrón vacío o con caracteres fuera de @, # y literales" };
+    }
+    const suffix = raw.autoMacSuffix === true;
+    if (suffix && !pattern.endsWith("@@@@")) {
+      return { ok: false, error: 'Con sufijo MAC, el patrón debe terminar en @@@@ (se reemplaza por los últimos 4 hex de la MAC al lanzar)' };
+    }
+    preset.name = name;
+    preset.pattern = pattern;
+    preset.description = String(raw.description || "").trim();
+    preset.autoMacSuffix = suffix;
     this.saveMaskPresets();
     return { ok: true, preset };
   }
@@ -618,13 +658,22 @@ export class WardriveService extends EventEmitter {
   // progress is polled by the UI via dictStatus(). `capPathOverride`
   // targets a PAST session's capture (the sessions browser's dict button);
   // the path must resolve inside the sessions root (traversal-safe).
-  async startDictCrack(bssidRaw: string, capPathOverride?: string): Promise<{ ok: boolean; error?: string }> {
+  // `wordlistChoice` picks rockyou (default — everything that predates
+  // Crack Station's second button keeps using this) or weakpass (the big
+  // gzip-streamed one, see weakpassWordlistGz()/DictCrack's "gzip" source).
+  async startDictCrack(
+    bssidRaw: string,
+    capPathOverride?: string,
+    wordlistChoice: "rockyou" | "weakpass" = "rockyou",
+  ): Promise<{ ok: boolean; error?: string }> {
     const bssid = WardriveService.clean(bssidRaw);
     if (!bssid) return { ok: false, error: "BSSID inválido" };
     // Demo: no aircrack, no .cap — the fake run walks rockyou numbers until
     // akbal_lab's (public, lab-only) password is "found". Demo sessions
     // (folder names starting "demo-") route here too: their .cap is a
     // synthetic marker file, running real aircrack on it would be pointless.
+    // The demo simulation is the same regardless of which button launched
+    // it — there's no real wordlist involved either way.
     const isDemoSession = Boolean(capPathOverride && /(^|\/|\\)demo-/.test(capPathOverride));
     if (this.source === "demo" || isDemoSession) {
       const demoTarget = DEMO_WD_TARGETS.find((t) => t.bssid === bssid);
@@ -635,6 +684,7 @@ export class WardriveService extends EventEmitter {
       const ownerDir = capPathOverride
         ? this.resolveSessionPath(path.dirname(capPathOverride))
         : undefined;
+      this.dictCrackWordlist = wordlistChoice;
       return this.startDictDemo(bssid, ownerDir || undefined);
     }
     if (this.dictCrack?.getState().running) {
@@ -655,12 +705,26 @@ export class WardriveService extends EventEmitter {
       capPath = resolveCapPath(this.session.dir, this.targetFiles(bssid));
       if (!capPath) return { ok: false, error: "El objetivo no tiene archivo .cap" };
     }
-    const wordlist = this.dictWordlist();
-    if (!fs.existsSync(wordlist)) {
-      return { ok: false, error: `Diccionario no encontrado: ${wordlist}` };
+    let source: DictSource;
+    let wordlistLabel: string;
+    if (wordlistChoice === "weakpass") {
+      const gz = this.weakpassWordlistGz();
+      if (!fs.existsSync(gz)) {
+        return { ok: false, error: `Wordlist weakpass no encontrada: ${gz}` };
+      }
+      source = { kind: "gzip", path: gz, knownTotal: null };
+      wordlistLabel = gz;
+    } else {
+      const wordlist = this.dictWordlist();
+      if (!fs.existsSync(wordlist)) {
+        return { ok: false, error: `Diccionario no encontrado: ${wordlist}` };
+      }
+      source = { kind: "file", path: wordlist };
+      wordlistLabel = wordlist;
     }
-    this.dictCrack = new DictCrack(capPath, bssid, wordlist);
+    this.dictCrack = new DictCrack(capPath, bssid, source);
     this.dictCrackBssid = bssid;
+    this.dictCrackWordlist = wordlistChoice;
     this.dictCrack.on("done", () => {
       const st = this.dictCrack?.getState();
       if (st?.result?.matched) {
@@ -686,7 +750,18 @@ export class WardriveService extends EventEmitter {
       this.broadcastStatus();
     });
     this.dictCrack.start();
-    this.appendLog(bssid, `[dict] aircrack started with ${wordlist}`);
+    this.appendLog(bssid, `[dict] aircrack started with ${wordlistLabel}`);
+    // Count the weakpass wordlist's lines in the background — first run
+    // ever (or after the .gz changes) takes minutes, every run after that
+    // is instant (cached, see gzipLineCount()). Never blocks the crack
+    // itself; if it resolves before the crack finishes, setKnownTotal()
+    // backfills a real percentage into the progress the UI is polling.
+    if (source.kind === "gzip") {
+      const dc = this.dictCrack;
+      void gzipLineCount(source.path).then((n) => {
+        if (n && dc === this.dictCrack) dc.setKnownTotal(n);
+      });
+    }
     return { ok: true };
   }
 
@@ -742,15 +817,17 @@ export class WardriveService extends EventEmitter {
     if (this.dictCrack?.getState().running) return { ok: false };
     this.dictCrack = null;
     this.dictCrackBssid = null;
+    this.dictCrackWordlist = null;
     return { ok: true };
   }
 
-  dictCrackStatus(): { bssid: string | null; state: DictCrackState | null } {
+  dictCrackStatus(): { bssid: string | null; state: DictCrackState | null; wordlist: "rockyou" | "weakpass" | null } {
     // Demo fake crack mirrors the real DictCrack state shape.
     if (this.demoDict) {
       const elapsed = this.demoDict.running ? 0 : 0;
       return {
         bssid: this.demoDict.bssid,
+        wordlist: this.dictCrackWordlist,
         state: {
           running: this.demoDict.running,
           progress: {
@@ -763,8 +840,8 @@ export class WardriveService extends EventEmitter {
         },
       };
     }
-    if (!this.dictCrack) return { bssid: null, state: null };
-    return { bssid: this.dictCrackBssid, state: this.dictCrack.getState() };
+    if (!this.dictCrack) return { bssid: null, state: null, wordlist: null };
+    return { bssid: this.dictCrackBssid, state: this.dictCrack.getState(), wordlist: this.dictCrackWordlist };
   }
 
   getSession(): WardriveSession | null {
@@ -2049,6 +2126,7 @@ export class WardriveService extends EventEmitter {
     this.dictCrack?.stop();
     this.dictCrack = null;
     this.dictCrackBssid = null;
+    this.dictCrackWordlist = null;
     // A mask run must not outlive the session either.
     this.stopMaskDemo();
     this.maskCrack?.stop();

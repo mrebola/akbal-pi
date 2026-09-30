@@ -1154,14 +1154,21 @@ export class WebAdminServer {
       ctx.body = await wardrive.validateHandshake(String(bssid || ""), String(password || ""));
     });
 
-    // Dictionary crack (rockyou) against a captured target — one at a time,
-    // progress polled via /dict-status, cancellable. Runs at low priority
-    // (nice +2 threads) so the Pi keeps responding while it runs.
+    // Dictionary crack against a captured target — one at a time, progress
+    // polled via /dict-status, cancellable. Runs at low priority (nice +2
+    // threads) so the Pi keeps responding while it runs. `wordlist` picks
+    // "rockyou" (default, plain file) or "weakpass" (big gzip wordlist,
+    // streamed via zcat — see DictCrack's "gzip" source in crack.ts);
+    // anything else falls back to rockyou.
     router.post("/api/wardrive/dict/start", async (ctx) => {
-      const { bssid, cap } = (ctx.request.body as any) || {};
+      const { bssid, cap, wordlist } = (ctx.request.body as any) || {};
       // `cap` targets a past session's capture (path relative to the
       // sessions root, traversal-checked in the service).
-      ctx.body = await wardrive.startDictCrack(String(bssid || ""), cap ? String(cap) : undefined);
+      ctx.body = await wardrive.startDictCrack(
+        String(bssid || ""),
+        cap ? String(cap) : undefined,
+        wordlist === "weakpass" ? "weakpass" : "rockyou",
+      );
     });
 
     router.post("/api/wardrive/dict/stop", (ctx) => {
@@ -1212,8 +1219,9 @@ export class WebAdminServer {
       ctx.body = wardrive.clearMaskRun();
     });
 
-    // Mask recipe CRUD: list (with built-ins), add (persisted to
-    // ~/wardrive-sessions/crack-station.json), remove (builtins refused).
+    // Mask recipe CRUD: list (with built-ins), add/edit (persisted to
+    // ~/wardrive-sessions/crack-station.json), remove (builtins refused
+    // for edit and remove alike).
     router.get("/api/wardrive/mask/presets", (ctx) => {
       ctx.body = { ok: true, presets: wardrive.listMaskPresets() };
     });
@@ -1221,6 +1229,16 @@ export class WebAdminServer {
     router.post("/api/wardrive/mask/presets", (ctx) => {
       const { name, description, pattern, autoMacSuffix } = (ctx.request.body as any) || {};
       ctx.body = wardrive.addMaskPreset({
+        name,
+        description,
+        pattern,
+        autoMacSuffix,
+      } as any);
+    });
+
+    router.post("/api/wardrive/mask/presets/update", (ctx) => {
+      const { id, name, description, pattern, autoMacSuffix } = (ctx.request.body as any) || {};
+      ctx.body = wardrive.updateMaskPreset(String(id || ""), {
         name,
         description,
         pattern,

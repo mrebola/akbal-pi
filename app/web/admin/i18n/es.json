@@ -150,12 +150,19 @@
     "map_title": "Ubicación de la captura",
     "dict_title": "ATAQUE DE DICCIONARIO (ROCKYOU)",
     "mask_title": "ATAQUE DE FUERZA BRUTA (MÁSCARA)",
+    "mask_manage_title": "Administrar máscaras (agregar, editar, borrar)",
     "mask_new_title": "+ NUEVA MÁSCARA",
+    "mask_edit_title": "EDITAR MÁSCARA",
     "mask_form_name": "Nombre",
     "mask_form_pattern": "Patrón",
     "mask_form_mac": "Sufijo MAC (añade los últimos 4 hex del BSSID al lanzar)",
     "mask_form_desc": "Descripción (a qué equipos aplica y cómo se construye la contraseña)",
-    "mask_form_save": "Guardar máscara"
+    "mask_form_save": "Guardar máscara",
+    "mask_form_save_edit": "Guardar cambios",
+    "mask_form_cancel": "Cancelar edición",
+    "mask_picker_title": "Elegir máscara",
+    "mask_picker_launch": "Lanzar contra este handshake",
+    "mask_picker_empty": "No hay máscaras guardadas — creá una en \"Administrar máscaras\"."
   },
   "settings": {
     "title": "Configuración",

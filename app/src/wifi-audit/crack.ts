@@ -429,9 +429,22 @@ export type DictCrackState = {
   result: CrackResult | null;
 };
 
+// Where the candidate passwords come from: a plain file aircrack-ng opens
+// itself (rockyou — small enough to keep decompressed, and aircrack can
+// pre-scan it for a total), or a gzip wordlist too big to decompress to
+// disk (weakpass) — streamed straight into aircrack's stdin via `zcat`, so
+// only the compressed .gz ever touches disk. `knownTotal`, when known
+// (see gzipLineCount below), lets the UI still show a real percentage even
+// though aircrack itself can't pre-scan a pipe.
+export type DictSource =
+  | { kind: "file"; path: string }
+  | { kind: "gzip"; path: string; knownTotal: number | null };
+
 export class DictCrack extends EventEmitter {
-  private proc: any = null; // ChildProcess
+  private proc: any = null; // ChildProcess (aircrack-ng)
+  private zcatProc: any = null; // ChildProcess (zcat, gzip source only)
   private running = false;
+  private knownTotal: number | null;
   private state: DictCrackState = {
     running: false,
     progress: { tried: 0, total: 0, fps: 0, elapsedSec: 0 },
@@ -441,13 +454,23 @@ export class DictCrack extends EventEmitter {
   constructor(
     private capPath: string,
     private bssid: string,
-    private wordlist: string,
+    private source: DictSource,
   ) {
     super();
+    this.knownTotal = this.source.kind === "gzip" ? this.source.knownTotal : null;
   }
 
   getState(): DictCrackState {
     return { ...this.state, progress: { ...this.state.progress } };
+  }
+
+  // Backfills the total once gzipLineCount() resolves (it's kicked off in
+  // parallel with start(), never blocking the crack launch on it — counting
+  // a multi-GB wordlist can take minutes on first run). Only takes effect
+  // if aircrack's own progress lines haven't already reported one.
+  setKnownTotal(n: number): void {
+    this.knownTotal = n;
+    if (!this.state.progress.total) this.state.progress.total = n;
   }
 
   start(): void {
@@ -455,13 +478,30 @@ export class DictCrack extends EventEmitter {
     this.running = true;
     this.state = {
       running: true,
-      progress: { tried: 0, total: 0, fps: 0, elapsedSec: 0 },
+      progress: { tried: 0, total: this.knownTotal || 0, fps: 0, elapsedSec: 0 },
       result: null,
     };
     const startedAt = Date.now();
-    const child = spawn("aircrack-ng", ["-w", this.wordlist, "-b", this.bssid, "-p", "2", this.capPath], {
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    let child: any;
+    if (this.source.kind === "gzip") {
+      // zcat's stdout feeds aircrack's stdin directly (Node-level pipe, no
+      // shell) — the decompressed wordlist never exists as a file, only as
+      // bytes in flight between the two processes.
+      const zcat = spawn("zcat", [this.source.path], { stdio: ["ignore", "pipe", "ignore"] });
+      this.zcatProc = zcat;
+      child = spawn("aircrack-ng", ["-w", "-", "-b", this.bssid, "-p", "2", this.capPath], {
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      zcat.stdout?.pipe(child.stdin);
+      zcat.on("error", () => {
+        // aircrack just sees stdin close early and reports "exhausted" —
+        // dictExhausted()/close handler below cover that case already.
+      });
+    } else {
+      child = spawn("aircrack-ng", ["-w", this.source.path, "-b", this.bssid, "-p", "2", this.capPath], {
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    }
     this.proc = child;
     let out = "";
     child.stdout?.on("data", (chunk: Buffer) => {
@@ -471,16 +511,22 @@ export class DictCrack extends EventEmitter {
     child.stderr?.on("data", (chunk: Buffer) => {
       out += chunk.toString("utf8");
     });
-    child.on("error", (err) => {
+    child.on("error", (err: any) => {
       this.running = false;
       this.state.running = false;
       this.state.result = { verdict: "error", matched: false, eapolPackets: 0, handshakeHint: false, output: `aircrack-ng: ${err?.message || err}` };
       this.emit("done", this.state);
     });
-    child.on("close", (code) => {
+    child.on("close", (code: number | null) => {
       this.running = false;
       this.state.running = false;
       this.state.progress.elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+      try {
+        this.zcatProc?.kill("SIGKILL");
+      } catch {
+        /* already gone */
+      }
+      this.zcatProc = null;
       const parsed = parseAircrackOutput(out);
       if (parsed.found) {
         this.state.result = {
@@ -520,6 +566,13 @@ export class DictCrack extends EventEmitter {
   }
 
   stop(): void {
+    if (this.zcatProc?.pid) {
+      try {
+        this.zcatProc.kill("SIGTERM");
+      } catch {
+        /* already gone */
+      }
+    }
     if (this.proc?.pid) {
       try {
         this.proc.kill("SIGTERM");
@@ -531,15 +584,20 @@ export class DictCrack extends EventEmitter {
 
   // aircrack progress lines look like:
   //   "[00:00:02] 1234/14344391 keys tested (12.34 fps)"
-  // or the PROGRESS: variant. Grab the LAST match.
+  // when it read the wordlist from a real file (it pre-scans it for the
+  // total) — but fed via stdin (gzip source) it can't know a total in
+  // advance, so the line drops the "/total" part entirely:
+  //   "[00:00:02] 1234 keys tested (12.34 fps)"
+  // The "/(\d+)" group is optional to cover both; when it's missing, fall
+  // back to knownTotal (gzipLineCount()'s cached count, if it's in yet).
   private parseProgress(text: string, startedAt: number): void {
-    const matches = [...text.matchAll(/\[(\d+):(\d+):(\d+)\]\s+(\d+)\/(\d+)\s+keys tested.*?\(([\d.]+)\s*fps\)/g)];
+    const matches = [...text.matchAll(/\[(\d+):(\d+):(\d+)\]\s+(\d+)(?:\/(\d+))?\s+keys tested.*?\(([\d.]+)\s*fps\)/g)];
     if (matches.length > 0) {
       const m = matches[matches.length - 1];
       const elapsed = parseInt(m[1], 10) * 3600 + parseInt(m[2], 10) * 60 + parseInt(m[3], 10);
       this.state.progress = {
         tried: parseInt(m[4], 10),
-        total: parseInt(m[5], 10),
+        total: m[5] ? parseInt(m[5], 10) : this.knownTotal || 0,
         fps: parseFloat(m[6]),
         elapsedSec: elapsed,
       };
@@ -547,4 +605,51 @@ export class DictCrack extends EventEmitter {
       this.state.progress.elapsedSec = Math.round((Date.now() - startedAt) / 1000);
     }
   }
+}
+
+// Counting a multi-GB gzip wordlist's lines costs real time (a full
+// decompress-and-scan pass — minutes on a Pi for a 10GB .gz) so it's
+// cached next to the .gz, fingerprinted by that file's size: a changed
+// size invalidates the cache and forces a recount, a same-size file never
+// recounts. Returns null if the .gz doesn't exist or counting fails —
+// callers treat that as "no known total yet", not an error (the crack
+// still runs fine, the UI just can't show a percentage for it).
+export async function gzipLineCount(gzPath: string): Promise<number | null> {
+  const cacheFile = `${gzPath}.linecount`;
+  let gzSize: number;
+  try {
+    gzSize = (await fs.promises.stat(gzPath)).size;
+  } catch {
+    return null;
+  }
+  try {
+    const cached = await fs.promises.readFile(cacheFile, "utf8");
+    const [cachedCount, cachedSize] = cached.trim().split(":");
+    const n = parseInt(cachedCount, 10);
+    if (Number.isFinite(n) && n > 0 && Number(cachedSize) === gzSize) return n;
+  } catch {
+    /* no cache yet, or unreadable — count it below */
+  }
+  return new Promise((resolve) => {
+    const zcat = spawn("zcat", [gzPath], { stdio: ["ignore", "pipe", "ignore"] });
+    const wc = spawn("wc", ["-l"], { stdio: ["pipe", "pipe", "ignore"] });
+    zcat.stdout?.pipe(wc.stdin);
+    let out = "";
+    wc.stdout?.on("data", (chunk: Buffer) => {
+      out += chunk.toString("utf8");
+    });
+    const finish = async (n: number | null) => {
+      if (n && Number.isFinite(n) && n > 0) {
+        try {
+          await fs.promises.writeFile(cacheFile, `${n}:${gzSize}`);
+        } catch {
+          /* cache write failure is non-fatal — just recounts next time */
+        }
+      }
+      resolve(n && Number.isFinite(n) && n > 0 ? n : null);
+    };
+    wc.on("close", () => finish(parseInt(out.trim(), 10)));
+    wc.on("error", () => finish(null));
+    zcat.on("error", () => finish(null));
+  });
 }

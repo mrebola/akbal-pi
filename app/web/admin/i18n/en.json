@@ -150,12 +150,19 @@
     "map_title": "Capture location",
     "dict_title": "DICTIONARY ATTACK (ROCKYOU)",
     "mask_title": "BRUTE-FORCE ATTACK (MASK)",
+    "mask_manage_title": "Manage masks (add, edit, delete)",
     "mask_new_title": "+ NEW MASK",
+    "mask_edit_title": "EDIT MASK",
     "mask_form_name": "Name",
     "mask_form_pattern": "Pattern",
     "mask_form_mac": "MAC suffix (appends BSSID's last-4 hex on launch)",
     "mask_form_desc": "Description (which equipment it applies to and how the password is built)",
-    "mask_form_save": "Save mask"
+    "mask_form_save": "Save mask",
+    "mask_form_save_edit": "Save changes",
+    "mask_form_cancel": "Cancel edit",
+    "mask_picker_title": "Choose a mask",
+    "mask_picker_launch": "Launch against this handshake",
+    "mask_picker_empty": "No saved masks yet — create one in \"Manage masks\"."
   },
   "settings": {
     "title": "Settings",

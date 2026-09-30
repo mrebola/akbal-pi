@@ -97,37 +97,71 @@
           <div class="wd-mask-run" id="wd-dict-run"></div>
         </div>
 
-        <!-- Mask brute-force: preset picker + custom recipe editor -->
+        <!-- Mask brute-force: running-attack progress stays at top level —
+             launching happens from a row's "máscara…" button (opens the
+             picker modal below), never from here. -->
         <div class="wd-session-title" style="margin-top:16px;" data-i18n="crackstation.mask_title">ATAQUE DE FUERZA BRUTA (MÁSCARA)</div>
         <div class="wd-mask-panel" id="wd-mask-panel">
           <div class="wd-mask-run-status" id="wd-mask-run-status"></div>
           <div class="wd-mask-run" id="wd-mask-run"></div>
         </div>
-        <div class="wd-mask-presets" id="wd-mask-presets"></div>
 
-        <!-- New mask recipe form -->
-        <div class="wd-mask-new" id="wd-mask-new">
-          <div class="wd-session-title" style="font-size:12px; margin-top:14px;" data-i18n="crackstation.mask_new_title">+ NUEVA MÁSCARA</div>
-          <div class="wd-mask-form">
-            <label><span data-i18n="crackstation.mask_form_name">Nombre</span>
-              <input id="wd-mask-name" type="text" autocomplete="off" placeholder="p.ej. Tenda por defecto" />
-            </label>
-            <label><span data-i18n="crackstation.mask_form_pattern">Patrón</span>
-              <input id="wd-mask-pattern" type="text" autocomplete="off" placeholder="@@@@  (@=dígito, #=minúscula)" />
-            </label>
-            <label class="wd-mask-check"><input id="wd-mask-mac" type="checkbox" />
-              <span data-i18n="crackstation.mask_form_mac">Sufijo MAC (añade los últimos 4 hex del BSSID al lanzar)</span>
-            </label>
-            <label class="wd-mask-desc"><span data-i18n="crackstation.mask_form_desc">Descripción (a qué equipos aplica y cómo se construye la contraseña)</span>
-              <textarea id="wd-mask-description" rows="3" placeholder="p.ej. Módems AXTEL XTREMO: 4 dígitos aleatorios + últimos 4 de la MAC..."></textarea>
-            </label>
-            <button id="wd-mask-save" data-i18n="crackstation.mask_form_save">Guardar máscara</button>
+        <!-- Manage masks (add/edit/delete) — tucked into its own collapsed
+             sub-section so it doesn't compete with the table for attention;
+             it's catalog upkeep, not something done per-handshake. -->
+        <details class="wd-mask-manage" id="wd-mask-manage">
+          <summary data-i18n="crackstation.mask_manage_title">Administrar máscaras (agregar, editar, borrar)</summary>
+          <div class="wd-mask-presets" id="wd-mask-presets"></div>
+
+          <!-- New/edit mask recipe form — the same form serves both:
+               wd-mask-edit-id holds a preset id while editing, empty while
+               creating a new one. -->
+          <div class="wd-mask-new" id="wd-mask-new">
+            <div class="wd-session-title" style="font-size:12px; margin-top:14px;" id="wd-mask-form-title" data-i18n="crackstation.mask_new_title">+ NUEVA MÁSCARA</div>
+            <div class="wd-mask-form">
+              <input type="hidden" id="wd-mask-edit-id" value="" />
+              <label><span data-i18n="crackstation.mask_form_name">Nombre</span>
+                <input id="wd-mask-name" type="text" autocomplete="off" placeholder="p.ej. Tenda por defecto" />
+              </label>
+              <label><span data-i18n="crackstation.mask_form_pattern">Patrón</span>
+                <input id="wd-mask-pattern" type="text" autocomplete="off" placeholder="@@@@  (@=dígito, #=minúscula)" />
+              </label>
+              <label class="wd-mask-check"><input id="wd-mask-mac" type="checkbox" />
+                <span data-i18n="crackstation.mask_form_mac">Sufijo MAC (añade los últimos 4 hex del BSSID al lanzar)</span>
+              </label>
+              <label class="wd-mask-desc"><span data-i18n="crackstation.mask_form_desc">Descripción (a qué equipos aplica y cómo se construye la contraseña)</span>
+                <textarea id="wd-mask-description" rows="3" placeholder="p.ej. Módems AXTEL XTREMO: 4 dígitos aleatorios + últimos 4 de la MAC..."></textarea>
+              </label>
+              <div style="display:flex; gap:8px;">
+                <button id="wd-mask-save" data-i18n="crackstation.mask_form_save">Guardar máscara</button>
+                <button id="wd-mask-cancel-edit" class="secondary hidden" data-i18n="crackstation.mask_form_cancel">Cancelar edición</button>
+              </div>
+            </div>
+            <div id="wd-mask-msg" class="muted" style="font-size:11px; margin-top:6px;"></div>
           </div>
-          <div id="wd-mask-msg" class="muted" style="font-size:11px; margin-top:6px;"></div>
-        </div>
+        </details>
       </div>
     </section>
   </main>
+
+  <!-- Mask picker: opened from a row's "máscara…" button — shows SSID +
+       MAC and every available mask; picking one launches it immediately
+       against that handshake (no retyping the BSSID). -->
+  <div id="wd-mask-picker-modal" class="wd-modal hidden">
+    <div class="wd-modal-backdrop" onclick="document.getElementById('wd-mask-picker-modal').classList.add('hidden')"></div>
+    <div class="wd-modal-content">
+      <div class="wd-modal-header">
+        <span data-i18n="crackstation.mask_picker_title">Elegir máscara</span>
+        <div class="wd-modal-actions">
+          <button id="wd-mask-picker-close" class="secondary" data-i18n="crackstation.files_close">Cerrar</button>
+        </div>
+      </div>
+      <div style="padding: 10px 16px; overflow: auto;">
+        <div class="wd-mask-picker-target" id="wd-mask-picker-target"></div>
+        <div class="wd-mask-picker-list" id="wd-mask-picker-list"></div>
+      </div>
+    </div>
+  </div>
 
   <!-- Files modal: one handshake's session folder (Wifi Audit dated folder
        OR Wardrive's drive-* folder — same backend endpoints, same

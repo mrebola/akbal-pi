@@ -325,6 +325,14 @@ export class MaskCrack extends EventEmitter {
       stdio: ["pipe", "pipe", "pipe"],
     });
     this.proc = child;
+    // aircrack-ng closes its stdin as soon as it finds the key — without
+    // this, writeChunk()'s next write() into that now-closed pipe throws
+    // an UNHANDLED 'error' (EPIPE) on child.stdin that crashes the whole
+    // Node process (found while adding the same stdin-feeding pattern to
+    // DictCrack below and testing a fast match against it).
+    child.stdin?.on("error", () => {
+      /* aircrack is done reading candidates — nothing to do here */
+    });
     let out = "";
     // Pipe candidates in bounded batches so we can parse progress between
     // writes and cancel stays responsive (no multi-GB stdin buffering).
@@ -490,10 +498,18 @@ export class DictCrack extends EventEmitter {
     };
     const startedAt = Date.now();
     // `cat` for a plain file, `zcat` for gzip — otherwise identical: its
-    // stdout feeds aircrack's stdin directly (Node-level pipe, no shell),
-    // and we count newlines as they flow through to measure progress
-    // ourselves. `.pipe()` applies Node's normal backpressure, so "fed"
-    // never runs far ahead of what aircrack has actually consumed.
+    // stdout feeds aircrack's stdin directly (Node-level pipe, no shell).
+    // Progress is NOT measured from this side of the pipe — tried that
+    // first (counting lines fed in) and it's actively misleading: the OS
+    // pipe buffer fills almost instantly (tens of thousands of lines) far
+    // faster than aircrack's real testing rate, so "fed" looks like it
+    // instantly jumps ahead and then sits frozen while aircrack slowly
+    // drains what's already buffered — the exact "stuck" symptom this was
+    // supposed to fix, just at a different number. Progress instead comes
+    // from aircrack's OWN stdout (parseProgress below) — confirmed by
+    // direct testing to actually stream incrementally once stdin is a
+    // pipe (the earlier "stuck at 0" bug was a plain regex mismatch: real
+    // output says "139.83 k/s", the old pattern only matched "fps").
     const feeder = spawn(this.source.kind === "gzip" ? "zcat" : "cat", [this.source.path], {
       stdio: ["ignore", "pipe", "ignore"],
     });
@@ -501,26 +517,24 @@ export class DictCrack extends EventEmitter {
     const child = spawn("aircrack-ng", ["-w", "-", "-b", this.bssid, "-p", "2", this.capPath], {
       stdio: ["pipe", "pipe", "pipe"],
     });
-    let fedLines = 0;
-    feeder.stdout?.on("data", (chunk: Buffer) => {
-      for (let i = 0; i < chunk.length; i++) if (chunk[i] === 10) fedLines++;
-      const elapsedSec = (Date.now() - startedAt) / 1000;
-      this.state.progress = {
-        tried: fedLines,
-        total: this.knownTotal || 0,
-        fps: elapsedSec > 0 ? fedLines / elapsedSec : 0,
-        elapsedSec: Math.round(elapsedSec),
-      };
-    });
     feeder.stdout?.pipe(child.stdin);
     feeder.on("error", () => {
       // aircrack just sees stdin close early and reports "exhausted" —
       // dictExhausted()/close handler below cover that case already.
     });
+    // aircrack-ng closes its stdin as soon as it finds the key (or exits
+    // for any other reason) — without this, the feeder writing into that
+    // now-closed pipe throws an UNHANDLED 'error' (EPIPE) on child.stdin
+    // that crashes the whole Node process, not just this crack. Found by
+    // testing this exact scenario (a fast match) before shipping it.
+    child.stdin?.on("error", () => {
+      /* aircrack is done reading candidates — nothing to do here */
+    });
     this.proc = child;
     let out = "";
     child.stdout?.on("data", (chunk: Buffer) => {
       out += chunk.toString("utf8");
+      this.parseProgress(out, startedAt);
     });
     child.stderr?.on("data", (chunk: Buffer) => {
       out += chunk.toString("utf8");
@@ -593,6 +607,34 @@ export class DictCrack extends EventEmitter {
       } catch {
         /* already gone */
       }
+    }
+  }
+
+  // aircrack's own progress line, confirmed by direct testing to arrive
+  // incrementally (several distinct snapshots over a 15s run, not one
+  // blob at the end):
+  //   "[00:00:14] 1958 keys tested (139.83 k/s)"
+  // The rate's unit scales with magnitude (plain /s, k/s, or M/s for a
+  // very fast match) — the earlier version of this only matched a
+  // hardcoded "fps" suffix that real aircrack-ng 1.7 output never
+  // actually uses, which is why progress never moved at all, on EITHER
+  // wordlist, regardless of file-vs-stdin. Total comes from knownTotal
+  // (wordlistLineCount()) — aircrack can't pre-scan a pipe for one.
+  private parseProgress(text: string, startedAt: number): void {
+    const matches = [...text.matchAll(/\[(\d+):(\d+):(\d+)\]\s+(\d+)\s+keys tested\s*\(([\d.]+)\s*([kKmM]?)\/s\)/g)];
+    if (matches.length > 0) {
+      const m = matches[matches.length - 1];
+      const elapsed = parseInt(m[1], 10) * 3600 + parseInt(m[2], 10) * 60 + parseInt(m[3], 10);
+      const unit = m[6].toLowerCase();
+      const scale = unit === "k" ? 1_000 : unit === "m" ? 1_000_000 : 1;
+      this.state.progress = {
+        tried: parseInt(m[4], 10),
+        total: this.knownTotal || 0,
+        fps: parseFloat(m[5]) * scale,
+        elapsedSec: elapsed,
+      };
+    } else {
+      this.state.progress.elapsedSec = Math.round((Date.now() - startedAt) / 1000);
     }
   }
 }

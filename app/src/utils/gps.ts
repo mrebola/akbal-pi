@@ -620,7 +620,15 @@ class ReverseGeocoder {
   }
 }
 
+// Shared across every caller of nominatimAddress (the live GPS geocoder
+// below AND geocodePoint()'s one-off lookups) — the 1 req/s Nominatim
+// policy is a single process-wide budget, not one per caller.
+let lastNominatimAt = 0;
+
 async function nominatimAddress(lat: number, lon: number): Promise<string | null> {
+  const wait = GEO_MIN_INTERVAL_MS - (Date.now() - lastNominatimAt);
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  lastNominatimAt = Date.now();
   const url =
     `https://nominatim.openstreetmap.org/reverse?lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}` +
     `&format=jsonv2&zoom=18&addressdetails=1&accept-language=es`;
@@ -655,6 +663,31 @@ function composeAddress(data: any): string | null {
   if (a.country) parts.push(a.country);
   const composed = parts.filter(Boolean).join(", ");
   return composed || data?.display_name || null;
+}
+
+// ─── One-off reverse geocode (Crack Station: "where was this handshake
+// captured?") ────────────────────────────────────────────────────────────
+// Same Nominatim call + address format as the live GPS page, but for an
+// arbitrary past point instead of the live fix — no proximity/speed logic
+// needed (a captured point never moves), just a cache so reopening the
+// same handshake's map modal costs zero extra requests. Shares
+// nominatimAddress()'s throttle, so it can never violate Nominatim's
+// 1 req/s policy no matter how many callers exist.
+const geocodeCache = new Map<string, string | null>(); // "lat,lon" (5dp) -> address
+
+export async function geocodePoint(lat: number, lon: number): Promise<string | null> {
+  const key = `${lat.toFixed(5)},${lon.toFixed(5)}`;
+  if (geocodeCache.has(key)) return geocodeCache.get(key)!;
+  let address: string | null = null;
+  try {
+    address = await nominatimAddress(lat, lon);
+  } catch {
+    address = null;
+  }
+  // Only cache a successful lookup — a transient network hiccup shouldn't
+  // stick as "no address" forever for that coordinate.
+  if (address !== null) geocodeCache.set(key, address);
+  return address;
 }
 
 function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {

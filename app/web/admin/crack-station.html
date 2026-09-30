@@ -174,20 +174,22 @@
   <!-- Files modal: one handshake's session folder (Wifi Audit dated folder
        OR Wardrive's drive-* folder — same backend endpoints, same
        ~/wardrive-sessions root, see /api/wardrive/files in
-       web-admin-server.ts). -->
+       web-admin-server.ts). Handshake captures (.cap/.pcapng/.hc22000) are
+       grouped above everything else. -->
   <div id="wd-crack-files-modal" class="wd-modal hidden">
     <div class="wd-modal-backdrop" onclick="document.getElementById('wd-crack-files-modal').classList.add('hidden')"></div>
     <div class="wd-modal-content">
       <div class="wd-modal-header">
         <span id="wd-crack-files-title" data-i18n="crackstation.files_title">Archivos</span>
         <div class="wd-modal-actions">
+          <button id="wd-crack-files-delete-session" class="wd-danger" data-i18n="crackstation.files_delete_session">Borrar sesión completa</button>
           <button id="wd-crack-files-close" class="secondary" data-i18n="crackstation.files_close">Cerrar</button>
         </div>
       </div>
       <div style="overflow: auto; padding: 4px;">
         <table class="wd-table">
           <thead>
-            <tr><th data-i18n="crackstation.col_file">Archivo</th><th data-i18n="crackstation.col_size">Tamaño</th><th></th><th></th></tr>
+            <tr><th data-i18n="crackstation.col_file">Archivo</th><th data-i18n="crackstation.col_size">Tamaño</th><th></th><th></th><th></th></tr>
           </thead>
           <tbody id="wd-crack-files-body"></tbody>
         </table>
@@ -201,12 +203,34 @@
     <div class="wd-modal-backdrop" onclick="document.getElementById('wd-crack-map-modal').classList.add('hidden')"></div>
     <div class="wd-modal-content" style="max-width: 640px;">
       <div class="wd-modal-header">
-        <span id="wd-crack-map-title" data-i18n="crackstation.map_title">Ubicación de la captura</span>
+        <div class="wd-crack-map-heading">
+          <div id="wd-crack-map-title" class="wd-crack-map-title">—</div>
+          <div id="wd-crack-map-address" class="wd-crack-map-address muted">—</div>
+        </div>
         <div class="wd-modal-actions">
           <button id="wd-crack-map-close" class="secondary" data-i18n="crackstation.files_close">Cerrar</button>
         </div>
       </div>
       <div id="wd-crack-map" class="wd-crack-map"></div>
+    </div>
+  </div>
+
+  <!-- Generic delete confirmation — shared by "borrar archivo" and "borrar
+       sesión completa" (the message + confirm action are filled in by JS
+       per use, see wdConfirmDelete()). -->
+  <div id="wd-confirm-modal" class="wd-modal hidden">
+    <div class="wd-modal-backdrop" onclick="document.getElementById('wd-confirm-modal').classList.add('hidden')"></div>
+    <div class="wd-modal-content" style="max-width: 420px;">
+      <div class="wd-modal-header">
+        <span data-i18n="crackstation.confirm_delete_title">Confirmar borrado</span>
+        <div class="wd-modal-actions">
+          <button id="wd-confirm-cancel" class="secondary" data-i18n="crackstation.confirm_cancel">Cancelar</button>
+        </div>
+      </div>
+      <div style="padding: 16px 20px;">
+        <p id="wd-confirm-message" style="font-size: 13px; line-height: 1.6; margin: 0 0 14px;"></p>
+        <button id="wd-confirm-ok" class="wd-danger" style="width: 100%;" data-i18n="crackstation.confirm_delete_ok">Borrar</button>
+      </div>
     </div>
   </div>
 

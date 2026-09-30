@@ -92,7 +92,7 @@ import {
   listUsbWifiAdapters,
   resolveFilePath,
 } from "../utils/usb";
-import { getGpsStatus } from "../utils/gps";
+import { getGpsStatus, geocodePoint } from "../utils/gps";
 import { getGnssSnapshot, getGnssHistory } from "../services/gnss/service";
 import { setPlatformMode, getPlatformMode } from "../utils/platform-mode";
 
@@ -1192,6 +1192,22 @@ export class WebAdminServer {
     // /api/wardrive/files for that (works for either source, same root).
     router.get("/api/wardrive/handshakes", (ctx) => {
       ctx.body = { ok: true, ...wardrive.handshakeInventory() };
+    });
+
+    // Reverse geocode for Crack Station's capture-location map modal (where
+    // was this handshake taken — street, colonia, ciudad, CP). Cached and
+    // throttled in geocodePoint() itself (shares the same Nominatim 1 req/s
+    // budget as the live GPS page), so this is safe to call freely.
+    router.get("/api/wardrive/geocode", async (ctx) => {
+      const lat = parseFloat(String(ctx.query.lat || ""));
+      const lon = parseFloat(String(ctx.query.lon || ""));
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "lat/lon inválidos" };
+        return;
+      }
+      const address = await geocodePoint(lat, lon);
+      ctx.body = { ok: true, address };
     });
 
     // Mask brute force (Crack Station): built-in + operator presets, run

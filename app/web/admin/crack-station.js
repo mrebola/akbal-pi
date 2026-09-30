@@ -240,23 +240,27 @@ function wdRenderCrackStation() {
   body.innerHTML = items
     .map((it) => {
       const capPath = capOf(it);
-      const crackButtons = [];
-      if (!it.password) {
-        crackButtons.push(
+      // While THIS handshake's own dict attack is running, its Ataques
+      // cell shows a live 0-100% bar instead of the attack buttons — the
+      // exact item doing the work is the one that visibly shows it.
+      const runningHere = wdDictSync?.running && wdDictBssid === it.bssid;
+      let actionsHtml;
+      if (it.password) {
+        actionsHtml = '<span class="muted">✓</span>';
+      } else if (runningHere) {
+        actionsHtml = wdRowInlineProgressHtml();
+      } else {
+        actionsHtml = [
           `<button class="wd-crack-dict" data-wordlist="rockyou" data-bssid="${it.bssid}" data-cap="${escapeHtml(capPath)}" data-session="${it.sessionId}"
              title="Ataque de diccionario contra este handshake — rockyou.txt (~14M claves)">rockyou</button>`,
-        );
-        crackButtons.push(
           `<button class="wd-crack-dict" data-wordlist="weakpass" data-bssid="${it.bssid}" data-cap="${escapeHtml(capPath)}" data-session="${it.sessionId}"
              title="Ataque de diccionario contra este handshake — weakpass_wifi_1 (wordlist grande, streameada desde el .gz)">weakpass</button>`,
-        );
-        crackButtons.push(
           `<button class="wd-crack-mask" data-bssid="${it.bssid}" data-ssid="${escapeHtml(it.ssid || "")}"
              data-cap="${escapeHtml(capPath)}" title="Fuerza bruta con máscara (p.ej. @@@@+MAC)">máscara…</button>`,
-        );
+        ].join("");
       }
       const gps = it.lat != null && it.lon != null
-        ? `<button class="wd-gps-btn" data-lat="${it.lat}" data-lon="${it.lon}" data-ssid="${escapeHtml(it.ssid || it.bssid)}"
+        ? `<button class="wd-gps-btn" data-lat="${it.lat}" data-lon="${it.lon}" data-ssid="${escapeHtml(it.ssid || it.bssid)}" data-bssid="${it.bssid}"
              title="Ver en el mapa">📍 ${it.lat.toFixed(4)}, ${it.lon.toFixed(4)}</button>`
         : "—";
       const rowClass = it.bssid === wdHighlightBssid ? "wd-crack-row-highlight" : "";
@@ -269,8 +273,8 @@ function wdRenderCrackStation() {
         <td>${gps}</td>
         <td>${it.hasHandshake ? '<span class="wd-verify-badge ok">✓ .cap</span>' : "—"}</td>
         <td>${it.password ? `<span class="wd-verify-badge ok" style="max-width:180px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(it.password)}</span>` : "—"}</td>
-        <td><div class="wd-action-group">${it.password ? '<span class="muted">✓</span>' : crackButtons.join("")}</div></td>
-        <td><button class="wd-crack-files-btn" data-session="${escapeHtml(it.sessionId)}" data-ssid="${escapeHtml(it.ssid || "")}" data-bssid="${it.bssid}">${escapeHtml(t("crackstation.files_btn", "Ver archivos"))}</button></td>
+        <td><div class="wd-action-group">${actionsHtml}</div></td>
+        <td><button class="wd-crack-files-btn" data-session="${escapeHtml(it.sessionId)}" data-ssid="${escapeHtml(it.ssid || "")}" data-bssid="${it.bssid}" data-source="${it.source}">${escapeHtml(t("crackstation.files_btn", "Ver archivos"))}</button></td>
       </tr>`;
     })
     .join("");
@@ -287,37 +291,121 @@ function wdRenderCrackStation() {
 // in a modal (not inline in the page flow) so it doesn't push the table
 // and mask panel down every time it's opened. ----
 
-async function wdOpenCrackFiles(sessionId, ssid, bssid) {
-  const modal = el("wd-crack-files-modal");
-  const filesTitle = el("wd-crack-files-title");
+// ---- Generic delete confirmation — shared by "borrar archivo" and
+// "borrar sesión completa". The confirm button is cloned on each call to
+// drop the previous listener instead of stacking a new one every time
+// (this one modal is reused for every delete in the page). ----
+
+function wdConfirmDelete(message, onConfirm) {
+  const modal = el("wd-confirm-modal");
+  const msgEl = el("wd-confirm-message");
+  const okBtn = el("wd-confirm-ok");
+  if (!modal || !msgEl || !okBtn) return;
+  msgEl.textContent = message;
+  const freshOk = okBtn.cloneNode(true);
+  okBtn.replaceWith(freshOk);
+  freshOk.addEventListener("click", async () => {
+    modal.classList.add("hidden");
+    await onConfirm();
+  }, { once: true });
+  modal.classList.remove("hidden");
+}
+
+el("wd-confirm-cancel")?.addEventListener("click", () => {
+  el("wd-confirm-modal")?.classList.add("hidden");
+});
+
+// ---- Files modal ----
+
+let wdFilesCtx = null; // { sessionId, source } — the session the modal is open for
+
+function wdIsHandshakeFile(name) {
+  return /\.(cap|pcapng|hc22000)$/i.test(name);
+}
+
+function wdRenderFilesList(items) {
   const filesBody = el("wd-crack-files-body");
-  if (!modal || !filesTitle || !filesBody) return;
+  if (!filesBody) return;
+  const rowHtml = (it) => {
+    const size = it.size > 1024 * 1024 ? `${(it.size / 1024 / 1024).toFixed(1)} MB` : `${Math.round(it.size / 1024)} KB`;
+    const dl = `/api/wardrive/files/download?path=${encodeURIComponent(it.path)}`;
+    return `<tr>
+      <td>${wdIsHandshakeFile(it.name) ? "🤝 " : ""}${escapeHtml(it.name)}</td>
+      <td>${size}</td>
+      <td><button class="wd-preview-btn" data-path="${escapeHtml(it.path)}" data-name="${escapeHtml(it.name)}">${escapeHtml(t("crackstation.preview_btn", "Ver"))}</button></td>
+      <td><a href="${dl}" download="${escapeHtml(it.name)}"><button class="wd-download-btn">${escapeHtml(t("crackstation.download_btn", "Bajar"))}</button></a></td>
+      <td><button class="wd-file-del" data-path="${escapeHtml(it.path)}" data-name="${escapeHtml(it.name)}" title="Borrar archivo">🗑</button></td>
+    </tr>`;
+  };
+  // Handshake captures (.cap/.pcapng/.hc22000) first — they're what you
+  // came here for — everything else (info.txt, logs, side pcaps) after.
+  const handshakes = items.filter((it) => wdIsHandshakeFile(it.name));
+  const others = items.filter((it) => !wdIsHandshakeFile(it.name));
+  let html = "";
+  if (handshakes.length) {
+    html += `<tr class="wd-files-group-label"><td colspan="5">${escapeHtml(t("crackstation.files_group_handshakes", "Handshakes"))}</td></tr>`;
+    html += handshakes.map(rowHtml).join("");
+  }
+  if (others.length) {
+    html += `<tr class="wd-files-group-label"><td colspan="5">${escapeHtml(t("crackstation.files_group_other", "Otros archivos"))}</td></tr>`;
+    html += others.map(rowHtml).join("");
+  }
+  filesBody.innerHTML = html || '<tr><td colspan="5" class="muted">—</td></tr>';
+}
+
+async function wdLoadFilesList() {
+  if (!wdFilesCtx) return;
   try {
-    const res = await fetch(`/api/wardrive/files?path=${encodeURIComponent(sessionId)}`);
+    const res = await fetch(`/api/wardrive/files?path=${encodeURIComponent(wdFilesCtx.sessionId)}`);
     if (!res.ok) return;
     const data = await res.json();
-    // SSID + MAC in the title so it's clear which handshake's files these
-    // are without having to go back and check the table row.
-    const label = ssid ? `${ssid} (${bssid})` : bssid || sessionId;
-    filesTitle.textContent = `${t("crackstation.files_title", "Archivos")} — ${label}`;
-    filesBody.innerHTML = (data.items || [])
-      .map((it) => {
-        const size = it.size > 1024 * 1024 ? `${(it.size / 1024 / 1024).toFixed(1)} MB` : `${Math.round(it.size / 1024)} KB`;
-        const dl = `/api/wardrive/files/download?path=${encodeURIComponent(it.path)}`;
-        return `<tr>
-          <td>${escapeHtml(it.name)}</td>
-          <td>${size}</td>
-          <td><button class="wd-preview-btn" data-path="${escapeHtml(it.path)}" data-name="${escapeHtml(it.name)}">${escapeHtml(t("crackstation.preview_btn", "Ver"))}</button></td>
-          <td><a href="${dl}" download="${escapeHtml(it.name)}"><button class="wd-download-btn">${escapeHtml(t("crackstation.download_btn", "Bajar"))}</button></a></td>
-        </tr>`;
-      })
-      .join("");
-    modal.classList.remove("hidden");
+    wdRenderFilesList(data.items || []);
   } catch { /* non-fatal */ }
+}
+
+async function wdOpenCrackFiles(sessionId, ssid, bssid, source) {
+  const modal = el("wd-crack-files-modal");
+  const filesTitle = el("wd-crack-files-title");
+  if (!modal || !filesTitle) return;
+  wdFilesCtx = { sessionId, source: source === "wardrive" ? "wardrive" : "wifi-audit" };
+  // SSID + MAC in the title so it's clear which handshake's files these
+  // are without having to go back and check the table row.
+  const label = ssid ? `${ssid} (${bssid})` : bssid || sessionId;
+  filesTitle.textContent = `${t("crackstation.files_title", "Archivos")} — ${label}`;
+  modal.classList.remove("hidden");
+  await wdLoadFilesList();
 }
 
 el("wd-crack-files-close")?.addEventListener("click", () => {
   el("wd-crack-files-modal")?.classList.add("hidden");
+});
+
+el("wd-crack-files-delete-session")?.addEventListener("click", () => {
+  if (!wdFilesCtx) return;
+  const { sessionId, source } = wdFilesCtx;
+  wdConfirmDelete(
+    `¿Borrar la sesión completa "${sessionId}" y todos sus archivos (capturas, hashes, logs)? Esta acción no se puede deshacer.`,
+    async () => {
+      const endpoint = source === "wardrive" ? "/api/wardrive/drive/sessions/delete" : "/api/wardrive/sessions/delete";
+      try {
+        const res = await apiFetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: sessionId }),
+        });
+        const data = await res.json().catch(() => null);
+        if (data?.ok) {
+          el("wd-crack-files-modal")?.classList.add("hidden");
+          toast("Sesión borrada", "success");
+          void wdTickCrackStation();
+        } else if (wdError) {
+          wdError.textContent = data?.error || "No se pudo borrar la sesión";
+        }
+      } catch {
+        if (wdError) wdError.textContent = "Error de red borrando la sesión";
+      }
+    },
+  );
 });
 
 function wdShowPreview(name, data) {
@@ -334,14 +422,33 @@ function wdShowPreview(name, data) {
 }
 
 el("wd-crack-files-body")?.addEventListener("click", async (ev) => {
-  const btn = ev.target.closest(".wd-preview-btn");
-  if (!btn) return;
-  try {
-    const res = await fetch(`/api/wardrive/files/preview?path=${encodeURIComponent(btn.dataset.path)}`);
-    if (!res.ok) return;
-    const data = await res.json();
-    wdShowPreview(btn.dataset.name, data);
-  } catch { /* non-fatal */ }
+  const previewBtn = ev.target.closest(".wd-preview-btn");
+  if (previewBtn) {
+    try {
+      const res = await fetch(`/api/wardrive/files/preview?path=${encodeURIComponent(previewBtn.dataset.path)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      wdShowPreview(previewBtn.dataset.name, data);
+    } catch { /* non-fatal */ }
+    return;
+  }
+  const delBtn = ev.target.closest(".wd-file-del");
+  if (delBtn) {
+    wdConfirmDelete(`¿Borrar "${delBtn.dataset.name}"? Esta acción no se puede deshacer.`, async () => {
+      try {
+        await apiFetch("/api/wardrive/files/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: delBtn.dataset.path }),
+        });
+        toast("Archivo borrado", "success");
+        await wdLoadFilesList();
+        void wdTickCrackStation(); // el inventario puede haber cambiado (p.ej. se borró el .cap)
+      } catch {
+        if (wdError) wdError.textContent = "Error de red borrando el archivo";
+      }
+    });
+  }
 });
 
 el("wd-preview-close")?.addEventListener("click", () => {
@@ -354,13 +461,30 @@ el("wd-preview-close")?.addEventListener("click", () => {
 
 let wdCrackMap = null;
 let wdCrackMapMarker = null;
+let wdCrackMapSeq = 0; // guards against a stale geocode reply overwriting a newer click
 
-function wdOpenCrackMap(lat, lon, label) {
+function wdOpenCrackMap(lat, lon, ssid, bssid) {
   const modal = el("wd-crack-map-modal");
   const title = el("wd-crack-map-title");
+  const addressEl = el("wd-crack-map-address");
   const mapEl = el("wd-crack-map");
   if (!modal || !mapEl) return;
-  if (title) title.textContent = label ? `${t("crackstation.map_title", "Ubicación de la captura")} — ${label}` : t("crackstation.map_title", "Ubicación de la captura");
+  if (title) title.textContent = `${ssid || "(oculta)"} — ${bssid}`;
+  const seq = ++wdCrackMapSeq;
+  if (addressEl) {
+    addressEl.textContent = "Buscando dirección...";
+    // Server-side reverse geocode (cached + throttled in geocodePoint(),
+    // shares the GPS page's Nominatim budget) — best-effort, never blocks
+    // the map itself.
+    fetch(`/api/wardrive/geocode?lat=${lat}&lon=${lon}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (seq === wdCrackMapSeq) addressEl.textContent = data?.address || "Dirección no disponible";
+      })
+      .catch(() => {
+        if (seq === wdCrackMapSeq) addressEl.textContent = "Dirección no disponible";
+      });
+  }
   modal.classList.remove("hidden");
   if (typeof L === "undefined") return; // vendor/leaflet failed to load — modal still shows the title
   if (!wdCrackMap) {
@@ -416,11 +540,11 @@ el("wd-crack-body")?.addEventListener("click", async (ev) => {
   }
   const filesBtn = ev.target.closest(".wd-crack-files-btn");
   if (filesBtn) {
-    void wdOpenCrackFiles(filesBtn.dataset.session, filesBtn.dataset.ssid, filesBtn.dataset.bssid);
+    void wdOpenCrackFiles(filesBtn.dataset.session, filesBtn.dataset.ssid, filesBtn.dataset.bssid, filesBtn.dataset.source);
     return;
   }
   const gpsBtn = ev.target.closest(".wd-gps-btn");
-  if (gpsBtn) wdOpenCrackMap(parseFloat(gpsBtn.dataset.lat), parseFloat(gpsBtn.dataset.lon), gpsBtn.dataset.ssid);
+  if (gpsBtn) wdOpenCrackMap(parseFloat(gpsBtn.dataset.lat), parseFloat(gpsBtn.dataset.lon), gpsBtn.dataset.ssid, gpsBtn.dataset.bssid);
 });
 
 el("wd-crack-refresh")?.addEventListener("click", () => void wdTickCrackStation());
@@ -439,6 +563,7 @@ let wdDictBssid = null;
 let wdDictSync = null; // { tried, total, fps, running, result, wordlist, syncedAtMs }
 let wdDictPollTimer = null; // server sync, only while a crack is running
 let wdDictAnimTimer = null; // local interpolation, cheap DOM update
+let wdDictRunningPrev = false; // detects start/stop transitions (see wdSyncDictStatus)
 
 function wdDictEstimatedTried() {
   if (!wdDictSync) return 0;
@@ -446,6 +571,31 @@ function wdDictEstimatedTried() {
   const elapsedSec = (performance.now() - wdDictSync.syncedAtMs) / 1000;
   const total = wdDictSync.total || Infinity;
   return Math.min(total, wdDictSync.tried + wdDictSync.fps * elapsedSec);
+}
+
+// ---- Inline per-row progress — the exact handshake being cracked shows
+// its own 0-100% bar in the Ataques column (replacing the attack buttons)
+// instead of only in the shared panel below. Updated every 250ms from the
+// same local extrapolation as the panel (wdRenderDictBar), so both stay in
+// sync without extra server load. ----
+
+function wdRowInlineProgressHtml() {
+  const total = wdDictSync.total || 0;
+  const tried = wdDictEstimatedTried();
+  const pct = total > 0 ? Math.min(100, (tried / total) * 100) : 0;
+  const wordlistLabel = wdDictSync.wordlist === "weakpass" ? "weakpass" : "rockyou";
+  const titleAttr = `${wordlistLabel} · ${Math.round(tried).toLocaleString()}${total ? ` / ${total.toLocaleString()}` : ""} claves`;
+  return `<div class="wd-row-progress" title="${escapeHtml(titleAttr)}">
+    <div class="wd-row-progress-bar"><div class="wd-row-progress-fill" style="width:${pct.toFixed(1)}%"></div></div>
+    <span class="wd-row-progress-pct">${total > 0 ? `${pct.toFixed(0)}%` : "…"}</span>
+  </div>`;
+}
+
+function wdRenderRowDictProgress() {
+  if (!wdDictSync?.running || !wdDictBssid) return;
+  const row = document.querySelector(`#wd-crack-body tr[data-bssid="${CSS.escape(wdDictBssid)}"]`);
+  const cell = row?.querySelector(".wd-action-group");
+  if (cell) cell.innerHTML = wdRowInlineProgressHtml();
 }
 
 function wdRenderDictBar() {
@@ -487,6 +637,7 @@ function wdRenderDictBar() {
     <div class="wd-dict-meta muted">${metaLine}</div>
     <div class="wd-dict-result">${resultMsg}</div>
   `;
+  wdRenderRowDictProgress();
 }
 
 async function wdSyncDictStatus() {
@@ -507,6 +658,16 @@ async function wdSyncDictStatus() {
         wordlist: data.wordlist,
         syncedAtMs: performance.now(),
       };
+    }
+    // A start/stop transition means the affected row's Ataques cell needs
+    // to switch between buttons and the progress bar — a full table
+    // re-render (cheap, it's a short list) is the simplest correct way to
+    // restore the right buttons (or the ✓ password badge) once a crack
+    // finishes, without hand-tracking every possible outcome here.
+    const runningNow = Boolean(wdDictSync?.running);
+    if (wdDictRunningPrev !== runningNow) {
+      wdDictRunningPrev = runningNow;
+      wdRenderCrackStation();
     }
     wdRenderDictBar();
     if (!wdDictSync?.running && wdDictPollTimer) {

@@ -135,14 +135,23 @@ export async function extractApFrames(
 
 // ─── hcxdumptool BPF (single-AP targeting) ───────────────────────────────────
 // hcxdumptool 6.3.5 dropped --filterlist_ap; targeting is done with a BPF
-// compiled by hcxdumptool's own --bpfc (no tcpdump needed). addr3 = BSSID
-// on management frames, addr4 covers the WDS corner case.
+// compiled by hcxdumptool's own --bpfc (no tcpdump needed). It must cover
+// EVERY address slot the AP's frames use, or hcxdumptool goes deaf for the
+// very AP it is attacking:
+//   addr2 = BSSID on every frame the AP transmits (beacons, probe/assoc
+//           responses, data) — beacons/responses never appear in addr3
+//   addr3 = BSSID on EAPOL/data from-DS frames
+//   addr4 = WDS corner case
+// (addr3/addr4 only was the old filter: it silently dropped the AP's
+// beacons and assoc-responses — addr1 is hcxdumptool's vMAC there and
+// addr3 is broadcast/client — so association never completed and every
+// PMKID attack reported "AP no respondió".)
 export async function compileBpfForAp(bssid: string): Promise<string | null> {
   const mac = bssid.toLowerCase().replace(/:/g, "");
   try {
     const { stdout } = await execFileAsync("hcxdumptool", [
       "--bpfc",
-      `wlan addr3 ${mac} || wlan addr4 ${mac}`,
+      `wlan addr2 ${mac} || wlan addr3 ${mac} || wlan addr4 ${mac}`,
     ]);
     const bpf = stdout.trim();
     return bpf.length > 0 ? bpf : null;

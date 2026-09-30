@@ -228,7 +228,12 @@ export class WardriveSession {
     // Accepts both hcxdumptool .pcapng and airodump-ng .cap inputs.
     const hashPath = pcapngPath.replace(/\.(pcapng|cap)$/i, ".hc22000");
     try {
+      // --all is REQUIRED: hcxdumptool's own-association traffic produces
+      // M1M2ROGUE pairs and bare-PMKID handshakes that plain hcxpcapngtool
+      // refuses — a real captured PMKID would be discarded and the attack
+      // misreported as "El AP no respondió al PMKID request".
       const { stdout, stderr } = await execFileAsync("hcxpcapngtool", [
+        "--all",
         "-o", hashPath,
         pcapngPath,
       ]);

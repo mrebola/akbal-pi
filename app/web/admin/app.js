@@ -2766,12 +2766,12 @@ document.getElementById("wd-deleteall-confirm")?.addEventListener("click", () =>
   })();
 });
 
-// Refresh sessions list while the wardrive tab is active (same 2s timer
+// Refresh sessions list while the Wifi Audit tab is active (same 2s timer
 // as the targets table — cheap local read).
 function wdStartSessionsTimer() {
   if (wdSessionsTimer) return;
   wdSessionsTimer = setInterval(() => {
-    const active = document.getElementById("tab-wardrive")?.classList.contains("active");
+    const active = document.getElementById("tab-wifi-audit")?.classList.contains("active");
     // The sessions list only polls while its subtab is visible — less JSON
     // churn on the Pi while the operator works the audit subtab.
     const sessionsVisible = document.getElementById("wd-sub-sessions")?.classList.contains("active");
@@ -2946,14 +2946,14 @@ async function wdRefreshOnce() {
 
 // Poll when tab active
 for (const btn of document.querySelectorAll(".tab-btn")) {
-  if (btn.dataset.tab === "wardrive") {
+  if (btn.dataset.tab === "wifi-audit") {
     btn.addEventListener("click", () => {
       void loadMonitorCap();
       void wdRefresh();
       wdStartSessionsTimer();
       if (!wdTimer) wdTimer = setInterval(() => {
         if (wdPaused) return;
-        const active = document.getElementById("tab-wardrive")?.classList.contains("active");
+        const active = document.getElementById("tab-wifi-audit")?.classList.contains("active");
         if (active) void wdRefresh();
         // The dict-crack widget renders inline in the sessions list, which
         // wdRefresh/wdLoadSessions rebuild — repaint it after each poll so
@@ -2966,10 +2966,18 @@ for (const btn of document.querySelectorAll(".tab-btn")) {
 
 let wdTimer = null;
 
-// Boot if direct link — the tab was renamed (wardrive → wifi-audit; the
-// driving capture owns the /wardrive page now), old bookmarks redirect.
+// Boot if direct link — the tab is "wifi-audit" (the driving capture owns
+// the /wardrive page). #wardrive is kept accepted here only so old
+// bookmarks/links still land somewhere instead of silently doing nothing.
 if (window.location.hash === "#wardrive" || window.location.hash === "#wifi-audit") {
-  history.replaceState(null, "", "#wifi-audit");
+  // try/catch: a failed URL cosmetic touch-up shouldn't stop the tab from
+  // loading its data below (some browser extensions restrict the History
+  // API and throw on it).
+  try {
+    history.replaceState(null, "", "#wifi-audit");
+  } catch {
+    /* non-fatal — the hash itself already routes here either way */
+  }
   void loadMonitorCap();
   void wdRefresh();
   wdStartSessionsTimer();
@@ -3646,9 +3654,15 @@ if (initialTab === "wifi") {
   activateTab("settings");
   document.querySelector('.cfg-nav-btn[data-cfg="wifi"]')?.click();
 } else if (initialTab === "wardrive") {
-  // Old bookmark: the tab is "wifi-audit" now (/wardrive is the driving map)
-  history.replaceState(null, "", "#wifi-audit");
-  activateTab("wardrive");
+  // Old bookmark: the tab is "wifi-audit" now (/wardrive is the driving
+  // map). try/catch: don't let a failed URL touch-up skip activating the
+  // tab below.
+  try {
+    history.replaceState(null, "", "#wifi-audit");
+  } catch {
+    /* non-fatal */
+  }
+  activateTab("wifi-audit");
 } else if (initialTab) {
   activateTab(initialTab);
 }

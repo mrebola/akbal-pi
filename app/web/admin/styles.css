@@ -693,7 +693,9 @@ button.secondary {
   .topbar { flex-wrap: wrap; }
 }
 
-/* ---- Wardriving (tab-wardrive) ---- */
+/* ---- Wifi Audit tab (id="tab-wifi-audit") — class prefix "wd-" stayed
+   from before the tab was renamed from "Wardrive"; the driving-capture
+   page (wardrive.html) is the one actually called Wardrive now. ---- */
 
 .wd-files-path {
   font-size: 12px;

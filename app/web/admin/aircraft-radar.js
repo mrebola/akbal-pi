@@ -487,6 +487,11 @@ function applySnapshot(snapshot) {
   setTxt("ar-count", String(snapshot.aircraft.length));
   setTxt("ar-mpm", String(snapshot.messagesPerMinute));
   setTxt("ar-hardware", snapshot.demo ? "DEMO" : (snapshot.hardware || "—"));
+  // In DEMO mode because the real capture failed — show exactly why on
+  // hover (e.g. "PortaPack en modo menú, no modo USB") instead of leaving
+  // the operator to go dig through chatbot.log to find out.
+  const hardwareEl = document.getElementById("ar-hardware");
+  if (hardwareEl) hardwareEl.title = snapshot.demo && snapshot.error ? snapshot.error : "";
   renderList(snapshot);
   render();
   updateAircraftMarkers(snapshot.aircraft);

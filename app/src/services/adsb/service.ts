@@ -139,7 +139,10 @@ export class AircraftRadarService extends EventEmitter {
   private async tryRealCapture(): Promise<void> {
     const info = await detectHackRf();
     if (!info.present) {
-      throw new Error("No hay HackRF conectado por USB");
+      // info.reason covers the known "connected but in the wrong mode"
+      // case (PortaPack Mayhem menu, see hackrf-receiver.ts); falls back
+      // to the generic message for a genuinely unplugged device.
+      throw new Error(info.reason || "No hay HackRF conectado por USB");
     }
     this.hardware = info.boardId ? `${info.boardId}${info.serial ? ` (${info.serial.slice(-8)})` : ""}` : "HackRF";
 

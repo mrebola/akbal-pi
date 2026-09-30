@@ -248,7 +248,7 @@ function wdRenderCrackStation() {
         <td>${it.hasHandshake ? '<span class="wd-verify-badge ok">✓ .cap</span>' : "—"}</td>
         <td>${it.password ? `<span class="wd-verify-badge ok" style="max-width:180px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(it.password)}</span>` : "—"}</td>
         <td><div class="wd-action-group">${it.password ? '<span class="muted">✓</span>' : crackButtons.join("")}</div></td>
-        <td><button class="wd-crack-files-btn" data-session="${escapeHtml(it.sessionId)}">${escapeHtml(t("crackstation.files_btn", "Ver archivos"))}</button></td>
+        <td><button class="wd-crack-files-btn" data-session="${escapeHtml(it.sessionId)}" data-ssid="${escapeHtml(it.ssid || "")}" data-bssid="${it.bssid}">${escapeHtml(t("crackstation.files_btn", "Ver archivos"))}</button></td>
       </tr>`;
     })
     .join("");
@@ -265,7 +265,7 @@ function wdRenderCrackStation() {
 // in a modal (not inline in the page flow) so it doesn't push the table
 // and mask panel down every time it's opened. ----
 
-async function wdOpenCrackFiles(sessionId) {
+async function wdOpenCrackFiles(sessionId, ssid, bssid) {
   const modal = el("wd-crack-files-modal");
   const filesTitle = el("wd-crack-files-title");
   const filesBody = el("wd-crack-files-body");
@@ -274,7 +274,10 @@ async function wdOpenCrackFiles(sessionId) {
     const res = await fetch(`/api/wardrive/files?path=${encodeURIComponent(sessionId)}`);
     if (!res.ok) return;
     const data = await res.json();
-    filesTitle.textContent = `${t("crackstation.files_title", "Archivos")} — ${sessionId}`;
+    // SSID + MAC in the title so it's clear which handshake's files these
+    // are without having to go back and check the table row.
+    const label = ssid ? `${ssid} (${bssid})` : bssid || sessionId;
+    filesTitle.textContent = `${t("crackstation.files_title", "Archivos")} — ${label}`;
     filesBody.innerHTML = (data.items || [])
       .map((it) => {
         const size = it.size > 1024 * 1024 ? `${(it.size / 1024 / 1024).toFixed(1)} MB` : `${Math.round(it.size / 1024)} KB`;
@@ -391,7 +394,7 @@ el("wd-crack-body")?.addEventListener("click", async (ev) => {
   }
   const filesBtn = ev.target.closest(".wd-crack-files-btn");
   if (filesBtn) {
-    void wdOpenCrackFiles(filesBtn.dataset.session);
+    void wdOpenCrackFiles(filesBtn.dataset.session, filesBtn.dataset.ssid, filesBtn.dataset.bssid);
     return;
   }
   const gpsBtn = ev.target.closest(".wd-gps-btn");

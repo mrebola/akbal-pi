@@ -1,5 +1,6 @@
 import { execFile, spawn, ChildProcess } from "child_process";
 import { promisify } from "util";
+import fs from "fs";
 import net from "net";
 import { EventEmitter } from "events";
 import { parseSbsLine } from "./sbs-parser";
@@ -15,6 +16,10 @@ export type HackRfInfo = {
   present: boolean;
   serial: string | null;
   boardId: string | null;
+  // Set only when present=false and we know WHY beyond "nothing plugged
+  // in" — see portapackReason() below. Lets the caller throw an
+  // actionable error instead of the generic "no está conectado".
+  reason?: string;
 };
 
 // hackrf_info already does the USB enumeration itself (unlike the AR9271
@@ -25,14 +30,38 @@ export async function detectHackRf(): Promise<HackRfInfo> {
   try {
     const { stdout } = await execFileAsync("hackrf_info", [], { timeout: 8000 });
     if (!/Found HackRF/i.test(stdout)) {
-      return { present: false, serial: null, boardId: null };
+      return { present: false, serial: null, boardId: null, reason: await portapackReason() };
     }
     const serial = /Serial number:\s*(\S+)/i.exec(stdout)?.[1] || null;
     const boardId = /Board ID Number:.*\(([^)]+)\)/i.exec(stdout)?.[1] || "HackRF One";
     return { present: true, serial, boardId };
   } catch {
-    return { present: false, serial: null, boardId: null };
+    return { present: false, serial: null, boardId: null, reason: await portapackReason() };
   }
+}
+
+// A HackRF One with a PortaPack Mayhem add-on boots into the PortaPack's
+// OWN menu firmware on power-up — including after any USB disconnect/
+// reconnect blip (a marginal hub, a service restart's USB re-enumeration,
+// etc.) — instead of passing the HackRF through in native USB mode. It
+// then enumerates as a plain CDC-ACM serial port ("PortaPack Mayhem" /
+// "Great Scott Gadgets", USB ID 1d50:6018) rather than the libhackrf
+// device (1d50:6089) `hackrf_info` looks for, so detection above reports
+// "not present" even though the hardware IS physically connected.
+// Distinguishing the two turns a confusing demo-mode fallback into a
+// message that says exactly what to do — see docs/aircraft-radar.md's
+// "PortaPack en modo menú" section (found by hand once via dmesg/lsusb
+// archaeology; this is that investigation made permanent).
+async function portapackReason(): Promise<string | undefined> {
+  try {
+    const byId = await fs.promises.readdir("/dev/serial/by-id");
+    if (byId.some((name) => /portapack|great_scott_gadgets/i.test(name))) {
+      return "El HackRF está conectado pero en modo PortaPack Mayhem (menú) — en su pantalla: Menu → USB (o equivalente en el firmware instalado) para pasarlo a modo USB nativo y que readsb pueda verlo.";
+    }
+  } catch {
+    /* /dev/serial/by-id unavailable — nothing extra to add, stay generic */
+  }
+  return undefined;
 }
 
 export type ReceiverGain = {

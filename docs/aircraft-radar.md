@@ -197,6 +197,35 @@ Sin el HackRF (o si `hackrf_info`/`readsb` no están instalados), Aircraft
 Radar arranca automáticamente en DEMO MODE — no hace falta hardware para
 probar la UI.
 
+### PortaPack en modo menú (causa más común de "se fue a DEMO solo")
+
+Este HackRF tiene un add-on PortaPack Mayhem. Cualquier corte de USB —un
+hub marginal, un replug, incluso el re-enumerado que pasa al reiniciar
+`chatbot.service`— hace que el PortaPack arranque en **su propio menú**
+en vez de dejar pasar el HackRF en modo USB nativo. El dispositivo sigue
+físicamente conectado, pero deja de verse como HackRF:
+
+```bash
+lsusb | grep -i 1d50
+# 1d50:6089 "HackRF One"         → modo USB nativo, todo bien
+# 1d50:6018 "PortaPack Mayhem"   → en el menú, hackrf_info no lo ve
+
+hackrf_info
+# "No HackRF boards found." aunque el equipo esté prendido y conectado
+```
+
+**Arreglo**: en la pantalla del PortaPack, `Menu → USB` (o el equivalente
+según el firmware instalado) para devolverlo a modo USB nativo — no hace
+falta reiniciar `chatbot.service`, el servicio reintenta la detección
+solo cada 15s (`RETRY_INTERVAL_MS` en `adsb/service.ts`) y vuelve a modo
+real apenas lo ve.
+
+El admin web ya distingue este caso de "no hay nada conectado": el
+indicador DEMO de `/aircraft-radar` muestra la razón exacta al pasar el
+mouse (`detectHackRf()` en `hackrf-receiver.ts` busca el nombre
+"PortaPack"/"Great Scott Gadgets" en `/dev/serial/by-id` cuando
+`hackrf_info` no encuentra nada, antes de asumir "no conectado").
+
 ## Cómo iniciar
 
 No requiere un paso de arranque separado — corre como parte de

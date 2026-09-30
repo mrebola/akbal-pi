@@ -138,6 +138,7 @@
     "col_gps": "GPS",
     "col_hs": "Handshake",
     "col_pass": "Contraseña",
+    "col_progress": "%",
     "col_actions": "Ataques",
     "col_files": "Archivos",
     "origin_wifiaudit": "Wifi Audit",

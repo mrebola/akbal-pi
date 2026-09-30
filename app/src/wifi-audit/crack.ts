@@ -483,7 +483,8 @@ export class DictCrack extends EventEmitter {
     };
     const startedAt = Date.now();
     let child: any;
-    if (this.source.kind === "gzip") {
+    const isGzip = this.source.kind === "gzip";
+    if (isGzip) {
       // zcat's stdout feeds aircrack's stdin directly (Node-level pipe, no
       // shell) — the decompressed wordlist never exists as a file, only as
       // bytes in flight between the two processes.
@@ -491,6 +492,26 @@ export class DictCrack extends EventEmitter {
       this.zcatProc = zcat;
       child = spawn("aircrack-ng", ["-w", "-", "-b", this.bssid, "-p", "2", this.capPath], {
         stdio: ["pipe", "pipe", "pipe"],
+      });
+      // Progress for a streamed wordlist is measured from OUR side of the
+      // pipe (lines actually fed into aircrack's stdin), not by parsing
+      // aircrack's own stdout: unlike the file case (where aircrack
+      // pre-scans the file and prints "X/Y keys tested"), its stdin
+      // progress-line format for piped input isn't something this code can
+      // rely on — MaskCrack above hits the same wall and solves it the
+      // same way (track the write side, not aircrack's report of it).
+      // `.pipe()` applies Node's normal backpressure, so "fed" never runs
+      // far ahead of what aircrack has actually consumed from its stdin.
+      let fedLines = 0;
+      zcat.stdout?.on("data", (chunk: Buffer) => {
+        for (let i = 0; i < chunk.length; i++) if (chunk[i] === 10) fedLines++;
+        const elapsedSec = (Date.now() - startedAt) / 1000;
+        this.state.progress = {
+          tried: fedLines,
+          total: this.knownTotal || 0,
+          fps: elapsedSec > 0 ? fedLines / elapsedSec : 0,
+          elapsedSec: Math.round(elapsedSec),
+        };
       });
       zcat.stdout?.pipe(child.stdin);
       zcat.on("error", () => {
@@ -506,7 +527,7 @@ export class DictCrack extends EventEmitter {
     let out = "";
     child.stdout?.on("data", (chunk: Buffer) => {
       out += chunk.toString("utf8");
-      this.parseProgress(out, startedAt);
+      if (!isGzip) this.parseProgress(out, startedAt);
     });
     child.stderr?.on("data", (chunk: Buffer) => {
       out += chunk.toString("utf8");

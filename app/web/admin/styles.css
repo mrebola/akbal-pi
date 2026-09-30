@@ -2967,7 +2967,7 @@ body { font-family: var(--font-sans); }
 
 /* Inline per-row progress (dict attack running on that exact handshake —
    Ataques column, replaces rockyou/weakpass/máscara while it runs). */
-.wd-row-progress { display: flex; align-items: center; gap: 6px; min-width: 130px; }
+.wd-row-progress { display: flex; align-items: center; gap: 4px; width: 64px; }
 .wd-row-progress-bar {
   flex: 1;
   height: 6px;
@@ -2985,9 +2985,10 @@ body { font-family: var(--font-sans); }
   font-size: 10px;
   font-family: var(--font-mono);
   color: var(--text-secondary);
-  min-width: 30px;
+  min-width: 26px;
   text-align: right;
 }
+.wd-row-progress-cell { white-space: nowrap; }
 
 /* Files modal: handshake captures grouped above everything else, and the
    per-file delete button. */

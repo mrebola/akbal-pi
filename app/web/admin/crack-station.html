@@ -88,12 +88,13 @@
                   <th data-sort="lat" data-i18n="crackstation.col_gps">GPS</th>
                   <th data-i18n="crackstation.col_hs">Handshake</th>
                   <th data-sort="password" data-i18n="crackstation.col_pass">Contraseña</th>
+                  <th data-i18n="crackstation.col_progress">%</th>
                   <th data-i18n="crackstation.col_actions">Ataques</th>
                   <th data-i18n="crackstation.col_files">Archivos</th>
                 </tr>
               </thead>
               <tbody id="wd-crack-body">
-                <tr><td colspan="9" class="muted">—</td></tr>
+                <tr><td colspan="10" class="muted">—</td></tr>
               </tbody>
             </table>
           </div>
@@ -107,11 +108,14 @@
 
           <!-- Mask brute-force: running-attack progress — launching itself
                happens from a row's "máscara…" button (opens the picker
-               modal below), never from here. -->
-          <div class="wd-session-title" style="margin-top:16px;" data-i18n="crackstation.mask_title">ATAQUE DE FUERZA BRUTA (MÁSCARA)</div>
-          <div class="wd-mask-panel" id="wd-mask-panel">
-            <div class="wd-mask-run-status" id="wd-mask-run-status"></div>
-            <div class="wd-mask-run" id="wd-mask-run"></div>
+               modal below), never from here. Hidden (title included)
+               whenever there's no run to show — see wdRenderMaskRun(). -->
+          <div id="wd-mask-section" class="hidden">
+            <div class="wd-session-title" style="margin-top:16px;" data-i18n="crackstation.mask_title">ATAQUE DE FUERZA BRUTA (MÁSCARA)</div>
+            <div class="wd-mask-panel" id="wd-mask-panel">
+              <div class="wd-mask-run-status" id="wd-mask-run-status"></div>
+              <div class="wd-mask-run" id="wd-mask-run"></div>
+            </div>
           </div>
         </div>
 

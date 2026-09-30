@@ -69,6 +69,17 @@ function wdFormatDateTime(ms) {
   }
 }
 
+// Compact "30/09" for the table cell (day/month only, no year/time) — the
+// full date+time lives in the cell's title tooltip via wdFormatDateTime().
+function wdFormatDateShort(ms) {
+  if (typeof ms !== "number") return "—";
+  try {
+    return new Date(ms).toLocaleDateString(undefined, { day: "2-digit", month: "2-digit" });
+  } catch {
+    return new Date(ms).toLocaleDateString();
+  }
+}
+
 // ---- Header (same /api/status pipeline as wardrive.js/gps.js) ----
 
 function initHeader() {
@@ -233,22 +244,23 @@ function wdRenderCrackStation() {
     th.textContent = active ? `${base} ${wdCrackSort.dir === "asc" ? "▲" : "▼"}` : base;
   });
   if (items.length === 0) {
-    body.innerHTML = '<tr><td colspan="9" class="muted">Aún no hay handshakes capturados.</td></tr>';
+    body.innerHTML = '<tr><td colspan="10" class="muted">Aún no hay handshakes capturados.</td></tr>';
     return;
   }
   const capOf = (it) => (it.capFile ? `${it.sessionId}/${it.capFile}` : "");
   body.innerHTML = items
     .map((it) => {
       const capPath = capOf(it);
-      // While THIS handshake's own dict attack is running, its Ataques
-      // cell shows a live 0-100% bar instead of the attack buttons — the
-      // exact item doing the work is the one that visibly shows it.
+      // While THIS handshake's own dict attack is running, it gets a live
+      // 0-100% bar in its own "%" column; the attack buttons make way for
+      // a short status note (there's nothing to click — only one dict
+      // crack runs at a time anyway).
       const runningHere = wdDictSync?.running && wdDictBssid === it.bssid;
       let actionsHtml;
       if (it.password) {
         actionsHtml = '<span class="muted">✓</span>';
       } else if (runningHere) {
-        actionsHtml = wdRowInlineProgressHtml();
+        actionsHtml = '<span class="muted" style="font-size:11px;">corriendo…</span>';
       } else {
         actionsHtml = [
           `<button class="wd-crack-dict" data-wordlist="rockyou" data-bssid="${it.bssid}" data-cap="${escapeHtml(capPath)}" data-session="${it.sessionId}"
@@ -259,9 +271,12 @@ function wdRenderCrackStation() {
              data-cap="${escapeHtml(capPath)}" title="Fuerza bruta con máscara (p.ej. @@@@+MAC)">máscara…</button>`,
         ].join("");
       }
+      const progressHtml = runningHere ? wdRowInlineProgressHtml() : "—";
+      // GPS: just the pin — full coordinates + SSID live in the tooltip,
+      // same "abbreviate + title" treatment as the date column.
       const gps = it.lat != null && it.lon != null
         ? `<button class="wd-gps-btn" data-lat="${it.lat}" data-lon="${it.lon}" data-ssid="${escapeHtml(it.ssid || it.bssid)}" data-bssid="${it.bssid}"
-             title="Ver en el mapa">📍 ${it.lat.toFixed(4)}, ${it.lon.toFixed(4)}</button>`
+             title="${escapeHtml(`${it.ssid || it.bssid} — ${it.lat.toFixed(5)}, ${it.lon.toFixed(5)} — ver en el mapa`)}">📍</button>`
         : "—";
       const rowClass = it.bssid === wdHighlightBssid ? "wd-crack-row-highlight" : "";
       return `<tr class="${rowClass}" data-bssid="${it.bssid}" data-ssid="${escapeHtml(it.ssid || "")}"
@@ -269,10 +284,11 @@ function wdRenderCrackStation() {
         <td class="wd-ssid">${it.live ? '<span class="demo-badge" style="background:rgba(80,255,120,.12);color:#34d351;">EN VIVO</span> ' : ""}${escapeHtml(it.ssid || "(oculta)")}</td>
         <td style="font-family: ui-monospace, monospace; font-size: 11px;">${escapeHtml(it.bssid)}</td>
         <td>${wdOriginBadge(it.source)}</td>
-        <td class="muted" style="font-size:11px; white-space:nowrap;">${escapeHtml(wdFormatDateTime(it.capturedAt))}</td>
+        <td class="muted" style="font-size:11px; white-space:nowrap;" title="${escapeHtml(wdFormatDateTime(it.capturedAt))}">${escapeHtml(wdFormatDateShort(it.capturedAt))}</td>
         <td>${gps}</td>
         <td>${it.hasHandshake ? '<span class="wd-verify-badge ok">✓ .cap</span>' : "—"}</td>
         <td>${it.password ? `<span class="wd-verify-badge ok" style="max-width:180px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(it.password)}</span>` : "—"}</td>
+        <td class="wd-row-progress-cell">${progressHtml}</td>
         <td><div class="wd-action-group">${actionsHtml}</div></td>
         <td><button class="wd-crack-files-btn" data-session="${escapeHtml(it.sessionId)}" data-ssid="${escapeHtml(it.ssid || "")}" data-bssid="${it.bssid}" data-source="${it.source}">${escapeHtml(t("crackstation.files_btn", "Ver archivos"))}</button></td>
       </tr>`;
@@ -594,7 +610,7 @@ function wdRowInlineProgressHtml() {
 function wdRenderRowDictProgress() {
   if (!wdDictSync?.running || !wdDictBssid) return;
   const row = document.querySelector(`#wd-crack-body tr[data-bssid="${CSS.escape(wdDictBssid)}"]`);
-  const cell = row?.querySelector(".wd-action-group");
+  const cell = row?.querySelector(".wd-row-progress-cell");
   if (cell) cell.innerHTML = wdRowInlineProgressHtml();
 }
 
@@ -920,6 +936,7 @@ async function wdMaskLaunch(presetId, pattern, bssid, cap, autoMacSuffixBaked) {
 async function wdRenderMaskRun() {
   const runBox = el("wd-mask-run");
   const status = el("wd-mask-run-status");
+  const section = el("wd-mask-section");
   if (!runBox) return;
   let data = null;
   try {
@@ -927,10 +944,14 @@ async function wdRenderMaskRun() {
     if (res.ok) data = await res.json();
   } catch { return; }
   if (!data?.state || (!data.state.running && !data.state.done)) {
+    // Nothing to show — hide the whole section (title included) instead
+    // of leaving an empty labeled box on screen.
     runBox.innerHTML = "";
     if (status) status.textContent = "";
+    section?.classList.add("hidden");
     return;
   }
+  section?.classList.remove("hidden");
   const { state } = data;
   const p = state.progress;
   const pct = p.total > 0 ? Math.min(100, (p.tried / p.total) * 100) : 0;

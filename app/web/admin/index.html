@@ -12,46 +12,52 @@
       <img id="avatar" class="avatar" src="/avatar/standing.gif" alt="Akbal" />
       <div class="brand">AKBAL</div>
     </div>
-    <button type="button" id="nav-toggle" class="nav-toggle" aria-label="Menú" aria-expanded="false" aria-controls="main-tabs">
+    <button type="button" id="nav-toggle" class="nav-toggle" aria-label="Menú" data-i18n-aria-label="topbar.menu_aria" aria-expanded="false" aria-controls="main-tabs">
       <span></span><span></span><span></span>
     </button>
     <nav class="tabs" id="main-tabs">
-      <button class="tab-btn active" data-tab="chat">Chat</button>
-      <a href="/wifiradar" class="tab-link" title="Visualización Wi-Fi en 3D">Radar Wi-Fi</a>
-      <a href="/aircraft-radar" class="tab-link" title="Aeronaves cercanas vía ADS-B">Aviones</a>
-      <a href="/wardrive" class="tab-link" title="Wardrive: mapa + handshakes en el auto">Wardrive</a>
-      <button class="tab-btn" data-tab="wardrive">Wifi Audit</button>
-      <a href="/gps" class="tab-link" title="Posición GPS del dispositivo">GPS</a>
-      <button class="tab-btn" data-tab="music">OST</button>
-      <button class="tab-btn" data-tab="usb">Dispositivos</button>
-      <button class="tab-btn" data-tab="settings" title="Ajustes">Ajustes</button>
+      <button class="tab-btn active" data-tab="chat" data-i18n="topbar.tab_chat">Chat</button>
+      <a href="/wifiradar" class="tab-link" title="Visualización Wi-Fi en 3D" data-i18n="topbar.tab_wifiradar" data-i18n-title="topbar.tab_wifiradar_title">Radar Wi-Fi</a>
+      <a href="/aircraft-radar" class="tab-link" title="Aeronaves cercanas vía ADS-B" data-i18n="topbar.tab_aircraft" data-i18n-title="topbar.tab_aircraft_title">Aviones</a>
+      <a href="/wardrive" class="tab-link" title="Wardrive: mapa + handshakes en el auto" data-i18n="topbar.tab_wardrive" data-i18n-title="topbar.tab_wardrive_title">Wardrive</a>
+      <button class="tab-btn" data-tab="wardrive" data-i18n="topbar.tab_wifiaudit">Wifi Audit</button>
+      <a href="/gps" class="tab-link" title="Posición GPS del dispositivo" data-i18n="topbar.tab_gps" data-i18n-title="topbar.tab_gps_title">GPS</a>
+      <button class="tab-btn" data-tab="music" data-i18n="topbar.tab_music">OST</button>
+      <button class="tab-btn" data-tab="usb" data-i18n="topbar.tab_usb">Dispositivos</button>
+      <button class="tab-btn" data-tab="settings" title="Ajustes" data-i18n="topbar.tab_settings" data-i18n-title="topbar.tab_settings">Ajustes</button>
     </nav>
     <div id="nav-backdrop" class="nav-backdrop hidden"></div>
 
     <div class="hdr-right">
-      <!-- Platform source: LIVE (real dongles) / DEMO (synthetic data, hardware released) -->
-      <div class="plx-toggle" id="platform-toggle" title="Fuente de datos: LIVE usa los dongles reales · DEMO muestra datos sintéticos y libera el hardware">
-        <span class="plx-toggle-label mode-live" data-mode="live">LIVE</span>
-        <span class="plx-toggle-label mode-demo" data-mode="demo">DEMO</span>
+      <!-- Language selector: always visible in the topbar (spec) — same
+           visual language as the LIVE/DEMO toggle below. Logic in i18n.js. -->
+      <div class="plx-toggle lang-toggle" id="lang-toggle" title="Idioma / Language" data-i18n-title="topbar.lang_title">
+        <span class="plx-toggle-label" data-lang="es">ES</span>
+        <span class="plx-toggle-label" data-lang="en">EN</span>
       </div>
-      <button type="button" id="sys-toggle" class="hdr-summary" title="Estado del sistema">
+      <!-- Platform source: LIVE (real dongles) / DEMO (synthetic data, hardware released) -->
+      <div class="plx-toggle" id="platform-toggle" title="Fuente de datos: LIVE usa los dongles reales · DEMO muestra datos sintéticos y libera el hardware" data-i18n-title="topbar.platform_toggle_title">
+        <span class="plx-toggle-label mode-live" data-mode="live" data-i18n="topbar.live">LIVE</span>
+        <span class="plx-toggle-label mode-demo" data-mode="demo" data-i18n="topbar.demo">DEMO</span>
+      </div>
+      <button type="button" id="sys-toggle" class="hdr-summary" title="Estado del sistema" data-i18n-title="topbar.system_title">
         <span class="hdr-dot" id="hdr-online-dot"></span>
         <span class="hdr-model" id="hdr-model">—</span>
-        <span class="battery-indicator" id="battery-indicator" title="Batería">
+        <span class="battery-indicator" id="battery-indicator" title="Batería" data-i18n-title="topbar.battery_title">
           <span id="battery-icon">🔋</span>
           <span id="battery-pct">—</span>
         </span>
         <span class="hdr-gear">◉</span>
       </button>
       <div id="sys-popover" class="popover hidden" role="menu">
-        <div class="popover-title">Sistema</div>
-        <div class="metric-row"><span class="metric-key">CPU</span><span class="metric-val mono" id="stat-cpu">—</span></div>
-        <div class="metric-row"><span class="metric-key">RAM</span><span class="metric-val mono" id="stat-ram">—</span></div>
-        <div class="metric-row"><span class="metric-key">Disco</span><span class="metric-val mono" id="stat-disk">—</span></div>
-        <div class="metric-row"><span class="metric-key">Wi-Fi</span><span class="metric-val" id="hdr-wifi">—</span></div>
-        <div class="metric-row"><span class="metric-key">Modelo</span><span class="metric-val mono" id="hdr-model-full">—</span></div>
+        <div class="popover-title" data-i18n="topbar.popover_system">Sistema</div>
+        <div class="metric-row"><span class="metric-key" data-i18n="topbar.cpu">CPU</span><span class="metric-val mono" id="stat-cpu">—</span></div>
+        <div class="metric-row"><span class="metric-key" data-i18n="topbar.ram">RAM</span><span class="metric-val mono" id="stat-ram">—</span></div>
+        <div class="metric-row"><span class="metric-key" data-i18n="topbar.disk">Disco</span><span class="metric-val mono" id="stat-disk">—</span></div>
+        <div class="metric-row"><span class="metric-key" data-i18n="topbar.wifi">Wi-Fi</span><span class="metric-val" id="hdr-wifi">—</span></div>
+        <div class="metric-row"><span class="metric-key" data-i18n="topbar.model">Modelo</span><span class="metric-val mono" id="hdr-model-full">—</span></div>
         <div class="popover-sep"></div>
-        <button id="logout-btn" class="btn btn-tertiary btn-block" title="Cerrar sesión">Cerrar sesión</button>
+        <button id="logout-btn" class="btn btn-tertiary btn-block" title="Cerrar sesión" data-i18n="topbar.logout" data-i18n-title="topbar.logout">Cerrar sesión</button>
       </div>
     </div>
     <span id="status-pill" class="hidden">—</span>
@@ -60,45 +66,45 @@
   <main>
     <section id="tab-chat" class="tab-panel active">
       <div class="chat-toolbar">
-        <span class="chat-model-chip"><span class="chat-model-dot"></span><label for="model-select">Modelo</label></span>
+        <span class="chat-model-chip"><span class="chat-model-dot"></span><label for="model-select" data-i18n="chat.model_label">Modelo</label></span>
         <select id="model-select"></select>
       </div>
       <div id="chat-empty" class="chat-empty">
-        <div class="chat-empty-title">Hola amo, ¿en qué te puedo ayudar hoy?</div>
+        <div class="chat-empty-title" data-i18n="chat.greeting">Hola amo, ¿en qué te puedo ayudar hoy?</div>
       </div>
       <div id="chat-log" class="chat-log"></div>
       <form id="chat-form" class="chat-form">
-        <textarea id="chat-input" placeholder="Escribí un mensaje..." rows="1"></textarea>
-        <button type="submit" id="chat-send">Enviar</button>
-        <button type="button" id="chat-cancel" class="secondary hidden">Cancelar</button>
+        <textarea id="chat-input" placeholder="Escribí un mensaje..." data-i18n-placeholder="chat.placeholder" rows="1"></textarea>
+        <button type="submit" id="chat-send" data-i18n="chat.send">Enviar</button>
+        <button type="button" id="chat-cancel" class="secondary hidden" data-i18n="chat.cancel">Cancelar</button>
       </form>
     </section>
 
     <section id="tab-usb" class="tab-panel">
       <div class="usb-toolbar">
-        <button id="usb-scan-btn" class="btn btn-secondary">Buscar dispositivos</button>
+        <button id="usb-scan-btn" class="btn btn-secondary" data-i18n="usb.scan_btn">Buscar dispositivos</button>
         <span id="usb-scan-status" class="muted"></span>
       </div>
 
       <div class="dev-grid">
         <div class="card">
-          <div class="usb-block-title">USB</div>
+          <div class="usb-block-title" data-i18n="usb.title_usb">USB</div>
           <ul id="usb-devices-list" class="usb-devices-list"></ul>
         </div>
 
         <div class="card">
-          <div class="usb-block-title">Adaptadores Wi-Fi</div>
+          <div class="usb-block-title" data-i18n="usb.title_wifi_adapters">Adaptadores Wi-Fi</div>
           <ul id="usb-wifi-list" class="usb-devices-list"></ul>
         </div>
 
         <div class="card">
-          <div class="usb-block-title">Almacenamiento</div>
+          <div class="usb-block-title" data-i18n="usb.title_storage">Almacenamiento</div>
           <ul id="usb-volumes-list" class="usb-devices-list"></ul>
         </div>
       </div>
 
       <div class="card" style="margin-top:16px;">
-        <div class="usb-block-title">Explorador de archivos</div>
+        <div class="usb-block-title" data-i18n="usb.title_filemgr">Explorador de archivos</div>
         <div id="fm-usb" class="filemgr"></div>
       </div>
     </section>
@@ -116,9 +122,9 @@
               <span class="mx-cover-tag">CYPHER//OST</span>
             </div>
             <div class="mx-nowinfo">
-              <div class="mx-label">// NOW PLAYING</div>
-              <div id="mp-title" class="mx-title">CYPHER_OST</div>
-              <div id="mp-sub" class="mx-sub">Cypher OST · selecciona una pista</div>
+              <div class="mx-label" data-i18n="music.now_playing">// NOW PLAYING</div>
+              <div id="mp-title" class="mx-title" data-i18n="music.default_title">CYPHER_OST</div>
+              <div id="mp-sub" class="mx-sub" data-i18n="music.default_sub">Cypher OST · selecciona una pista</div>
             </div>
           </div>
           <div id="mp-visual" class="mx-visual stopped" aria-hidden="true">
@@ -126,50 +132,50 @@
             <span class="mx-glyph mx-pause">❚❚</span>
             <span class="mx-glyph mx-stop">■</span>
           </div>
-          <div id="mp-seek" class="mx-seek" title="Click para adelantar">
+          <div id="mp-seek" class="mx-seek" title="Click para adelantar" data-i18n-title="music.seek_title">
             <div id="mp-progress-fill" class="mx-seek-fill"></div>
             <div id="mp-seek-knob" class="mx-seek-knob"></div>
           </div>
           <div class="mx-time"><span id="mp-cur">0:00</span><span id="mp-dur">0:00</span></div>
           <div class="mx-controls">
-            <button type="button" id="mp-prev" class="mx-btn" title="Anterior">
+            <button type="button" id="mp-prev" class="mx-btn" title="Anterior" data-i18n-title="music.prev_title">
               <svg class="mx-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="3" height="14"/><polygon points="19,5 19,19 8,12"/></svg>
             </button>
-            <button type="button" id="mp-playpause" class="mx-btn mx-main" title="Reproducir / Pausa">
+            <button type="button" id="mp-playpause" class="mx-btn mx-main" title="Reproducir / Pausa" data-i18n-title="music.playpause_title">
               <svg class="mx-icon mx-icon-play" viewBox="0 0 24 24" aria-hidden="true"><polygon points="6,4 20,12 6,20"/></svg>
               <svg class="mx-icon mx-icon-pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
             </button>
-            <button type="button" id="mp-stop" class="mx-btn" title="Detener">
+            <button type="button" id="mp-stop" class="mx-btn" title="Detener" data-i18n-title="music.stop_title">
               <svg class="mx-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
             </button>
-            <button type="button" id="mp-next" class="mx-btn" title="Siguiente">
+            <button type="button" id="mp-next" class="mx-btn" title="Siguiente" data-i18n-title="music.next_title">
               <svg class="mx-icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="5,5 5,19 16,12"/><rect x="17" y="5" width="3" height="14"/></svg>
             </button>
           </div>
           <div class="mx-extra">
             <div class="mx-volume">
-              <button type="button" id="mp-vol-down" class="mx-vol-btn" title="Bajar volumen">−</button>
+              <button type="button" id="mp-vol-down" class="mx-vol-btn" title="Bajar volumen" data-i18n-title="music.vol_down_title">−</button>
               <div class="mx-vol-info">
-                <span class="mx-vol-label">// VOLUMEN</span>
+                <span class="mx-vol-label" data-i18n="music.vol_label">// VOLUMEN</span>
                 <span id="mp-vol-pct" class="mx-vol-pct">—</span>
               </div>
-              <button type="button" id="mp-vol-up" class="mx-vol-btn" title="Subir volumen">+</button>
+              <button type="button" id="mp-vol-up" class="mx-vol-btn" title="Subir volumen" data-i18n-title="music.vol_up_title">+</button>
             </div>
             <label class="mx-output">
-              <span class="mx-output-label">// SALIDA</span>
+              <span class="mx-output-label" data-i18n="music.output_label">// SALIDA</span>
               <select id="mp-output-select"></select>
             </label>
           </div>
         </div>
         <div class="mx-lower">
           <div class="mx-col-tracks">
-            <div class="mx-list-head">// TRACKLIST</div>
+            <div class="mx-list-head" data-i18n="music.tracklist_label">// TRACKLIST</div>
             <ul id="mp-list" class="mx-list"></ul>
           </div>
           <div class="mx-col-lyrics">
-            <div class="mx-list-head">// LYRICS</div>
+            <div class="mx-list-head" data-i18n="music.lyrics_label">// LYRICS</div>
             <div id="mp-lyrics" class="mp-lyrics">
-              <div class="mp-lyrics-hint">Reproduce una pista para ver su letra.</div>
+              <div class="mp-lyrics-hint" data-i18n="music.lyrics_hint">Reproduce una pista para ver su letra.</div>
             </div>
           </div>
         </div>
@@ -179,11 +185,11 @@
     <section id="tab-wardrive" class="tab-panel">
       <div class="wd-mode-banner" id="wd-mode-banner">
         <div class="wd-banner-text">
-          <div class="wd-banner-title">MODO WIFI AUDIT <span id="wd-iface" class="wd-iface"></span></div>
+          <div class="wd-banner-title"><span data-i18n="wifiaudit.banner_title">MODO WIFI AUDIT</span> <span id="wd-iface" class="wd-iface"></span></div>
           <div id="wd-banner-status" class="wd-banner-status">—</div>
         </div>
-        <button id="wd-exit-btn" class="secondary hidden">Salir</button>
-        <button id="wd-enter-btn" class="hidden">Entrar</button>
+        <button id="wd-exit-btn" class="secondary hidden" data-i18n="wifiaudit.exit_btn">Salir</button>
+        <button id="wd-enter-btn" class="hidden" data-i18n="wifiaudit.enter_btn">Entrar</button>
       </div>
 
       <div id="wd-error" class="error"></div>
@@ -191,32 +197,32 @@
       <!-- Two subsections: 1. AUDIT (select a network, capture the handshake)
            2. SESSIONS (past audits + dictionary attacks from there). -->
       <div class="wd-subtabs">
-        <button class="wd-subtab active" data-subtab="audit">1 · Auditoría</button>
-        <button class="wd-subtab" data-subtab="sessions">2 · Sesiones</button>
+        <button class="wd-subtab active" data-subtab="audit" data-i18n="wifiaudit.subtab_audit">1 · Auditoría</button>
+        <button class="wd-subtab" data-subtab="sessions" data-i18n="wifiaudit.subtab_sessions">2 · Sesiones</button>
       </div>
 
       <div id="wd-sub-audit" class="wd-subtab-panel active">
         <div class="wd-toolbar">
-          <button id="wd-scan-btn">Escanear redes</button>
-          <button id="wd-pause-btn" class="secondary hidden">Pausar</button>
-          <button id="wd-cancel-btn" class="wd-danger hidden">Cancelar ataque</button>
+          <button id="wd-scan-btn" data-i18n="wifiaudit.scan_btn">Escanear redes</button>
+          <button id="wd-pause-btn" class="secondary hidden" data-i18n="wifiaudit.pause_btn">Pausar</button>
+          <button id="wd-cancel-btn" class="wd-danger hidden" data-i18n="wifiaudit.cancel_btn">Cancelar ataque</button>
           <span id="wd-attack-status" class="muted"></span>
-          <input id="wd-search" type="search" placeholder="Buscar red (SSID, BSSID, canal...)" autocomplete="off"
+          <input id="wd-search" type="search" placeholder="Buscar red (SSID, BSSID, canal...)" data-i18n-placeholder="wifiaudit.search_placeholder" autocomplete="off"
                  style="margin-left: auto; width: 220px; font-size: 12px; padding: 6px 10px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary);" />
-          <button id="wd-filters-reset" class="secondary" title="Limpiar búsqueda y orden">Borrar filtros</button>
+          <button id="wd-filters-reset" class="secondary" title="Limpiar búsqueda y orden" data-i18n="wifiaudit.clear_filters">Borrar filtros</button>
         </div>
 
         <div class="wd-list-wrap">
           <table class="wd-table">
             <thead>
               <tr>
-                <th data-sort="ssid" data-label="Red">Red</th>
-                <th data-sort="channel" data-label="Canal">Canal</th>
-                <th data-sort="rssi" data-label="Señal">Señal</th>
-                <th data-sort="clients" data-label="Clientes">Clientes</th>
-                <th data-sort="security" data-label="Seguridad">Seguridad</th>
-                <th>Estado</th>
-                <th>Acciones</th>
+                <th data-sort="ssid" data-label="Red" data-i18n="wifiaudit.col_network">Red</th>
+                <th data-sort="channel" data-label="Canal" data-i18n="wifiaudit.col_channel">Canal</th>
+                <th data-sort="rssi" data-label="Señal" data-i18n="wifiaudit.col_signal">Señal</th>
+                <th data-sort="clients" data-label="Clientes" data-i18n="wifiaudit.col_clients">Clientes</th>
+                <th data-sort="security" data-label="Seguridad" data-i18n="wifiaudit.col_security">Seguridad</th>
+                <th data-i18n="wifiaudit.col_status">Estado</th>
+                <th data-i18n="wifiaudit.col_actions">Acciones</th>
               </tr>
             </thead>
             <tbody id="wd-table-body">
@@ -226,9 +232,9 @@
         </div>
 
         <div class="wd-session-block" id="wd-results-block">
-          <div class="wd-session-title">HANDSHAKES CAPTURADOS</div>
+          <div class="wd-session-title" data-i18n="wifiaudit.captured_title">HANDSHAKES CAPTURADOS</div>
           <div id="wd-results-list" class="wd-results-list">
-            <div class="muted">Sin capturas aún. Selecciona una red y pulsa Auditar.</div>
+            <div class="muted" data-i18n="wifiaudit.empty_results">Sin capturas aún. Selecciona una red y pulsa Auditar.</div>
           </div>
           <div id="wd-verify-list" class="wd-results-list"></div>
           <div id="wd-dict-progress" class="wd-dict-progress"></div>
@@ -239,7 +245,7 @@
         <!-- Past sessions browser: every folder is one session (date-named),
              browse its files and download handshakes/hashes/info.txt. -->
         <div class="wd-session-block" id="wd-sessions-block" style="margin-top: 0;">
-          <div class="wd-session-title">SESIONES ANTERIORES</div>
+          <div class="wd-session-title" data-i18n="wifiaudit.sessions_title">SESIONES ANTERIORES</div>
           <div id="wd-sessions-list" class="wd-sessions-list">
             <div class="muted">—</div>
           </div>
@@ -249,7 +255,7 @@
             <div class="wd-session-title" id="wd-session-files-title" style="font-size:12px; margin-top:10px;"></div>
             <table class="wd-table">
               <thead>
-                <tr><th>Archivo</th><th>Tamaño</th><th></th><th></th></tr>
+                <tr><th data-i18n="wifiaudit.col_file">Archivo</th><th data-i18n="wifiaudit.col_size">Tamaño</th><th></th><th></th></tr>
               </thead>
               <tbody id="wd-session-files-body"></tbody>
             </table>
@@ -265,18 +271,18 @@
         <div class="wd-modal-backdrop" onclick="wdHideProgress()"></div>
         <div class="wd-modal-content">
           <div class="wd-modal-header">
-            <span id="wd-progress-title">Auditando...</span>
+            <span id="wd-progress-title" data-i18n="wifiaudit.progress_title">Auditando...</span>
             <div class="wd-modal-actions">
-              <a id="wd-progress-download" class="hidden" href="#" download><button class="wd-download-btn">Descargar</button></a>
-              <button id="wd-progress-minimize" class="secondary" title="Minimizar (sigue corriendo)">—</button>
-              <button id="wd-progress-close" class="secondary" title="Cerrar (el ataque sigue en background)">×</button>
+              <a id="wd-progress-download" class="hidden" href="#" download><button class="wd-download-btn" data-i18n="wifiaudit.download_btn">Descargar</button></a>
+              <button id="wd-progress-minimize" class="secondary" title="Minimizar (sigue corriendo)" data-i18n-title="wifiaudit.minimize_title">—</button>
+              <button id="wd-progress-close" class="secondary" title="Cerrar (el ataque sigue en background)" data-i18n-title="wifiaudit.close_title">×</button>
             </div>
           </div>
           <div class="wd-progress-steps" id="wd-progress-steps">
             <!-- Steps injected here -->
           </div>
           <div class="wd-progress-log" id="wd-progress-log">
-            <div class="muted">Esperando inicio...</div>
+            <div class="muted" data-i18n="wifiaudit.waiting">Esperando inicio...</div>
           </div>
         </div>
       </div>
@@ -287,9 +293,9 @@
         <div class="wd-modal-backdrop" onclick="document.getElementById('wd-preview-modal').classList.add('hidden')"></div>
         <div class="wd-modal-content">
           <div class="wd-modal-header">
-            <span id="wd-preview-title">Archivo</span>
+            <span id="wd-preview-title" data-i18n="wifiaudit.preview_title">Archivo</span>
             <div class="wd-modal-actions">
-              <button id="wd-preview-close" class="secondary">Cerrar</button>
+              <button id="wd-preview-close" class="secondary" data-i18n="wifiaudit.preview_close">Cerrar</button>
             </div>
           </div>
           <div id="wd-preview-body" class="wd-preview-body"></div>
@@ -301,17 +307,17 @@
         <div class="wd-modal-backdrop" onclick="document.getElementById('wd-deletesession-modal').classList.add('hidden')"></div>
         <div class="wd-modal-content" style="max-width: 420px;">
           <div class="wd-modal-header">
-            <span id="wd-deletesession-title">Borrar sesión</span>
+            <span id="wd-deletesession-title" data-i18n="wifiaudit.delete_session_title">Borrar sesión</span>
             <div class="wd-modal-actions">
-              <button class="secondary" onclick="document.getElementById('wd-deletesession-modal').classList.add('hidden')">Cancelar</button>
+              <button class="secondary" onclick="document.getElementById('wd-deletesession-modal').classList.add('hidden')" data-i18n="wifiaudit.delete_session_cancel">Cancelar</button>
             </div>
           </div>
           <div style="padding: 16px 20px;">
-            <p style="font-size: 13px; line-height: 1.6; margin: 0 0 14px;">
+            <p style="font-size: 13px; line-height: 1.6; margin: 0 0 14px;" data-i18n-html="wifiaudit.delete_session_body">
               Se eliminan <strong style="color:#ef4444">todos los archivos</strong> de esta sesión:
               capturas, hashes, logs e info. Esta acción no se puede deshacer.
             </p>
-            <button id="wd-deletesession-confirm" class="wd-danger" style="width: 100%;">Borrar sesión</button>
+            <button id="wd-deletesession-confirm" class="wd-danger" style="width: 100%;" data-i18n="wifiaudit.delete_session_confirm">Borrar sesión</button>
           </div>
         </div>
       </div>
@@ -321,9 +327,9 @@
         <div class="wd-modal-backdrop" onclick="document.getElementById('wd-pwd-modal').classList.add('hidden')"></div>
         <div class="wd-modal-content" style="max-width: 380px;">
           <div class="wd-modal-header">
-            <span>Contraseña encontrada — <span id="wd-pwd-ssid">—</span></span>
+            <span><span data-i18n="wifiaudit.pwd_found_prefix">Contraseña encontrada —</span> <span id="wd-pwd-ssid">—</span></span>
             <div class="wd-modal-actions">
-              <button id="wd-pwd-close" class="secondary">Cerrar</button>
+              <button id="wd-pwd-close" class="secondary" data-i18n="wifiaudit.pwd_close">Cerrar</button>
             </div>
           </div>
           <div style="padding: 18px 20px; display: flex; align-items: center; gap: 10px;">
@@ -340,14 +346,14 @@
         <div class="wd-modal-backdrop" onclick="document.getElementById('wd-session-pwd-modal').classList.add('hidden')"></div>
         <div class="wd-modal-content" style="max-width: 380px;">
           <div class="wd-modal-header">
-            <span>🏴‍☠️ password — <span id="wd-session-pwd-ssid">—</span></span>
+            <span><span data-i18n="wifiaudit.session_pwd_prefix">🏴‍☠️ password —</span> <span id="wd-session-pwd-ssid">—</span></span>
             <div class="wd-modal-actions">
-              <button id="wd-session-pwd-close" class="secondary">Cerrar</button>
+              <button id="wd-session-pwd-close" class="secondary" data-i18n="wifiaudit.session_pwd_close">Cerrar</button>
             </div>
           </div>
           <div style="padding: 18px 20px; display: flex; align-items: center; gap: 10px;">
             <span id="wd-session-pwd-value" style="flex: 1; font-family: ui-monospace, monospace; font-size: 15px; letter-spacing: 0.06em; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px;">—</span>
-            <button id="wd-session-pwd-eye" class="secondary" style="font-size: 18px; min-width: 44px;" title="Revelar / ocultar">🏴‍☠️</button>
+            <button id="wd-session-pwd-eye" class="secondary" style="font-size: 18px; min-width: 44px;" title="Revelar / ocultar" data-i18n-title="wifiaudit.session_pwd_eye_title">🏴‍☠️</button>
           </div>
         </div>
       </div>
@@ -359,17 +365,17 @@
           <button class="apm-close" onclick="document.getElementById('wd-netinfo-modal').classList.add('hidden')">✕</button>
           <div class="apm-head">
             <div class="apm-title" id="wd-netinfo-title">—</div>
-            <div class="apm-sub">Detalles de la red</div>
+            <div class="apm-sub" data-i18n="wifiaudit.netinfo_sub">Detalles de la red</div>
           </div>
           <div class="apm-grid">
-            <div class="apm-row"><span>MAC Address (BSSID)</span><span id="wdni-bssid">—</span></div>
-            <div class="apm-row"><span>Marca / fabricante</span><span id="wdni-vendor">—</span></div>
-            <div class="apm-row"><span>Seguridad</span><span id="wdni-security">—</span></div>
-            <div class="apm-row"><span>Canal</span><span id="wdni-channel">—</span></div>
-            <div class="apm-row"><span>Potencia (RSSI)</span><span id="wdni-rssi">—</span></div>
-            <div class="apm-row"><span>Distancia aprox.</span><span id="wdni-distance">—</span></div>
+            <div class="apm-row"><span data-i18n="wifiaudit.netinfo_mac">MAC Address (BSSID)</span><span id="wdni-bssid">—</span></div>
+            <div class="apm-row"><span data-i18n="wifiaudit.netinfo_vendor">Marca / fabricante</span><span id="wdni-vendor">—</span></div>
+            <div class="apm-row"><span data-i18n="wifiaudit.netinfo_security">Seguridad</span><span id="wdni-security">—</span></div>
+            <div class="apm-row"><span data-i18n="wifiaudit.netinfo_channel">Canal</span><span id="wdni-channel">—</span></div>
+            <div class="apm-row"><span data-i18n="wifiaudit.netinfo_rssi">Potencia (RSSI)</span><span id="wdni-rssi">—</span></div>
+            <div class="apm-row"><span data-i18n="wifiaudit.netinfo_distance">Distancia aprox.</span><span id="wdni-distance">—</span></div>
           </div>
-          <div class="apm-hint">La lista de equipos conectados vive en el radar (WIFIRADAR) y en los archivos de la sesión.</div>
+          <div class="apm-hint" data-i18n="wifiaudit.netinfo_hint">La lista de equipos conectados vive en el radar (WIFIRADAR) y en los archivos de la sesión.</div>
         </div>
       </div>
 
@@ -379,20 +385,20 @@
         <div class="wd-modal-backdrop" onclick="document.getElementById('wd-deleteall-modal').classList.add('hidden')"></div>
         <div class="wd-modal-content" style="max-width: 460px;">
           <div class="wd-modal-header">
-            <span>Borrar todas las sesiones</span>
+            <span data-i18n="wifiaudit.deleteall_title">Borrar todas las sesiones</span>
             <div class="wd-modal-actions">
-              <button id="wd-deleteall-cancel" class="secondary">Cancelar</button>
+              <button id="wd-deleteall-cancel" class="secondary" data-i18n="wifiaudit.deleteall_cancel">Cancelar</button>
             </div>
           </div>
           <div style="padding: 16px 20px;">
-            <p style="font-size: 13px; line-height: 1.6; margin: 0 0 12px;">
+            <p style="font-size: 13px; line-height: 1.6; margin: 0 0 12px;" data-i18n-html="wifiaudit.deleteall_body">
               Esto <strong style="color:#ef4444">borra TODAS las sesiones</strong> del dispositivo:
               capturas, hashes, logs e info. Los handshakes no se pueden recuperar.
             </p>
-            <input id="wd-deleteall-input" type="text" placeholder="Escribe DELETE ALL" autocomplete="off"
+            <input id="wd-deleteall-input" type="text" placeholder="Escribe DELETE ALL" data-i18n-placeholder="wifiaudit.deleteall_placeholder" autocomplete="off"
                    style="width: 100%; font-size: 13px; padding: 8px 12px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary);" />
             <div id="wd-deleteall-error" class="error" style="margin-top: 8px;"></div>
-            <button id="wd-deleteall-confirm" class="wd-danger" style="margin-top: 12px; width: 100%;">Borrar todo</button>
+            <button id="wd-deleteall-confirm" class="wd-danger" style="margin-top: 12px; width: 100%;" data-i18n="wifiaudit.deleteall_confirm">Borrar todo</button>
           </div>
         </div>
       </div>
@@ -401,60 +407,60 @@
     <section id="tab-settings" class="tab-panel">
       <div class="cfg">
         <div class="cfg-head">
-          <h2 class="cfg-title">Configuración</h2>
+          <h2 class="cfg-title" data-i18n="settings.title">Configuración</h2>
         </div>
         <nav class="cfg-nav" id="cfg-nav">
-          <button class="cfg-nav-btn active" data-cfg="general">General</button>
-          <button class="cfg-nav-btn" data-cfg="wifi">Wifi</button>
-          <button class="cfg-nav-btn" data-cfg="audio">Audio</button>
-          <button class="cfg-nav-btn" data-cfg="ia">IA</button>
-          <button class="cfg-nav-btn" data-cfg="almacenamiento">Almacenamiento</button>
-          <button class="cfg-nav-btn" data-cfg="sistema">Sistema</button>
+          <button class="cfg-nav-btn active" data-cfg="general" data-i18n="settings.nav_general">General</button>
+          <button class="cfg-nav-btn" data-cfg="wifi" data-i18n="settings.nav_wifi">Wifi</button>
+          <button class="cfg-nav-btn" data-cfg="audio" data-i18n="settings.nav_audio">Audio</button>
+          <button class="cfg-nav-btn" data-cfg="ia" data-i18n="settings.nav_ia">IA</button>
+          <button class="cfg-nav-btn" data-cfg="almacenamiento" data-i18n="settings.nav_storage">Almacenamiento</button>
+          <button class="cfg-nav-btn" data-cfg="sistema" data-i18n="settings.nav_system">Sistema</button>
         </nav>
 
         <!-- GENERAL -->
         <div class="cfg-panel active" data-cfg-panel="general">
           <div class="cfg-card">
-            <div class="cfg-card-head"><span class="cfg-card-title">Resumen del dispositivo</span></div>
+            <div class="cfg-card-head"><span class="cfg-card-title" data-i18n="settings.general.summary_title">Resumen del dispositivo</span></div>
             <div class="cfg-rows">
-              <div class="cfg-row"><span class="cfg-key">Modelo de IA</span><span id="ov-model" class="cfg-val">—</span></div>
-              <div class="cfg-row"><span class="cfg-key">Salida de audio</span><span id="ov-audio" class="cfg-val">—</span></div>
-              <div class="cfg-row"><span class="cfg-key">Wifi</span><span id="ov-wifi" class="cfg-val">—</span></div>
-              <div class="cfg-row"><span class="cfg-key">Batería</span><span id="ov-battery" class="cfg-val">—</span></div>
+              <div class="cfg-row"><span class="cfg-key" data-i18n="settings.general.ai_model">Modelo de IA</span><span id="ov-model" class="cfg-val">—</span></div>
+              <div class="cfg-row"><span class="cfg-key" data-i18n="settings.general.audio_output">Salida de audio</span><span id="ov-audio" class="cfg-val">—</span></div>
+              <div class="cfg-row"><span class="cfg-key" data-i18n="settings.general.wifi">Wifi</span><span id="ov-wifi" class="cfg-val">—</span></div>
+              <div class="cfg-row"><span class="cfg-key" data-i18n="settings.general.battery">Batería</span><span id="ov-battery" class="cfg-val">—</span></div>
             </div>
           </div>
 
           <div class="cfg-card">
             <div class="cfg-card-head">
-              <span class="cfg-card-title">Modo de IA</span>
+              <span class="cfg-card-title" data-i18n="settings.general.mode_title">Modo de IA</span>
               <span id="mode-badge" class="cfg-badge">—</span>
             </div>
-            <p class="cfg-meta">Local usa el modelo instalado en este dispositivo. Agente conversa a través de OpenClaw.</p>
+            <p class="cfg-meta" data-i18n="settings.general.mode_desc">Local usa el modelo instalado en este dispositivo. Agente conversa a través de OpenClaw.</p>
             <div class="cfg-toggle-group" id="mode-toggle">
-              <button type="button" class="cfg-toggle-btn" data-mode="local">Local</button>
-              <button type="button" class="cfg-toggle-btn" data-mode="agent">Agente (OpenClaw)</button>
+              <button type="button" class="cfg-toggle-btn" data-mode="local" data-i18n="settings.general.mode_local">Local</button>
+              <button type="button" class="cfg-toggle-btn" data-mode="agent" data-i18n="settings.general.mode_agent">Agente (OpenClaw)</button>
             </div>
           </div>
 
           <div class="cfg-card cfg-card-wide">
             <div class="cfg-card-head">
-              <span class="cfg-card-title">WiFi directo (punto de acceso)</span>
+              <span class="cfg-card-title" data-i18n="settings.general.ap_title">WiFi directo (punto de acceso)</span>
               <span id="ap-state" class="cfg-badge">—</span>
             </div>
-            <p class="cfg-meta">Convierte la Pi en su propio WiFi para entrar a esta web sin internet. Al activarlo, la Pi se desconecta de tu WiFi actual; vuelve a la normalidad al desactivarlo.</p>
+            <p class="cfg-meta" data-i18n="settings.general.ap_desc">Convierte la Pi en su propio WiFi para entrar a esta web sin internet. Al activarlo, la Pi se desconecta de tu WiFi actual; vuelve a la normalidad al desactivarlo.</p>
             <div class="cfg-actions">
-              <button type="button" id="ap-enable-btn" class="cfg-btn cfg-btn-accent">Activar WiFi directo</button>
-              <button type="button" id="ap-disable-btn" class="cfg-btn" style="display:none;">Desactivar</button>
+              <button type="button" id="ap-enable-btn" class="cfg-btn cfg-btn-accent" data-i18n="settings.general.ap_enable">Activar WiFi directo</button>
+              <button type="button" id="ap-disable-btn" class="cfg-btn" style="display:none;" data-i18n="settings.general.ap_disable">Desactivar</button>
             </div>
             <div id="ap-details" class="ap-details" style="display:none;">
               <div class="ap-info">
-                <div class="cfg-row"><span class="cfg-key">Red (SSID)</span><span id="ap-ssid" class="cfg-val">—</span></div>
-                <div class="cfg-row"><span class="cfg-key">Contraseña</span><span id="ap-pass" class="cfg-val">—</span></div>
-                <div class="cfg-row"><span class="cfg-key">Dirección web</span><span id="ap-url" class="cfg-val">—</span></div>
+                <div class="cfg-row"><span class="cfg-key" data-i18n="settings.general.ap_ssid">Red (SSID)</span><span id="ap-ssid" class="cfg-val">—</span></div>
+                <div class="cfg-row"><span class="cfg-key" data-i18n="settings.general.ap_pass">Contraseña</span><span id="ap-pass" class="cfg-val">—</span></div>
+                <div class="cfg-row"><span class="cfg-key" data-i18n="settings.general.ap_url">Dirección web</span><span id="ap-url" class="cfg-val">—</span></div>
               </div>
               <div class="ap-qrs">
-                <figure class="ap-qr"><img id="ap-qr-wifi" alt="QR para conectarse al WiFi" /><figcaption>Escanea para conectarte al WiFi</figcaption></figure>
-                <figure class="ap-qr"><img id="ap-qr-url" alt="QR para abrir la web" /><figcaption>Escanea para abrir la web</figcaption></figure>
+                <figure class="ap-qr"><img id="ap-qr-wifi" alt="QR para conectarse al WiFi" data-i18n-alt="settings.general.ap_qr_wifi_alt" /><figcaption data-i18n="settings.general.ap_qr_wifi_caption">Escanea para conectarte al WiFi</figcaption></figure>
+                <figure class="ap-qr"><img id="ap-qr-url" alt="QR para abrir la web" data-i18n-alt="settings.general.ap_qr_url_alt" /><figcaption data-i18n="settings.general.ap_qr_url_caption">Escanea para abrir la web</figcaption></figure>
               </div>
             </div>
           </div>
@@ -464,18 +470,18 @@
         <div class="cfg-panel" data-cfg-panel="wifi">
           <div class="cfg-card-wide">
             <nav class="subtabs" id="wifi-subtabs">
-              <button class="subtab active" data-wifi-sub="conexion">Conexión</button>
-              <button class="subtab" data-wifi-sub="redes">Redes</button>
-              <button class="subtab" data-wifi-sub="espectro">Espectro</button>
+              <button class="subtab active" data-wifi-sub="conexion" data-i18n="settings.wifi.sub_connection">Conexión</button>
+              <button class="subtab" data-wifi-sub="redes" data-i18n="settings.wifi.sub_networks">Redes</button>
+              <button class="subtab" data-wifi-sub="espectro" data-i18n="settings.wifi.sub_spectrum">Espectro</button>
             </nav>
 
             <div class="subpanel active" data-wifi-panel="conexion">
               <div class="wifi-current card">
-                <div class="wifi-current-label">Conexión actual</div>
+                <div class="wifi-current-label" data-i18n="settings.wifi.current_label">Conexión actual</div>
                 <div id="wifi-current-ssid" class="wifi-current-ssid">—</div>
                 <div id="wifi-current-actions" class="wifi-current-actions hidden">
-                  <button id="wifi-current-show-password" class="btn btn-tertiary">Ver contraseña</button>
-                  <button id="wifi-current-forget" class="btn btn-danger">Olvidar esta red</button>
+                  <button id="wifi-current-show-password" class="btn btn-tertiary" data-i18n="settings.wifi.show_password">Ver contraseña</button>
+                  <button id="wifi-current-forget" class="btn btn-danger" data-i18n="settings.wifi.forget_network">Olvidar esta red</button>
                 </div>
                 <div id="wifi-current-password" class="wifi-current-password hidden"></div>
               </div>
@@ -483,12 +489,12 @@
 
             <div class="subpanel" data-wifi-panel="redes">
               <div class="wifi-toolbar">
-                <button id="wifi-scan-btn" class="btn btn-secondary">Buscar redes</button>
+                <button id="wifi-scan-btn" class="btn btn-secondary" data-i18n="settings.wifi.scan_btn">Buscar redes</button>
                 <span id="wifi-scan-status" class="muted"></span>
               </div>
               <ul id="wifi-list" class="wifi-list"></ul>
               <div class="wifi-toolbar">
-                <span class="muted">Redes guardadas</span>
+                <span class="muted" data-i18n="settings.wifi.saved_networks">Redes guardadas</span>
               </div>
               <ul id="wifi-saved-list" class="wifi-list"></ul>
             </div>
@@ -496,25 +502,25 @@
             <div class="subpanel" data-wifi-panel="espectro">
               <div class="rf-panel">
                 <div class="rf-panel-header">
-                  <span class="rf-panel-title">// ANÁLISIS DE ESPECTRO RF</span>
+                  <span class="rf-panel-title" data-i18n="settings.wifi.spectrum_title">// ANÁLISIS DE ESPECTRO RF</span>
                   <span class="muted" id="rf-scan-status"></span>
                 </div>
                 <canvas id="rf-spectrum" class="rf-spectrum" width="640" height="170"></canvas>
                 <div class="rf-legend">
-                  <span class="rf-legend-item"><span class="rf-dot rf-dot-strong"></span>estable</span>
-                  <span class="rf-legend-item"><span class="rf-dot rf-dot-mid"></span>media</span>
-                  <span class="rf-legend-item"><span class="rf-dot rf-dot-weak"></span>débil</span>
+                  <span class="rf-legend-item"><span class="rf-dot rf-dot-strong"></span><span data-i18n="settings.wifi.legend_strong">estable</span></span>
+                  <span class="rf-legend-item"><span class="rf-dot rf-dot-mid"></span><span data-i18n="settings.wifi.legend_mid">media</span></span>
+                  <span class="rf-legend-item"><span class="rf-dot rf-dot-weak"></span><span data-i18n="settings.wifi.legend_weak">débil</span></span>
                 </div>
                 <div class="rf-table-wrap">
                   <table class="rf-table">
                     <thead>
                       <tr>
-                        <th>SSID</th>
-                        <th>BSSID</th>
-                        <th>CH</th>
-                        <th>dBm</th>
-                        <th>~DIST</th>
-                        <th>SEG</th>
+                        <th data-i18n="settings.wifi.table_ssid">SSID</th>
+                        <th data-i18n="settings.wifi.table_bssid">BSSID</th>
+                        <th data-i18n="settings.wifi.table_ch">CH</th>
+                        <th data-i18n="settings.wifi.table_dbm">dBm</th>
+                        <th data-i18n="settings.wifi.table_dist">~DIST</th>
+                        <th data-i18n="settings.wifi.table_sec">SEG</th>
                       </tr>
                     </thead>
                     <tbody id="rf-table-body"></tbody>
@@ -529,29 +535,29 @@
         <div class="cfg-panel" data-cfg-panel="audio">
           <div class="cfg-card">
             <div class="cfg-card-head">
-              <span class="cfg-card-title">Salida de audio</span>
-              <button type="button" id="audio-output-refresh" class="cfg-icon-btn" title="Refrescar">↻</button>
+              <span class="cfg-card-title" data-i18n="settings.audio.output_title">Salida de audio</span>
+              <button type="button" id="audio-output-refresh" class="cfg-icon-btn" title="Refrescar" data-i18n-title="settings.audio.refresh_title">↻</button>
             </div>
             <div class="cfg-device">
               <span id="audio-active-name" class="cfg-device-name">—</span>
               <span id="audio-active-state" class="cfg-badge">—</span>
             </div>
             <label class="cfg-field">
-              <span class="cfg-key">Reproducir por</span>
+              <span class="cfg-key" data-i18n="settings.audio.output_label">Reproducir por</span>
               <select id="audio-output-select">
-                <option value="hat">Bocina de la Pi</option>
+                <option value="hat" data-i18n="settings.audio.output_hat">Bocina de la Pi</option>
               </select>
             </label>
           </div>
 
           <div class="cfg-card">
             <div class="cfg-card-head">
-              <span class="cfg-card-title">Bluetooth</span>
-              <button type="button" id="bt-scan-btn" class="cfg-btn cfg-btn-accent">+ Vincular dispositivo</button>
+              <span class="cfg-card-title" data-i18n="settings.audio.bt_title">Bluetooth</span>
+              <button type="button" id="bt-scan-btn" class="cfg-btn cfg-btn-accent" data-i18n="settings.audio.bt_pair_btn">+ Vincular dispositivo</button>
             </div>
             <span id="bt-scan-status" class="cfg-meta"></span>
             <ul id="bt-found-list" class="cfg-list"></ul>
-            <div class="cfg-sub">Dispositivos vinculados</div>
+            <div class="cfg-sub" data-i18n="settings.audio.bt_paired_label">Dispositivos vinculados</div>
             <ul id="bt-paired-list" class="cfg-list"></ul>
           </div>
         </div>
@@ -559,19 +565,19 @@
         <!-- IA -->
         <div class="cfg-panel" data-cfg-panel="ia">
           <div class="cfg-card">
-            <div class="cfg-card-head"><span class="cfg-card-title">Modelo de IA</span></div>
+            <div class="cfg-card-head"><span class="cfg-card-title" data-i18n="settings.ia.title">Modelo de IA</span></div>
             <div class="cfg-device">
               <span id="ia-model-name" class="cfg-device-name">—</span>
-              <span id="model-load-indicator" class="cfg-badge" title="¿El modelo está cargado en RAM?">—</span>
+              <span id="model-load-indicator" class="cfg-badge" title="¿El modelo está cargado en RAM?" data-i18n-title="settings.ia.loaded_title">—</span>
             </div>
-            <div class="cfg-row"><span class="cfg-key">RAM usada</span><span id="ia-ram" class="cfg-val">—</span></div>
+            <div class="cfg-row"><span class="cfg-key" data-i18n="settings.ia.ram_used">RAM usada</span><span id="ia-ram" class="cfg-val">—</span></div>
             <div class="cfg-progress"><div id="ia-ram-bar" class="cfg-progress-fill"></div></div>
             <label class="cfg-field">
-              <span class="cfg-key">Cambiar modelo</span>
+              <span class="cfg-key" data-i18n="settings.ia.change_model">Cambiar modelo</span>
               <select id="ia-model-select"></select>
             </label>
             <div class="cfg-actions">
-              <button type="button" id="unload-model-btn" class="cfg-btn" title="Liberar el modelo de la memoria de la Pi">Descargar de memoria</button>
+              <button type="button" id="unload-model-btn" class="cfg-btn" title="Liberar el modelo de la memoria de la Pi" data-i18n="settings.ia.unload_btn" data-i18n-title="settings.ia.unload_title">Descargar de memoria</button>
             </div>
           </div>
         </div>
@@ -580,17 +586,17 @@
         <div class="cfg-panel" data-cfg-panel="almacenamiento">
           <div class="cfg-card">
             <div class="cfg-card-head">
-              <span class="cfg-card-title">Disco interno</span>
-              <button type="button" id="cfg-storage-refresh" class="cfg-icon-btn" title="Refrescar">↻</button>
+              <span class="cfg-card-title" data-i18n="settings.storage.internal_title">Disco interno</span>
+              <button type="button" id="cfg-storage-refresh" class="cfg-icon-btn" title="Refrescar" data-i18n-title="settings.storage.refresh_title">↻</button>
             </div>
-            <div class="cfg-row"><span class="cfg-key">Uso</span><span id="disk-usage" class="cfg-val">—</span></div>
+            <div class="cfg-row"><span class="cfg-key" data-i18n="settings.storage.usage_label">Uso</span><span id="disk-usage" class="cfg-val">—</span></div>
             <div class="cfg-progress"><div id="disk-bar" class="cfg-progress-fill"></div></div>
           </div>
 
           <div class="cfg-card">
             <div class="cfg-card-head">
-              <span class="cfg-card-title">Almacenamiento USB</span>
-              <button type="button" id="settings-usb-refresh-btn" class="cfg-icon-btn" title="Refrescar">↻</button>
+              <span class="cfg-card-title" data-i18n="settings.storage.usb_title">Almacenamiento USB</span>
+              <button type="button" id="settings-usb-refresh-btn" class="cfg-icon-btn" title="Refrescar" data-i18n-title="settings.storage.refresh_title">↻</button>
             </div>
             <span id="settings-usb-status" class="cfg-meta"></span>
             <ul id="settings-usb-eject-list" class="cfg-list"></ul>
@@ -598,7 +604,7 @@
 
           <div class="cfg-card cfg-card-wide">
             <div class="cfg-card-head">
-              <span class="cfg-card-title">Explorador de archivos</span>
+              <span class="cfg-card-title" data-i18n="settings.storage.filemgr_title">Explorador de archivos</span>
             </div>
             <div id="fm-settings" class="filemgr"></div>
           </div>
@@ -607,37 +613,37 @@
         <!-- SISTEMA -->
         <div class="cfg-panel" data-cfg-panel="sistema">
           <div class="cfg-card">
-            <div class="cfg-card-head"><span class="cfg-card-title">Recursos</span></div>
-            <div class="cfg-row"><span class="cfg-key">CPU</span><span id="sys-cpu" class="cfg-val">—</span></div>
+            <div class="cfg-card-head"><span class="cfg-card-title" data-i18n="settings.system.resources_title">Recursos</span></div>
+            <div class="cfg-row"><span class="cfg-key" data-i18n="settings.system.cpu">CPU</span><span id="sys-cpu" class="cfg-val">—</span></div>
             <div class="cfg-progress"><div id="sys-cpu-bar" class="cfg-progress-fill"></div></div>
-            <div class="cfg-row"><span class="cfg-key">RAM</span><span id="sys-ram" class="cfg-val">—</span></div>
+            <div class="cfg-row"><span class="cfg-key" data-i18n="settings.system.ram">RAM</span><span id="sys-ram" class="cfg-val">—</span></div>
             <div class="cfg-progress"><div id="sys-ram-bar" class="cfg-progress-fill"></div></div>
           </div>
 
           <div class="cfg-card">
             <div class="cfg-card-head">
-              <span class="cfg-card-title">Respaldo</span>
-              <button type="button" id="backup-create-btn" class="cfg-btn cfg-btn-accent">+ Crear respaldo</button>
+              <span class="cfg-card-title" data-i18n="settings.system.backup_title">Respaldo</span>
+              <button type="button" id="backup-create-btn" class="cfg-btn cfg-btn-accent" data-i18n="settings.system.backup_create">+ Crear respaldo</button>
             </div>
-            <p class="cfg-meta">Guarda la configuración (incluye claves y wifi) en la microSD de la Pi. No se sube al repositorio. Úsalo para restaurar si algo falla.</p>
+            <p class="cfg-meta" data-i18n="settings.system.backup_desc">Guarda la configuración (incluye claves y wifi) en la microSD de la Pi. No se sube al repositorio. Úsalo para restaurar si algo falla.</p>
             <span id="backup-status" class="cfg-meta"></span>
             <ul id="backup-list" class="cfg-list"></ul>
           </div>
 
           <div class="cfg-card">
-            <div class="cfg-card-head"><span class="cfg-card-title">Contraseña de esta web</span></div>
-            <p class="cfg-meta">Se guarda en el <code>.env</code> del dispositivo (texto plano, accesible por SSH) por si la olvidan.</p>
+            <div class="cfg-card-head"><span class="cfg-card-title" data-i18n="settings.system.password_title">Contraseña de esta web</span></div>
+            <p class="cfg-meta" data-i18n-html="settings.system.password_desc">Se guarda en el <code>.env</code> del dispositivo (texto plano, accesible por SSH) por si la olvidan.</p>
             <form id="password-change-form" class="cfg-form">
               <label class="cfg-field">
-                <span class="cfg-key">Contraseña actual</span>
+                <span class="cfg-key" data-i18n="settings.system.password_current">Contraseña actual</span>
                 <input type="password" id="pw-current" autocomplete="current-password" required />
               </label>
               <label class="cfg-field">
-                <span class="cfg-key">Contraseña nueva</span>
+                <span class="cfg-key" data-i18n="settings.system.password_new">Contraseña nueva</span>
                 <input type="password" id="pw-new" autocomplete="new-password" minlength="4" required />
               </label>
               <div class="cfg-actions">
-                <button type="submit" class="cfg-btn cfg-btn-accent">Cambiar contraseña</button>
+                <button type="submit" class="cfg-btn cfg-btn-accent" data-i18n="settings.system.password_change_btn">Cambiar contraseña</button>
               </div>
               <span id="pw-change-status" class="cfg-meta"></span>
             </form>
@@ -649,11 +655,11 @@
 
   <div id="wifi-connect-modal" class="modal hidden">
     <div class="modal-card">
-      <h3 id="wifi-connect-title">Conectar</h3>
-      <input id="wifi-connect-password" type="password" placeholder="Contraseña (si hace falta)" autocomplete="off" />
+      <h3 id="wifi-connect-title" data-i18n="modal.wifi_connect_title">Conectar</h3>
+      <input id="wifi-connect-password" type="password" placeholder="Contraseña (si hace falta)" data-i18n-placeholder="modal.wifi_connect_placeholder" autocomplete="off" />
       <div class="modal-actions">
-        <button id="wifi-connect-cancel" class="secondary">Cancelar</button>
-        <button id="wifi-connect-confirm">Conectar</button>
+        <button id="wifi-connect-cancel" class="secondary" data-i18n="modal.cancel">Cancelar</button>
+        <button id="wifi-connect-confirm" data-i18n="modal.connect">Conectar</button>
       </div>
       <div id="wifi-connect-error" class="error"></div>
     </div>
@@ -663,7 +669,7 @@
     <div class="modal-card image-preview-card">
       <img id="image-preview-img" src="" alt="preview" />
       <div class="modal-actions">
-        <button id="image-preview-close" class="secondary">Cerrar</button>
+        <button id="image-preview-close" class="secondary" data-i18n="modal.image_preview_close">Cerrar</button>
       </div>
     </div>
   </div>
@@ -673,14 +679,15 @@
       <div class="fm-viewer-head">
         <span id="fm-viewer-name" class="fm-viewer-name mono">—</span>
         <div class="fm-viewer-actions">
-          <a id="fm-viewer-download" class="btn btn-tertiary" href="#" download>Descargar</a>
-          <button id="fm-viewer-close" class="btn btn-secondary">Cerrar</button>
+          <a id="fm-viewer-download" class="btn btn-tertiary" href="#" download data-i18n="modal.fm_download">Descargar</a>
+          <button id="fm-viewer-close" class="btn btn-secondary" data-i18n="modal.fm_close">Cerrar</button>
         </div>
       </div>
       <div id="fm-viewer-body" class="fm-viewer-body"></div>
     </div>
   </div>
 
+  <script src="i18n.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

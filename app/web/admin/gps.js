@@ -17,11 +17,46 @@ let lastHadFix = false;
 let lastSnapshot = null; // forwarded to the globe view when it's active
 let view = "map"; // "map" | "globe"
 
+// GNSS metadata enrichment (services/gnss/, docs/gnss.md) — cached satellite
+// name + orbital freshness, polled separately and much less often than the
+// position fix: CelesTrak data changes on the order of hours, not seconds.
+const GNSS_POLL_MS = 15_000;
+let gnssMetaByKey = new Map(); // "constellation:prn" -> { name, orbital }
+
 initMap();
 initHeader();
 initViewToggle();
 void refresh();
+void refreshGnssMeta();
 setInterval(() => void refresh(), POLL_MS);
+setInterval(() => void refreshGnssMeta(), GNSS_POLL_MS);
+
+async function refreshGnssMeta() {
+  try {
+    const res = await fetch("/api/gnss/status");
+    if (!res.ok) return;
+    const data = await res.json();
+    const map = new Map();
+    for (const s of data.satellites || []) {
+      map.set(`${s.constellation}:${s.prn}`, { name: s.metadata?.name || null, orbital: s.orbital || null });
+    }
+    gnssMetaByKey = map;
+  } catch {
+    // Offline or CelesTrak down: keep serving whatever's already cached in
+    // memory (itself sourced from SQLite, so a restart doesn't lose it).
+  }
+}
+
+// Merges cached GNSS metadata into the live satellite list from
+// /api/gps/status — additive-only fields (gnssName/gnssOrbital) so every
+// existing consumer of this array (sky plot, globe rendering) keeps working
+// exactly as before when there's no metadata yet.
+function enrichWithGnssMeta(satellites) {
+  return (satellites || []).map((s) => {
+    const meta = gnssMetaByKey.get(`${s.constellation || "UNKNOWN"}:${s.prn}`);
+    return meta ? { ...s, gnssName: meta.name, gnssOrbital: meta.orbital } : s;
+  });
+}
 
 // ---- View toggle (MAPA / GLOBO 3D) ----
 
@@ -175,6 +210,7 @@ async function refresh() {
   } catch {
     return;
   }
+  if (data.satellites) data.satellites = enrichWithGnssMeta(data.satellites);
   lastSnapshot = data;
   render(data);
   if (view === "globe") forwardToGlobe(data);
@@ -307,7 +343,10 @@ function renderSatDots(sats) {
       const y = 50 + r * Math.sin(angle);
       const strength = Math.max(0, Math.min(1, s.snr / 45));
       const cls = s.used ? "sat-dot used" : s.snr > 0 ? "sat-dot" : "sat-dot idle";
-      return `<div class="${cls}" style="left:${x.toFixed(1)}%;top:${y.toFixed(1)}%;--sat-strength:${strengthColor(strength)}" title="${escapeHtml(s.prn)} · ${s.elevation}° el · ${s.azimuth}° az · ${s.snr} dB${s.used ? " · en fix" : ""}"></div>`;
+      // gnssName: cached CelesTrak match when available (services/gnss/);
+      // falls back to just the constellation + PRN otherwise.
+      const label = s.gnssName || [s.constellation, s.prn].filter(Boolean).join(" ") || s.prn;
+      return `<div class="${cls}" style="left:${x.toFixed(1)}%;top:${y.toFixed(1)}%;--sat-strength:${strengthColor(strength)}" title="${escapeHtml(label)} · ${s.elevation}° el · ${s.azimuth}° az · ${s.snr} dB${s.used ? " · en fix" : ""}"></div>`;
     })
     .join("");
 }

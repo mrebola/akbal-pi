@@ -86,6 +86,7 @@ import {
   resolveFilePath,
 } from "../utils/usb";
 import { getGpsStatus } from "../utils/gps";
+import { getGnssSnapshot, getGnssHistory } from "../services/gnss/service";
 import { setPlatformMode, getPlatformMode } from "../utils/platform-mode";
 
 const SESSION_COOKIE = "akbal_session";
@@ -153,8 +154,15 @@ export class WebAdminServer {
   private sessionAuth() {
     return async (ctx: Koa.Context, next: Koa.Next) => {
       // /avatar/* is also public — the login page shows Akbal's idle GIF
-      // before there's any session to check.
-      if (PUBLIC_PATHS.has(ctx.path) || ctx.path.startsWith("/avatar/")) {
+      // before there's any session to check. i18n.js + i18n/*.json are
+      // public too: the login page's language selector needs them before
+      // there's any session, and they're just UI strings, nothing sensitive.
+      if (
+        PUBLIC_PATHS.has(ctx.path) ||
+        ctx.path.startsWith("/avatar/") ||
+        ctx.path === "/i18n.js" ||
+        ctx.path.startsWith("/i18n/")
+      ) {
         await next();
         return;
       }
@@ -285,6 +293,19 @@ export class WebAdminServer {
 
     router.get("/api/gps/status", async (ctx) => {
       ctx.body = await getGpsStatus();
+    });
+
+    // GNSS satellite metadata (offline-first cache + CelesTrak enrichment,
+    // docs/gnss.md). Additive to /api/gps/status: gps.js keeps working
+    // untouched, and gnss.js/gps.js can layer this in for satellite names
+    // and orbital freshness without changing the position/fix payload.
+    router.get("/api/gnss/status", (ctx) => {
+      ctx.body = getGnssSnapshot();
+    });
+
+    router.get("/api/gnss/history", (ctx) => {
+      const minutes = parseInt(String(ctx.query.minutes || "60"), 10) || 60;
+      ctx.body = getGnssHistory(Date.now() - minutes * 60_000);
     });
 
     // Platform-wide source mode: LIVE (real dongles feed radar/wardrive/gps)

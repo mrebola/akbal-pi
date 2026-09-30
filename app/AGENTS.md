@@ -107,6 +107,10 @@ whisplay-ai-chatbot/
 │   │   ├── history.ts            # SQLite: aircraft_seen + lookup caches
 │   │   ├── demo-mode.ts          # synthetic aircraft for demo source
 │   │   └── service.ts            # orchestrator: live/demo fallback, shared singleton
+│   ├── services/gnss/            # GNSS satellite metadata, offline-first (docs/gnss.md)
+│   │   ├── celestrak.ts          # CelesTrak GP/OMM client (proxy-fetch, never throws)
+│   │   ├── db.ts                 # SQLite: metadata permanente / datos orbitales / histórico
+│   │   └── service.ts            # orchestrator: cache-first snapshot + refresh en background
 │   ├── plugin/                   # Plugin system
 │   │   ├── types.ts              # Plugin interface definitions
 │   │   ├── registry.ts           # Plugin registry
@@ -132,6 +136,8 @@ whisplay-ai-chatbot/
 ├── web/                          # Static frontends (no build step)
 │   ├── whisplay-display/         # Mirrors the physical screen for dev (WHISPLAY_WEB_ENABLED)
 │   └── admin/                    # LAN chat + wifi admin UI (web-admin-server.ts, docs/web-ui.md)
+│       ├── i18n.js               # Translation engine (ES/EN), shared by every admin page (docs/i18n.md)
+│       └── i18n/                 # es.json / en.json dictionaries
 ├── cli/                          # Bash CLI implementation
 │   ├── commands.sh               # Main command dispatcher
 │   ├── plugin.sh                 # Plugin management

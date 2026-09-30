@@ -11,6 +11,7 @@ import { startWardriveDisplayMirror } from "./core/chat-flow/wifi-audit-mode";
 import { getDriveWardriveService } from "./wardrive/service";
 import { startWardriveDisplayMirror as startDriveMirror } from "./core/chat-flow/wardrive-mode";
 import { startAircraftRadarService, stopAircraftRadarService } from "./services/adsb/service";
+import { startGnssService, stopGnssService } from "./services/gnss/service";
 
 dotenv.config();
 
@@ -37,6 +38,15 @@ registerShutdownHook(() => stopWifiRadarService());
 if ((process.env.ADSB_ENABLED || "true").toLowerCase() !== "false") {
   startAircraftRadarService();
   registerShutdownHook(() => stopAircraftRadarService());
+}
+
+// GNSS satellite metadata (offline-first cache + CelesTrak enrichment,
+// docs/gnss.md). Reads the same GPS adapter as the GPS page; GNSS_ENABLED
+// lets it be turned off for anyone who doesn't want the extra sweep timer /
+// SQLite file, same convention as ADSB_ENABLED above.
+if ((process.env.GNSS_ENABLED || "true").toLowerCase() !== "false") {
+  startGnssService();
+  registerShutdownHook(() => stopGnssService());
 }
 
 // WIFI AUDIT (thesis/lab handshake capture — wifi-audit/service.ts). Service

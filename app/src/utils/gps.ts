@@ -10,8 +10,33 @@ const execFileAsync = promisify(execFile);
 // directly otherwise — one code path for both setups. The device keeps
 // running so the web GPS page has a fresh fix whenever it opens.
 
+// NMEA talker prefix → GNSS constellation (docs/gps.md). Used by the GNSS
+// metadata service (services/gnss/) to know which system a PRN belongs to;
+// "GN" is a combined-talker sentence (u-blox M8+ mixing systems in one GSV/
+// GSA) and doesn't identify a single constellation on its own.
+export type GnssConstellationCode =
+  | "GPS"
+  | "GLONASS"
+  | "GALILEO"
+  | "BEIDOU"
+  | "QZSS"
+  | "NAVIC"
+  | "UNKNOWN";
+
+const TALKER_TO_CONSTELLATION: Record<string, GnssConstellationCode> = {
+  GP: "GPS",
+  GL: "GLONASS",
+  GA: "GALILEO",
+  GB: "BEIDOU",
+  BD: "BEIDOU",
+  GQ: "QZSS",
+  GI: "NAVIC",
+  GN: "UNKNOWN",
+};
+
 export type GpsSatellite = {
-  prn: string; // satellite ID as reported (e.g. "G05" = GPS PRN 5)
+  prn: string; // satellite ID as reported by the receiver (raw GSV number)
+  constellation?: GnssConstellationCode; // from the sentence's talker prefix
   elevation: number; // degrees above horizon (0-90), -1 unknown
   azimuth: number; // degrees from true north (0-359), -1 unknown
   snr: number; // signal strength dB-Hz, 0 = not tracking
@@ -157,7 +182,11 @@ function parseRmc(fields: string[]): RmcFields | null {
 // GSV: "$xxGSV,totalMsgs,msgNum,satsInView,prn,el,az,snr,..." — up to 4 sats
 // per message. Talker prefix identifies the constellation (GP=GPS, GL=GLONASS,
 // GA=Galileo, GB/BD=BeiDou).
-function parseGsv(fields: string[], satellites: Map<string, GpsSatellite>): void {
+function parseGsv(
+  fields: string[],
+  satellites: Map<string, GpsSatellite>,
+  constellation: GnssConstellationCode,
+): void {
   if (fields.length < 4) return;
   for (let base = 4; base + 3 < fields.length; base += 4) {
     const prn = fields[base];
@@ -165,25 +194,39 @@ function parseGsv(fields: string[], satellites: Map<string, GpsSatellite>): void
     const el = parseInt(fields[base + 1], 10);
     const az = parseInt(fields[base + 2], 10);
     const snr = parseInt(fields[base + 3], 10);
+    const existing = satellites.get(prn);
     satellites.set(prn, {
       prn,
+      constellation: constellation === "UNKNOWN" ? existing?.constellation : constellation,
       elevation: Number.isFinite(el) ? el : -1,
       azimuth: Number.isFinite(az) ? az : -1,
       snr: Number.isFinite(snr) ? snr : 0,
-      used: false, // patched from GSA (or GGA count) below
+      used: false, // patched from GSA (or GGA count) below — unchanged original behavior
     });
   }
 }
 
 // GSA: satellites participating in the current fix (DOP + PRN list).
-function parseGsa(fields: string[], satellites: Map<string, GpsSatellite>): void {
+function parseGsa(
+  fields: string[],
+  satellites: Map<string, GpsSatellite>,
+  constellation: GnssConstellationCode,
+): void {
   // $xxGSA,mode,type,prn1..prn12,pdop,hdop,vdop*sum
   for (let i = 3; i < 15 && i < fields.length; i++) {
     const prn = fields[i];
     if (!prn) continue;
     const existing = satellites.get(prn);
     if (existing) existing.used = true;
-    else satellites.set(prn, { prn, elevation: -1, azimuth: -1, snr: 0, used: true });
+    else
+      satellites.set(prn, {
+        prn,
+        constellation: constellation === "UNKNOWN" ? undefined : constellation,
+        elevation: -1,
+        azimuth: -1,
+        snr: 0,
+        used: true,
+      });
   }
 }
 
@@ -288,6 +331,7 @@ class GpsNmeaReader {
     if (!nmeaChecksumOk(line)) return;
     const body = line.slice(1, line.indexOf("*"));
     const fields = body.split(",");
+    const talker = fields[0].slice(0, 2); // GP / GL / GA / GB|BD / GQ / GI / GN
     const type = fields[0].slice(-3); // GGA / RMC / GSV / GSA
     if (type === "GGA") {
       const parsed = parseGga(fields);
@@ -299,9 +343,9 @@ class GpsNmeaReader {
       const parsed = parseRmc(fields);
       if (parsed) this.state.lastRmc = parsed;
     } else if (type === "GSV") {
-      parseGsv(fields, this.state.satellites);
+      parseGsv(fields, this.state.satellites, TALKER_TO_CONSTELLATION[talker] || "UNKNOWN");
     } else if (type === "GSA") {
-      parseGsa(fields, this.state.satellites);
+      parseGsa(fields, this.state.satellites, TALKER_TO_CONSTELLATION[talker] || "UNKNOWN");
     }
   }
 }
@@ -362,6 +406,7 @@ function demoSatellites(): GpsSatellite[] {
   const t = Date.now() / 1000;
   const mk = (prn: string, el: number, az: number, snr: number, used: boolean): GpsSatellite => ({
     prn,
+    constellation: "GPS",
     elevation: Math.round(el),
     azimuth: Math.round((az + t * 0.4) % 360), // slow drift for liveliness
     snr,

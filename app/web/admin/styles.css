@@ -2347,6 +2347,14 @@ body { font-family: var(--font-sans); }
   box-shadow: 0 0 12px rgba(80, 255, 120, 0.55);
 }
 
+/* Language selector (topbar, i18n.js) — reuses .plx-toggle's shell, own
+   accent so it doesn't read as another data-source switch. */
+.lang-toggle .plx-toggle-label.active {
+  color: #0c1a0f;
+  background: var(--accent, #50ff78);
+  text-shadow: none;
+}
+
 .plx-toggle-label.mode-demo.active {
   color: #241a05;
   background: var(--warning, #ffd166);

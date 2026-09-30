@@ -33,45 +33,49 @@
         <img id="avatar" class="avatar" src="/avatar/standing.gif" alt="Akbal" />
         <div class="brand">AKBAL</div>
       </div>
-      <button type="button" id="nav-toggle" class="nav-toggle" aria-label="Menú" aria-expanded="false" aria-controls="main-tabs">
+      <button type="button" id="nav-toggle" class="nav-toggle" aria-label="Menú" data-i18n-aria-label="topbar.menu_aria" aria-expanded="false" aria-controls="main-tabs">
         <span></span><span></span><span></span>
       </button>
       <nav class="tabs" id="main-tabs">
-        <a href="/#chat" class="tab-link">Chat</a>
-        <span class="tab-link active">Radar Wi-Fi</span>
-        <a href="/aircraft-radar" class="tab-link">Aviones</a>
-        <a href="/#wifi-audit" class="tab-link">Wifi Audit</a>
-        <a href="/wardrive" class="tab-link">Wardrive</a>
-        <a href="/gps" class="tab-link">GPS</a>
-        <a href="/#music" class="tab-link">OST</a>
-        <a href="/#usb" class="tab-link">Dispositivos</a>
-        <a href="/#settings" class="tab-link">Ajustes</a>
+        <a href="/#chat" class="tab-link" data-i18n="topbar.tab_chat">Chat</a>
+        <span class="tab-link active" data-i18n="topbar.tab_wifiradar">Radar Wi-Fi</span>
+        <a href="/aircraft-radar" class="tab-link" data-i18n="topbar.tab_aircraft">Aviones</a>
+        <a href="/#wifi-audit" class="tab-link" data-i18n="topbar.tab_wifiaudit">Wifi Audit</a>
+        <a href="/wardrive" class="tab-link" data-i18n="topbar.tab_wardrive">Wardrive</a>
+        <a href="/gps" class="tab-link" data-i18n="topbar.tab_gps">GPS</a>
+        <a href="/#music" class="tab-link" data-i18n="topbar.tab_music">OST</a>
+        <a href="/#usb" class="tab-link" data-i18n="topbar.tab_usb">Dispositivos</a>
+        <a href="/#settings" class="tab-link" data-i18n="topbar.tab_settings">Ajustes</a>
       </nav>
       <div id="nav-backdrop" class="nav-backdrop hidden"></div>
 
       <div class="hdr-right">
-        <div class="plx-toggle" id="platform-toggle" title="Fuente de datos: LIVE usa los dongles reales · DEMO muestra datos sintéticos y libera el hardware">
-          <span class="plx-toggle-label mode-live" data-mode="live">LIVE</span>
-          <span class="plx-toggle-label mode-demo" data-mode="demo">DEMO</span>
+        <div class="plx-toggle lang-toggle" id="lang-toggle" title="Idioma / Language" data-i18n-title="topbar.lang_title">
+          <span class="plx-toggle-label" data-lang="es">ES</span>
+          <span class="plx-toggle-label" data-lang="en">EN</span>
         </div>
-        <button type="button" id="sys-toggle" class="hdr-summary" title="Estado del sistema">
+        <div class="plx-toggle" id="platform-toggle" title="Fuente de datos: LIVE usa los dongles reales · DEMO muestra datos sintéticos y libera el hardware" data-i18n-title="topbar.platform_toggle_title">
+          <span class="plx-toggle-label mode-live" data-mode="live" data-i18n="topbar.live">LIVE</span>
+          <span class="plx-toggle-label mode-demo" data-mode="demo" data-i18n="topbar.demo">DEMO</span>
+        </div>
+        <button type="button" id="sys-toggle" class="hdr-summary" title="Estado del sistema" data-i18n-title="topbar.system_title">
           <span class="hdr-dot" id="hdr-online-dot"></span>
           <span class="hdr-model" id="hdr-model">—</span>
-          <span class="battery-indicator" id="battery-indicator" title="Batería">
+          <span class="battery-indicator" id="battery-indicator" title="Batería" data-i18n-title="topbar.battery_title">
             <span id="battery-icon">🔋</span>
             <span id="battery-pct">—</span>
           </span>
           <span class="hdr-gear">◉</span>
         </button>
         <div id="sys-popover" class="popover hidden" role="menu">
-          <div class="popover-title">Sistema</div>
-          <div class="metric-row"><span class="metric-key">CPU</span><span class="metric-val mono" id="stat-cpu">—</span></div>
-          <div class="metric-row"><span class="metric-key">RAM</span><span class="metric-val mono" id="stat-ram">—</span></div>
-          <div class="metric-row"><span class="metric-key">Disco</span><span class="metric-val mono" id="stat-disk">—</span></div>
-          <div class="metric-row"><span class="metric-key">Wi-Fi</span><span class="metric-val" id="hdr-wifi">—</span></div>
-          <div class="metric-row"><span class="metric-key">Modelo</span><span class="metric-val mono" id="hdr-model-full">—</span></div>
+          <div class="popover-title" data-i18n="topbar.popover_system">Sistema</div>
+          <div class="metric-row"><span class="metric-key" data-i18n="topbar.cpu">CPU</span><span class="metric-val mono" id="stat-cpu">—</span></div>
+          <div class="metric-row"><span class="metric-key" data-i18n="topbar.ram">RAM</span><span class="metric-val mono" id="stat-ram">—</span></div>
+          <div class="metric-row"><span class="metric-key" data-i18n="topbar.disk">Disco</span><span class="metric-val mono" id="stat-disk">—</span></div>
+          <div class="metric-row"><span class="metric-key" data-i18n="topbar.wifi">Wi-Fi</span><span class="metric-val" id="hdr-wifi">—</span></div>
+          <div class="metric-row"><span class="metric-key" data-i18n="topbar.model">Modelo</span><span class="metric-val mono" id="hdr-model-full">—</span></div>
           <div class="popover-sep"></div>
-          <button id="logout-btn" class="btn btn-tertiary btn-block" title="Cerrar sesión">Cerrar sesión</button>
+          <button id="logout-btn" class="btn btn-tertiary btn-block" title="Cerrar sesión" data-i18n="topbar.logout" data-i18n-title="topbar.logout">Cerrar sesión</button>
         </div>
       </div>
       <span id="status-pill" class="hidden">—</span>
@@ -145,6 +149,7 @@
 
   <div id="ws-status" class="ws-status"></div>
 
+  <script src="i18n.js"></script>
   <script type="module" src="wifiradar.js"></script>
 </body>
 </html>

@@ -255,8 +255,42 @@
     }
     @keyframes blink { 50% { opacity: 0; } }
 
+    /* Language selector — login.html doesn't load styles.css (self-contained
+       pre-auth page), so its .plx-toggle/.lang-toggle styling is redefined
+       here, matching the shared admin UI's look (see styles.css). */
+    .plx-toggle {
+      position: fixed;
+      z-index: 3;
+      top: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: inline-flex;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+      height: 26px;
+      border-radius: 8px;
+      border: 1px solid var(--border-strong);
+      background: rgba(6, 10, 6, 0.85);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      overflow: hidden;
+    }
+    .plx-toggle-label {
+      padding: 0 12px;
+      line-height: 24px;
+      color: var(--text-muted);
+      transition: color 0.18s ease, background 0.18s ease;
+    }
+    .plx-toggle-label.active {
+      color: #0c1a0f;
+      background: var(--accent);
+    }
+
     @media (max-width: 640px) {
       .hud-corner { display: none; }
+      .plx-toggle { top: 12px; }
     }
     @media (max-width: 480px) {
       .card { padding: 24px 18px 20px; }
@@ -268,44 +302,53 @@
 <body>
   <div class="bg-grid"></div>
 
+  <!-- Language selector: no shared topbar on the pre-auth login page, so
+       this sits in its own corner — same always-visible requirement, same
+       i18n.js logic as everywhere else. -->
+  <div class="plx-toggle lang-toggle" id="lang-toggle" title="Idioma / Language" data-i18n-title="topbar.lang_title">
+    <span class="plx-toggle-label" data-lang="es">ES</span>
+    <span class="plx-toggle-label" data-lang="en">EN</span>
+  </div>
+
   <div class="hud-corner hud-tl">
-    AKBAL.SYSTEMS v2.3.1<br />
-    NODO: AKBAL-PI<br />
-    HOST: <span id="hud-host">—</span><br />
-    ESTADO: EN LÍNEA<span class="hud-dot"></span>
+    <span data-i18n="login.hud_tl_line1">AKBAL.SYSTEMS v2.3.1</span><br />
+    <span data-i18n="login.hud_tl_node">NODO: AKBAL-PI</span><br />
+    <span data-i18n="login.hud_tl_host_label">HOST:</span> <span id="hud-host">—</span><br />
+    <span data-i18n="login.hud_tl_status">ESTADO: EN LÍNEA</span><span class="hud-dot"></span>
   </div>
   <div class="hud-corner hud-tr">
-    CONEXIÓN SEGURA<br />
-    SSH://akbal-pi
+    <span data-i18n="login.hud_tr_line1">CONEXIÓN SEGURA</span><br />
+    <span data-i18n="login.hud_tr_line2">SSH://akbal-pi</span>
   </div>
 
   <div class="login-wrap">
     <div class="card-glow"></div>
     <form class="card" id="login-form" autocomplete="off">
       <img class="avatar" src="/avatar/standing.gif" alt="Akbal" />
-      <div class="prompt">root@akbal-pi:~$ ./acceso</div>
+      <div class="prompt" data-i18n="login.prompt">root@akbal-pi:~$ ./acceso</div>
       <h1>AKBAL<span class="cursor"></span></h1>
-      <p class="subtitle">// CONTROL NODE ACCESS</p>
+      <p class="subtitle" data-i18n="login.subtitle">// CONTROL NODE ACCESS</p>
       <div class="divider"></div>
 
-      <label for="username">// USUARIO</label>
+      <label for="username" data-i18n="login.username_label">// USUARIO</label>
       <input id="username" name="username" type="text" autocomplete="username" required autofocus />
 
-      <label for="password">// CONTRASEÑA</label>
+      <label for="password" data-i18n="login.password_label">// CONTRASEÑA</label>
       <div class="input-wrap">
         <input id="password" name="password" type="password" autocomplete="current-password" required />
-        <button type="button" class="toggle-pass" id="toggle-pass" aria-label="Mostrar contraseña">
+        <button type="button" class="toggle-pass" id="toggle-pass" aria-label="Mostrar contraseña" data-i18n-aria-label="login.toggle_show">
           <svg class="icon-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle></svg>
           <svg class="icon-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.9 19.9 0 0 1 4.22-5.44M9.9 4.24A10.6 10.6 0 0 1 12 4c7 0 11 8 11 8a19.9 19.9 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
         </button>
       </div>
 
-      <button type="submit" id="submit-btn">&gt; AUTENTICAR</button>
-      <div class="status-line"><span class="hud-dot"></span>nodo seguro · conexión cifrada</div>
+      <button type="submit" id="submit-btn" data-i18n="login.submit">&gt; AUTENTICAR</button>
+      <div class="status-line"><span class="hud-dot"></span><span data-i18n="login.status_line">nodo seguro · conexión cifrada</span></div>
       <div class="error" id="error"></div>
     </form>
   </div>
 
+  <script src="i18n.js"></script>
   <script>
     const form = document.getElementById("login-form");
     const errorEl = document.getElementById("error");
@@ -320,21 +363,24 @@
       const showing = passwordInput.type === "text";
       passwordInput.type = showing ? "password" : "text";
       togglePassBtn.classList.toggle("is-visible", !showing);
-      togglePassBtn.setAttribute("aria-label", showing ? "Mostrar contraseña" : "Ocultar contraseña");
+      togglePassBtn.setAttribute(
+        "aria-label",
+        window.AkbalI18n.t(showing ? "login.toggle_show" : "login.toggle_hide"),
+      );
     });
 
     const params = new URLSearchParams(window.location.search);
     const nextPath = params.get("next") && params.get("next").startsWith("/") ? params.get("next") : "/";
 
     function showError(msg) {
-      errorEl.textContent = "ACCESS_DENIED :: " + msg;
+      errorEl.textContent = `${window.AkbalI18n.t("login.error_prefix")} ${msg}`;
     }
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       errorEl.textContent = "";
       submitBtn.disabled = true;
-      submitBtn.textContent = "> VERIFICANDO...";
+      submitBtn.textContent = window.AkbalI18n.t("login.submit_verifying");
       try {
         const res = await fetch("/api/login", {
           method: "POST",
@@ -348,13 +394,13 @@
         if (data.ok) {
           window.location.href = nextPath;
         } else {
-          showError(data.error || "credenciales inválidas");
+          showError(data.error || window.AkbalI18n.t("login.error_generic"));
         }
       } catch (err) {
         showError(err.message);
       } finally {
         submitBtn.disabled = false;
-        submitBtn.textContent = "> AUTENTICAR";
+        submitBtn.textContent = window.AkbalI18n.t("login.submit");
       }
     });
   </script>

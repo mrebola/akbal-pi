@@ -363,8 +363,27 @@ async function main() {
     return SAT_COLORS.idle;
   }
 
+  // Human labels for utils/gps.ts's GnssConstellationCode (services/gnss/).
+  const CONSTELLATION_LABEL = {
+    GPS: "GPS",
+    GLONASS: "GLONASS",
+    GALILEO: "Galileo",
+    BEIDOU: "BeiDou",
+    QZSS: "QZSS",
+    NAVIC: "NavIC",
+    UNKNOWN: "GNSS",
+  };
+
   function satLabel(s) {
-    // GP→GPS, GL→GLONASS, GA→Galileo, GB/BD→BeiDou
+    // Prefer the backend's own constellation field (utils/gps.ts, derived
+    // from the NMEA talker prefix) — falls back to the old PRN-prefix guess
+    // only for responses from before that field existed (cached data, e.g.
+    // web/admin's own localStorage snapshots) so this never breaks on
+    // stale data.
+    if (s.constellation) {
+      const system = CONSTELLATION_LABEL[s.constellation] || "GNSS";
+      return `${system} ${s.prn}`;
+    }
     const m = /^([A-Z]{2})?0*(\d+)$/.exec(s.prn || "");
     const system = { GP: "GPS", GL: "GLONASS", GA: "Galileo", GB: "BeiDou", BD: "BeiDou", "": "GNSS" }[m?.[1] || ""];
     return system ? `${system} ${m?.[2] || s.prn}` : s.prn;
@@ -507,6 +526,18 @@ async function main() {
     const label = satLabel(s);
     document.getElementById("gsm-title").textContent = label;
     document.getElementById("gsm-prn").textContent = `${label} (PRN ${s.prn})`;
+    const nameEl = document.getElementById("gsm-name");
+    if (nameEl) {
+      // gnssName/gnssOrbital: enrichment merged in by gps.js from
+      // /api/gnss/status (services/gnss/, docs/gnss.md) — absent on
+      // satellites not yet matched to a CelesTrak entry.
+      if (s.gnssName) {
+        const ageHours = s.gnssOrbital ? Math.round(s.gnssOrbital.ageMs / 3_600_000) : null;
+        nameEl.textContent = ageHours != null ? `${s.gnssName} · datos de hace ${ageHours} h` : s.gnssName;
+      } else {
+        nameEl.textContent = "—";
+      }
+    }
     const statusEl = document.getElementById("gsm-status");
     statusEl.innerHTML = s.used
       ? badge("used", "● EN FIX — parte de la solución de posición")

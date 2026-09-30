@@ -530,6 +530,20 @@ export class DriveDb {
     }
   }
 
+  // One session row (session-resume reads counters back so a continued
+  // trip keeps its distance/points instead of resetting).
+  getSession(id: string): { startedAt: number; distanceMeters: number; points: number } | null {
+    try {
+      const row = this.db
+        .prepare(`SELECT started_at, distance_m, points FROM drive_sessions WHERE id = ?`)
+        .get(id) as { started_at: number; distance_m: number; points: number } | undefined;
+      if (!row) return null;
+      return { startedAt: row.started_at, distanceMeters: row.distance_m || 0, points: row.points || 0 };
+    } catch {
+      return null;
+    }
+  }
+
   sessions(): DriveSessionRow[] {
     try {
       return this.db

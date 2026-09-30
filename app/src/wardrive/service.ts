@@ -57,6 +57,11 @@ const GPS_WATCH_MS = 2_000;
 const POINT_MIN_MOVE_M = 6; // GPS track resolution (driving ~8m at 30km/h)
 const POINT_MAX_DT_MS = 20_000; // also drop a point when parked this long
 const TARGET_SCAN_INTERVAL_MS = 1_500; // pick a new attack target this often
+// SESSION CONTINUATION: a start within this window after the previous
+// session ended re-opens the SAME session (no new folder/row) — covers
+// INICIAR/DETENER toggle churn, the service restarting mid-trip, dongle
+// replug flashes. Beyond this, the next start creates a new session.
+const RESUME_WINDOW_MS = 10 * 60_000;
 const ATTACK_SETTLE_MS = 2_000; // between hcxdumptool exit and discovery restart
 const BURST_GAP_MS = 1_200; // between deauth bursts inside a window
 
@@ -141,6 +146,10 @@ export class DriveWardriveService extends EventEmitter {
 
   // Session + GPS
   private sessionId: string | null = null;
+  // Remembers the last ended session so a quick restart can CONTINUE it
+  // (beginSession reads these; set in finalizeSession).
+  private lastEndedSessionId: string | null = null;
+  private lastEndedSessionAt = 0;
   private sessionDir: string | null = null;
   private ringDir: string | null = null;
   private startedAt = 0;
@@ -405,14 +414,52 @@ export class DriveWardriveService extends EventEmitter {
 
   private beginSession(demo: boolean): void {
     this.startedAt = Date.now();
-    const id = "drive-" + new Date(this.startedAt).toISOString().replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "-");
+    // SESSION CONTINUATION (the fragmenting-sessions lesson): a start that
+    // happens RESUME_WINDOW_MS after the previous session cleanly ended
+    // (service restart, INICIAR/DETENER toggle churn, quick reconnect)
+    // re-opens THE SAME session — one drive leg, one folder, one DB row.
+    // Same-folder artifacts (session.json, ring, .pcapng/.hc22000) stay
+    // together: one real trip = one session file. A long gap (car parked,
+    // next day) or an explicit long-stop starts a genuinely new one.
+    let id: string | null = null;
+    let resumed = false;
+    if (!demo && this.lastEndedSessionId) {
+      const endedAt = this.lastEndedSessionAt;
+      if (endedAt > 0 && Date.now() - endedAt <= RESUME_WINDOW_MS) {
+        const rejoin = path.join(DRIVE_SESSIONS_ROOT, this.lastEndedSessionId);
+        if (fs.existsSync(rejoin)) {
+          id = this.lastEndedSessionId;
+          resumed = true;
+          // carried over: startedAt of the ORIGINAL begin, distance and
+          // point counters read back from the DB row so the stats continue
+          // instead of resetting.
+          const prev = driveDb.getSession(this.lastEndedSessionId);
+          this.startedAt = prev?.startedAt || this.startedAt;
+          this.distanceM = prev?.distanceMeters || 0;
+          this.points = prev?.points || 0;
+          console.log(`[wardrive] RESUMING session ${id} (prev end ${Math.round((Date.now() - endedAt) / 1000)}s ago)`);
+        }
+      }
+    }
+    if (!id) {
+      id = "drive-" + new Date(this.startedAt).toISOString().replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "-");
+      this.distanceM = 0;
+      this.points = 0;
+    }
+    // GPS track anchor always resets: the FIRST point after any start /
+    // resume is the current fix (distance only accrues between real fixes).
+    this.lastPointAt = 0;
+    this.lastPointLat = null;
+    this.lastPointLon = null;
     this.sessionId = id;
     this.sessionDir = path.join(DRIVE_SESSIONS_ROOT, id);
     this.ringDir = path.join(this.sessionDir, "ring");
     try {
       fs.mkdirSync(this.ringDir, { recursive: true });
       if (!demo) {
-        fs.writeFileSync(path.join(this.sessionDir, "session.json"), JSON.stringify({ id, startedAt: this.startedAt, kind: "drive" }, null, 2));
+        if (!resumed) {
+          fs.writeFileSync(path.join(this.sessionDir, "session.json"), JSON.stringify({ id, startedAt: this.startedAt, kind: "drive" }, null, 2));
+        }
       } else {
         this.sessionDir = null;
         this.ringDir = null;
@@ -422,15 +469,17 @@ export class DriveWardriveService extends EventEmitter {
       this.sessionDir = null;
       this.ringDir = null;
     }
-    driveDb.insertSession(id, this.startedAt);
-    this.lastPointAt = 0;
-    this.lastPointLat = null;
-    this.lastPointLon = null;
-    this.distanceM = 0;
-    this.points = 0;
-    this.sessionNewSsids.clear();
-    this.sessionNewHandshakeSsids.clear();
-    this.knownHandshakeSsids = driveDb.handshakeSsids();
+    if (demo) {
+      // The DB row stays the real-session identity; the demo never writes
+      // artifacts (folders are skipped above).
+    } else {
+      driveDb.insertSession(id, this.startedAt);
+    }
+    if (!resumed) {
+      this.sessionNewSsids.clear();
+      this.sessionNewHandshakeSsids.clear();
+      this.knownHandshakeSsids = driveDb.handshakeSsids();
+    }
     // Priority targets: SSIDs this device has seen in PAST sessions with
     // attempts — the operator's recurring lab list. They get attack
     // priority over strangers AND a wider RSSI gate, so a weak lab AP
@@ -476,6 +525,12 @@ export class DriveWardriveService extends EventEmitter {
       networks,
       handshakes: this.sessionNewHandshakeSsids.size,
     });
+    // Remember it so a quick restart continues this same session instead
+    // of fragmenting the trip into a new folder (see RESUME_WINDOW_MS).
+    if (!this.demo) {
+      this.lastEndedSessionId = this.sessionId;
+      this.lastEndedSessionAt = Date.now();
+    }
     this.sessionId = null;
   }
 

@@ -170,7 +170,7 @@ export function handleAircraftRadarPress(): void {
     display({
       aircraft_radar_ui: "",
       model_ui: "confirm",
-      model_ui_title: "AIRCRAFT RADAR",
+      model_ui_title: "RADAR AVIONES",
       model_ui_label: "Salir",
       model_ui_description: "",
       model_ui_percent: percent,

@@ -58,6 +58,12 @@ TEXT_PRIMARY = (235, 235, 235, 255)    # main content: names, labels, replies
 TEXT_SECONDARY = (150, 155, 160, 255)  # muted: eyebrow headers, hints, examples
 ACCENT_GREEN = (80, 255, 120, 255)     # active/selected/confirm accents only
 ACCENT_DIM = (35, 60, 45, 255)         # inactive position dots/ticks
+# Same amber/red as the web admin's --warning/--danger (app/web/admin/
+# styles.css) — the radar dots and the wardrive/wifi-audit band used to each
+# have their own unrelated amber/red (and a 3rd, different red from the
+# battery icon in battery-status.ts), with none of the three matching.
+ACCENT_AMBER = (255, 209, 102, 255)    # #ffd166 — mid signal / warning
+ACCENT_RED = (255, 107, 107, 255)      # #ff6b6b — weak signal / danger / audit-active
 TOOL_PLACEHOLDER_RE = re.compile(r"\{tool:([A-Za-z0-9_-]+)\}")
 
 
@@ -341,8 +347,17 @@ class RenderThread(threading.Thread):
                 name_y += line_height
 
             if description:
-                self._draw_centered(draw, description, self.model_ui_hint_font, name_y + 4, center_x, TEXT_SECONDARY)
-                name_y += 20
+                # Same wrap_text safety net as the label above — without it
+                # this was the only text on the card with no width check at
+                # all, so a description longer than content_width would run
+                # off the safe area (or off the screen) with no warning.
+                desc_lines = [
+                    line for line in TextUtils.wrap_text(draw, description, self.model_ui_hint_font, content_width)
+                    if line
+                ][:1]
+                for line in desc_lines:
+                    self._draw_centered(draw, line, self.model_ui_hint_font, name_y + 4, center_x, TEXT_SECONDARY)
+                    name_y += 20
 
             if mode == "select":
                 if current_model_ui_active:
@@ -480,9 +495,9 @@ class RenderThread(threading.Thread):
                     if strength == "strong":
                         color = ACCENT_GREEN
                     elif strength == "mid":
-                        color = (220, 190, 60, 255)
+                        color = ACCENT_AMBER
                     else:
-                        color = (220, 90, 90, 255)
+                        color = ACCENT_RED
                     dot_r = 3
                     if point.get("featured"):
                         # The one dot the bottom text band is currently
@@ -555,9 +570,9 @@ class RenderThread(threading.Thread):
                     if strength == "strong":
                         color = ACCENT_GREEN
                     elif strength == "mid":
-                        color = (220, 190, 60, 255)
+                        color = ACCENT_AMBER
                     else:
-                        color = (220, 90, 90, 255)
+                        color = ACCENT_RED
                     dot_r = 3
                     if point.get("featured"):
                         outline_r = dot_r + 3
@@ -589,7 +604,7 @@ class RenderThread(threading.Thread):
         self.render_top_bar()
 
         # Node manda el label por modo: "WARDRIVE <IFACE>" (drive) o
-        # "AUDIT WIFI <IFACE>" (audit) — el overlay es el mismo para ambos.
+        # "WIFI AUDIT <IFACE>" (audit) — el overlay es el mismo para ambos.
         label = current_wardrive_label or "WARDRIVE MODE"
         is_drive = label.upper().startswith("WARDRIVE")
         status_line = current_wardrive_status_text or "..."
@@ -634,7 +649,9 @@ class RenderThread(threading.Thread):
         band_h = 20
         overlay = Image.new("RGBA", (VIDEO_WIDTH, band_h), (0, 0, 0, 200))
         odraw = ImageDraw.Draw(overlay)
-        self._draw_centered(odraw, status_line[:36], self.model_ui_hint_font, 3, center_x, TEXT_PRIMARY)
+        # Hard cut with no "…" used to hide that it was truncated at all.
+        shown_status = status_line if len(status_line) <= 36 else status_line[:35] + "…"
+        self._draw_centered(odraw, shown_status, self.model_ui_hint_font, 3, center_x, TEXT_PRIMARY)
         rgb = ImageUtils.image_to_rgb565(overlay, VIDEO_WIDTH, band_h)
         self.whisplay.draw_image(0, TOP_BAR_HEIGHT + VIDEO_HEIGHT - band_h, VIDEO_WIDTH, band_h, rgb)
 
@@ -642,7 +659,7 @@ class RenderThread(threading.Thread):
         # session counter — handshakes for audit, redes para wardrive.
         band = Image.new("RGBA", (VIDEO_WIDTH, TEXT_BAND_HEIGHT), (0, 0, 0, 255))
         bdraw = ImageDraw.Draw(band)
-        self._draw_centered(bdraw, label, self.model_ui_label_font, 10, center_x, (255, 60, 40, 255))
+        self._draw_centered(bdraw, label, self.model_ui_label_font, 10, center_x, ACCENT_RED)
         counters = f"{captured}/{total} handshakes" if not is_drive else f"{captured} handshakes · {total} redes"
         self._draw_centered(bdraw, counters, self.model_ui_hint_font, 34, center_x, TEXT_SECONDARY)
         rgb = ImageUtils.image_to_rgb565(band, VIDEO_WIDTH, TEXT_BAND_HEIGHT)
@@ -684,27 +701,14 @@ class RenderThread(threading.Thread):
 
     def render_idle_screen(self, status, text):
         """Thin top bar (wifi/battery + LOCAL/AGENTE tag), full-width
-        looping GIF (standing / talking / wardrive) in the middle, and a
-        two-line caption band at the bottom. While a WiFi audit runs (the
-        wardrive service active — see current_wardrive_ui), the character
-        plays the wardrive animation EVERYWHERE, whatever the screen, so
-        the whole UI reads 'auditing right now'; it returns to normal the
-        moment the mode ends."""
+        looping GIF (standing / talking) in the middle, and a two-line
+        caption band at the bottom. NOTE: this is never reached while a
+        WiFi audit is active — render_frame's current_wardrive_ui check
+        returns render_wardrive_screen() first (that's where the wardrive
+        loop plays over every screen); an earlier version of this
+        auditing-in-progress handling lived here too, unreachably, and has
+        been removed."""
         self.render_top_bar()
-
-        if current_wardrive_ui:
-            # Audit in progress: the wardrive loop replaces standing/talking
-            # on every screen (idle, thinking, answering — the whole chat UI).
-            frames = self.gif_frames.get("wardrive") or []
-            if frames:
-                elapsed = time.time() - self.gif_start_time
-                frame_index = int(elapsed * GIF_FPS) % len(frames)
-                if self.last_drawn_gif_key != "wardrive" or frame_index != self.last_drawn_frame_index:
-                    self.whisplay.draw_image(0, TOP_BAR_HEIGHT, VIDEO_WIDTH, VIDEO_HEIGHT, frames[frame_index])
-                    self.last_drawn_gif_key = "wardrive"
-                    self.last_drawn_frame_index = frame_index
-                self.render_bottom_text(text)
-                return True
 
         gif_key = "talking" if is_answering_status(status) else "standing"
         frames = self.gif_frames.get(gif_key) or []
@@ -759,7 +763,7 @@ class RenderThread(threading.Thread):
         self.render_top_bar()
 
         icon = current_music_icon or "play"
-        title = current_music_title or "Música"
+        title = current_music_title or "OST"
         progress = current_music_progress  # 0..1 or None
         prog_pct = int(max(0.0, min(1.0, progress)) * 100) if progress is not None else -1
 
@@ -853,7 +857,7 @@ class RenderThread(threading.Thread):
             ex_w = ex_bbox[2] - ex_bbox[0]
             ex_x = TOP_BAR_MARGIN_X + BRAND_LEFT_PADDING + (bbox[2] - bbox[0]) + 2
             if ex_x + ex_w < cursor_x - TOP_BAR_MARGIN_X:  # only if it fits
-                draw.text((ex_x, (TOP_BAR_HEIGHT - text_h) // 2 - ex_bbox[1]), extra, font=self.top_bar_mode_font, fill=(255, 60, 40, 255))
+                draw.text((ex_x, (TOP_BAR_HEIGHT - text_h) // 2 - ex_bbox[1]), extra, font=self.top_bar_mode_font, fill=ACCENT_RED)
 
         rgb565_data = ImageUtils.image_to_rgb565(bar, self.whisplay.LCD_WIDTH, TOP_BAR_HEIGHT)
         self.whisplay.draw_image(0, 0, self.whisplay.LCD_WIDTH, TOP_BAR_HEIGHT, rgb565_data)

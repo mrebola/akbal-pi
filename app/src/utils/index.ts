@@ -263,13 +263,19 @@ export const transformToGeminiType = (parameters: Object) => {
   return newObject;
 };
 
+// Pictographic/emoji glyphs the Whisplay's bitmap font has no glyph for —
+// they render as a blank "tofu" box on the LCD. Shared so both TTS
+// purification and the LCD's own display text (ChatFlow.ts's
+// updateAnswerDisplayText) strip the exact same set.
+export const EMOJI_PATTERN = /[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu;
+
 export const purifyTextForTTS = (text: string): string => {
   return text
     .replace(/https?:\/\/\S+/giu, " link ")
     .replace(/www\.\S+/giu, " link ")
     .replace(/[`*_#~^=+|\\/<>$@•·●○◆◇■□▪▫✓✔✕✖→←↑↓⇒⇐⇧⇩]/gu, " ")
     .replace(/[{}\u200b-\u200f\u202a-\u202e\ufe0e\ufe0f]/gu, "")
-    .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, "")
+    .replace(EMOJI_PATTERN, "")
     .replace(/[—–-]+/g, "，")
     .replace(/[，,、]{2,}/g, "，")
     .replace(/[。.!?！？]{2,}/g, "。")

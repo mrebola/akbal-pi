@@ -225,17 +225,25 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       // Always clear the menu-carousel/help/radar/wardrive overlay here,
       // since "sleep" is the common return point from every flow —
       // including the idle timeouts, which have no other cleanup step.
-      // radar_ui/wardrive_ui in particular have to be cleared explicitly:
-      // render_frame checks them independently of model_ui/help_ui, so
-      // leaving either truthy would keep that screen stuck on top forever
-      // after returning here.
+      // radar_ui/wardrive_ui/aircraft_radar_ui in particular have to be
+      // cleared explicitly: render_frame checks them independently of
+      // model_ui/help_ui, so leaving any truthy would keep that screen
+      // stuck on top forever after returning here.
       model_ui: "",
       model_ui_percent: 0,
       help_ui: "",
       radar_ui: "",
       wardrive_ui: "",
+      aircraft_radar_ui: "",
       top_bar_mode: isAgentMode() ? "agent" : "local",
-      ...(getCurrentStatus().text.endsWith("Escuchando...") || !getCurrentStatus().text
+      // Reset the hint line unless it's showing an actual answer: every
+      // submenu leaves its own "Mantén: ..." hint behind on exit (quick
+      // menu, help, volume, wifi connect, network info, wifi/aircraft
+      // radar, wardrive all do), and none of that is still true back in
+      // sleep — only a spoken answer's text is worth preserving here.
+      ...(getCurrentStatus().text.endsWith("Escuchando...") ||
+      getCurrentStatus().text.includes("Mantén:") ||
+      !getCurrentStatus().text
         ? { text: "Click: menú · Mantén: hablar" }
         : {}),
     });
@@ -285,6 +293,13 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       if (key === "wardrive") {
         ctx.transitionTo("wardrive");
         return;
+      }
+      // "camera" falls through to here, but so would any future
+      // QuickMenuKey added to quick-menu-mode.ts without a matching branch
+      // above — warn instead of silently opening the camera for a key that
+      // was never meant to.
+      if (key !== "camera") {
+        console.warn(`[quick_menu] unhandled key "${key}", opening camera by default`);
       }
       const captureImgPath = `${cameraDir}/capture-${moment().format(
         "YYYYMMDD-HHmmss",
@@ -400,7 +415,7 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
         model_ui: "", // clear any leftover quick-menu card / loading spinner
         music_ui: "player",
         music_icon: iconFor(s),
-        music_title: s.available ? s.title || "Música Cypher OST" : "Sin música",
+        music_title: s.available ? s.title || "Cypher OST" : "Sin música",
         music_progress: s.durationMs > 0 ? s.positionMs / s.durationMs : -1,
         music_duration_ms: s.durationMs,
         text: CONTROLS_HINT,

@@ -8,7 +8,10 @@ import {
   generateApUrlQrFile,
 } from "../../utils/access-point";
 
-// "Wifi connect" in the quick menu — replaces the old "Internet emergencia"
+// "WiFi directo" in the quick menu — same feature as the web admin's
+// Ajustes > General > "WiFi directo (punto de acceso)" card (both call
+// utils/access-point.ts, so toggling from either side is always in sync).
+// Replaces the old "Internet emergencia"
 // (wifi-manager-mode.ts, removed): instead of joining an existing network,
 // this turns the Pi's own wifi card into a direct access point so a phone
 // can reach the device with zero setup and no internet at all. Opening the
@@ -90,7 +93,7 @@ function showLoading(label: string): void {
   if (!active) return;
   display({
     model_ui: "loading",
-    model_ui_title: "WIFI CONNECT",
+    model_ui_title: "WIFI DIRECTO",
     model_ui_label: label,
     model_ui_description: "",
     text: "Un momento...",
@@ -108,7 +111,7 @@ async function renderView(): Promise<void> {
     if (!active) return;
     display({
       model_ui: "network",
-      model_ui_title: "WIFI CONNECT",
+      model_ui_title: "WIFI DIRECTO",
       model_ui_label: status.ssid,
       model_ui_description: `Clave: ${status.password}`,
       model_ui_qr_path: qrPath,
@@ -122,7 +125,7 @@ async function renderView(): Promise<void> {
     if (!active) return;
     display({
       model_ui: "network",
-      model_ui_title: "WIFI CONNECT",
+      model_ui_title: "WIFI DIRECTO",
       model_ui_label: "Abrí la web",
       model_ui_description: status.url,
       model_ui_qr_path: qrPath,
@@ -187,7 +190,7 @@ export function handleWifiConnectPress(): void {
     const percent = Math.min(100, Math.round((elapsed / CONFIRM_HOLD_MS) * 100));
     display({
       model_ui: "confirm",
-      model_ui_title: "WIFI CONNECT",
+      model_ui_title: "WIFI DIRECTO",
       model_ui_label: "Desactivar y salir",
       model_ui_description: "",
       model_ui_percent: percent,

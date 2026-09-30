@@ -23,7 +23,7 @@ const REFRESH_INTERVAL_MS = 3000;
 let pressStartedAt = 0;
 let holdTicker: ReturnType<typeof setInterval> | null = null;
 let confirmTimer: ReturnType<typeof setTimeout> | null = null;
-let idleTimer: ReturnType<typeof setInterval> | null = null;
+let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 let onExitCallback: () => void = () => {};
 
@@ -40,7 +40,7 @@ function clearHoldTimers(): void {
 
 function clearIdleTimer(): void {
   if (idleTimer) {
-    clearInterval(idleTimer);
+    clearTimeout(idleTimer);
     idleTimer = null;
   }
 }

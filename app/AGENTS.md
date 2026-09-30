@@ -358,10 +358,10 @@ The chat flow uses a finite state machine (`src/core/chat-flow/stateMachine.ts`)
 | `audio_output_select` | On-screen menu to switch TTS/chime output between the onboard Whisplay HAT speaker (default) and a paired Bluetooth speaker (see `chat-flow/audio-output-select-mode.ts`, `config/audio-output.ts`) |
 | `audio_output_loading` | Confirms the speaker switch and persists it to `.env` (`AUDIO_OUTPUT`); also settable from the web admin (`/api/audio-output/select`) |
 | `help` | Voice-command cheat sheet, opened by saying "ayuda" while holding the button, or from the quick menu (see `docs/voice-commands.md`) |
-| `quick_menu` | Short click from "sleep" — carousel of Modelo/Modo/Audio/Música/Ayuda/Cámara/Volumen/Wifi connect/Conexión web/WiFi Radar/Aviones (see `chat-flow/quick-menu-mode.ts`) |
+| `quick_menu` | Short click from "sleep" — carousel of Modelo/Modo/Audio/OST/Volumen/Ayuda/Cámara/WiFi directo/Conexión web/WiFi Radar/Radar de Aviones/Wardrive (see `chat-flow/quick-menu-mode.ts`) |
 | `volume_adjust` | Physical volume control from the quick menu — click bumps +10% live, hold/double-click exits (see `chat-flow/volume-adjust-mode.ts`) |
-| `wifi_connect` | Toggles the Pi's own wifi into a direct access point (SSID `akbal-pi`, QR on screen) from the quick menu's "Wifi connect" (see `chat-flow/wifi-connect-mode.ts`, `docs/wifi.md`) |
-| `aircraft_radar` | Simplified physical radar for nearby ADS-B traffic (HackRF One), from the quick menu's "Aviones" (see `chat-flow/aircraft-radar-mode.ts`, `docs/aircraft-radar.md`) |
+| `wifi_connect` | Toggles the Pi's own wifi into a direct access point (SSID `akbal-pi`, QR on screen) from the quick menu's "WiFi directo" — same feature as the web's Ajustes > General > "WiFi directo (punto de acceso)" (see `chat-flow/wifi-connect-mode.ts`, `docs/wifi.md`) |
+| `aircraft_radar` | Simplified physical radar for nearby ADS-B traffic (HackRF One), from the quick menu's "Radar de Aviones" (see `chat-flow/aircraft-radar-mode.ts`, `docs/aircraft-radar.md`) |
 
 State transitions are triggered by button events, wake word detection, or completion of async operations.
 

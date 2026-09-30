@@ -18,12 +18,14 @@ export function startBatteryStatus(): Battery {
     console.log("Failed to reconnect to battery service.");
   });
   battery.addListener("batteryLevel", (data: number) => {
-    let color = "#34d351";
+    // Same green/amber/red as the web admin's --success/--warning/--danger
+    // (app/web/admin/styles.css) — this used to be its own unrelated trio.
+    let color = "#50ff78";
     if (data <= 30) {
-      color = "#ff7700";
+      color = "#ffd166";
     }
     if (data <= 10) {
-      color = "#ff0000";
+      color = "#ff6b6b";
     }
     display({
       battery_level: data,

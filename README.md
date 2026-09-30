@@ -25,9 +25,9 @@ El proyecto toma como base el repositorio [PiSugar/whisplay-ai-chatbot](https://
 | — | [Chat](#chat) | Chat escrito con el LLM local |
 | — | [WiFi](#wifi-pestaña-sub-pestañas-conexión-redes) | Conexión, redes, punto de acceso |
 | — | [WIFIRADAR 3D](#wifiradar-wifiradar-link-radar-wi-fi) | Radar 3D con toggle REAL/DEMO |
-| — | [Aircraft Radar](#aircraft-radar-aircraft-radar-link-aviones) | Tráfico aéreo (ADS-B) vía HackRF One |
+| — | [Aircraft Radar](#aircraft-radar-aircraft-radar-link-radar-de-aviones) | Tráfico aéreo (ADS-B) vía HackRF One |
 | — | [Wardriving](#wardriving-pestaña) | Auditoría de handshakes (allowlist, ataques, sesiones) |
-| — | [OST](#ost-pestaña-música) | Jukebox de música |
+| — | [OST](#ost-pestaña-ost) | Jukebox de música |
 | — | [Dispositivos](#dispositivos-pestaña-usb) | USB, montaje, adaptadores WiFi |
 | — | [Ajustes](#ajustes) | Volumen, bocina Bluetooth, respaldos |
 | — | [API HTTP](#api-http-para-integraciones) | Endpoints para integraciones |
@@ -60,7 +60,7 @@ Raspberry Pi OS 64-bit, basado en Debian Trixie.
 | Orquestación | [whisplay-ai-chatbot](https://github.com/PiSugar/whisplay-ai-chatbot) |
 | Pantalla | UI propia minimalista: íconos de wifi/batería arriba, personaje animado (cara en primer plano) al medio, texto verde terminal abajo ([`docs/display-ui.md`](docs/display-ui.md)); pantalla dedicada estilo terminal para elegir/cargar modelo de LLM ([`docs/voice-commands.md`](docs/voice-commands.md)) |
 | Comandos de voz | Volumen, cambio/consulta de modelo de LLM y modo agente/local, resueltos por expresiones regulares antes de llegar al LLM — instantáneo, sin gastar un turno. Decir "ayuda" con el botón presionado muestra un resumen de todos estos comandos en pantalla ([`docs/voice-commands.md`](docs/voice-commands.md)) |
-| Wifi | Menú físico "Wifi connect" (AP directo + QR, ver [`docs/wifi.md`](docs/wifi.md)) + interfaz web con chat a los modelos locales, wifi completo (buscar, conectar con contraseña, olvidar redes), USB y batería/CPU/RAM en vivo en `http://<ip-del-dispositivo>:8090` ([`docs/web-ui.md`](docs/web-ui.md)) |
+| Wifi | Menú físico "WiFi directo" (AP directo + QR, ver [`docs/wifi.md`](docs/wifi.md)) + interfaz web con chat a los modelos locales, wifi completo (buscar, conectar con contraseña, olvidar redes), USB y batería/CPU/RAM en vivo en `http://<ip-del-dispositivo>:8090` ([`docs/web-ui.md`](docs/web-ui.md)) |
 | WiFi Radar | Visualización 3D (Three.js) del espacio WiFi alrededor del Pi, capturado pasivamente con cualquier adaptador USB en modo monitor (detección genérica; probado con Atheros AR9271 y Ralink RT5372) — toggle real/demo y caída a demo con datos simulados si no hay hardware conectado. Fabricantes resueltos del registro IEEE local (ieee-data), con fallback opcional a la API de macvendors.com ([`docs/wifiradar.md`](docs/wifiradar.md)) |
 | Wardriving | Captura de handshakes para laboratorio/tesis: allowlist explícita de BSSIDs como único mecanismo de autorización, ataques pmkid/deauth con aircrack-ng, sesiones con artifacts descargables desde la web, contraseñas crackeadas visibles por sesión (ojo con revelado) y dictionary attack (rockyou) desde el listado de sesiones — probado contra un AP de laboratorio dedicado ([`docs/wardrive.md`](docs/wardrive.md), [`docs/lab-wireless.md`](docs/lab-wireless.md)) |
 | GPS | Mapa mundial con la posición en vivo del dongle GPS USB: marcador, precisión, sky plot de satélites (en fix / visibles / necesarios) — [`docs/gps.md`](docs/gps.md) |
@@ -334,14 +334,14 @@ con estos modos, cada uno con su propio control:
 | **Modelo** | Elegir modelo de IA entre los descargados en Ollama. Click recorre opciones, mantener confirma (spinner mientras Ollama carga el modelo), doble clic cancela sin cambiar. No reinicia el servicio. |
 | **Modo** | Alterna el origen de las respuestas: **"Modo agente"** (conversa vía OpenClaw, un agente externo puenteado por `whisplay-im`) o **"Modo local"** (el LLM corre en la propia Pi). Click navega, mantener confirma; queda persistido en `.env` y el top-bar de la pantalla lo indica (`agent`/`local`). |
 | **Audio** | Salida de sonido: **bocina de la Pi** (Whisplay HAT, ALSA directo) o **bocina externa Bluetooth** ya emparejada desde la web (Ajustes → Salida de audio — ahí se escanea, vincula y elimina). Al confirmar una BT el dispositivo la conecta y suelta cualquier otra; ver la sección Ajustes para el detalle. Persiste en `.env`. |
-| **Música** | Reproductor dedicado del OST de Cypher con barra de progreso: **click** play/pausa · **doble clic** siguiente pista · **mantener** salir. Muestra título y progreso de la pista actual. |
+| **OST** | Reproductor dedicado del OST de Cypher con barra de progreso: **click** play/pausa · **doble clic** siguiente pista · **mantener** salir. Muestra título y progreso de la pista actual. |
+| **Volumen** | Cada **click** sube +10% en vivo (barra de progreso en pantalla); **doble clic** sale sin cambios; mantener también sale. |
 | **Ayuda** | Pantalla(s) de referencia con todos los comandos de voz y gestos del botón (a lo sumo 2 pantallas). |
 | **Cámara** | Abre el modo cámara del dispositivo (solo si hay cámara configurada; el menú la oculta si no): **click corto** captura la foto (se usa como contexto para el LLM si luego lo preguntas) · **mantener 2s** sale. La foto queda en `data/images/`. |
-| **Volumen** | Cada **click** sube +10% en vivo (barra de progreso en pantalla); **doble clic** sale sin cambios; mantener también sale. |
-| **Wifi connect** | Convierte la wifi de la Pi en un punto de acceso **`akbal-pi`** con QR en pantalla: escanéalo con un celular para conectarte directo (y abrir la web admin). Dos QR navegables con click: wifi y web. En cuanto un teléfono se conecta, salta solo al QR web. **Mantener** desactiva el AP y sale; **doble clic** sale dejándolo activo. |
+| **WiFi directo** | Convierte la wifi de la Pi en un punto de acceso **`akbal-pi`** con QR en pantalla (misma función que Ajustes → General → "WiFi directo" en la web): escanéalo con un celular para conectarte directo (y abrir la web admin). Dos QR navegables con click: wifi y web. En cuanto un teléfono se conecta, salta solo al QR web. **Mantener** desactiva el AP y sale; **doble clic** sale dejándolo activo. |
 | **Conexión web** | Muestra la IP LAN y de Tailscale del dispositivo + QR apuntando a la web admin (`http://<ip>:8090`). Es la forma de saber a qué URL conectarse. |
 | **WiFi Radar** | Versión de pantalla del radar WiFi (detalle abajo): discos con puntos por red cercana, texto inferior rotando nombre + dBm. **Mantener** para salir. |
-| **Aviones** | Versión de pantalla del Aircraft Radar (detalle abajo): disco con un punto por aeronave, ubicado por su rumbo/distancia GPS reales. **Mantener** para salir. |
+| **Radar de Aviones** | Versión de pantalla del Aircraft Radar (detalle abajo): disco con un punto por aeronave, ubicado por su rumbo/distancia GPS reales. **Mantener** para salir. |
 
 El menú se cierra solo tras **60 segundos** sin tocar el botón.
 
@@ -362,7 +362,7 @@ contra la posición del Pi, no por un hash. El color indica si se acerca (verde)
 o se aleja (rojo); amarillo mientras no hay fix GPS para calcularlo. La franja
 inferior rota callsign + distancia + rumbo. Sin HackRF conectado muestra "Sin
 HackRF conectado o sin fix GPS"; en demo, aeronaves sintéticas con prefijo
-"DEMO · ". Entra desde el menú rápido ("Aviones"); mantener presionado para
+"DEMO · ". Entra desde el menú rápido ("Radar de Aviones"); mantener presionado para
 salir. Detalle completo en [`docs/aircraft-radar.md`](docs/aircraft-radar.md).
 
 ## Sitio web de administración (`http://<ip>:8090`)
@@ -447,7 +447,7 @@ visibles M/total, coloreados por SNR). Sin fix indica cuántos satélites hay
 y cuántos faltan. Funciona con u-blox y clones (`ttyACM*`/`ttyUSB*`), con o
 sin `gpsd` — ver [`docs/gps.md`](docs/gps.md).
 
-### Aircraft Radar (`/aircraft-radar`, link "Aviones")
+### Aircraft Radar (`/aircraft-radar`, link "Radar de Aviones")
 
 Lista de aeronaves cercanas ordenada por distancia, alimentada por un HackRF
 One en 1090MHz. Cada tarjeta muestra callsign, matrícula/modelo/aerolínea
@@ -471,10 +471,10 @@ para cómo se afinó y sus límites conocidos. Solo recepción: el HackRF
 nunca transmite. Detalle completo en
 [`docs/aircraft-radar.md`](docs/aircraft-radar.md).
 
-### OST (pestaña Música)
+### OST (pestaña OST)
 
 Jukebox del OST de Cypher: playlist fija local con play/pausa, siguiente/
-anterior y seek. Controla lo mismo que el ítem "Música" del menú físico.
+anterior y seek. Controla lo mismo que el ítem "OST" del menú físico.
 
 ### Dispositivos (pestaña USB)
 

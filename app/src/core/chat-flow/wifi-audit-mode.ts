@@ -1,4 +1,4 @@
-import { display, onButtonDown, onButtonUp } from "../../device/display";
+import { display, onButtonDown, onButtonUp, setMainButtonSuspended } from "../../device/display";
 import { getWardriveService } from "../../wifi-audit/service";
 import { WardriveStatus } from "../../wifi-audit/types";
 
@@ -90,7 +90,7 @@ function paint(status: WardriveStatus): void {
     help_ui: "",
     radar_ui: "",
     wardrive_ui: "view",
-    wardrive_label: status.iface ? `AUDIT WIFI ${status.iface.toUpperCase()}` : "AUDIT WIFI",
+    wardrive_label: status.iface ? `WIFI AUDIT ${status.iface.toUpperCase()}` : "WIFI AUDIT",
     wardrive_status_text: statusText,
     wardrive_captured: captured,
     wardrive_total: total,
@@ -104,9 +104,12 @@ export function startWardriveDisplayMirror(): void {
     if (payload?.type !== "status") return;
     const st: WardriveStatus = payload.status;
     if (st.mode === "inactive") {
-      // Leaving wardriving: clear the overlay; the normal sleep screen
-      // takes over on the next render (states.ts sleep handler also
-      // clears it, but do it here so the screen flips immediately).
+      // Leaving wardriving: give the button back to whatever chat-flow
+      // state is actually current (see setMainButtonSuspended below).
+      setMainButtonSuspended(false);
+      // Clear the overlay; the normal sleep screen takes over on the next
+      // render (states.ts sleep handler also clears it, but do it here so
+      // the screen flips immediately).
       display({
         status: "idle",
         emoji: "😴",
@@ -114,10 +117,17 @@ export function startWardriveDisplayMirror(): void {
         wardrive_ui: "",
         wardrive_label: "",
         wardrive_status_text: "",
-        text: "Saliendo del modo audit wifi...",
+        text: "Saliendo del modo wifi audit...",
       });
       return;
     }
+    // Entering wardriving suspends the chat-flow's own button handling: a
+    // short click otherwise still opens the quick menu (usually still in
+    // "sleep" underneath, since the service unloads the LLM on enter) and a
+    // hold still triggers push-to-talk, completely out of sync with what's
+    // on screen. The hold-to-exit gesture above is wired through
+    // onButtonDown/onButtonUp instead, so it keeps working regardless.
+    setMainButtonSuspended(true);
     paint(st);
   };
   service.on("status", statusListener);

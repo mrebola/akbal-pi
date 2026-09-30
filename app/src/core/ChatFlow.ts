@@ -6,7 +6,7 @@ import {
 import { display } from "../device/display";
 import { recognizeAudio, ttsProcessor } from "../cloud-api/server";
 import { isAgentMode } from "../config/device-mode";
-import { DEFAULT_EMOJI, extractEmojis } from "../utils";
+import { DEFAULT_EMOJI, extractEmojis, EMOJI_PATTERN } from "../utils";
 import { StreamResponser } from "./StreamResponsor";
 import { recordingsDir } from "../utils/dir";
 import dotEnv from "dotenv";
@@ -295,7 +295,11 @@ class ChatFlow implements ChatFlowContext {
   composeAnswerDisplayText = (text?: string): string => {
     const answerText = text ?? this.answerDisplayText;
     if (this.toolDisplayItems.length === 0) {
-      return answerText || "";
+      // Strip emoji only from what actually reaches the LCD — the
+      // Whisplay's bitmap font has no glyph for them (renders as a blank
+      // "tofu" box); answerDisplayText itself stays untouched since
+      // appendToolCallDisplay's anchorIndex is a position into it.
+      return (answerText || "").replace(EMOJI_PATTERN, "");
     }
     const sortedItems = [...this.toolDisplayItems].sort((a, b) => {
       if (a.anchorIndex !== b.anchorIndex) {
@@ -318,7 +322,7 @@ class ChatFlow implements ChatFlowContext {
       result += `${needsSeparatorBefore ? " " : ""}{tool:${item.id}}${needsSeparatorAfter ? " " : ""}`;
     });
     result += answerText.slice(cursor);
-    return result;
+    return result.replace(EMOJI_PATTERN, "");
   };
 
   private formatToolDisplayItem = (item: {

@@ -22,18 +22,26 @@ export type QuickMenuKey =
 
 type QuickMenuItem = { key: QuickMenuKey; label: string; description: string };
 
+// Order: IA (model/mode) → audio/media (grouped together — volume used to
+// sit apart from audio_output/jukebox with help/camera in between, for no
+// real reason) → utilidades personales (help/camera) → red y radares
+// (wifi_connect...wardrive). Labels match the web admin's naming for the
+// same feature 1:1 (see app/web/admin/i18n/es.json's topbar.* and
+// settings.general.ap_* keys) — they used to drift (e.g. "Wifi connect"
+// here vs. "WiFi directo (punto de acceso)" on the web for the same AP
+// toggle), which reads as two different features when it's one.
 const BASE_ITEMS: QuickMenuItem[] = [
   { key: "model", label: "Modelo", description: "Elegir modelo de IA" },
   { key: "mode", label: "Modo", description: "Agente u local" },
   { key: "audio_output", label: "Audio", description: "Bocina Pi o bluetooth" },
-  { key: "jukebox", label: "Música", description: "OST de Cypher" },
+  { key: "jukebox", label: "OST", description: "OST de Cypher" },
+  { key: "volume", label: "Volumen", description: "Subir/bajar el sonido" },
   { key: "help", label: "Ayuda", description: "Comandos de voz" },
   { key: "camera", label: "Cámara", description: "Tomar una foto" },
-  { key: "volume", label: "Volumen", description: "Subir/bajar el sonido" },
-  { key: "wifi_connect", label: "Wifi connect", description: "Conectate directo por wifi" },
+  { key: "wifi_connect", label: "WiFi directo", description: "Conectate directo por wifi" },
   { key: "network", label: "Conexión web", description: "IP, tailscale y QR" },
   { key: "wifiradar", label: "WiFi Radar", description: "Ver redes cercanas" },
-  { key: "aircraft_radar", label: "Aviones", description: "Ver tráfico aéreo cercano" },
+  { key: "aircraft_radar", label: "Radar de Aviones", description: "Ver tráfico aéreo cercano" },
   { key: "wardrive", label: "Wardrive", description: "Captura en el auto + GPS" },
 ];
 

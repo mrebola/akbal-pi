@@ -179,6 +179,13 @@ export class WhisplayDisplay {
   private buttonPressedCallback: () => void = () => {};
   private buttonReleasedCallback: () => void = () => {};
   private buttonDoubleClickCallback: (() => void) | null = null;
+  // Suspends only the chat-flow's main press/release/double-click callbacks
+  // (see setMainButtonSuspended below) — set while a non-chat-flow overlay
+  // owns the button instead (e.g. Wifi Audit, started from the web: the
+  // radio is busy and the physical hold-to-exit gesture in wifi-audit-mode.ts
+  // is wired through onButtonDown/onButtonUp below, which keep firing
+  // regardless, so that escape hatch still works).
+  private mainButtonSuspended = false;
   private buttonDown = false;
   private onCameraCaptureCallback: () => void = () => {};
   private textInputCallback: (text: string) => void = () => {};
@@ -417,6 +424,12 @@ export class WhisplayDisplay {
 
   onButtonReleased(callback: () => void): void {
     this.buttonReleasedCallback = callback;
+  }
+
+  // See mainButtonSuspended above. wifi-audit-mode.ts calls this from its
+  // service status listener (mode !== "inactive" → true, "inactive" → false).
+  setMainButtonSuspended(suspended: boolean): void {
+    this.mainButtonSuspended = suspended;
   }
 
   // Extra edge listeners fanned out inside handleButtonPressed/ReleasedEvent —
@@ -663,7 +676,7 @@ export class WhisplayDisplay {
     this.buttonDown = true;
     this.buttonPressTimeArray.push(Date.now());
     console.log("emit pressed");
-    this.buttonPressedCallback();
+    if (!this.mainButtonSuspended) this.buttonPressedCallback();
     for (const listener of buttonDownListenersModule) {
       try {
         listener();
@@ -677,8 +690,10 @@ export class WhisplayDisplay {
     this.buttonDown = false;
     this.buttonReleaseTimeArray.push(Date.now());
     console.log("emit released");
-    this.buttonReleasedCallback();
-    this.maybeEmitDoubleClick();
+    if (!this.mainButtonSuspended) {
+      this.buttonReleasedCallback();
+      this.maybeEmitDoubleClick();
+    }
     for (const listener of buttonUpListenersModule) {
       try {
         listener();
@@ -770,6 +785,8 @@ export const onButtonReleased =
   displayInstance.onButtonReleased.bind(displayInstance);
 export const onButtonDoubleClick =
   displayInstance.onButtonDoubleClick.bind(displayInstance);
+export const setMainButtonSuspended =
+  displayInstance.setMainButtonSuspended.bind(displayInstance);
 export const onCameraCapture =
   displayInstance.onCameraCapture.bind(displayInstance);
 export const onTextInput =

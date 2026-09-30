@@ -118,5 +118,5 @@ en la pantalla aunque nadie la esté mirando desde el navegador.
 
 El overlay del LCD se comparte con Wifi Audit (`render_wardrive_screen` en
 `chatbot-ui.py`): Node manda `wardrive_label` ("WARDRIVE <IFACE>" o
-"AUDIT WIFI <IFACE>") y la banda inferior cambia el contador — "N handshakes ·
+"WIFI AUDIT <IFACE>") y la banda inferior cambia el contador — "N handshakes ·
 M redes" para wardrive, "N/M handshakes" para audit.

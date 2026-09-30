@@ -1,4 +1,4 @@
-# Wifi: menú "Wifi connect" y administrador desde la web
+# Wifi: menú "WiFi directo" y administrador desde la web
 
 ## Qué hace
 
@@ -6,7 +6,7 @@ El dispositivo usa wifi normal (`NetworkManager`, ya configurado en el
 sistema — nada nuevo ahí) para todo el tráfico normal, incluido el modo
 agente. Esto agrega dos formas de gestionarla sin entrar por SSH:
 
-1. **Menú físico** ("Wifi connect" en el [menú
+1. **Menú físico** ("WiFi directo" en el [menú
    rápido](./voice-commands.md#menú-rápido)): convierte la wifi de la propia
    Pi en un punto de acceso (`akbal-pi`) para conectarse directo desde un
    celular sin necesitar internet ni la wifi de siempre — ver
@@ -19,11 +19,11 @@ agente. Esto agrega dos formas de gestionarla sin entrar por SSH:
    Ajustes → General.
 
 > Antes existía un menú "Internet emergencia" que unía el dispositivo a una
-> red pre-configurada en `.env`. Se quitó a favor de "Wifi connect": andaba
+> red pre-configurada en `.env`. Se quitó a favor de "WiFi directo": andaba
 > mejor conectarse directo al dispositivo (sin depender de que haya wifi
 > disponible cerca) que memorizar una red de respaldo.
 
-## Wifi connect: punto de acceso directo
+## WiFi directo: punto de acceso directo
 
 `app/src/utils/access-point.ts` maneja todo el ciclo vida (crear/activar/
 desactivar la conexión `akbal-ap` vía `nmcli`, generar la clave, armar los

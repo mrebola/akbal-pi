@@ -3,8 +3,8 @@
 `http://<ip-del-dispositivo>:8090/aircraft-radar` — lista de aeronaves
 detectadas ordenada por distancia + mapa/radar (ver "Frontend" abajo),
 alimentado en tiempo real por un HackRF One en 1090MHz. Además hay una
-pantalla física simplificada en el menú rápido del LCD ("Aviones"). Solo
-recepción: el backend de HackRF de `readsb` únicamente recibe (API RX de
+pantalla física simplificada en el menú rápido del LCD ("Radar de Aviones").
+Solo recepción: el backend de HackRF de `readsb` únicamente recibe (API RX de
 `libhackrf`, sin ninguna ruta de transmisión en el binario), y este módulo
 no interactúa con ningún transpondedor.
 
@@ -137,11 +137,12 @@ agente `getAircraftHistory`.
 ## Pantalla física (LCD)
 
 `chat-flow/aircraft-radar-mode.ts`, accesible desde el menú rápido
-("Aviones"). Mismo primitivo genérico `radar_ui` que ya usaba WIFIRADAR en
+("Radar de Aviones" — mismo nombre que la pestaña de la web, ver
+docs/i18n.md). Mismo primitivo genérico `radar_ui` que ya usaba WIFIRADAR en
 `python/chatbot-ui.py` — pero como propio campo `aircraft_radar_ui`
 (no comparte estado con `radar_ui`, así ambas pantallas no pueden
 pisarse) con su propio render (`render_aircraft_radar_screen`, título
-"AIRCRAFT RADAR"). A diferencia de WIFIRADAR (ángulo hasheado, sin
+"RADAR AVIONES"). A diferencia de WIFIRADAR (ángulo hasheado, sin
 significado real), aquí el ángulo de cada punto es el **bearing GPS real**
 de la aeronave, y el color reutiliza la misma escala verde/amarillo/rojo
 pero para tendencia de acercamiento (`approaching`) en vez de RSSI.

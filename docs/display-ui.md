@@ -175,9 +175,14 @@ padding extra (`BRAND_LEFT_PADDING`, además de `TOP_BAR_MARGIN_X`) porque el
 borde izquierdo del case recorta el texto más cerca de lo que el margen de
 los íconos ya contemplaba — verificado en el dispositivo real.
 
-El único rastro del modo agente/local que queda ahí es el **color** del
-texto: verde acento cuando `top_bar_mode === "agent"`, gris apagado en
-cualquier otro caso (local, o antes de que se sete por primera vez) — ver
-`top_bar_mode` en `Status` (`app/src/device/display.ts`) y
-`render_top_bar()`. Se actualiza al entrar a "sleep" y al confirmar un
-cambio de modo (`mode_loading` en `states.ts`).
+El texto de "AKBAL" es siempre verde acento — una marca fija, no un
+indicador de estado (ver el comentario en `render_top_bar()`,
+`python/chatbot-ui.py`). Antes el color dependía de `top_bar_mode`
+(verde = agente, gris apagado = local), pero eso se quitó a propósito;
+hoy la pantalla física no tiene ninguna forma de distinguir modo
+agente/local a simple vista — para eso hay que abrir el menú **Modo**
+(`mode_select`) o mirar la web (Ajustes → General → "Modo de IA").
+`top_bar_mode` en `Status` (`app/src/device/display.ts`) se sigue
+actualizando al entrar a "sleep" y al confirmar un cambio de modo
+(`mode_loading` en `states.ts`), pero ya no se usa para pintar nada en el
+top bar.

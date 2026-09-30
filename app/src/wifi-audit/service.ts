@@ -307,6 +307,9 @@ export class WardriveService extends EventEmitter {
           live: true,
           capFile: (t.files || []).find((f) => /\.(cap|pcapng)$/i.test(f)) || null,
           source: "wifi-audit",
+          capturedAt: t.finishedAt ?? null,
+          lat: null,
+          lon: null,
         });
       }
     }
@@ -337,6 +340,9 @@ export class WardriveService extends EventEmitter {
             live: false,
             capFile: (t.files || []).find((f: string) => /\.(cap|pcapng)$/i.test(f)) || null,
             source: "wifi-audit",
+            capturedAt: typeof t.finishedAt === "number" ? t.finishedAt : null,
+            lat: null,
+            lon: null,
           });
         }
       }
@@ -358,6 +364,9 @@ export class WardriveService extends EventEmitter {
           live: false,
           capFile: row.cap_file ? path.basename(row.cap_file) : null,
           source: "wardrive",
+          capturedAt: row.captured_at ?? null,
+          lat: row.lat ?? null,
+          lon: row.lon ?? null,
         });
       }
     } catch {

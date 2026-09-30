@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Akbal · Crack Station</title>
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
 </head>
 <body>
   <header class="topbar">
@@ -72,35 +73,28 @@
           <table class="wd-table wd-crack-table">
             <thead>
               <tr>
-                <th data-i18n="crackstation.col_ssid">SSID</th>
-                <th data-i18n="crackstation.col_mac">MAC (BSSID)</th>
-                <th data-i18n="crackstation.col_origin">Origen</th>
+                <th data-sort="ssid" data-i18n="crackstation.col_ssid">SSID</th>
+                <th data-sort="bssid" data-i18n="crackstation.col_mac">MAC (BSSID)</th>
+                <th data-sort="source" data-i18n="crackstation.col_origin">Origen</th>
+                <th data-sort="capturedAt" data-i18n="crackstation.col_when">Fecha y hora</th>
+                <th data-sort="lat" data-i18n="crackstation.col_gps">GPS</th>
                 <th data-i18n="crackstation.col_hs">Handshake</th>
-                <th data-i18n="crackstation.col_pass">Contraseña</th>
+                <th data-sort="password" data-i18n="crackstation.col_pass">Contraseña</th>
                 <th data-i18n="crackstation.col_actions">Ataques</th>
                 <th data-i18n="crackstation.col_files">Archivos</th>
               </tr>
             </thead>
             <tbody id="wd-crack-body">
-              <tr><td colspan="7" class="muted">—</td></tr>
+              <tr><td colspan="9" class="muted">—</td></tr>
             </tbody>
           </table>
         </div>
 
-        <!-- File browser for one handshake's session folder (Wifi Audit
-             dated folder OR Wardrive's drive-* folder — same backend
-             endpoints, same ~/wardrive-sessions root, see
-             /api/wardrive/files in web-admin-server.ts). -->
-        <div id="wd-crack-files" class="wd-sessions-files hidden">
-          <div class="wd-session-title" id="wd-crack-files-title" style="font-size:12px; margin-top:10px;"></div>
-          <div class="wd-list-wrap">
-            <table class="wd-table">
-              <thead>
-                <tr><th data-i18n="crackstation.col_file">Archivo</th><th data-i18n="crackstation.col_size">Tamaño</th><th></th><th></th></tr>
-              </thead>
-              <tbody id="wd-crack-files-body"></tbody>
-            </table>
-          </div>
+        <!-- Dictionary attack (rockyou) progress -->
+        <div class="wd-session-title" style="margin-top:16px;" data-i18n="crackstation.dict_title">ATAQUE DE DICCIONARIO (ROCKYOU)</div>
+        <div class="wd-mask-panel" id="wd-dict-panel">
+          <div class="wd-mask-run-status" id="wd-dict-run-status"></div>
+          <div class="wd-mask-run" id="wd-dict-run"></div>
         </div>
 
         <!-- Mask brute-force: preset picker + custom recipe editor -->
@@ -135,6 +129,45 @@
     </section>
   </main>
 
+  <!-- Files modal: one handshake's session folder (Wifi Audit dated folder
+       OR Wardrive's drive-* folder — same backend endpoints, same
+       ~/wardrive-sessions root, see /api/wardrive/files in
+       web-admin-server.ts). -->
+  <div id="wd-crack-files-modal" class="wd-modal hidden">
+    <div class="wd-modal-backdrop" onclick="document.getElementById('wd-crack-files-modal').classList.add('hidden')"></div>
+    <div class="wd-modal-content">
+      <div class="wd-modal-header">
+        <span id="wd-crack-files-title" data-i18n="crackstation.files_title">Archivos</span>
+        <div class="wd-modal-actions">
+          <button id="wd-crack-files-close" class="secondary" data-i18n="crackstation.files_close">Cerrar</button>
+        </div>
+      </div>
+      <div style="overflow: auto; padding: 4px;">
+        <table class="wd-table">
+          <thead>
+            <tr><th data-i18n="crackstation.col_file">Archivo</th><th data-i18n="crackstation.col_size">Tamaño</th><th></th><th></th></tr>
+          </thead>
+          <tbody id="wd-crack-files-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Capture-location modal: where a handshake was captured (Wardrive
+       tracks GPS; Wifi Audit is stationary lab capture, no coordinate). -->
+  <div id="wd-crack-map-modal" class="wd-modal hidden">
+    <div class="wd-modal-backdrop" onclick="document.getElementById('wd-crack-map-modal').classList.add('hidden')"></div>
+    <div class="wd-modal-content" style="max-width: 640px;">
+      <div class="wd-modal-header">
+        <span id="wd-crack-map-title" data-i18n="crackstation.map_title">Ubicación de la captura</span>
+        <div class="wd-modal-actions">
+          <button id="wd-crack-map-close" class="secondary" data-i18n="crackstation.files_close">Cerrar</button>
+        </div>
+      </div>
+      <div id="wd-crack-map" class="wd-crack-map"></div>
+    </div>
+  </div>
+
   <!-- Inline file preview: text files render as-is, binaries get a
        hexdump head + note (same /api/wardrive/files/preview backend the
        Sessions subtab uses). -->
@@ -151,6 +184,7 @@
     </div>
   </div>
 
+  <script src="vendor/leaflet/leaflet.js"></script>
   <script src="i18n.js"></script>
   <script src="crack-station.js"></script>
 </body>

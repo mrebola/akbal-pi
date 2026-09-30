@@ -90,6 +90,11 @@ export type HandshakeEntry = {
   live: boolean; // belongs to the in-progress session
   capFile: string | null; // capture file name (relative to the session dir)
   source: "wifi-audit" | "wardrive";
+  capturedAt: number | null; // epoch ms when the handshake was captured
+  // GPS at capture time — only Wardrive tracks position (driving sessions);
+  // Wifi Audit is stationary lab capture, always null there.
+  lat: number | null;
+  lon: number | null;
 };
 
 // Mask brute-force recipe (Crack Station, web UI): pattern where '@' =

@@ -2931,6 +2931,23 @@ body { font-family: var(--font-sans); }
 }
 .wd-crack-mask:hover { background: rgba(80, 255, 120, 0.08); }
 
+.wd-gps-btn {
+  font-size: 11px;
+  padding: 4px 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+.wd-gps-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
+
+/* Capture-location modal map (Crack Station's GPS column) — Leaflet needs
+   an explicit height to render into, unlike the fullscreen map pages. */
+.wd-crack-map { width: 100%; height: 360px; }
+
 /* ---- Mask presets (brute-force recipes) ---- */
 
 .wd-mask-panel {

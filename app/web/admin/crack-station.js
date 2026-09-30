@@ -59,6 +59,16 @@ function t(key, fallback) {
   return window.AkbalI18n ? AkbalI18n.t(key) : fallback;
 }
 
+// Local-locale date/time (browser's own timezone/format — not hardcoded).
+function wdFormatDateTime(ms) {
+  if (typeof ms !== "number") return "—";
+  try {
+    return new Date(ms).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+  } catch {
+    return new Date(ms).toLocaleString();
+  }
+}
+
 // ---- Header (same /api/status pipeline as wardrive.js/gps.js) ----
 
 function initHeader() {
@@ -126,7 +136,6 @@ initHeader();
 // capture tools) — see handshakeInventory() in wifi-audit/service.ts.
 
 let wdCrackCache = []; // HandshakeEntry[] (wifi-audit + wardrive, merged server-side)
-let wdOpenFilesSession = null; // which row's file list is expanded
 // Deep link from the wifi-audit celebrate modal (?bssid=...): highlight +
 // scroll to that row on first render only.
 let wdHighlightBssid = new URLSearchParams(window.location.search).get("bssid");
@@ -135,6 +144,44 @@ function wdOriginBadge(source) {
   const isWardrive = source === "wardrive";
   const label = isWardrive ? t("crackstation.origin_wardrive", "Wardrive") : t("crackstation.origin_wifiaudit", "Wifi Audit");
   return `<span class="wd-verify-badge none">${escapeHtml(label)}</span>`;
+}
+
+// ---- Column sort (browser-side, instant — same pattern as the Auditoría
+// table in app.js: click a header to sort by it, click again to flip). ----
+
+const wdCrackSort = { key: null, dir: "desc" };
+
+function wdSortedCrackItems() {
+  const { key, dir } = wdCrackSort;
+  if (!key) return wdCrackCache;
+  const mul = dir === "asc" ? 1 : -1;
+  return [...wdCrackCache].sort((a, b) => {
+    const av = a[key];
+    const bv = b[key];
+    const aMissing = av === null || av === undefined || av === "";
+    const bMissing = bv === null || bv === undefined || bv === "";
+    if (aMissing && bMissing) return 0;
+    if (aMissing) return 1; // missing values always sort last
+    if (bMissing) return -1;
+    if (typeof av === "number" && typeof bv === "number") return (av - bv) * mul;
+    return String(av).localeCompare(String(bv), "es", { numeric: true }) * mul;
+  });
+}
+
+function wdInitCrackSort() {
+  document.querySelectorAll("#wd-crack-block .wd-crack-table th[data-sort]").forEach((th) => {
+    th.style.cursor = "pointer";
+    th.addEventListener("click", () => {
+      const key = th.dataset.sort;
+      if (wdCrackSort.key === key) {
+        wdCrackSort.dir = wdCrackSort.dir === "asc" ? "desc" : "asc";
+      } else {
+        wdCrackSort.key = key;
+        wdCrackSort.dir = "desc"; // first click: newest/strongest first
+      }
+      wdRenderCrackStation();
+    });
+  });
 }
 
 // Inventory tick: fetch + render.
@@ -153,14 +200,22 @@ function wdRenderCrackStation() {
   const body = el("wd-crack-body");
   const status = el("wd-crack-status");
   if (!body) return;
-  const items = wdCrackCache;
+  const items = wdSortedCrackItems();
   if (status) {
     status.textContent = items.length
       ? `${items.length} handshake(s) en el inventario`
       : "Sin handshakes aún — auditá una red en Wifi Audit o salí a manejar con Wardrive";
   }
+  // Sort arrows on the active column header (▲/▼), same convention as the
+  // Auditoría table.
+  document.querySelectorAll("#wd-crack-block .wd-crack-table th[data-sort]").forEach((th) => {
+    const active = th.dataset.sort === wdCrackSort.key;
+    const base = th.dataset.label || th.textContent.replace(/ [▲▼]$/, "");
+    th.dataset.label = base;
+    th.textContent = active ? `${base} ${wdCrackSort.dir === "asc" ? "▲" : "▼"}` : base;
+  });
   if (items.length === 0) {
-    body.innerHTML = '<tr><td colspan="7" class="muted">Aún no hay handshakes capturados.</td></tr>';
+    body.innerHTML = '<tr><td colspan="9" class="muted">Aún no hay handshakes capturados.</td></tr>';
     return;
   }
   const capOf = (it) => (it.capFile ? `${it.sessionId}/${it.capFile}` : "");
@@ -171,19 +226,25 @@ function wdRenderCrackStation() {
       if (!it.password) {
         crackButtons.push(
           `<button class="wd-crack-dict" data-bssid="${it.bssid}" data-cap="${escapeHtml(capPath)}" data-session="${it.sessionId}"
-             title="Rockyou contra este handshake">rockyou</button>`,
+             title="Ataque de diccionario (rockyou) contra este handshake">dictionary attack</button>`,
         );
         crackButtons.push(
           `<button class="wd-crack-mask" data-bssid="${it.bssid}" data-ssid="${escapeHtml(it.ssid || "")}"
              data-cap="${escapeHtml(capPath)}" title="Fuerza bruta con máscara (p.ej. @@@@+MAC)">máscara…</button>`,
         );
       }
+      const gps = it.lat != null && it.lon != null
+        ? `<button class="wd-gps-btn" data-lat="${it.lat}" data-lon="${it.lon}" data-ssid="${escapeHtml(it.ssid || it.bssid)}"
+             title="Ver en el mapa">📍 ${it.lat.toFixed(4)}, ${it.lon.toFixed(4)}</button>`
+        : "—";
       const rowClass = it.bssid === wdHighlightBssid ? "wd-crack-row-highlight" : "";
       return `<tr class="${rowClass}" data-bssid="${it.bssid}" data-ssid="${escapeHtml(it.ssid || "")}"
                   data-session="${it.sessionId}" data-cap="${escapeHtml(capPath)}">
         <td class="wd-ssid">${it.live ? '<span class="demo-badge" style="background:rgba(80,255,120,.12);color:#34d351;">EN VIVO</span> ' : ""}${escapeHtml(it.ssid || "(oculta)")}</td>
         <td style="font-family: ui-monospace, monospace; font-size: 11px;">${escapeHtml(it.bssid)}</td>
         <td>${wdOriginBadge(it.source)}</td>
+        <td class="muted" style="font-size:11px; white-space:nowrap;">${escapeHtml(wdFormatDateTime(it.capturedAt))}</td>
+        <td>${gps}</td>
         <td>${it.hasHandshake ? '<span class="wd-verify-badge ok">✓ .cap</span>' : "—"}</td>
         <td>${it.password ? `<span class="wd-verify-badge ok" style="max-width:180px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(it.password)}</span>` : "—"}</td>
         <td><div class="wd-action-group">${it.password ? '<span class="muted">✓</span>' : crackButtons.join("")}</div></td>
@@ -200,24 +261,20 @@ function wdRenderCrackStation() {
 
 // ---- File browser: same /api/wardrive/files endpoints the Sessions
 // subtab uses (path-traversal-checked, shared ~/wardrive-sessions root —
-// works for a Wifi Audit dated folder AND a Wardrive drive-* folder). ----
+// works for a Wifi Audit dated folder AND a Wardrive drive-* folder). Shown
+// in a modal (not inline in the page flow) so it doesn't push the table
+// and mask panel down every time it's opened. ----
 
 async function wdOpenCrackFiles(sessionId) {
-  const filesBlock = el("wd-crack-files");
+  const modal = el("wd-crack-files-modal");
   const filesTitle = el("wd-crack-files-title");
   const filesBody = el("wd-crack-files-body");
-  if (!filesBlock || !filesTitle || !filesBody) return;
-  if (wdOpenFilesSession === sessionId && !filesBlock.classList.contains("hidden")) {
-    filesBlock.classList.add("hidden");
-    wdOpenFilesSession = null;
-    return;
-  }
+  if (!modal || !filesTitle || !filesBody) return;
   try {
     const res = await fetch(`/api/wardrive/files?path=${encodeURIComponent(sessionId)}`);
     if (!res.ok) return;
     const data = await res.json();
-    wdOpenFilesSession = sessionId;
-    filesTitle.textContent = `Sesión ${sessionId}`;
+    filesTitle.textContent = `${t("crackstation.files_title", "Archivos")} — ${sessionId}`;
     filesBody.innerHTML = (data.items || [])
       .map((it) => {
         const size = it.size > 1024 * 1024 ? `${(it.size / 1024 / 1024).toFixed(1)} MB` : `${Math.round(it.size / 1024)} KB`;
@@ -230,10 +287,13 @@ async function wdOpenCrackFiles(sessionId) {
         </tr>`;
       })
       .join("");
-    filesBlock.classList.remove("hidden");
-    filesBlock.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    modal.classList.remove("hidden");
   } catch { /* non-fatal */ }
 }
+
+el("wd-crack-files-close")?.addEventListener("click", () => {
+  el("wd-crack-files-modal")?.classList.add("hidden");
+});
 
 function wdShowPreview(name, data) {
   const modal = el("wd-preview-modal");
@@ -263,7 +323,52 @@ el("wd-preview-close")?.addEventListener("click", () => {
   el("wd-preview-modal")?.classList.add("hidden");
 });
 
-// Launch points: Crack Station rows (rockyou / mask / ver archivos).
+// ---- Capture-location map (GPS column) — Leaflet, same OSM tiles as
+// gps.js/wardrive.js. Only Wardrive rows carry a coordinate (Wifi Audit is
+// stationary lab capture). One map instance, re-centered per click. ----
+
+let wdCrackMap = null;
+let wdCrackMapMarker = null;
+
+function wdOpenCrackMap(lat, lon, label) {
+  const modal = el("wd-crack-map-modal");
+  const title = el("wd-crack-map-title");
+  const mapEl = el("wd-crack-map");
+  if (!modal || !mapEl) return;
+  if (title) title.textContent = label ? `${t("crackstation.map_title", "Ubicación de la captura")} — ${label}` : t("crackstation.map_title", "Ubicación de la captura");
+  modal.classList.remove("hidden");
+  if (typeof L === "undefined") return; // vendor/leaflet failed to load — modal still shows the title
+  if (!wdCrackMap) {
+    wdCrackMap = L.map(mapEl, { zoomControl: true, attributionControl: true });
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      subdomains: "abc",
+      maxZoom: 19,
+      crossOrigin: true,
+    }).addTo(wdCrackMap);
+  }
+  wdCrackMap.setView([lat, lon], 16);
+  if (wdCrackMapMarker) {
+    wdCrackMapMarker.setLatLng([lat, lon]);
+  } else {
+    const icon = L.divIcon({
+      className: "wd-crack-map-pin",
+      html: '<div style="width:16px;height:16px;border-radius:50%;background:#50ff78;border:2px solid #0b0d0f;box-shadow:0 0 0 4px rgba(80,255,120,.25);"></div>',
+      iconSize: [16, 16],
+      iconAnchor: [8, 8],
+    });
+    wdCrackMapMarker = L.marker([lat, lon], { icon }).addTo(wdCrackMap);
+  }
+  // The map div is 0×0 while its modal is hidden — Leaflet needs a
+  // recalculation once it's actually visible, or tiles render blank/offset.
+  setTimeout(() => wdCrackMap.invalidateSize(), 60);
+}
+
+el("wd-crack-map-close")?.addEventListener("click", () => {
+  el("wd-crack-map-modal")?.classList.add("hidden");
+});
+
+// Launch points: Crack Station rows (dictionary attack / mask / archivos / mapa).
 el("wd-crack-body")?.addEventListener("click", async (ev) => {
   const dictBtn = ev.target.closest(".wd-crack-dict");
   if (dictBtn) {
@@ -272,7 +377,9 @@ el("wd-crack-body")?.addEventListener("click", async (ev) => {
       if (wdError) wdError.textContent = res.error;
       return;
     }
-    toast("Diccionario lanzado — mira el progreso en esta misma tabla", "success");
+    toast("Ataque de diccionario lanzado", "success");
+    wdWatchDict();
+    el("wd-dict-panel")?.scrollIntoView({ block: "start", behavior: "smooth" });
     void wdTickCrackStation();
     return;
   }
@@ -283,10 +390,126 @@ el("wd-crack-body")?.addEventListener("click", async (ev) => {
     return;
   }
   const filesBtn = ev.target.closest(".wd-crack-files-btn");
-  if (filesBtn) void wdOpenCrackFiles(filesBtn.dataset.session);
+  if (filesBtn) {
+    void wdOpenCrackFiles(filesBtn.dataset.session);
+    return;
+  }
+  const gpsBtn = ev.target.closest(".wd-gps-btn");
+  if (gpsBtn) wdOpenCrackMap(parseFloat(gpsBtn.dataset.lat), parseFloat(gpsBtn.dataset.lon), gpsBtn.dataset.ssid);
 });
 
 el("wd-crack-refresh")?.addEventListener("click", () => void wdTickCrackStation());
+
+// ---- Dictionary attack (rockyou) progress ----
+// aircrack-ng itself has to run server-side (it needs the .cap bytes and
+// does real crypto), so the server is the only source of truth for
+// {tried, total, fps}. But updating that number requires parsing aircrack's
+// live stdout on the Pi, so polling it every few hundred ms would cost CPU
+// the Pi doesn't have to spare. Instead: sync the real numbers from the
+// server every few seconds, then EXTRAPOLATE the percentage in the browser
+// every 250ms using the last known rate (tried + fps × elapsed) — the bar
+// looks smooth and responsive while almost all of that work happens here,
+// not on the server.
+let wdDictBssid = null;
+let wdDictSync = null; // { tried, total, fps, running, result, syncedAtMs }
+let wdDictPollTimer = null; // server sync, only while a crack is running
+let wdDictAnimTimer = null; // local interpolation, cheap DOM update
+
+function wdDictEstimatedTried() {
+  if (!wdDictSync) return 0;
+  if (!wdDictSync.running) return wdDictSync.tried;
+  const elapsedSec = (performance.now() - wdDictSync.syncedAtMs) / 1000;
+  const total = wdDictSync.total || Infinity;
+  return Math.min(total, wdDictSync.tried + wdDictSync.fps * elapsedSec);
+}
+
+function wdRenderDictBar() {
+  const box = el("wd-dict-run");
+  const status = el("wd-dict-run-status");
+  if (!box) return;
+  if (!wdDictSync) {
+    box.innerHTML = "";
+    if (status) status.textContent = "";
+    return;
+  }
+  const total = wdDictSync.total || 0;
+  const tried = wdDictEstimatedTried();
+  const pct = total > 0 ? Math.min(100, (tried / total) * 100) : 0;
+  const ssid = wdCrackCache.find((i) => i.bssid === wdDictBssid)?.ssid || wdDictBssid || "";
+  const resultMsg = wdDictSync.result
+    ? wdDictSync.result.matched
+      ? `<span class="wd-verify-badge ok">✓ ENCONTRADA — ${escapeHtml(wdDictSync.result.output?.match(/KEY FOUND!\s*\[\s*(.*?)\s*\]/)?.[1] || "")}</span>`
+      : wdDictSync.result.verdict === "handshake_wrong_password"
+        ? '<span class="wd-verify-badge wrong">Diccionario agotado — sin match</span>'
+        : `<span class="wd-verify-badge err">${escapeHtml(wdDictSync.result.output || "cancelado")}</span>`
+    : "";
+  box.innerHTML = `
+    <div class="wd-dict-head">
+      <span>dictionary attack (rockyou) · <strong>${escapeHtml(ssid)}</strong></span>
+      <span style="display:inline-flex; gap:6px;">
+        ${wdDictSync.running ? '<button class="wd-dict-stop">Cancelar</button>' : ""}
+        ${!wdDictSync.running ? '<button class="wd-dict-clear">✕</button>' : ""}
+      </span>
+    </div>
+    <div class="wd-dict-bar"><div class="wd-dict-bar-fill" style="width:${pct.toFixed(1)}%"></div></div>
+    <div class="wd-dict-meta muted">${Math.round(tried).toLocaleString()} / ${total.toLocaleString()} claves · ${(wdDictSync.fps || 0).toFixed(0)} pass/s · ${wdDictSync.running ? "corriendo..." : wdDictSync.result ? "terminado" : "cancelado"}</div>
+    <div class="wd-dict-result">${resultMsg}</div>
+  `;
+}
+
+async function wdSyncDictStatus() {
+  try {
+    const res = await fetch("/api/wardrive/dict/status");
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data?.state) {
+      wdDictSync = null;
+    } else {
+      wdDictBssid = data.bssid;
+      wdDictSync = {
+        tried: data.state.progress.tried,
+        total: data.state.progress.total,
+        fps: data.state.progress.fps,
+        running: data.state.running,
+        result: data.state.result,
+        syncedAtMs: performance.now(),
+      };
+    }
+    wdRenderDictBar();
+    if (!wdDictSync?.running && wdDictPollTimer) {
+      clearInterval(wdDictPollTimer);
+      wdDictPollTimer = null;
+    }
+  } catch { /* non-fatal */ }
+}
+
+// Called on launch, and once at boot to recover an in-flight run after a
+// page reload. Idempotent — safe to call repeatedly.
+function wdWatchDict() {
+  void wdSyncDictStatus();
+  if (!wdDictPollTimer) {
+    wdDictPollTimer = setInterval(() => {
+      if (!document.hidden) void wdSyncDictStatus();
+    }, 4000);
+  }
+  if (!wdDictAnimTimer) {
+    wdDictAnimTimer = setInterval(() => {
+      if (!document.hidden) wdRenderDictBar();
+    }, 250);
+  }
+}
+
+el("wd-dict-run")?.addEventListener("click", async (ev) => {
+  if (ev.target.closest(".wd-dict-clear")) {
+    await apiFetch("/api/wardrive/dict/clear", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    wdDictSync = null;
+    wdRenderDictBar();
+    return;
+  }
+  if (!ev.target.closest(".wd-dict-stop")) return;
+  await apiFetch("/api/wardrive/dict/stop", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+  void wdSyncDictStatus();
+});
 
 // ---- Mask brute force ----
 
@@ -490,6 +713,8 @@ el("wd-mask-run")?.addEventListener("click", async (ev) => {
 
 // ---- Boot ----
 
+wdInitCrackSort();
+wdWatchDict(); // recovers an in-flight dictionary attack after a reload
 void wdTickCrackStation();
 setInterval(() => {
   if (!document.hidden) void wdTickCrackStation();

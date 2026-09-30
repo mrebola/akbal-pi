@@ -450,7 +450,7 @@ export class DriveDb {
     try {
       return this.db
         .prepare(
-          `SELECT ssid, bssid, security, method, captured_at, session_id, session_dir, cap_file, hash_file, password, cracked
+          `SELECT ssid, bssid, security, method, captured_at, session_id, session_dir, cap_file, hash_file, lat, lon, password, cracked
            FROM handshakes ORDER BY captured_at DESC`,
         )
         .all() as HandshakeRow[];
@@ -715,7 +715,7 @@ export type SessionNetworkRow = {
 };
 
 // One row of the `handshakes` table — what listHandshakes() returns for
-// Crack Station's merge (lat/lon omitted, not needed there).
+// Crack Station's merge (lat/lon: GPS at capture time, for the map modal).
 export type HandshakeRow = {
   ssid: string;
   bssid: string;
@@ -726,6 +726,8 @@ export type HandshakeRow = {
   session_dir: string;
   cap_file: string;
   hash_file: string | null;
+  lat: number | null;
+  lon: number | null;
   password: string | null;
   cracked: 0 | 1;
 };

@@ -545,7 +545,6 @@ el("wd-crack-body")?.addEventListener("click", async (ev) => {
     }
     toast(`Ataque de diccionario lanzado (${wordlist})`, "success");
     wdWatchDict();
-    el("wd-dict-panel")?.scrollIntoView({ block: "start", behavior: "smooth" });
     void wdTickCrackStation();
     return;
   }
@@ -560,21 +559,28 @@ el("wd-crack-body")?.addEventListener("click", async (ev) => {
     return;
   }
   const gpsBtn = ev.target.closest(".wd-gps-btn");
-  if (gpsBtn) wdOpenCrackMap(parseFloat(gpsBtn.dataset.lat), parseFloat(gpsBtn.dataset.lon), gpsBtn.dataset.ssid, gpsBtn.dataset.bssid);
+  if (gpsBtn) {
+    wdOpenCrackMap(parseFloat(gpsBtn.dataset.lat), parseFloat(gpsBtn.dataset.lon), gpsBtn.dataset.ssid, gpsBtn.dataset.bssid);
+    return;
+  }
+  const progressBtn = ev.target.closest(".wd-row-progress");
+  if (progressBtn) wdOpenDictDetail();
 });
 
 el("wd-crack-refresh")?.addEventListener("click", () => void wdTickCrackStation());
 
-// ---- Dictionary attack (rockyou) progress ----
+// ---- Dictionary attack (rockyou/weakpass) progress ----
 // aircrack-ng itself has to run server-side (it needs the .cap bytes and
 // does real crypto), so the server is the only source of truth for
-// {tried, total, fps}. But updating that number requires parsing aircrack's
-// live stdout on the Pi, so polling it every few hundred ms would cost CPU
-// the Pi doesn't have to spare. Instead: sync the real numbers from the
-// server every few seconds, then EXTRAPOLATE the percentage in the browser
-// every 250ms using the last known rate (tried + fps × elapsed) — the bar
-// looks smooth and responsive while almost all of that work happens here,
-// not on the server.
+// {tried, total, fps} — but that number comes from OUR OWN count of what
+// was fed into aircrack's stdin (see DictCrack in crack.ts), never from
+// parsing aircrack's stdout, which doesn't stream reliably when aircrack
+// isn't talking to a real terminal. Polling that every few hundred ms
+// would still cost CPU the Pi doesn't have to spare, so: sync the real
+// numbers from the server every few seconds, then EXTRAPOLATE the
+// percentage in the browser every 250ms using the last known rate
+// (tried + fps × elapsed) — the bar looks smooth and responsive while
+// almost all of that work happens here, not on the server.
 let wdDictBssid = null;
 let wdDictSync = null; // { tried, total, fps, running, result, wordlist, syncedAtMs }
 let wdDictPollTimer = null; // server sync, only while a crack is running
@@ -590,21 +596,18 @@ function wdDictEstimatedTried() {
 }
 
 // ---- Inline per-row progress — the exact handshake being cracked shows
-// its own 0-100% bar in the Ataques column (replacing the attack buttons)
-// instead of only in the shared panel below. Updated every 250ms from the
-// same local extrapolation as the panel (wdRenderDictBar), so both stay in
-// sync without extra server load. ----
+// its own 0-100% bar in a dedicated "%" column: JUST the percentage, no
+// "claves probadas" text. Updated every 250ms from local extrapolation.
+// Click it for the detail modal (see wdOpenDictDetail below). ----
 
 function wdRowInlineProgressHtml() {
   const total = wdDictSync.total || 0;
   const tried = wdDictEstimatedTried();
   const pct = total > 0 ? Math.min(100, (tried / total) * 100) : 0;
-  const wordlistLabel = wdDictSync.wordlist === "weakpass" ? "weakpass" : "rockyou";
-  const titleAttr = `${wordlistLabel} · ${Math.round(tried).toLocaleString()}${total ? ` / ${total.toLocaleString()}` : ""} claves`;
-  return `<div class="wd-row-progress" title="${escapeHtml(titleAttr)}">
+  return `<button class="wd-row-progress" title="Ver detalle">
     <div class="wd-row-progress-bar"><div class="wd-row-progress-fill" style="width:${pct.toFixed(1)}%"></div></div>
     <span class="wd-row-progress-pct">${total > 0 ? `${pct.toFixed(0)}%` : "…"}</span>
-  </div>`;
+  </button>`;
 }
 
 function wdRenderRowDictProgress() {
@@ -614,13 +617,19 @@ function wdRenderRowDictProgress() {
   if (cell) cell.innerHTML = wdRowInlineProgressHtml();
 }
 
-function wdRenderDictBar() {
-  const box = el("wd-dict-run");
-  const status = el("wd-dict-run-status");
-  if (!box) return;
+// ---- Dictionary attack detail modal — opened by clicking the row's %
+// bar. The only place the numeric detail (tried/total/fps/result) shows;
+// the table itself never displays more than the bare percentage. ----
+
+function wdRenderDictDetail() {
+  const modal = el("wd-dict-detail-modal");
+  if (modal?.classList.contains("hidden")) return; // don't bother building it unless it's actually open
+  const title = el("wd-dict-detail-title");
+  const body = el("wd-dict-detail-body");
+  if (!body) return;
   if (!wdDictSync) {
-    box.innerHTML = "";
-    if (status) status.textContent = "";
+    if (title) title.textContent = t("crackstation.dict_detail_title", "Ataque de diccionario");
+    body.innerHTML = '<p class="muted">No hay ningún ataque de diccionario en curso.</p>';
     return;
   }
   const total = wdDictSync.total || 0;
@@ -628,6 +637,7 @@ function wdRenderDictBar() {
   const pct = total > 0 ? Math.min(100, (tried / total) * 100) : 0;
   const ssid = wdCrackCache.find((i) => i.bssid === wdDictBssid)?.ssid || wdDictBssid || "";
   const wordlistLabel = wdDictSync.wordlist === "weakpass" ? "weakpass" : "rockyou";
+  if (title) title.textContent = `dictionary attack (${wordlistLabel}) · ${ssid}`;
   const resultMsg = wdDictSync.result
     ? wdDictSync.result.matched
       ? `<span class="wd-verify-badge ok">✓ ENCONTRADA — ${escapeHtml(wdDictSync.result.output?.match(/KEY FOUND!\s*\[\s*(.*?)\s*\]/)?.[1] || "")}</span>`
@@ -635,26 +645,48 @@ function wdRenderDictBar() {
         ? '<span class="wd-verify-badge wrong">Diccionario agotado — sin match</span>'
         : `<span class="wd-verify-badge err">${escapeHtml(wdDictSync.result.output || "cancelado")}</span>`
     : "";
-  // weakpass's total isn't known until gzipLineCount() finishes counting
-  // the .gz in the background (first run only — cached after) — until
-  // then there's a "tried" count but no meaningful percentage.
+  // Total isn't known until wordlistLineCount() finishes counting the
+  // wordlist in the background (instant for rockyou, can take minutes the
+  // first time for weakpass's multi-GB .gz, cached after) — until then
+  // there's a "tried" count but no meaningful percentage.
   const metaLine = total > 0
-    ? `${Math.round(tried).toLocaleString()} / ${total.toLocaleString()} claves · ${(wdDictSync.fps || 0).toFixed(0)} pass/s · ${wdDictSync.running ? "corriendo..." : wdDictSync.result ? "terminado" : "cancelado"}`
-    : `${Math.round(tried).toLocaleString()} claves probadas · ${(wdDictSync.fps || 0).toFixed(0)} pass/s · contando el diccionario para saber el % (una sola vez)...`;
-  box.innerHTML = `
-    <div class="wd-dict-head">
-      <span>dictionary attack (${escapeHtml(wordlistLabel)}) · <strong>${escapeHtml(ssid)}</strong></span>
-      <span style="display:inline-flex; gap:6px;">
-        ${wdDictSync.running ? '<button class="wd-dict-stop">Cancelar</button>' : ""}
-        ${!wdDictSync.running ? '<button class="wd-dict-clear">✕</button>' : ""}
-      </span>
-    </div>
+    ? `${Math.round(tried).toLocaleString()} / ${total.toLocaleString()} claves · ${(wdDictSync.fps || 0).toFixed(0)} pass/s`
+    : `${Math.round(tried).toLocaleString()} claves probadas · contando el diccionario para saber el total...`;
+  body.innerHTML = `
     <div class="wd-dict-bar"><div class="wd-dict-bar-fill" style="width:${pct.toFixed(1)}%"></div></div>
-    <div class="wd-dict-meta muted">${metaLine}</div>
-    <div class="wd-dict-result">${resultMsg}</div>
+    <div class="wd-dict-meta muted" style="margin-top:8px;">${metaLine}</div>
+    <div class="wd-dict-result" style="margin-top:8px;">${resultMsg}</div>
+    <div style="margin-top:14px;">
+      ${wdDictSync.running
+        ? `<button class="wd-dict-stop wd-danger">${escapeHtml(t("crackstation.dict_cancel", "Cancelar"))}</button>`
+        : `<button class="wd-dict-clear secondary">${escapeHtml(t("crackstation.dict_clear", "Cerrar"))}</button>`}
+    </div>
   `;
-  wdRenderRowDictProgress();
 }
+
+function wdOpenDictDetail() {
+  const modal = el("wd-dict-detail-modal");
+  if (!modal) return;
+  modal.classList.remove("hidden");
+  wdRenderDictDetail();
+}
+
+el("wd-dict-detail-close")?.addEventListener("click", () => {
+  el("wd-dict-detail-modal")?.classList.add("hidden");
+});
+
+el("wd-dict-detail-body")?.addEventListener("click", async (ev) => {
+  if (ev.target.closest(".wd-dict-clear")) {
+    await apiFetch("/api/wardrive/dict/clear", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    wdDictSync = null;
+    el("wd-dict-detail-modal")?.classList.add("hidden");
+    void wdRenderCrackStation();
+    return;
+  }
+  if (!ev.target.closest(".wd-dict-stop")) return;
+  await apiFetch("/api/wardrive/dict/stop", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+  void wdSyncDictStatus();
+});
 
 async function wdSyncDictStatus() {
   try {
@@ -685,7 +717,8 @@ async function wdSyncDictStatus() {
       wdDictRunningPrev = runningNow;
       wdRenderCrackStation();
     }
-    wdRenderDictBar();
+    wdRenderRowDictProgress();
+    wdRenderDictDetail(); // no-op while the modal is closed
     if (!wdDictSync?.running && wdDictPollTimer) {
       clearInterval(wdDictPollTimer);
       wdDictPollTimer = null;
@@ -704,22 +737,13 @@ function wdWatchDict() {
   }
   if (!wdDictAnimTimer) {
     wdDictAnimTimer = setInterval(() => {
-      if (!document.hidden) wdRenderDictBar();
+      if (!document.hidden) {
+        wdRenderRowDictProgress();
+        wdRenderDictDetail(); // no-op while the modal is closed
+      }
     }, 250);
   }
 }
-
-el("wd-dict-run")?.addEventListener("click", async (ev) => {
-  if (ev.target.closest(".wd-dict-clear")) {
-    await apiFetch("/api/wardrive/dict/clear", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-    wdDictSync = null;
-    wdRenderDictBar();
-    return;
-  }
-  if (!ev.target.closest(".wd-dict-stop")) return;
-  await apiFetch("/api/wardrive/dict/stop", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-  void wdSyncDictStatus();
-});
 
 // ---- Mask brute force ----
 

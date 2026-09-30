@@ -2967,7 +2967,17 @@ body { font-family: var(--font-sans); }
 
 /* Inline per-row progress (dict attack running on that exact handshake —
    Ataques column, replaces rockyou/weakpass/máscara while it runs). */
-.wd-row-progress { display: flex; align-items: center; gap: 4px; width: 64px; }
+.wd-row-progress {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 64px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.wd-row-progress:hover .wd-row-progress-pct { color: var(--text-primary); }
 .wd-row-progress-bar {
   flex: 1;
   height: 6px;

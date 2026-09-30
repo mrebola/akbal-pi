@@ -22,7 +22,7 @@ import {
 } from "./types";
 import { registerShutdownHook } from "../device/display";
 import { unloadModel } from "../cloud-api/local/ollama-llm";
-import { crackCheck, resolveCapPath, DictCrack, MaskCrack, maskTotal, gzipLineCount, type CrackResult, type DictCrackState, type MaskRunState, type DictSource } from "./crack";
+import { crackCheck, resolveCapPath, DictCrack, MaskCrack, maskTotal, wordlistLineCount, type CrackResult, type DictCrackState, type MaskRunState, type DictSource } from "./crack";
 import type { MaskPreset } from "./types";
 import { lookupVendorOrRandomAsync, macvendorsEnabled } from "../wifiradar/oui";
 import { demoTargetsWithPassword, DEMO_WD_TARGETS, type DemoWardriveTarget } from "./discovery";
@@ -719,7 +719,7 @@ export class WardriveService extends EventEmitter {
       if (!fs.existsSync(wordlist)) {
         return { ok: false, error: `Diccionario no encontrado: ${wordlist}` };
       }
-      source = { kind: "file", path: wordlist };
+      source = { kind: "file", path: wordlist, knownTotal: null };
       wordlistLabel = wordlist;
     }
     this.dictCrack = new DictCrack(capPath, bssid, source);
@@ -751,14 +751,15 @@ export class WardriveService extends EventEmitter {
     });
     this.dictCrack.start();
     this.appendLog(bssid, `[dict] aircrack started with ${wordlistLabel}`);
-    // Count the weakpass wordlist's lines in the background — first run
-    // ever (or after the .gz changes) takes minutes, every run after that
-    // is instant (cached, see gzipLineCount()). Never blocks the crack
-    // itself; if it resolves before the crack finishes, setKnownTotal()
-    // backfills a real percentage into the progress the UI is polling.
-    if (source.kind === "gzip") {
+    // Count the wordlist's lines in the background — rockyou (~140MB)
+    // resolves in under a second, weakpass (multi-GB .gz) can take minutes
+    // on first run, instant after (cached, see wordlistLineCount()). Never
+    // blocks the crack itself; if it resolves before the crack finishes,
+    // setKnownTotal() backfills a real percentage into the progress the UI
+    // is polling.
+    {
       const dc = this.dictCrack;
-      void gzipLineCount(source.path).then((n) => {
+      void wordlistLineCount(source.path, source.kind === "gzip").then((n) => {
         if (n && dc === this.dictCrack) dc.setKnownTotal(n);
       });
     }

@@ -429,20 +429,27 @@ export type DictCrackState = {
   result: CrackResult | null;
 };
 
-// Where the candidate passwords come from: a plain file aircrack-ng opens
-// itself (rockyou — small enough to keep decompressed, and aircrack can
-// pre-scan it for a total), or a gzip wordlist too big to decompress to
-// disk (weakpass) — streamed straight into aircrack's stdin via `zcat`, so
-// only the compressed .gz ever touches disk. `knownTotal`, when known
-// (see gzipLineCount below), lets the UI still show a real percentage even
-// though aircrack itself can't pre-scan a pipe.
+// Where the candidate passwords come from: a plain file (rockyou — small
+// enough to keep decompressed) or a gzip wordlist too big to decompress to
+// disk (weakpass). Both are STREAMED into aircrack's stdin (`-w -`) — `cat`
+// for a file, `zcat` for gzip — rather than letting aircrack open the file
+// itself. That's deliberate, not just convenient for the gzip case: when
+// aircrack-ng's stdout isn't a real terminal (always true here — it's a
+// spawned child), its own "X/Y keys tested" progress line either never
+// arrives incrementally or arrives in an unpredictable format — confirmed
+// in practice (the file-based path showed the exact same "stuck at 0%"
+// symptom weakpass did before this existed). So progress for BOTH sources
+// is measured from OUR side of the pipe — lines actually fed into
+// aircrack's stdin — never by parsing anything aircrack prints.
+// `knownTotal`, once wordlistLineCount() resolves, turns "tried" into a
+// real percentage.
 export type DictSource =
-  | { kind: "file"; path: string }
+  | { kind: "file"; path: string; knownTotal: number | null }
   | { kind: "gzip"; path: string; knownTotal: number | null };
 
 export class DictCrack extends EventEmitter {
   private proc: any = null; // ChildProcess (aircrack-ng)
-  private zcatProc: any = null; // ChildProcess (zcat, gzip source only)
+  private feederProc: any = null; // ChildProcess (cat/zcat feeding aircrack's stdin)
   private running = false;
   private knownTotal: number | null;
   private state: DictCrackState = {
@@ -457,17 +464,17 @@ export class DictCrack extends EventEmitter {
     private source: DictSource,
   ) {
     super();
-    this.knownTotal = this.source.kind === "gzip" ? this.source.knownTotal : null;
+    this.knownTotal = this.source.knownTotal;
   }
 
   getState(): DictCrackState {
     return { ...this.state, progress: { ...this.state.progress } };
   }
 
-  // Backfills the total once gzipLineCount() resolves (it's kicked off in
+  // Backfills the total once wordlistLineCount() resolves (kicked off in
   // parallel with start(), never blocking the crack launch on it — counting
-  // a multi-GB wordlist can take minutes on first run). Only takes effect
-  // if aircrack's own progress lines haven't already reported one.
+  // a multi-GB wordlist can take minutes on first run; rockyou's ~140MB
+  // counts in under a second). Only takes effect if nothing's set one yet.
   setKnownTotal(n: number): void {
     this.knownTotal = n;
     if (!this.state.progress.total) this.state.progress.total = n;
@@ -482,52 +489,38 @@ export class DictCrack extends EventEmitter {
       result: null,
     };
     const startedAt = Date.now();
-    let child: any;
-    const isGzip = this.source.kind === "gzip";
-    if (isGzip) {
-      // zcat's stdout feeds aircrack's stdin directly (Node-level pipe, no
-      // shell) — the decompressed wordlist never exists as a file, only as
-      // bytes in flight between the two processes.
-      const zcat = spawn("zcat", [this.source.path], { stdio: ["ignore", "pipe", "ignore"] });
-      this.zcatProc = zcat;
-      child = spawn("aircrack-ng", ["-w", "-", "-b", this.bssid, "-p", "2", this.capPath], {
-        stdio: ["pipe", "pipe", "pipe"],
-      });
-      // Progress for a streamed wordlist is measured from OUR side of the
-      // pipe (lines actually fed into aircrack's stdin), not by parsing
-      // aircrack's own stdout: unlike the file case (where aircrack
-      // pre-scans the file and prints "X/Y keys tested"), its stdin
-      // progress-line format for piped input isn't something this code can
-      // rely on — MaskCrack above hits the same wall and solves it the
-      // same way (track the write side, not aircrack's report of it).
-      // `.pipe()` applies Node's normal backpressure, so "fed" never runs
-      // far ahead of what aircrack has actually consumed from its stdin.
-      let fedLines = 0;
-      zcat.stdout?.on("data", (chunk: Buffer) => {
-        for (let i = 0; i < chunk.length; i++) if (chunk[i] === 10) fedLines++;
-        const elapsedSec = (Date.now() - startedAt) / 1000;
-        this.state.progress = {
-          tried: fedLines,
-          total: this.knownTotal || 0,
-          fps: elapsedSec > 0 ? fedLines / elapsedSec : 0,
-          elapsedSec: Math.round(elapsedSec),
-        };
-      });
-      zcat.stdout?.pipe(child.stdin);
-      zcat.on("error", () => {
-        // aircrack just sees stdin close early and reports "exhausted" —
-        // dictExhausted()/close handler below cover that case already.
-      });
-    } else {
-      child = spawn("aircrack-ng", ["-w", this.source.path, "-b", this.bssid, "-p", "2", this.capPath], {
-        stdio: ["ignore", "pipe", "pipe"],
-      });
-    }
+    // `cat` for a plain file, `zcat` for gzip — otherwise identical: its
+    // stdout feeds aircrack's stdin directly (Node-level pipe, no shell),
+    // and we count newlines as they flow through to measure progress
+    // ourselves. `.pipe()` applies Node's normal backpressure, so "fed"
+    // never runs far ahead of what aircrack has actually consumed.
+    const feeder = spawn(this.source.kind === "gzip" ? "zcat" : "cat", [this.source.path], {
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    this.feederProc = feeder;
+    const child = spawn("aircrack-ng", ["-w", "-", "-b", this.bssid, "-p", "2", this.capPath], {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    let fedLines = 0;
+    feeder.stdout?.on("data", (chunk: Buffer) => {
+      for (let i = 0; i < chunk.length; i++) if (chunk[i] === 10) fedLines++;
+      const elapsedSec = (Date.now() - startedAt) / 1000;
+      this.state.progress = {
+        tried: fedLines,
+        total: this.knownTotal || 0,
+        fps: elapsedSec > 0 ? fedLines / elapsedSec : 0,
+        elapsedSec: Math.round(elapsedSec),
+      };
+    });
+    feeder.stdout?.pipe(child.stdin);
+    feeder.on("error", () => {
+      // aircrack just sees stdin close early and reports "exhausted" —
+      // dictExhausted()/close handler below cover that case already.
+    });
     this.proc = child;
     let out = "";
     child.stdout?.on("data", (chunk: Buffer) => {
       out += chunk.toString("utf8");
-      if (!isGzip) this.parseProgress(out, startedAt);
     });
     child.stderr?.on("data", (chunk: Buffer) => {
       out += chunk.toString("utf8");
@@ -543,11 +536,11 @@ export class DictCrack extends EventEmitter {
       this.state.running = false;
       this.state.progress.elapsedSec = Math.round((Date.now() - startedAt) / 1000);
       try {
-        this.zcatProc?.kill("SIGKILL");
+        this.feederProc?.kill("SIGKILL");
       } catch {
         /* already gone */
       }
-      this.zcatProc = null;
+      this.feederProc = null;
       const parsed = parseAircrackOutput(out);
       if (parsed.found) {
         this.state.result = {
@@ -587,9 +580,9 @@ export class DictCrack extends EventEmitter {
   }
 
   stop(): void {
-    if (this.zcatProc?.pid) {
+    if (this.feederProc?.pid) {
       try {
-        this.zcatProc.kill("SIGTERM");
+        this.feederProc.kill("SIGTERM");
       } catch {
         /* already gone */
       }
@@ -602,44 +595,21 @@ export class DictCrack extends EventEmitter {
       }
     }
   }
-
-  // aircrack progress lines look like:
-  //   "[00:00:02] 1234/14344391 keys tested (12.34 fps)"
-  // when it read the wordlist from a real file (it pre-scans it for the
-  // total) — but fed via stdin (gzip source) it can't know a total in
-  // advance, so the line drops the "/total" part entirely:
-  //   "[00:00:02] 1234 keys tested (12.34 fps)"
-  // The "/(\d+)" group is optional to cover both; when it's missing, fall
-  // back to knownTotal (gzipLineCount()'s cached count, if it's in yet).
-  private parseProgress(text: string, startedAt: number): void {
-    const matches = [...text.matchAll(/\[(\d+):(\d+):(\d+)\]\s+(\d+)(?:\/(\d+))?\s+keys tested.*?\(([\d.]+)\s*fps\)/g)];
-    if (matches.length > 0) {
-      const m = matches[matches.length - 1];
-      const elapsed = parseInt(m[1], 10) * 3600 + parseInt(m[2], 10) * 60 + parseInt(m[3], 10);
-      this.state.progress = {
-        tried: parseInt(m[4], 10),
-        total: m[5] ? parseInt(m[5], 10) : this.knownTotal || 0,
-        fps: parseFloat(m[6]),
-        elapsedSec: elapsed,
-      };
-    } else {
-      this.state.progress.elapsedSec = Math.round((Date.now() - startedAt) / 1000);
-    }
-  }
 }
 
-// Counting a multi-GB gzip wordlist's lines costs real time (a full
-// decompress-and-scan pass — minutes on a Pi for a 10GB .gz) so it's
-// cached next to the .gz, fingerprinted by that file's size: a changed
-// size invalidates the cache and forces a recount, a same-size file never
-// recounts. Returns null if the .gz doesn't exist or counting fails —
-// callers treat that as "no known total yet", not an error (the crack
-// still runs fine, the UI just can't show a percentage for it).
-export async function gzipLineCount(gzPath: string): Promise<number | null> {
-  const cacheFile = `${gzPath}.linecount`;
-  let gzSize: number;
+// Counting a wordlist's lines costs real time — negligible for rockyou
+// (~140MB, well under a second) but real for a multi-GB gzip wordlist like
+// weakpass (a full decompress-and-scan pass, minutes on a Pi the first
+// time) — so it's cached next to the file, fingerprinted by that file's
+// size: a changed size invalidates the cache and forces a recount, a
+// same-size file never recounts. Returns null if the file doesn't exist or
+// counting fails — callers treat that as "no known total yet", not an
+// error (the crack still runs fine, the UI just can't show a percentage).
+export async function wordlistLineCount(filePath: string, isGzip: boolean): Promise<number | null> {
+  const cacheFile = `${filePath}.linecount`;
+  let fileSize: number;
   try {
-    gzSize = (await fs.promises.stat(gzPath)).size;
+    fileSize = (await fs.promises.stat(filePath)).size;
   } catch {
     return null;
   }
@@ -647,14 +617,14 @@ export async function gzipLineCount(gzPath: string): Promise<number | null> {
     const cached = await fs.promises.readFile(cacheFile, "utf8");
     const [cachedCount, cachedSize] = cached.trim().split(":");
     const n = parseInt(cachedCount, 10);
-    if (Number.isFinite(n) && n > 0 && Number(cachedSize) === gzSize) return n;
+    if (Number.isFinite(n) && n > 0 && Number(cachedSize) === fileSize) return n;
   } catch {
     /* no cache yet, or unreadable — count it below */
   }
   return new Promise((resolve) => {
-    const zcat = spawn("zcat", [gzPath], { stdio: ["ignore", "pipe", "ignore"] });
+    const reader = spawn(isGzip ? "zcat" : "cat", [filePath], { stdio: ["ignore", "pipe", "ignore"] });
     const wc = spawn("wc", ["-l"], { stdio: ["pipe", "pipe", "ignore"] });
-    zcat.stdout?.pipe(wc.stdin);
+    reader.stdout?.pipe(wc.stdin);
     let out = "";
     wc.stdout?.on("data", (chunk: Buffer) => {
       out += chunk.toString("utf8");
@@ -662,7 +632,7 @@ export async function gzipLineCount(gzPath: string): Promise<number | null> {
     const finish = async (n: number | null) => {
       if (n && Number.isFinite(n) && n > 0) {
         try {
-          await fs.promises.writeFile(cacheFile, `${n}:${gzSize}`);
+          await fs.promises.writeFile(cacheFile, `${n}:${fileSize}`);
         } catch {
           /* cache write failure is non-fatal — just recounts next time */
         }
@@ -671,6 +641,6 @@ export async function gzipLineCount(gzPath: string): Promise<number | null> {
     };
     wc.on("close", () => finish(parseInt(out.trim(), 10)));
     wc.on("error", () => finish(null));
-    zcat.on("error", () => finish(null));
+    reader.on("error", () => finish(null));
   });
 }

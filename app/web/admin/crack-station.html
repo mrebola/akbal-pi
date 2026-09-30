@@ -99,12 +99,9 @@
             </table>
           </div>
 
-          <!-- Dictionary attack (rockyou/weakpass) progress -->
-          <div class="wd-session-title" style="margin-top:16px;" data-i18n="crackstation.dict_title">ATAQUE DE DICCIONARIO (ROCKYOU)</div>
-          <div class="wd-mask-panel" id="wd-dict-panel">
-            <div class="wd-mask-run-status" id="wd-dict-run-status"></div>
-            <div class="wd-mask-run" id="wd-dict-run"></div>
-          </div>
+          <!-- Dictionary attack (rockyou/weakpass) progress: lives ONLY in
+               the table's "%" column now (the row being cracked), not as a
+               box down here — click the bar for the detail modal below. -->
 
           <!-- Mask brute-force: running-attack progress — launching itself
                happens from a row's "máscara…" button (opens the picker
@@ -198,6 +195,22 @@
           <tbody id="wd-crack-files-body"></tbody>
         </table>
       </div>
+    </div>
+  </div>
+
+  <!-- Dictionary attack detail: click the "%" bar in the table to see
+       this (SSID, wordlist, keys tried/fps, cancel) — the table itself
+       only ever shows the plain percentage. -->
+  <div id="wd-dict-detail-modal" class="wd-modal hidden">
+    <div class="wd-modal-backdrop" onclick="document.getElementById('wd-dict-detail-modal').classList.add('hidden')"></div>
+    <div class="wd-modal-content" style="max-width: 460px;">
+      <div class="wd-modal-header">
+        <span id="wd-dict-detail-title" data-i18n="crackstation.dict_detail_title">Ataque de diccionario</span>
+        <div class="wd-modal-actions">
+          <button id="wd-dict-detail-close" class="secondary" data-i18n="crackstation.files_close">Cerrar</button>
+        </div>
+      </div>
+      <div id="wd-dict-detail-body" style="padding: 16px 20px;"></div>
     </div>
   </div>
 

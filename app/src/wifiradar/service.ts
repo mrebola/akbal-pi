@@ -1,5 +1,5 @@
 import { EventEmitter } from "events";
-import { detectMonitorAdapter, listAdaptersForUI } from "./adapter";
+import { detectMonitorAdapter, listAdaptersForUI, MAC_RE } from "./adapter";
 import { enterMonitorMode, exitMonitorMode, getAvailable24GhzChannels } from "./monitor-control";
 import { Ar9271Capture } from "./capture";
 import { ChannelHopper } from "./channel-hopper";
@@ -24,9 +24,12 @@ export class WifiRadarService extends EventEmitter {
   private demo: DemoGenerator | null = null;
   private sweepTimer: ReturnType<typeof setInterval> | null = null;
   private monitorIface: string | null = null;
-  // Dongle pinned by the operator via the web picker (null = auto-detect,
-  // same ranking wifi-audit/wardrive use — see adapter.ts).
-  private preferredIface: string | null = null;
+  // Dongle pinned by the operator via the web picker, by MAC address (null
+  // = auto-detect, same ranking wifi-audit/wardrive use — see adapter.ts).
+  // MAC and not iface name: the kernel/udev can reassign wlan* names on
+  // any USB reconnect, including one on a different device entirely —
+  // confirmed live on this device swapping a second AR9271 in/out.
+  private preferredMac: string | null = null;
   private mode: WifiRadarMode = "starting";
   private hardware: string | null = null;
   private lastError: string | undefined;
@@ -121,7 +124,7 @@ export class WifiRadarService extends EventEmitter {
   }
 
   private async tryRealCapture(): Promise<void> {
-    const info = await detectMonitorAdapter(this.preferredIface);
+    const info = await detectMonitorAdapter(this.preferredMac);
     if (!info.present) {
       throw new Error("No hay adaptador WiFi USB conectado");
     }
@@ -243,21 +246,22 @@ export class WifiRadarService extends EventEmitter {
   }
 
   async listAdapters(): ReturnType<typeof listAdaptersForUI> {
-    return listAdaptersForUI(this.preferredIface);
+    return listAdaptersForUI(this.preferredMac);
   }
 
-  // Pin (or unpin with null) the radar dongle. Unlike wifi-audit/wardrive
-  // this service runs continuously, so a change takes effect right away
-  // instead of being refused mid-session: tear down whatever's capturing
-  // now and let tryRealCapture() re-detect with the new preference. Only
-  // matters while the operator asked for live — if they're in forced demo,
-  // just remember the preference for whenever they switch back.
-  async setPreferredAdapter(iface: string | null): Promise<{ ok: boolean; error?: string }> {
-    const clean = iface === null || String(iface).trim() === "" ? null : String(iface).trim();
-    if (clean && !/^wlan\d+$/.test(clean)) {
-      return { ok: false, error: "Nombre de interfaz inválido" };
+  // Pin (or unpin with null) the radar dongle, by MAC. Unlike wifi-audit/
+  // wardrive this service runs continuously, so a change takes effect
+  // right away instead of being refused mid-session: tear down whatever's
+  // capturing now and let tryRealCapture() re-detect with the new
+  // preference. Only matters while the operator asked for live — if
+  // they're in forced demo, just remember the preference for whenever
+  // they switch back.
+  async setPreferredAdapter(mac: string | null): Promise<{ ok: boolean; error?: string }> {
+    const clean = mac === null || String(mac).trim() === "" ? null : String(mac).trim().toLowerCase();
+    if (clean && !MAC_RE.test(clean)) {
+      return { ok: false, error: "MAC inválida" };
     }
-    this.preferredIface = clean;
+    this.preferredMac = clean;
     console.log(`[wifiradar] dongle fijado: ${clean || "auto"}`);
     if (this.requestedMode === "live") {
       await this.teardownRealCapture();

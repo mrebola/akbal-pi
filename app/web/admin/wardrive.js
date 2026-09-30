@@ -361,7 +361,11 @@ async function refreshDongleList() {
         .map((a) => {
           const tag = a.driver === "ath9k_htc" ? " ← recomendado" : "";
           const label = `${a.iface} · ${a.driver || "?"}${tag}${a.monitorSupported ? "" : " (sin monitor)"}`;
-          return `<option value="${escapeHtml(a.iface)}"${a.isPreferred ? " selected" : ""}>${escapeHtml(label)}</option>`;
+          // value = MAC, not iface name: wlan* names get reassigned by the
+          // kernel/udev on any USB reconnect (including one on a totally
+          // different dongle), so pinning by name silently drifted onto
+          // the wrong physical adapter after a replug.
+          return `<option value="${escapeHtml(a.mac)}"${a.isPreferred ? " selected" : ""}>${escapeHtml(label)}</option>`;
         })
         .join("");
     // Reflect the pinned value even if the list came back without it.
@@ -383,12 +387,12 @@ function initDonglePicker() {
   const sel = el("wd-dongle-select");
   const msg = el("wd-dongle-msg");
   sel?.addEventListener("change", async (ev) => {
-    const iface = ev.target.value || null;
+    const mac = ev.target.value || null; // the <option value>s are MACs now, not iface names
     try {
       const res = await fetch("/api/wardrive/drive/adapter", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ iface }),
+        body: JSON.stringify({ iface: mac }),
       });
       const data = await res.json();
       if (msg) {

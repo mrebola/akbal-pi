@@ -3,7 +3,7 @@ import { promisify } from "util";
 import { EventEmitter } from "events";
 import fs from "fs";
 import path from "path";
-import { detectMonitorAdapter, listAdaptersForUI } from "../wifiradar/adapter";
+import { detectMonitorAdapter, listAdaptersForUI, MAC_RE } from "../wifiradar/adapter";
 import { enterMonitorMode, exitMonitorMode, setChannel, getAvailable24GhzChannels } from "../wifiradar/monitor-control";
 import { getGpsStatus, type GpsSatellite } from "../utils/gps";
 import { getWifiStatus, armHomeNetworkWatchdog, disarmHomeNetworkWatchdog, checkHomeNetwork } from "../utils/wifi";
@@ -83,12 +83,16 @@ export class DriveWardriveService extends EventEmitter {
   private running = false;
   private iface: string | null = null;
   private phy: string | null = null;
-  // Dongle pinned by the operator for wardrive (null = auto). Applied only
-  // at session start; changing it while running is refused (the radio is
-  // busy). Default preference when unset: AR9271 (ath9k_htc) — its TX
-  // feedback in monitor mode makes PMKID/EAPOL capture deterministic, vs
-  // rt2800usb which loses the driver's own TX frames to userland.
-  private preferredIface: string | null = null;
+  // Dongle pinned by the operator for wardrive, by MAC (null = auto).
+  // MAC and not iface name — wlan* names get reassigned by the kernel/
+  // udev on any USB reconnect, including one on a completely different
+  // device (see wifiradar/adapter.ts's MonitorAdapter comment). Applied
+  // only at session start; changing it while running is refused (the
+  // radio is busy). Default preference when unset: AR9271 (ath9k_htc) —
+  // its TX feedback in monitor mode makes PMKID/EAPOL capture
+  // deterministic, vs rt2800usb which loses the driver's own TX frames to
+  // userland.
+  private preferredMac: string | null = null;
   // SSID the Pi's wlan0 is connected to at session start — PROTECTED. The
   // engine refuses to attack it (deauth/PMKID would drop Akbal's own link
   // and the operator's access to this web UI). Checked at start; if the
@@ -191,7 +195,7 @@ export class DriveWardriveService extends EventEmitter {
       if (this.homeSsid) {
         console.log(`[wardrive] red de casa protegida: ${this.homeSsid} — nunca se atacará`);
       }
-      const info = await detectMonitorAdapter(this.preferredIface);
+      const info = await detectMonitorAdapter(this.preferredMac);
       if (!info.present) {
         this.error = "No hay adaptador WiFi USB conectado — enchufá el dongle para wardrive";
         return { ok: false, error: this.error };
@@ -211,7 +215,7 @@ export class DriveWardriveService extends EventEmitter {
       this.startHopper();
       this.startTimers();
       this.broadcastStatus();
-      const pinned = this.preferredIface === info.iface ? " (dongle fijado)" : "";
+      const pinned = this.preferredMac && this.preferredMac === info.mac ? " (dongle fijado)" : "";
       console.log(`[wardrive] started (iface=${this.iface}, ${this.channels.length} channels)${pinned}`);
       return { ok: true };
     } catch (err: any) {
@@ -273,20 +277,20 @@ export class DriveWardriveService extends EventEmitter {
   // List every USB wifi adapter present, monitor-capability + "is this the
   // one the current/last session used" flags, for the dongle picker UI.
   async listAdapters(): ReturnType<typeof listAdaptersForUI> {
-    return listAdaptersForUI(this.preferredIface);
+    return listAdaptersForUI(this.preferredMac);
   }
 
-  // Pin (or unpin with null) the wardrive dongle. Refused while a session
-  // runs — changing the radio mid-attack would kill the capture.
-  setPreferredAdapter(iface: string | null): { ok: boolean; error?: string } {
+  // Pin (or unpin with null) the wardrive dongle, by MAC. Refused while a
+  // session runs — changing the radio mid-attack would kill the capture.
+  setPreferredAdapter(mac: string | null): { ok: boolean; error?: string } {
     if (this.running) {
       return { ok: false, error: "Detené la sesión activa antes de cambiar de dongle" };
     }
-    const clean = iface === null || String(iface).trim() === "" ? null : String(iface).trim();
-    if (clean && !/^wlan\d+$/.test(clean)) {
-      return { ok: false, error: "Nombre de interfaz inválido" };
+    const clean = mac === null || String(mac).trim() === "" ? null : String(mac).trim().toLowerCase();
+    if (clean && !MAC_RE.test(clean)) {
+      return { ok: false, error: "MAC inválida" };
     }
-    this.preferredIface = clean;
+    this.preferredMac = clean;
     this.broadcastStatus();
     console.log(`[wardrive] dongle fijado: ${clean || "auto"}`);
     return { ok: true };
@@ -1200,7 +1204,7 @@ export class DriveWardriveService extends EventEmitter {
         error: this.gpsError,
       },
       iface: this.iface,
-      preferredIface: this.preferredIface,
+      preferredMac: this.preferredMac,
       homeSsid: this.homeSsid,
       error: this.error,
       channel: this.currentChannel,

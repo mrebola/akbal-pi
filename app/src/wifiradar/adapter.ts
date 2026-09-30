@@ -8,6 +8,11 @@ const execFileAsync = promisify(execFile);
 const IW = "/usr/sbin/iw";
 const NET_CLASS_DIR = "/sys/class/net";
 
+// Shared validator for a pinned-dongle value — every setPreferredAdapter()
+// (wifiradar/wifi-audit/wardrive services) checks against this before
+// storing it.
+export const MAC_RE = /^[0-9a-f]{2}(:[0-9a-f]{2}){5}$/i;
+
 // A WiFi adapter usable for auditing (WiFi Radar / wardriving): a USB wireless
 // interface whose driver advertises monitor mode. Detection is generic — any
 // monitor-capable USB dongle works, not just the AR9271 — so swapping adapters
@@ -16,8 +21,13 @@ const NET_CLASS_DIR = "/sys/class/net";
 export type MonitorAdapter = {
   present: boolean; // a USB wifi adapter is plugged in
   monitorSupported: boolean; // ...and it advertises monitor mode
-  iface: string | null; // e.g. "wlan1"
-  phy: string | null; // e.g. "phy1"
+  iface: string | null; // e.g. "wlan1" — NOT stable: the kernel/udev can
+  // reassign this on any USB reconnect, including one on a DIFFERENT
+  // device (confirmed live: swapping a second AR9271 in/out reshuffled
+  // which name this same physical dongle got). Never persist this as an
+  // identity — mac below is what's stable across reconnects.
+  phy: string | null; // e.g. "phy1" — same caveat as iface
+  mac: string; // "" if none — the one thing that survives a re-enumeration
   driver: string;
   description: string; // human label, e.g. "Realtek RTL8812AU" or the driver
 };
@@ -27,6 +37,7 @@ const NONE: MonitorAdapter = {
   monitorSupported: false,
   iface: null,
   phy: null,
+  mac: "",
   driver: "",
   description: "",
 };
@@ -87,7 +98,30 @@ const supportsMonitor = async (phy: string): Promise<boolean> => {
   }
 };
 
-export async function detectMonitorAdapter(preferredIface?: string | null): Promise<MonitorAdapter> {
+const macOf = async (iface: string): Promise<string> =>
+  (await readText(path.join(NET_CLASS_DIR, iface, "address"))).toLowerCase();
+
+// One iface -> full MonitorAdapter (or null if it's not a USB wireless
+// iface at all) — the single place that reads phy/usb/driver/mac/monitor
+// for a given name, shared by both the auto-detect loop and the picker
+// listing below so they can never disagree about what a given iface is.
+async function describeIfaceIfPresent(iface: string): Promise<MonitorAdapter | null> {
+  const phy = await phyOf(iface);
+  if (!phy) return null;
+  if (!(await isUsbIface(iface))) return null;
+  const driver = await driverOf(iface);
+  return {
+    present: true,
+    monitorSupported: await supportsMonitor(phy),
+    iface,
+    phy,
+    mac: await macOf(iface),
+    driver,
+    description: await describe(iface, driver),
+  };
+}
+
+export async function detectMonitorAdapter(preferredMac?: string | null): Promise<MonitorAdapter> {
   let ifaces: string[] = [];
   try {
     ifaces = await fs.promises.readdir(NET_CLASS_DIR);
@@ -95,55 +129,34 @@ export async function detectMonitorAdapter(preferredIface?: string | null): Prom
     return NONE;
   }
 
-  // The operator can pin a specific dongle for wardrive (POST
-  // /api/wardrive/drive/adapter): if it's present and monitor-capable it
-  // wins regardless of enumeration order; if it's missing the normal
-  // detection applies (failover, never a hard failure).
-  if (preferredIface) {
-    const want = String(preferredIface).trim();
-    if (ifaces.includes(want)) {
-      const phy = await phyOf(want);
-      if (phy && (await isUsbIface(want)) && (await supportsMonitor(phy))) {
-        return {
-          present: true,
-          monitorSupported: true,
-          iface: want,
-          phy,
-          driver: await driverOf(want),
-          description: await describe(want, await driverOf(want)),
-        };
-      }
+  // The operator can pin a specific dongle (by MAC — see AdapterUiEntry
+  // below for why not by iface name) for wardrive/wifi-audit/wifi radar:
+  // if it's present and monitor-capable it wins regardless of enumeration
+  // order; if it's missing the normal detection applies (failover, never
+  // a hard failure).
+  if (preferredMac) {
+    const wantMac = String(preferredMac).trim().toLowerCase();
+    for (const iface of ifaces) {
+      const info = await describeIfaceIfPresent(iface);
+      if (info && info.mac === wantMac && info.monitorSupported) return info;
     }
-    // Preferred dongle missing → fall through to auto-detect (never fail).
+    // Preferred dongle missing/not usable right now → auto-detect below.
   }
 
   let firstUsb: MonitorAdapter | null = null;
   for (const iface of ifaces) {
-    // Only wireless interfaces (have a phy80211) that live on the USB bus.
-    const phy = await phyOf(iface);
-    if (!phy) continue;
-    if (!(await isUsbIface(iface))) continue;
-
-    const driver = await driverOf(iface);
-    const description = await describe(iface, driver);
-    const monitor = await supportsMonitor(phy);
-    const adapter: MonitorAdapter = {
-      present: true,
-      monitorSupported: monitor,
-      iface,
-      phy,
-      driver,
-      description,
-    };
-    if (monitor) return adapter; // best case — use it immediately
-    if (!firstUsb) firstUsb = adapter; // remember a present-but-incapable one
+    const info = await describeIfaceIfPresent(iface);
+    if (!info) continue;
+    if (info.monitorSupported) return info; // best case — use it immediately
+    if (!firstUsb) firstUsb = info; // remember a present-but-incapable one
   }
 
   return firstUsb || NONE;
 }
 
 export type AdapterUiEntry = {
-  iface: string;
+  iface: string; // display only — see MonitorAdapter.iface
+  mac: string; // the picker's actual <option value> / pin identity
   driver: string;
   description: string;
   monitorSupported: boolean;
@@ -156,27 +169,26 @@ export type AdapterUiEntry = {
 // monitor-capable-first / pinned-first / ath9k_htc (AR9271, this
 // project's reference dongle) as the default recommendation.
 export async function listAdaptersForUI(
-  preferredIface: string | null,
+  preferredMac: string | null,
 ): Promise<{ adapters: AdapterUiEntry[]; preferred: string | null }> {
   const out: AdapterUiEntry[] = [];
-  const seen = new Set<string>();
+  const wantMac = preferredMac ? preferredMac.trim().toLowerCase() : null;
   for (const iface of await fs.promises.readdir(NET_CLASS_DIR).catch(() => [] as string[])) {
-    const info = await detectMonitorAdapter(iface);
-    if (info.present && info.iface === iface && !seen.has(iface)) {
-      seen.add(iface);
-      out.push({
-        iface,
-        driver: info.driver,
-        description: info.description,
-        monitorSupported: info.monitorSupported,
-        isPreferred: preferredIface === iface,
-      });
-    }
+    const info = await describeIfaceIfPresent(iface);
+    if (!info) continue;
+    out.push({
+      iface,
+      mac: info.mac,
+      driver: info.driver,
+      description: info.description,
+      monitorSupported: info.monitorSupported,
+      isPreferred: wantMac !== null && info.mac === wantMac,
+    });
   }
   const rank = (a: AdapterUiEntry) =>
     (a.monitorSupported ? 0 : 2) + (a.isPreferred ? -1 : 0) + (a.driver === "ath9k_htc" ? 0 : 1);
   out.sort((a, b) => rank(a) - rank(b) || a.iface.localeCompare(b.iface));
-  return { adapters: out, preferred: preferredIface };
+  return { adapters: out, preferred: preferredMac };
 }
 
 // Back-compat shape for callers that used detectAr9271().

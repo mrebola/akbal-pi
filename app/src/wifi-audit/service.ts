@@ -3,7 +3,7 @@ import { promisify } from "util";
 import { EventEmitter } from "events";
 import fs from "fs";
 import path from "path";
-import { detectMonitorAdapter, listAdaptersForUI } from "../wifiradar/adapter";
+import { detectMonitorAdapter, listAdaptersForUI, MAC_RE } from "../wifiradar/adapter";
 import { enterMonitorMode, exitMonitorMode } from "./monitor";
 import { setChannel } from "./rf";
 import { AirodumpCapture, DeauthRunner, scanTarget } from "./attack";
@@ -84,9 +84,11 @@ type TargetMeta = {
 export class WardriveService extends EventEmitter {
   private mode: WardriveMode = "inactive";
   private iface: string | null = null;
-  // Dongle pinned by the operator via the web picker (null = auto-detect,
-  // same detectMonitorAdapter() ranking WiFi Radar/Wardrive use).
-  private preferredIface: string | null = null;
+  // Dongle pinned by the operator via the web picker, by MAC (null =
+  // auto-detect, same detectMonitorAdapter() ranking WiFi Radar/Wardrive
+  // use). MAC and not iface name — see wifiradar/adapter.ts's MonitorAdapter
+  // comment for why wlan* names aren't a stable identity across reconnects.
+  private preferredMac: string | null = null;
   private error = "";
   private modelsUnloaded = false;
   private allowlist = new Set<string>();
@@ -573,7 +575,7 @@ export class WardriveService extends EventEmitter {
       return { ok: true };
     }
     try {
-      const info = await detectMonitorAdapter(this.preferredIface);
+      const info = await detectMonitorAdapter(this.preferredMac);
       if (!info.present) {
         this.error = "No hay adaptador WiFi USB conectado — enchufá el dongle para auditar";
         this.broadcastStatus();
@@ -613,20 +615,21 @@ export class WardriveService extends EventEmitter {
   // Dongle picker for the web UI — same shape/ranking wardrive's already
   // uses, factored into adapter.ts so both pickers stay in sync.
   async listAdapters(): ReturnType<typeof listAdaptersForUI> {
-    return listAdaptersForUI(this.preferredIface);
+    return listAdaptersForUI(this.preferredMac);
   }
 
-  // Pin (or unpin with null) the audit dongle. Refused while a session is
-  // active — changing the radio mid-attack would kill the capture.
-  setPreferredAdapter(iface: string | null): { ok: boolean; error?: string } {
+  // Pin (or unpin with null) the audit dongle, by MAC. Refused while a
+  // session is active — changing the radio mid-attack would kill the
+  // capture.
+  setPreferredAdapter(mac: string | null): { ok: boolean; error?: string } {
     if (this.mode !== "inactive") {
       return { ok: false, error: "Salí del modo Wifi Audit antes de cambiar de dongle" };
     }
-    const clean = iface === null || String(iface).trim() === "" ? null : String(iface).trim();
-    if (clean && !/^wlan\d+$/.test(clean)) {
-      return { ok: false, error: "Nombre de interfaz inválido" };
+    const clean = mac === null || String(mac).trim() === "" ? null : String(mac).trim().toLowerCase();
+    if (clean && !MAC_RE.test(clean)) {
+      return { ok: false, error: "MAC inválida" };
     }
-    this.preferredIface = clean;
+    this.preferredMac = clean;
     console.log(`[wifi-audit] dongle fijado: ${clean || "auto"}`);
     return { ok: true };
   }

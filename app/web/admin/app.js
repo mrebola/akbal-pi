@@ -1661,7 +1661,10 @@ async function wdRefreshDongleList() {
         .map((a) => {
           const tag = a.driver === "ath9k_htc" ? " ← recomendado" : "";
           const label = `${a.iface} · ${a.driver || "?"}${tag}${a.monitorSupported ? "" : " (sin monitor)"}`;
-          return `<option value="${escapeHtml(a.iface)}"${a.isPreferred ? " selected" : ""}>${escapeHtml(label)}</option>`;
+          // value = MAC, not iface name — wlan* names aren't stable across
+          // USB reconnects (confirmed live: a second dongle plugged in/out
+          // reshuffled which name this one got).
+          return `<option value="${escapeHtml(a.mac)}"${a.isPreferred ? " selected" : ""}>${escapeHtml(label)}</option>`;
         })
         .join("");
     if (cur && !wdDongleSelect.querySelector(`option[value="${CSS.escape(cur)}"]`)) {
@@ -1677,12 +1680,12 @@ async function wdRefreshDongleList() {
 }
 
 wdDongleSelect?.addEventListener("change", async (ev) => {
-  const iface = ev.target.value || null;
+  const mac = ev.target.value || null; // the <option value>s are MACs now, not iface names
   try {
     const res = await fetch("/api/wardrive/adapter", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ iface }),
+      body: JSON.stringify({ iface: mac }),
     });
     const data = await res.json();
     if (wdDongleMsg) wdDongleMsg.textContent = data.ok ? "" : data.error || "No se pudo fijar el dongle";

@@ -1066,7 +1066,10 @@ async function refreshRadarDongleList() {
         .map((a) => {
           const tag = a.driver === "ath9k_htc" ? " ← recomendado" : "";
           const label = `${a.iface} · ${a.driver || "?"}${tag}${a.monitorSupported ? "" : " (sin monitor)"}`;
-          return `<option value="${a.iface}"${a.isPreferred ? " selected" : ""}>${label}</option>`;
+          // value = MAC, not iface name — wlan* names aren't stable across
+          // USB reconnects (confirmed live: a second dongle plugged in/out
+          // reshuffled which name this one got).
+          return `<option value="${a.mac}"${a.isPreferred ? " selected" : ""}>${label}</option>`;
         })
         .join("");
     if (cur && !sel.querySelector(`option[value="${CSS.escape(cur)}"]`)) {
@@ -1082,13 +1085,13 @@ async function refreshRadarDongleList() {
 }
 
 document.getElementById("hud-dongle-select")?.addEventListener("change", async (ev) => {
-  const iface = ev.target.value || null;
+  const mac = ev.target.value || null; // the <option value>s are MACs now, not iface names
   const msg = document.getElementById("hud-dongle-msg");
   try {
     const res = await fetch("/api/wifiradar/adapter", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ iface }),
+      body: JSON.stringify({ iface: mac }),
     });
     const data = await res.json();
     if (msg) msg.textContent = data.ok ? "" : data.error || "No se pudo fijar el dongle";

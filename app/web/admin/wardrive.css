@@ -439,6 +439,8 @@
   gap: 10px;
   padding: 10px 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-wrap: wrap;
+  row-gap: 6px;
 }
 
 .wd-drawer-head > span:first-child {
@@ -447,7 +449,10 @@
   color: #7ab7ff;
 }
 
-.wd-drawer-actions { display: flex; gap: 6px; }
+/* 7 botones (Historial CSV / CSV sesión / GPX / borrar / minimizar /
+   maximizar / cerrar) en una sola fila sin wrap se salían de un drawer
+   angosto (min(680px, 100vw-28px), ~292px en un celular de 320px). */
+.wd-drawer-actions { display: flex; gap: 6px; flex-wrap: wrap; row-gap: 6px; }
 
 .wd-btn-sm {
   padding: 5px 12px;
@@ -505,6 +510,7 @@
 
 .wd-drawer-body {
   overflow-y: auto;
+  overflow-x: auto;
   padding: 10px 14px 14px;
 }
 
@@ -626,6 +632,11 @@
     max-height: 38vh;
   }
   .wd-deauth { bottom: 90px; }
+  /* min-width:320px es un piso más ancho que un viewport de exactamente
+     320px (con box-sizing:border-box no debería desbordar, pero cualquier
+     variación de 1-2px — scrollbar, redondeo — lo hacía posible al no
+     tener margen de seguridad, a diferencia de .wd-panel arriba). */
+  .wd-activity { min-width: 0; width: calc(100vw - 28px); }
 }
 /* AP row highlight while being attacked */
 .wd-ap-row.attacking {

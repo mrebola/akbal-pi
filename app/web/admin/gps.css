@@ -221,7 +221,10 @@
 }
 
 @media (max-width: 900px) {
-  .hdr-view-toggle { padding: 4px 8px; }
+  /* min-height en vez de más padding vertical: el track+knob interno mide
+     20px, así que el hit-area total rondaba ~28px — por debajo del táctil
+     recomendado (~40px) — sin agrandar el pill visualmente de más. */
+  .hdr-view-toggle { padding: 4px 8px; min-height: 40px; }
   .hdr-view-label { display: none; }
   .hdr-view-label.active { display: inline; }
 }
@@ -338,6 +341,13 @@
   font-family: ui-monospace, monospace;
   pointer-events: none;
   transition: opacity 0.25s ease;
+  /* Sin max-width el pill se ajusta al contenido (shrink-to-fit); el texto
+     es más ancho que un viewport de 320-375px y quedaba recortado por el
+     overflow-x:hidden global. */
+  max-width: calc(100vw - 28px);
+  white-space: normal;
+  text-align: center;
+  line-height: 1.4;
 }
 
 .gps-globe-hint.hidden { display: none; }
@@ -473,12 +483,24 @@
   .gps-hud {
     max-width: calc(100vw - 28px);
     top: auto;
-    bottom: 190px;
+    /* Antes 190px fijo asumiendo una altura constante para el panel de
+       satélites de abajo — en un teléfono de poca altura (p. ej. 375x667)
+       el panel de satélites es más alto que ese presupuesto y los dos
+       terminan superpuestos. gps.js mide su altura real y la publica en
+       --gps-sat-panel-height. */
+    bottom: calc(var(--gps-sat-panel-height, 220px) + 24px);
   }
   .gps-address {
-    top: 74px;
+    /* Antes 74px fijo — ignoraba la altura real del header (gps.js ahora
+       la mide en --header-height), así que si el topbar envolvía a dos
+       líneas en un celular angosto, este panel quedaba tapado detrás. */
+    top: calc(var(--header-height, 64px) + 10px);
     max-width: calc(100vw - 28px);
   }
   .gps-sat-panel { bottom: 10px; }
-  .gps-error { top: 74px; width: calc(100vw - 28px); text-align: center; }
+  .gps-error {
+    top: calc(var(--header-height, 64px) + 10px);
+    width: calc(100vw - 28px);
+    text-align: center;
+  }
 }

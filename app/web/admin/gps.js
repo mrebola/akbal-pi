@@ -23,6 +23,43 @@ let view = "map"; // "map" | "globe"
 const GNSS_POLL_MS = 15_000;
 let gnssMetaByKey = new Map(); // "constellation:prn" -> { name, orbital }
 
+// The HUD/address/sat-panel overlays are position:fixed and must start
+// below the real header — measuring it (not a hardcoded px fallback) keeps
+// the layout right on narrow screens where the topbar wraps taller (e.g.
+// the language toggle pushing LIVE/DEMO + the view toggle to a second
+// line). Same mechanism as wardrive.js/wifiradar.js.
+function updateHeaderHeight() {
+  const headerEl = document.querySelector("#gps-header .topbar");
+  if (headerEl) {
+    document.documentElement.style.setProperty("--header-height", `${headerEl.offsetHeight}px`);
+  }
+}
+// On narrow screens (gps.css's 640px query) both the position HUD and the
+// satellite sky-plot panel anchor to the bottom edge, stacked — the HUD's
+// `bottom` offset has to clear the sat panel's real height (it used to be
+// a hardcoded 190px guess, which a taller sat panel — or a shorter phone —
+// could overlap). Same "measure, don't guess" approach as updateHeaderHeight.
+function updateSatPanelHeight() {
+  const panel = document.getElementById("gps-sat-panel");
+  if (panel) {
+    document.documentElement.style.setProperty("--gps-sat-panel-height", `${panel.offsetHeight}px`);
+  }
+}
+function updateLayoutMetrics() {
+  updateHeaderHeight();
+  updateSatPanelHeight();
+}
+updateLayoutMetrics();
+window.addEventListener("resize", () => {
+  updateLayoutMetrics();
+  // Leaflet doesn't notice a container resize on its own (e.g. rotating
+  // the phone) — only re-measures on view toggle otherwise (setView()).
+  if (map && view === "map") setTimeout(() => map.invalidateSize(), 60);
+});
+// Switching language (i18n.js) can change how the nav wraps and therefore
+// the header's real height — resize alone wouldn't catch that.
+document.addEventListener("akbal:locale-changed", updateLayoutMetrics);
+
 initMap();
 initHeader();
 initViewToggle();

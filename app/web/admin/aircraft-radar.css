@@ -116,6 +116,16 @@ header.topbar { z-index: 1000; }
   transition: opacity 0.12s ease, border-color 0.12s ease;
 }
 
+/* Extiende el área táctil a ~40px sin agrandar el ícono visible de 22px
+   (que se vería como un bloque grande y fuera de lugar en la esquina de
+   una card chica) — el ::after es contenido generado del propio botón, así
+   que un tap dentro de su caja extendida sigue contando como click en él. */
+.ar-card-note-btn::after {
+  content: "";
+  position: absolute;
+  inset: -9px;
+}
+
 .ar-card-note-btn:hover {
   opacity: 1;
   border-color: var(--accent);
@@ -346,7 +356,10 @@ header.topbar { z-index: 1000; }
 }
 
 @media (max-width: 900px) {
-  .hdr-view-toggle { padding: 4px 8px; }
+  /* min-height en vez de más padding vertical: el track+knob interno mide
+     20px, así que el hit-area total rondaba ~28px — por debajo del táctil
+     recomendado (~40px) — sin agrandar el pill visualmente de más. */
+  .hdr-view-toggle { padding: 4px 8px; min-height: 40px; }
   .hdr-view-label { display: none; }
   .hdr-view-label.active { display: inline; }
 }

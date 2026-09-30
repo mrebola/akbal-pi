@@ -147,6 +147,9 @@ function updateHeaderHeight() {
 }
 updateHeaderHeight();
 window.addEventListener("resize", updateHeaderHeight);
+// Switching language (i18n.js) can change how the nav wraps and therefore
+// the header's real height — resize alone wouldn't catch that.
+document.addEventListener("akbal:locale-changed", updateHeaderHeight);
 
 // ---- state ----
 let paused = false;

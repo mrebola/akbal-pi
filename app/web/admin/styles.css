@@ -7,7 +7,7 @@
   --border-strong: #333a41;
   --text-primary: #ececec;
   --text-secondary: #969ca1;
-  --text-muted: #6b7178;
+  --text-muted: #7d838a; /* contraste AA (~4.6:1) sobre --bg y --bg-elevated */
   /* green = primary action / connected / ok ONLY */
   --accent: #50ff78;
   --accent-dim: #234a30;
@@ -177,6 +177,7 @@ main {
   align-items: center;
   gap: 8px;
   margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .chat-toolbar label {
@@ -737,6 +738,43 @@ button.secondary {
   flex-wrap: wrap;
 }
 
+/* Era un inline style con `background: var(--bg-input)` — variable que no
+   existe en ningún :root del proyecto, así que el campo perdía su fondo
+   oscuro (caía al valor inicial de `background`, transparente). */
+.wd-search-input {
+  margin-left: auto;
+  width: 220px;
+  font-size: 12px;
+  padding: 6px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+}
+@media (max-width: 480px) {
+  /* A ancho fijo, en 320px queda angosto y no aprovecha el espacio de su
+     propia fila cuando .wd-toolbar hace wrap. */
+  .wd-search-input { width: 100%; margin-left: 0; }
+}
+
+/* Valor de contraseña revelada (modal 🔑 en vivo y 🏴‍☠️ de sesión pasada).
+   Mismo bug de --bg-input que .wd-search-input, más overflow-wrap: una
+   contraseña larga sin espacios podía desbordar la caja en un modal de
+   ~380px de max-width (~288px reales en 320px de viewport). */
+.wd-pwd-value {
+  flex: 1;
+  font-family: ui-monospace, monospace;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+  color: var(--text-primary);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
 .wd-danger {
   background: transparent;
   border: 1px solid var(--danger);
@@ -811,7 +849,11 @@ button.secondary {
 .wd-status-captured { color: var(--accent); border-color: var(--accent); }
 .wd-status-failed { color: var(--danger); border-color: var(--danger); }
 
-.wd-table button { font-size: 11px; padding: 2px 8px; margin-right: 4px; }
+/* min-height (no solo padding) porque esta regla, al tener más
+   especificidad que `.wd-audit-btn`/`.wd-deauth-btn`/`.wd-both-btn`
+   (más abajo en el archivo), les ganaba el padding y los dejaba más
+   chicos de lo que esas reglas pedían — quedaban ~15px de alto real. */
+.wd-table button { font-size: 11px; padding: 4px 8px; margin-right: 4px; min-height: 30px; }
 
 .wd-session-block {
   margin-top: 16px;
@@ -926,7 +968,7 @@ button.secondary {
   min-width: 140px;
   font-size: 12px;
   padding: 6px 10px;
-  background: var(--bg-input);
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text-primary);
@@ -1708,8 +1750,8 @@ button.secondary {
   border: 1px solid var(--border);
   color: var(--text-secondary);
   border-radius: 8px;
-  width: 30px;
-  height: 30px;
+  width: 40px;
+  height: 40px;
   font-size: 15px;
   line-height: 1;
   cursor: pointer;
@@ -2120,8 +2162,8 @@ button.secondary {
 }
 .mx-vol-btn {
   flex: none;
-  width: 30px;
-  height: 30px;
+  width: 40px;
+  height: 40px;
   background: transparent;
   border: 1px solid var(--accent-dim);
   color: var(--accent);
@@ -2165,7 +2207,7 @@ button.secondary {
   padding: 9px 0;
   cursor: pointer;
 }
-.mx-output select:focus { outline: none; }
+.mx-output select:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-dim); }
 
 .mx-list-head { margin: 0 4px 6px; }
 .mx-list { list-style: none; margin: 0; padding: 0 4px; display: flex; flex-direction: column; gap: 3px; font-family: "Courier New", Courier, monospace; }
@@ -2291,7 +2333,12 @@ body { font-family: var(--font-sans); }
 }
 
 /* ---- Header derecha: resumen compacto + popover ---- */
-.hdr-right { position: relative; display: flex; align-items: center; }
+/* flex-wrap + justify-content:flex-end: con el toggle de idioma sumado a
+   LIVE/DEMO + (en gps/aircraft-radar) el toggle de vista + el resumen de
+   sistema, el total ya no entra en una sola fila en 320-375px de ancho —
+   sin wrap, el exceso quedaba recortado en silencio por el overflow-x:
+   hidden global en vez de pasar a una segunda línea visible y tocable. */
+.hdr-right { position: relative; display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 6px 8px; }
 
 /* ---- Platform source toggle (LIVE/DEMO) — hacker terminal switch ----
    Sliding pill with scanline texture; DEMO lights amber with a soft blink,
@@ -2501,6 +2548,14 @@ body { font-family: var(--font-sans); }
   .tab-panel { padding: 16px 12px; }
   .cfg-panel { grid-template-columns: 1fr !important; }
 
+  /* Header compacto: el avatar de 80px + 3 pills (idioma/LIVE-DEMO/estado,
+     y en gps/aircraft-radar un 4to toggle de vista) ya no entran cómodos
+     en una fila de celular — achicar el avatar y el padding de las pills
+     libera el espacio que el wrap de .hdr-right (arriba) necesita. */
+  .avatar { width: 40px; height: 40px; }
+  .plx-toggle-label { padding: 0 8px; }
+  .hdr-summary { padding: 6px 8px; gap: 6px; }
+
   /* Settings sub-nav (General/Wifi/Audio/IA/...): a single scrollable row
      instead of wrapping into two cramped lines. */
   .cfg-nav {
@@ -2511,6 +2566,18 @@ body { font-family: var(--font-sans); }
   }
   .cfg-nav::-webkit-scrollbar { display: none; }
   .cfg-nav-btn { flex: none; }
+
+  /* Tap targets: pestañas y botones secundarios que en desktop pueden ser
+     compactos, pero en touch necesitan más alto (~40px). No se toca su
+     tamaño en desktop — solo agranda dentro de este breakpoint. */
+  .cfg-nav-btn, .wd-subtab, .subtab { min-height: 40px; }
+  .wd-session-open, .wd-session-del, .wd-session-del-all,
+  .wd-session-eye, .wd-session-hs, .wd-session-dict {
+    min-height: 36px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  .wd-modal-actions button { min-height: 40px; min-width: 44px; }
 
   /* OST player: smaller cover art / title leave more room for the track
      name before ellipsis has to kick in, and the transport row can't be
@@ -2661,15 +2728,16 @@ body { font-family: var(--font-sans); }
 
 .apm-close {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: 8px;
+  right: 8px;
   background: transparent;
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
   font-size: 12px;
-  padding: 4px 8px;
+  min-width: 40px;
+  min-height: 40px;
 }
 
 .apm-close:hover { color: var(--accent); border-color: var(--accent); }
@@ -2707,6 +2775,14 @@ body { font-family: var(--font-sans); }
   color: var(--text-primary);
   text-align: right;
   word-break: break-word;
+}
+
+@media (max-width: 380px) {
+  /* Etiquetas largas en español ("Posición sobre la Tierra", "Constelación
+     / PRN") + valores largos competían por el ancho en la misma fila y
+     quedaban apretados — apilarlas es más legible en pantallas muy angostas. */
+  .apm-row { flex-direction: column; gap: 2px; }
+  .apm-row span:last-child { text-align: left; }
 }
 
 .apm-hint {

@@ -208,7 +208,7 @@
           <button id="wd-cancel-btn" class="wd-danger hidden" data-i18n="wifiaudit.cancel_btn">Cancelar ataque</button>
           <span id="wd-attack-status" class="muted"></span>
           <input id="wd-search" type="search" placeholder="Buscar red (SSID, BSSID, canal...)" data-i18n-placeholder="wifiaudit.search_placeholder" autocomplete="off"
-                 style="margin-left: auto; width: 220px; font-size: 12px; padding: 6px 10px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary);" />
+                 class="wd-search-input" />
           <button id="wd-filters-reset" class="secondary" title="Limpiar búsqueda y orden" data-i18n="wifiaudit.clear_filters">Borrar filtros</button>
         </div>
 
@@ -253,12 +253,18 @@
           <div id="wd-sessions-dict-progress" class="wd-dict-progress"></div>
           <div id="wd-session-files" class="wd-sessions-files hidden">
             <div class="wd-session-title" id="wd-session-files-title" style="font-size:12px; margin-top:10px;"></div>
-            <table class="wd-table">
-              <thead>
-                <tr><th data-i18n="wifiaudit.col_file">Archivo</th><th data-i18n="wifiaudit.col_size">Tamaño</th><th></th><th></th></tr>
-              </thead>
-              <tbody id="wd-session-files-body"></tbody>
-            </table>
+            <!-- Mismo wrapper de scroll horizontal que la tabla principal
+                 (wd-list-wrap más arriba) — antes no lo tenía, y en 320px
+                 con nombres de archivo largos el contenido (incluidas las
+                 acciones Ver/Bajar) quedaba cortado e inalcanzable. -->
+            <div class="wd-list-wrap">
+              <table class="wd-table">
+                <thead>
+                  <tr><th data-i18n="wifiaudit.col_file">Archivo</th><th data-i18n="wifiaudit.col_size">Tamaño</th><th></th><th></th></tr>
+                </thead>
+                <tbody id="wd-session-files-body"></tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
@@ -333,7 +339,7 @@
             </div>
           </div>
           <div style="padding: 18px 20px; display: flex; align-items: center; gap: 10px;">
-            <span id="wd-pwd-value" style="flex: 1; font-family: ui-monospace, monospace; font-size: 15px; letter-spacing: 0.06em; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px;">—</span>
+            <span id="wd-pwd-value" class="wd-pwd-value">—</span>
             <button id="wd-pwd-eye" class="secondary" style="font-size: 16px; min-width: 40px;">🙈</button>
           </div>
         </div>
@@ -352,7 +358,7 @@
             </div>
           </div>
           <div style="padding: 18px 20px; display: flex; align-items: center; gap: 10px;">
-            <span id="wd-session-pwd-value" style="flex: 1; font-family: ui-monospace, monospace; font-size: 15px; letter-spacing: 0.06em; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px;">—</span>
+            <span id="wd-session-pwd-value" class="wd-pwd-value">—</span>
             <button id="wd-session-pwd-eye" class="secondary" style="font-size: 18px; min-width: 44px;" title="Revelar / ocultar" data-i18n-title="wifiaudit.session_pwd_eye_title">🏴‍☠️</button>
           </div>
         </div>
@@ -396,7 +402,7 @@
               capturas, hashes, logs e info. Los handshakes no se pueden recuperar.
             </p>
             <input id="wd-deleteall-input" type="text" placeholder="Escribe DELETE ALL" data-i18n-placeholder="wifiaudit.deleteall_placeholder" autocomplete="off"
-                   style="width: 100%; font-size: 13px; padding: 8px 12px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary);" />
+                   style="width: 100%; font-size: 13px; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary);" />
             <div id="wd-deleteall-error" class="error" style="margin-top: 8px;"></div>
             <button id="wd-deleteall-confirm" class="wd-danger" style="margin-top: 12px; width: 100%;" data-i18n="wifiaudit.deleteall_confirm">Borrar todo</button>
           </div>

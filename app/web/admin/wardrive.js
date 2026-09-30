@@ -42,6 +42,9 @@ window.addEventListener("resize", () => {
   updateHeaderHeight();
   if (map) setTimeout(() => map.invalidateSize(), 60);
 });
+// Switching language (i18n.js) can change how the nav wraps and therefore
+// the header's real height — resize alone wouldn't catch that.
+document.addEventListener("akbal:locale-changed", updateHeaderHeight);
 
 initMap();
 initHeader();

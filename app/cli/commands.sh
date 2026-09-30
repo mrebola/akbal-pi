@@ -10,10 +10,23 @@ cmd_update() {
   require_cmd git
 
   _bold "Updating whisplay-ai-chatbot..."
-  cd "$PROJECT_ROOT"
+
+  local git_root
+  git_root="$(resolve_update_git_root)"
+  if [ -z "$git_root" ]; then
+    _red "Error: $PROJECT_ROOT is not a git checkout — can't 'git pull' here."
+    echo "See docs/deploy.md for how to set up a git-based deployment."
+    exit 1
+  fi
 
   _bold "[1/3] Pulling latest code..."
-  git pull --ff-only
+  # git_root is PROJECT_ROOT itself on a standalone checkout, or its parent
+  # when PROJECT_ROOT is the app/ subdirectory of a cloned akbal-pi monorepo
+  # (see resolve_update_git_root in common.sh) — either way this is where
+  # the actual .git lives, so it's the only place `pull` can run.
+  git -C "$git_root" pull --ff-only
+
+  cd "$PROJECT_ROOT"
 
   _bold "[2/3] Installing dependencies..."
   source ~/.bashrc 2>/dev/null || true

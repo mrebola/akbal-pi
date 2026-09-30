@@ -396,6 +396,10 @@ WEB_CAMERA_ENABLED=true     # Use browser camera
 
 ## Deployment Process
 
+See `docs/deploy.md` for the full picture (git clone + `whisplay update`,
+replacing the old rsync-only flow — rsync still works as a fallback for
+devices without GitHub access). Short version:
+
 ### Systemd Service Setup
 ```bash
 # Install and enable auto-start
@@ -406,11 +410,22 @@ whisplay service install
 # Service file location: /etc/systemd/system/chatbot.service
 # If whisplay-daemon.service exists, startup.sh refuses to install chatbot.service.
 # In that case the chatbot should be launched and managed by whisplay-daemon instead.
-# Logs: ~/whisplay-ai-chatbot/chatbot.log
+# startup.sh resolves its own real path (PROJECT_DIR) instead of assuming
+# ~/whisplay-ai-chatbot — WorkingDirectory/ExecStart/logs all follow
+# wherever this checkout actually lives (e.g. ~/akbal-pi/app). Logs:
+# $PROJECT_DIR/chatbot.log (this directory, next to run_chatbot.sh).
 
 # View logs
 tail -f chatbot.log
 sudo journalctl -u chatbot.service -f
+```
+
+### Updating
+```bash
+whisplay update   # git pull --ff-only (at the real repo root, even if
+                   # this checkout is app/ nested inside a monorepo — see
+                   # resolve_update_git_root in cli/common.sh) + deps + build
+whisplay service restart
 ```
 
 ### Docker Services (Optional)

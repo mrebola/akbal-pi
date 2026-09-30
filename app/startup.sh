@@ -20,6 +20,14 @@ TARGET_USER=$(whoami)
 USER_HOME=$HOME
 TARGET_UID=$(id -u $TARGET_USER)
 
+# Where THIS script actually lives — not a hardcoded "~/whisplay-ai-chatbot"
+# guess. On a standalone whisplay-ai-chatbot checkout that's the repo root;
+# on akbal-pi (a monorepo with app/ nested under README.md/docs/setup/) it's
+# .../akbal-pi/app. Either way, this is what run_chatbot.sh/chatbot.log
+# actually need, and it's what `whisplay update`'s git-root detection
+# (cli/common.sh's resolve_update_git_root) also relies on being correct.
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Make sure we do not return roon (in case user called the script with sudo)
 if [ "$TARGET_USER" == "root" ]; then
     echo "Error: Please run this script as your normal user (WITHOUT sudo)."
@@ -69,9 +77,9 @@ User=$TARGET_USER
 Group=audio
 SupplementaryGroups=audio video gpio
 
-# Use the dynamic Home Directory
-WorkingDirectory=$USER_HOME/whisplay-ai-chatbot
-ExecStart=/bin/bash $USER_HOME/whisplay-ai-chatbot/run_chatbot.sh
+# Use the dynamic project directory (see PROJECT_DIR above)
+WorkingDirectory=$PROJECT_DIR
+ExecStart=/bin/bash $PROJECT_DIR/run_chatbot.sh
 
 # Inject the dynamic Node path and dynamic User ID
 Environment=PATH=$NODE_FOLDER:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin
@@ -83,8 +91,8 @@ Environment=NODE_ENV=production
 PrivateDevices=no
 
 # Logs
-StandardOutput=append:$USER_HOME/whisplay-ai-chatbot/chatbot.log
-StandardError=append:$USER_HOME/whisplay-ai-chatbot/chatbot.log
+StandardOutput=append:$PROJECT_DIR/chatbot.log
+StandardError=append:$PROJECT_DIR/chatbot.log
 
 Restart=always
 RestartSec=2

@@ -36,6 +36,7 @@ El proyecto toma como base el repositorio [PiSugar/whisplay-ai-chatbot](https://
 | — | [Idioma (ES/EN)](#idioma-esen) | Selector siempre visible en el topbar |
 | **Docs por archivo** | | |
 | — | [`docs/`](docs/) | Bitácora de instalación, fixes y decisiones (índice en [`docs/SETUP.md`](docs/SETUP.md)) |
+| — | [`docs/deploy.md`](docs/deploy.md) | Deploy/actualización por `git clone` + `whisplay update` |
 | — | [`app/AGENTS.md`](app/AGENTS.md) | Arquitectura interna de la app (para agentes/mantenedores) |
 
 ## Hardware
@@ -193,17 +194,20 @@ locales, sin depender de APIs de nube).
 
 ### 8. La app (Akbal)
 
-Copia la carpeta [`app/`](app/) de este repo a la Pi como `~/whisplay-ai-chatbot`
-(ya incluye los fixes aplicados, como el de Piper HTTP — ver
+Cloná el repo completo directo en la Pi (ya incluye los fixes aplicados,
+como el de Piper HTTP — ver
 [`docs/piper-tts-silent-fix.md`](docs/piper-tts-silent-fix.md) — y la interfaz
 de pantalla minimalista con los GIFs de personaje ya generados, ver
 [`docs/display-ui.md`](docs/display-ui.md); no hace falta ningún paso extra
-para la pantalla):
+para la pantalla). Esto deja `whisplay update` funcionando de una — un
+`git pull` alcanza para la próxima actualización, en vez de repetir un
+rsync a mano cada vez; detalle completo (y la alternativa por rsync si tu
+Pi no tiene salida a GitHub) en [`docs/deploy.md`](docs/deploy.md):
 
 ```bash
-rsync -az /ruta/local/akbal-pi/app/ <usuario>@<host-de-la-pi>:~/whisplay-ai-chatbot/
 ssh <usuario>@<host-de-la-pi>
-cd ~/whisplay-ai-chatbot
+git clone https://github.com/mrebola/akbal-pi.git ~/akbal-pi
+cd ~/akbal-pi/app
 touch use_npm            # si yarn falla por permisos globales de npm, se usa npm
 bash install_dependencies.sh
 source ~/.bashrc
@@ -232,13 +236,14 @@ bash startup.sh
 
 Crea `chatbot.service` (con `Restart=always`) y lo deja arrancando en cada boot.
 El script pregunta si quieres deshabilitar la interfaz gráfica (recomendado para
-uso 100% headless, opcional). Logs en `~/whisplay-ai-chatbot/chatbot.log`.
+uso 100% headless, opcional). Detecta solo la ruta real del proyecto (no asume
+`~/whisplay-ai-chatbot`) — logs en `~/akbal-pi/app/chatbot.log`.
 
 ### 10. Verificación de punta a punta
 
 ```bash
 systemctl status chatbot.service
-tail -f ~/whisplay-ai-chatbot/chatbot.log
+tail -f ~/akbal-pi/app/chatbot.log
 ```
 
 Con el botón del Whisplay HAT: presionar y hablar → debería transcribir, pensar,
@@ -250,8 +255,11 @@ PiSugar).
 ## Estructura del repo
 
 - [`app/`](app/) — código de la aplicación que corre en la Pi (fork de trabajo de
-  `whisplay-ai-chatbot`, con nuestros fixes aplicados). Se despliega copiando esta
-  carpeta a `~/whisplay-ai-chatbot` en el dispositivo y siguiendo `docs/SETUP.md`.
+  `whisplay-ai-chatbot`, con nuestros fixes aplicados). Se despliega clonando
+  este repo entero en el dispositivo (ver [`docs/deploy.md`](docs/deploy.md))
+  y corriendo todo desde `app/` — `whisplay update` sabe que el repo real
+  está un nivel arriba de `app/`, no confundirlo con la instalación
+  original de PiSugar (esa sí espera clonarse directo en la raíz).
   No incluye `.env` (usar `app/.env.template` o `setup/akbal.env.example` como base),
   `node_modules`, `dist` ni datos de runtime — todo eso se genera/instala en el
   propio dispositivo.

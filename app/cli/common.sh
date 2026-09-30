@@ -63,6 +63,20 @@ resolve_project_root() {
   echo ""
 }
 
+# ── Git repo root for `whisplay update` ──────────────────────
+# PROJECT_ROOT (app/) is the git repo root on a standalone
+# whisplay-ai-chatbot checkout (upstream layout), but on akbal-pi it's a
+# subdirectory of the monorepo (README.md/docs/setup/app/ all under one
+# clone) — `git pull` has to run at the actual repo root either way, or a
+# nested checkout would never see it as a git command at all.
+resolve_update_git_root() {
+  if ! git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree &>/dev/null; then
+    echo ""
+    return
+  fi
+  git -C "$PROJECT_ROOT" rev-parse --show-toplevel
+}
+
 # ── Terminal colors ──────────────────────────────────────────
 
 _green()  { printf '\033[0;32m%s\033[0m\n' "$*"; }

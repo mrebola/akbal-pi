@@ -39,6 +39,13 @@ const DEAUTH_WINDOW_MS = 30_000; // hcxdumptool deauth+capture window (fallback)
 const DEAUTH_SPEED_MAX_KMH = 25; // deauth fallback only slow/stopped
 const MIN_EAPOL_PAIRS = 1; // PMKID counts as 1 pair; a real 4-way as 2+
 const SESSION_TICK_MS = 1_000; // status/GPS/DB cadence
+// GPS used to only update while a drive session was running (tick()'s own
+// job) — opening /wardrive without hitting "start" showed the world map
+// forever even with a live fix, since getStatus() only ever reflected
+// whatever tick() last wrote. This keeps position/satellites fresh whether
+// or not a session is active, so the map can center on "where we are" the
+// moment the page loads.
+const GPS_WATCH_MS = 2_000;
 const POINT_MIN_MOVE_M = 6; // GPS track resolution (driving ~8m at 30km/h)
 const POINT_MAX_DT_MS = 20_000; // also drop a point when parked this long
 const TARGET_SCAN_INTERVAL_MS = 5_000; // pick a new attack target this often
@@ -93,6 +100,7 @@ export class DriveWardriveService extends EventEmitter {
   private hopTimer: ReturnType<typeof setTimeout> | null = null;
   private tickTimer: ReturnType<typeof setInterval> | null = null;
   private scanTimer: ReturnType<typeof setInterval> | null = null;
+  private gpsWatchTimer: ReturnType<typeof setInterval> | null = null;
   private error = "";
 
   // In-memory air picture (rebuilt every session; the DB is the archive)
@@ -145,6 +153,16 @@ export class DriveWardriveService extends EventEmitter {
   // Demo source (platform mode): synthetic APs/GPS, no hardware touched.
   private demo = false;
   private demoT = 0;
+
+  constructor() {
+    super();
+    // Only polls while a drive session isn't already doing it at a faster
+    // cadence itself (tick(), below) — this exists purely to keep GPS
+    // fresh while idle/browsing, not to double up on it while driving.
+    this.gpsWatchTimer = setInterval(() => {
+      if (!this.running) void this.readLiveGps();
+    }, GPS_WATCH_MS);
+  }
 
   // ─── Start / stop ──────────────────────────────────────────────────────
 
@@ -933,6 +951,19 @@ export class DriveWardriveService extends EventEmitter {
     // Home-network watchdog tick: if the connection dropped mid-drive,
     // bring the SAME network back (never another saved one).
     void checkHomeNetwork().catch(() => {});
+    await this.readLiveGps();
+    this.maybeRecordPoint();
+    if (this.sessionId) {
+      driveDb.updateSession(this.sessionId, {
+        distanceM: Math.round(this.distanceM),
+        points: this.points,
+        networks: this.sessionNewSsids.size,
+        handshakes: this.sessionNewHandshakeSsids.size,
+      });
+    }
+  }
+
+  private async readLiveGps(): Promise<void> {
     try {
       const gps = await getGpsStatus();
       this.gpsHasFix = gps.hasFix;
@@ -948,15 +979,6 @@ export class DriveWardriveService extends EventEmitter {
       this.gpsError = gps.hasFix ? "" : gps.error || "Sin fix GPS";
     } catch {
       this.gpsError = "GPS sin datos";
-    }
-    this.maybeRecordPoint();
-    if (this.sessionId) {
-      driveDb.updateSession(this.sessionId, {
-        distanceM: Math.round(this.distanceM),
-        points: this.points,
-        networks: this.sessionNewSsids.size,
-        handshakes: this.sessionNewHandshakeSsids.size,
-      });
     }
   }
 

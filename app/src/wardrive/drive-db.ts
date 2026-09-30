@@ -148,6 +148,80 @@ export class DriveDb {
       `);
       console.log("[wardrive] drive-db migrated: per-method attempt counters");
     }
+    // Schema evolution 3: attack_rounds — one row per attempt window, with
+    // the radio mode (single|dual) and the blind window (ms) the attack
+    // cost to discovery. This table IS the 1-vs-2-adapter comparison
+    // dataset: SELECT by radio_mode and compare hit rate + blind time.
+    if (!this.db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='attack_rounds'`).get()) {
+      this.db.exec(`
+        CREATE TABLE attack_rounds (
+          ts          INTEGER NOT NULL,
+          bssid       TEXT NOT NULL,
+          ssidle      TEXT,
+          method      TEXT NOT NULL,
+          mode        TEXT NOT NULL,           -- 'single' | 'dual'
+          window_ms   INTEGER NOT NULL,        -- hcxdumptool window actually run
+          result      TEXT NOT NULL,           -- 'captured' | 'failed' | 'aborted'
+          blind_ms    INTEGER NOT NULL DEFAULT 0, -- ms discovery was stopped for this round
+          eapol_pairs INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_attack_rounds_mode ON attack_rounds(mode, ts);
+      `);
+      console.log("[wardrive] drive-db migrated: attack_rounds metrics table");
+    }
+  }
+
+  // ─── attack_rounds (1 vs 2 adapters comparison dataset) ──────────────────
+
+  recordAttackRound(rec: {
+    bssid: string;
+    ssid: string;
+    method: string;
+    mode: "single" | "dual";
+    windowMs: number;
+    result: "captured" | "captured2" | "failed" | "aborted";
+    blindMs: number;
+    eapolPairs: number;
+  }): void {
+    try {
+      this.db
+        .prepare(
+          `INSERT INTO attack_rounds (ts, bssid, ssidle, method, mode, window_ms, result, blind_ms, eapol_pairs)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(Date.now(), rec.bssid, rec.ssid || null, rec.method, rec.mode, rec.windowMs, rec.result, rec.blindMs, rec.eapolPairs);
+    } catch (err) {
+      console.warn("[wardrive] recordAttackRound failed:", (err as Error).message);
+    }
+  }
+
+  // Per-mode comparison for the efficiency panel: rounds, captures, hit
+  // rate, total attack time and total blind time.
+  roundComparison(): { mode: string; rounds: number; captured: number; hitRate: number; attackMs: number; blindMs: number; avgBlindMs: number }[] {
+    try {
+      const rows = this.db
+        .prepare(
+          `SELECT mode,
+                  COUNT(*) AS rounds,
+                  SUM(CASE WHEN result IN ('captured','captured2') THEN 1 ELSE 0 END) AS captured,
+                  SUM(window_ms) AS attack_ms,
+                  SUM(blind_ms) AS blind_ms
+           FROM attack_rounds
+           GROUP BY mode`,
+        )
+        .all() as { mode: string; rounds: number; captured: number; attack_ms: number; blind_ms: number }[];
+      return rows.map((r) => ({
+        mode: r.mode,
+        rounds: r.rounds || 0,
+        captured: r.captured || 0,
+        hitRate: r.rounds > 0 ? (r.captured || 0) / r.rounds : 0,
+        attackMs: r.attack_ms || 0,
+        blindMs: r.blind_ms || 0,
+        avgBlindMs: r.rounds > 0 ? Math.round((r.blind_ms || 0) / r.rounds) : 0,
+      }));
+    } catch {
+      return [];
+    }
   }
 
   // ─── networks_seen ─────────────────────────────────────────────────────

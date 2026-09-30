@@ -822,3 +822,32 @@
 }
 .wd-ap-attack:hover { background: rgba(80, 255, 120, 0.12); }
 .wd-ap-attack:disabled { opacity: 0.5; cursor: wait; }
+
+/* Radios selector + efficiency comparison (1 vs 2 adapters) */
+.wd-compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+}
+
+.wd-compare-table th,
+.wd-compare-table td {
+  padding: 4px 6px;
+  text-align: left;
+  color: var(--text-secondary, #94a3b8);
+}
+
+.wd-compare-table th { font-weight: 600; border-bottom: 1px solid var(--border, rgba(255,255,255,0.1)); }
+.wd-compare-table td:first-child { color: var(--text-primary, #f5f5f5); font-weight: 600; }
+.wd-radio-compare {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: rgba(10, 14, 18, 0.88);
+  border: 1px solid var(--border, rgba(255,255,255,0.12));
+  border-radius: 10px;
+  padding: 10px 14px;
+  min-width: 280px;
+  z-index: 500;
+}

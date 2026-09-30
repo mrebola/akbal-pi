@@ -90,10 +90,32 @@
       </select>
     </label>
     <div id="wd-dongle-msg" class="wd-dongle-msg"></div>
+    <!-- Radio count: 1 dongle (shared, blind during attacks) vs 2 dongles
+         (discovery keeps running while the attack radio attacks). -->
+    <label class="wd-dongle" title="Single: 1 dongle compartido (ciego durante ataques). Dual: 2 dongles — discovery sigue en el aire mientras el atacante ataca.">
+      <span class="k">Radios</span>
+      <select id="wd-radio-select">
+        <option value="auto">auto</option>
+        <option value="single">1 (single)</option>
+        <option value="dual">2 (dual)</option>
+      </select>
+    </label>
+    <div id="wd-radio-msg" class="wd-dongle-msg"></div>
     <div class="wd-home-guard" id="wd-home-guard" title="La red a la que Akbal está conectado NUNCA es atacada — el motor la excluye">
       🔒 <span id="wd-home-ssid">—</span> protegida
     </div>
     <div id="wd-error" class="wd-fix-msg hidden"></div>
+  </div>
+
+  <!-- 1-vs-2 adapters efficiency comparison (attack_rounds metrics) -->
+  <div class="wd-radio-compare" id="wd-radio-compare" style="display:none;">
+    <div class="wd-hud-title">EFICIENCIA RADIOS</div>
+    <table class="wd-compare-table">
+      <thead>
+        <tr><th>Modo</th><th>Rondas</th><th>Éxitos</th><th>%</th><th>Ciego/hora</th></tr>
+      </thead>
+      <tbody id="wd-radio-compare-body"></tbody>
+    </table>
   </div>
 
   <!-- GPS mini-HUD (bottom left): position + speed + satellite sky plot -->

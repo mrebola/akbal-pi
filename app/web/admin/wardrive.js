@@ -148,6 +148,20 @@ function render(st) {
   if (!render.dongleAt || Date.now() - render.dongleAt > 8000) {
     render.dongleAt = Date.now();
     void refreshDongleList();
+    void syncRadioModeSelect(st);
+    if (!render.compareAt || Date.now() - render.compareAt > 15000) {
+      render.compareAt = Date.now();
+      void refreshRadioComparison();
+    }
+  }
+  // Live radio badge on the iface HUD item
+  const ifaceEl = el("wd-iface");
+  if (ifaceEl && st.dualRadio) {
+    ifaceEl.textContent = `${(st.iface || "?").toUpperCase()}+${(st.attackIface || "?").toUpperCase()}`;
+  } else if (ifaceEl && typeof st.iface === "string") {
+    // single mode keeps the plain label (DEMO / IFCACE name)
+    if (!ifaceEl.textContent.includes("+")) ifaceEl.textContent = st.running ? ifaceEl.textContent : st.iface ? st.iface.toUpperCase() : "—";
+    if (st.running && !st.dualRadio) ifaceEl.textContent = `${st.iface ? st.iface.toUpperCase() : "DEMO"} · 1 radio`;
   }
   // Home-network guard badge: which SSID is protected
   const homeGuard = el("wd-home-guard");
@@ -463,6 +477,80 @@ async function refreshDongleList() {
     sel.dataset.running = lastStatus?.running ? "1" : "0";
     sel.disabled = Boolean(lastStatus?.running);
   } catch { /* picker is optional */ }
+}
+
+// ---- Radio count (1 vs 2 adapters) ----
+// Selector in the HUD + efficiency comparison table fed by the
+// attack_rounds DB (hit rate + blind time per mode).
+
+async function syncRadioModeSelect(st) {
+  const sel = el("wd-radio-select");
+  if (!sel) return;
+  // Load the persisted mode once (status carries what the session
+  // resolved; the select shows the REQUESTED mode).
+  if (!st || !st.running) {
+    try {
+      const res = await fetch("/api/wardrive/drive/radio-mode");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.mode) sel.value = data.mode;
+      }
+    } catch { /* keep current */ }
+  }
+  sel.disabled = Boolean(lastStatus?.running);
+}
+
+el("wd-radio-select")?.addEventListener("change", async (ev) => {
+  const sel = ev.target;
+  const msg = el("wd-radio-msg");
+  try {
+    const res = await fetch("/api/wardrive/drive/radio-mode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: sel.value }),
+    });
+    const data = await res.json();
+    if (msg) msg.textContent = data?.ok ? "" : data?.error || "No se pudo cambiar";
+    if (!data?.ok) void syncRadioModeSelect(lastStatus);
+  } catch {
+    if (msg) msg.textContent = "Error de red";
+  }
+});
+
+async function refreshRadioComparison() {
+  const host = el("wd-radio-compare");
+  const body = el("wd-radio-compare-body");
+  if (!host || !body) return;
+  try {
+    const res = await fetch("/api/wardrive/drive/rounds/comparison");
+    if (!res.ok) return;
+    const data = await res.json();
+    const rows = data.comparison || [];
+    // Only worth showing once there are rounds of BOTH modes; a single
+    // mode's data is just its own baseline.
+    host.style.display = rows.length > 0 ? "" : "none";
+    if (rows.length === 0) return;
+    body.innerHTML = rows
+      .map((r) => {
+        // Row's total discovery-down time (single mode pays it, dual ≈ 0).
+        const blindTotal = r.rounds > 0 ? r.blindMs / r.rounds : 0;
+        return `<tr>
+          <td>${r.mode === "dual" ? "2 radios" : "1 radio"}</td>
+          <td>${r.rounds}</td>
+          <td>${r.captured}</td>
+          <td>${(r.hitRate * 100).toFixed(0)}%</td>
+          <td title="Tiempo de discovery pausada (total y por ronda)">${blindH(r.blindMs)} · ${blindH(blindTotal)}/ronda</td>
+        </tr>`;
+      })
+      .join("");
+  } catch { /* metrics panel is optional */ }
+}
+
+function blindH(ms) {
+  if (!ms) return "0";
+  if (ms >= 3.6e6) return (ms / 3.6e6).toFixed(1) + " h";
+  if (ms >= 60_000) return (ms / 60_000).toFixed(1) + " min";
+  return (ms / 1000).toFixed(0) + "s";
 }
 
 function initDonglePicker() {

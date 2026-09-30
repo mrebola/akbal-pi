@@ -1592,6 +1592,23 @@ export class WebAdminServer {
       );
     });
 
+    // Radio-count preference ("single" = 1 dongle shared, "dual" =
+    // discovery + dedicated attacker when 2 monitor dongles exist, "auto"
+    // = dual whenever possible). Only changeable with the session stopped.
+    router.get("/api/wardrive/drive/radio-mode", (ctx) => {
+      ctx.body = { ok: true, mode: drive.getRadioMode() };
+    });
+
+    router.post("/api/wardrive/drive/radio-mode", (ctx) => {
+      const { mode } = (ctx.request.body as any) || {};
+      ctx.body = drive.setRadioMode(String(mode || ""));
+    });
+
+    // 1-vs-2-adapter efficiency comparison, from the attack_rounds table.
+    router.get("/api/wardrive/drive/rounds/comparison", (ctx) => {
+      ctx.body = { ok: true, comparison: driveDb.roundComparison() };
+    });
+
     // Session list (DB-backed, includes track shape flags for the UI).
     router.get("/api/wardrive/drive/sessions", (ctx) => {
       ctx.body = { ok: true, sessions: driveDb.sessions() };

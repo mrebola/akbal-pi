@@ -71,6 +71,12 @@ export type DriveStatus = {
   gps: DriveFix;
   iface: string | null;
   preferredMac: string | null; // dongle pinned by the operator, by MAC (null = auto)
+  // Radio count: one dongle shared by discovery+attacks ("single", blind
+  // during attacks) or a dedicated attacker radio ("dual"). Requested
+  // mode + what the session actually resolved.
+  radioMode: "auto" | "single" | "dual";
+  dualRadio: boolean;
+  attackIface: string | null; // e.g. wlan2 when dualRadio
   homeSsid: string | null; // SSID wlan0 is connected to — PROTECTED, never attacked
   error: string;
   channel: number; // current listening channel (0 = not hopping yet)

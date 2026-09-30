@@ -13,12 +13,17 @@ const MAX_TRACK_POINTS = 1500; // live polyline cap (DB keeps everything)
 let map = null;
 let posMarker = null;
 let trackLayer = null; // polyline segments group (gap-aware, see drawTrack)
-let hsLayer = null; // handshake capture dots (all sessions, "mapa general")
+let hsLayer = null; // handshake capture dots (CURRENT session only, see below)
 let apLayer = null; // plain AP dots with position + click-info popup
 let trackPoints = []; // {lat, lon, ts} live session only
 let firstFixSeen = false;
 let followCar = true;
 let lastStatus = null;
+// Track/session isolation: the map shows ONLY the live session (or one
+// explicitly opened from the drawer). Loading the page cold must NOT draw
+// other sessions' routes/handshakes — they live one explicit click away
+// in the sessions drawer.
+let dotsSessionFilter = null; // session id for the dots layer (live id)
 // Live car position as a track candidate: appended on fix with the same
 // distance/time gates the backend uses (this is the INSTANT trail — the
 // DB polyline reload every few seconds stays the authoritative one).
@@ -358,64 +363,131 @@ function appendLivePoint(lat, lon) {
   }
 }
 
-// ---- Handshake dots (global map view) ----
+// ---- Map dots (session-scoped) + overlapping-picker modal ----
 
-// All-time capture positions + live AP positions on the map. Two layers:
-//   apLayer   — one dot per AP with a known position (live + past), click
-//               opens the AP detail modal (same card as the live list)
-//   hsLayer   — handshake captures, bigger green dot
+// The map shows ONLY the active session's networks (or the session
+// explicitly opened in the drawer). Fresh page load = clean map with no
+// other sessions' routes/dots; past data is one drawer-click away. The
+// live list at the right (from getStatus().recent) is the live-session
+// AP table; these map dots come from the session-networks endpoint.
 async function refreshHandshakeDots() {
   if (!map || !hsLayer) return;
   try {
-    const res = await fetch("/api/wardrive/drive/sessions");
+    // Which session the map is showing: the drawer-opened one, else the
+    // live one, else nothing (idle state shows a clean map).
+    const sessionId = dotsSessionFilter || lastStatus?.session?.id;
+    if (!sessionId) {
+      hsLayer.clearLayers();
+      apLayer.clearLayers();
+      mapDots = [];
+      return;
+    }
+    const res = await fetch(`/api/wardrive/drive/session-networks?id=${encodeURIComponent(sessionId)}`);
     if (!res.ok) return;
-    const data = await res.json();
-    const sessions = data.sessions || [];
-    let dots = 0;
+    const nets = (await res.json()).networks || [];
     hsLayer.clearLayers();
     apLayer.clearLayers();
-    for (const s of sessions) {
-      const res2 = await fetch(`/api/wardrive/drive/session-networks?id=${encodeURIComponent(s.id)}`);
-      if (!res2.ok) continue;
-      const nets = (await res2.json()).networks || [];
-      for (const n of nets) {
-        if (n.lat == null || n.lon == null) continue;
-        if (n.handshake) {
-          L.marker([n.lat, n.lon], {
-            icon: L.divIcon({
-              className: "",
-              html: '<div class="wd-hs-dot" style="width:10px;height:10px;"></div>',
-              iconSize: [10, 10],
-              iconAnchor: [5, 5],
-            }),
-            title: `✋ ${n.ssid} — ${s.id}`,
-          }).addTo(hsLayer);
-          dots += 1;
-        } else if (dots < 400) {
-          // Plain AP dot: color by encryption (red WPA, yellow WPA/3, blue open)
-          const col = n.security === "OPEN" ? "#7ab7ff" : n.security === "WPA2/3" ? "#ff9500" : "#ffd166";
-          const m = L.marker([n.lat, n.lon], {
-            icon: L.divIcon({
-              className: "",
-              html: `<div class="wd-ap-dot" style="background:${col};box-shadow:0 0 6px ${col}"></div>`,
-              iconSize: [7, 7],
-              iconAnchor: [3.5, 3.5],
-            }),
-          }).addTo(apLayer);
-          m.bindPopup(
-            `<b>${escapeHtml(n.ssid)}</b><br>` +
-              `MAC: ${escapeHtml(n.bssid || "—")}<br>` +
-              `Canal: ${n.channel ?? "—"} · ${n.best_rssi ?? "—"} dBm<br>` +
-              `Cifrado: ${escapeHtml(n.security || "—")}<br>` +
-              `Handshake: ${n.handshake ? "🏴 SI" : "NO"} · Método: ${escapeHtml(n.last_method || n.hs_method || "—")}<br>` +
-              `Intentos: ${n.attempts || 0} (PMKID ${n.pmkid_attempts || 0} · deauth ${n.deauth_attempts || 0})<br>` +
-              `<small>${new Date(n.first_seen).toLocaleString("es-MX")} · ${escapeHtml(s.id.replace("drive-", ""))}</small>`,
-          );
-        }
-        if (dots > 400) return; // sane cap for the browser
+    mapDots = [];
+    let dots = 0;
+    for (const n of nets) {
+      if (n.lat == null || n.lon == null) continue;
+      const info = { ...n, sessionId };
+      if (n.handshake) {
+        L.marker([n.lat, n.lon], {
+          icon: L.divIcon({
+            className: "",
+            html: '<div class="wd-hs-dot" style="width:10px;height:10px;"></div>',
+            iconSize: [10, 10],
+            iconAnchor: [5, 5],
+          }),
+          title: `🏴 ${n.ssid}`,
+        }).on("click", (ev) => {
+          L.DomEvent.stopPropagation(ev);
+          pickDotAt(ev.latlng ?? [n.lat, n.lon], info);
+        }).addTo(hsLayer);
+        mapDots.push(info);
+        dots += 1;
+      } else if (dots < 400) {
+        const col = n.security === "OPEN" ? "#7ab7ff" : n.security === "WPA2/3" ? "#ff9500" : "#ffd166";
+        const m = L.marker([n.lat, n.lon], {
+          icon: L.divIcon({
+            className: "",
+            html: `<div class="wd-ap-dot" style="background:${col};box-shadow:0 0 6px ${col}"></div>`,
+            iconSize: [7, 7],
+            iconAnchor: [3.5, 3.5],
+          }),
+        }).on("click", (ev) => {
+          L.DomEvent.stopPropagation(ev);
+          pickDotAt(ev.latlng ?? [n.lat, n.lon], info);
+        }).addTo(apLayer);
+        mapDots.push(info);
+        dots += 1;
       }
+      if (dots > 400) break; // sane cap for the browser
     }
   } catch { /* map dots are decorative */ }
+}
+
+// ── Overlapping-dots picker ──
+// Clicks collect every dot within PICK_RADIUS_M of the click; 1 → its
+// info card directly, ≥2 → a picker modal (many SSIDs share a mast at the
+// same street corner, so exact-pixel hits alone miss most of the pile).
+const PICK_RADIUS_M = 40;
+
+let mapDots = []; // every dot {lat, lon, info} the current session rendered
+
+function pickDotAt(latlng, clicked) {
+  if (!map) return;
+  const point = Array.isArray(latlng) ? latlng : [latlng.lat, latlng.lng];
+  const nearby = mapDots.filter((d) => map.distance([d.lat, d.lon], point) <= PICK_RADIUS_M);
+  if (nearby.length <= 1) {
+    showDotInfoModal(clicked || nearby[0]);
+    return;
+  }
+  nearby.sort((a, b) => map.distance([a.lat, a.lon], point) - map.distance([b.lat, b.lon], point));
+  const body = document.getElementById("wd-pick-list");
+  if (!body) return;
+  body.innerHTML = nearby
+    .map((d, i) => `<button class="wd-pick-row" data-idx="${i}">
+      ${d.handshake ? "🏴" : "•"}
+      <span class="wd-pick-ssid">${escapeHtml(d.ssid)}</span>
+      <span class="wd-pick-meta mono">${escapeHtml(d.bssid || "")}</span>
+    </button>`)
+    .join("");
+  for (const btn of body.querySelectorAll(".wd-pick-row")) {
+    btn.addEventListener("click", () => {
+      const d = nearby[Number(btn.dataset.idx)];
+      document.getElementById("wd-pick-modal")?.classList.add("hidden");
+      showDotInfoModal(d);
+    });
+  }
+  document.getElementById("wd-pick-modal")?.classList.remove("hidden");
+}
+
+// Same AP detail card as the live list ("Red detectada"), fed from the
+// session-networks row instead of the live air view.
+function showDotInfoModal(n) {
+  if (!n) return;
+  setText("wd-apm-title", n.ssid || "(oculta)");
+  setText("wd-apm-bssid", n.bssid || "—");
+  setText("wd-apm-vendor", n.last_method ? `método ${n.last_method}` : "—");
+  setText("wd-apm-security", n.security || "—");
+  setText("wd-apm-channel", `CH ${n.channel ?? "—"}`);
+  setText("wd-apm-rssi", `${n.best_rssi ?? n.rssi ?? "—"} dBm (mejor señal registrada)`);
+  setText("wd-apm-packets", String(n.times_seen ?? "—"));
+  setText(
+    "wd-apm-hs",
+    n.handshake
+      ? n.cracked
+        ? `🏴🏴 ${n.password || "crackeada"}`
+        : "🏴 Handshake capturado"
+      : "Sin handshake aún",
+  );
+  setText(
+    "wd-apm-attempts",
+    `${n.attempts ?? 0} intentos · PMKID ${n.pmkid_attempts ?? 0} · deauth ${n.deauth_attempts ?? 0}`,
+  );
+  document.getElementById("wd-ap-modal")?.classList.remove("hidden");
 }
 
 // ---- Right panel ----
@@ -885,8 +957,10 @@ el("wd-drawer-close")?.addEventListener("click", () => {
   const drawer = el("wd-session-drawer");
   drawer.classList.add("hidden");
   drawer.classList.remove("minimized", "maximized");
-  // Back to the live session view
-  trackPoints = [];
+  // Back to the live session view — the map dots return to the live
+  // session (or a clean map while idle), never the opened one.
+  dotsSessionFilter = null;
+  void refreshHandshakeDots();
   trackPoints = [];
   drawTrack();
   if (lastStatus?.session) void loadLiveTrack(lastStatus.session.id);
@@ -933,10 +1007,13 @@ function initControls() {
       const res = await fetch(path, { method: "POST" });
       const data = await res.json();
       if (!data.ok && data.error) showError(data.error);
-      // Reset the live view when stopping
+      // Reset the live view when stopping: the map goes clean (the ended
+      // session stays browsable from the sessions drawer only).
       if (running) {
         trackPoints = [];
-        trackPoints = [];
+        liveLastPoint = null;
+        dotsSessionFilter = null;
+        void refreshHandshakeDots();
         drawTrack();
         firstFixSeen = false;
       }

@@ -197,6 +197,20 @@
     </div>
   </div>
 
+  <!-- Overlapping-dots picker: click a dense cluster → every network
+       within pick radius, pick one to open its info card. -->
+  <div id="wd-pick-modal" class="apm hidden">
+    <div class="apm-backdrop" onclick="document.getElementById('wd-pick-modal').classList.add('hidden')"></div>
+    <div class="apm-card" style="max-width: 360px;">
+      <button id="wd-pick-close" class="apm-close" onclick="document.getElementById('wd-pick-modal').classList.add('hidden')">✕</button>
+      <div class="apm-head">
+        <div class="apm-title" style="font-size:14px;">Redes en este punto</div>
+        <div class="apm-sub">Selecciona una para ver su tarjeta</div>
+      </div>
+      <div id="wd-pick-list" class="wd-pick-list" style="padding: 8px 14px 14px; display:flex; flex-direction:column; gap:6px; max-height:50vh; overflow-y:auto;"></div>
+    </div>
+  </div>
+
   <!-- AP detail modal (click a network row) -->
   <div id="wd-ap-modal" class="apm hidden">
     <div class="apm-backdrop" id="wd-ap-modal-backdrop"></div>

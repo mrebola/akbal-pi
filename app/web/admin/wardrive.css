@@ -851,3 +851,22 @@
   min-width: 280px;
   z-index: 500;
 }
+
+/* Overlapping-dots picker rows */
+.wd-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--bg-raised, rgba(255,255,255,0.03));
+  border: 1px solid var(--border, rgba(255,255,255,0.1));
+  border-radius: 8px;
+  color: var(--text-primary, #f5f5f5);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+.wd-pick-row:hover { border-color: var(--accent, #50ff78); }
+.wd-pick-ssid { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wd-pick-meta { font-size: 10px; color: var(--text-secondary, #94a3b8); font-family: ui-monospace, monospace; }

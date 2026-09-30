@@ -213,6 +213,12 @@ export class WardriveSession {
     return this.targets.get(bssid)?.status === "captured";
   }
 
+  // Snapshot of every tracked target for the Crack Station inventory
+  // (service.ts) — read-only view of the private map.
+  listTargets(): SessionTargetSnapshot[] {
+    return [...this.targets.values()].map((t) => ({ ...t, files: [...t.files] }));
+  }
+
   // hcxpcapngtool converts whatever hcxdumptool caught into .hc22000 hashes
   // AND tells us whether an actual EAPOL/PMKID frame is in there (exit 0 +
   // "frames written" vs "no handshakes written" wording). The .hc22000 file

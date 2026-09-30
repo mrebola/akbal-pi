@@ -1165,6 +1165,64 @@ export class WebAdminServer {
       ctx.body = wardrive.dictCrackStatus();
     });
 
+    // ── Crack Station (persistent captured-handshake inventory) ──
+    // List every captured handshake (live + past sessions) with SSID, MAC,
+    // handshake/password flags. No file contents leave the device.
+    router.get("/api/wardrive/handshakes", (ctx) => {
+      ctx.body = { ok: true, ...wardrive.handshakeInventory() };
+    });
+
+    // Mask brute force (Crack Station): built-in + operator presets, run
+    // status, launch/stop/clear. Runs aircrack with a generated wordlist
+    // piped over stdin (crunch-style mask).
+    router.get("/api/wardrive/mask/status", (ctx) => {
+      ctx.body = wardrive.maskRunStatus();
+    });
+
+    router.post("/api/wardrive/mask/run", async (ctx) => {
+      const { bssid, presetId, pattern, autoMacSuffix, cap } = (ctx.request.body as any) || {};
+      ctx.body = await wardrive.startMaskRun(String(bssid || ""), {
+        presetId: presetId ? String(presetId) : undefined,
+        pattern: pattern ? String(pattern) : undefined,
+        autoMacSuffix: autoMacSuffix === true,
+        cap: cap ? String(cap) : undefined,
+      });
+    });
+
+    router.post("/api/wardrive/mask/stop", (ctx) => {
+      ctx.body = wardrive.stopMaskRun();
+    });
+
+    router.post("/api/wardrive/mask/clear", (ctx) => {
+      ctx.body = wardrive.clearMaskRun();
+    });
+
+    // Mask recipe CRUD: list (with built-ins), add (persisted to
+    // ~/wardrive-sessions/crack-station.json), remove (builtins refused).
+    router.get("/api/wardrive/mask/presets", (ctx) => {
+      ctx.body = { ok: true, presets: wardrive.listMaskPresets() };
+    });
+
+    router.post("/api/wardrive/mask/presets", (ctx) => {
+      const { name, description, pattern, autoMacSuffix } = (ctx.request.body as any) || {};
+      ctx.body = wardrive.addMaskPreset({
+        name,
+        description,
+        pattern,
+        autoMacSuffix,
+      } as any);
+    });
+
+    router.post("/api/wardrive/mask/presets/remove", (ctx) => {
+      const { id } = (ctx.request.body as any) || {};
+      ctx.body = wardrive.removeMaskPreset(String(id || ""));
+    });
+
+    // Dictionary attack against a past-session or in-progress handshake
+    // (Crack Station launch point — same engine as the sessions browser).
+    // The original route (above, next to the other dict/* ones) still owns
+    // this path; no duplicate registration here.
+
     // Cancel an in-flight password validation (aircrack killed mid-run).
     router.post("/api/wardrive/validate/cancel", (ctx) => {
       const { bssid } = (ctx.request.body as any) || {};

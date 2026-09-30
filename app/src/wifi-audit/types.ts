@@ -75,6 +75,32 @@ export const ATTACK_STEPS: Record<AttackStep, string> = {
   done: "Resultado final",
 };
 
+// Inventory entry for Crack Station: one captured handshake (live or past
+// session) with what's known about it.
+export type HandshakeEntry = {
+  sessionId: string; // session folder name (the id)
+  bssid: string;
+  ssid: string;
+  hasHandshake: boolean;
+  password: string | null; // already cracked, if any
+  verified: boolean;
+  live: boolean; // belongs to the in-progress session
+  capFile: string | null; // capture file name (relative to the session dir)
+};
+
+// Mask brute-force recipe (Crack Station, web UI): pattern where '@' =
+// dígito (0-9) and '#' = minúscula (a-z), everything else is a literal
+// (compiled to `crunch <len> <len> -t <pattern>` by wifi-audit/crack.ts).
+// autoMacSuffix tells the UI to append the last 4 hex chars of the target's
+// BSSID when launching (AXTEL XTREMO-style default-password recipes).
+export type MaskPreset = {
+  id: string; // builtin-* = shipped ones; m-<timestamp> = operator-created
+  name: string;
+  description: string; // how the password is built + which equipment
+  pattern: string;
+  autoMacSuffix: boolean;
+};
+
 // Client-device view for the Deauth tab (wifi-audit/discovery.ts). One
 // entry per distinct client MAC the WIFIRADAR capture has seen talking.
 export type WardriveDeviceView = {

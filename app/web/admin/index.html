@@ -178,6 +178,7 @@
       <div class="wd-subtabs">
         <button class="wd-subtab active" data-subtab="audit" data-i18n="wifiaudit.subtab_audit">1 · Auditoría</button>
         <button class="wd-subtab" data-subtab="sessions" data-i18n="wifiaudit.subtab_sessions">2 · Sesiones</button>
+        <button class="wd-subtab" data-subtab="crack" data-i18n="wifiaudit.subtab_crack">3 · Crack Station</button>
       </div>
 
       <div id="wd-sub-audit" class="wd-subtab-panel active">
@@ -217,6 +218,88 @@
           </div>
           <div id="wd-verify-list" class="wd-results-list"></div>
           <div id="wd-dict-progress" class="wd-dict-progress"></div>
+        </div>
+      </div>
+
+      <div id="wd-sub-crack" class="wd-subtab-panel">
+        <!-- Crack Station: persistent inventory of captured handshakes with
+             crack controls (dictionary rockyou + mask brute force with
+             operator-managed recipes like @@@@<MAC4> for AXTEL default keys). -->
+        <div class="wd-session-block" id="wd-crack-block" style="margin-top: 0;">
+          <div class="wd-session-title" data-i18n="wifiaudit.crack_title">CRACK STATION — HANDSHAKES CAPTURADOS</div>
+          <div class="wd-crack-toolbar">
+            <button id="wd-crack-refresh" class="secondary" data-i18n="wifiaudit.crack_refresh">Refrescar inventario</button>
+            <span id="wd-crack-status" class="muted"></span>
+          </div>
+          <div class="wd-list-wrap">
+            <table class="wd-table wd-crack-table">
+              <thead>
+                <tr>
+                  <th data-i18n="wifiaudit.crack_col_ssid">SSID</th>
+                  <th data-i18n="wifiaudit.crack_col_mac">MAC (BSSID)</th>
+                  <th data-i18n="wifiaudit.crack_col_hs">Handshake</th>
+                  <th data-i18n="wifiaudit.crack_col_pass">Contraseña</th>
+                  <th data-i18n="wifiaudit.crack_col_actions">Ataques</th>
+                </tr>
+              </thead>
+              <tbody id="wd-crack-body">
+                <tr><td colspan="5" class="muted">—</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Mask brute-force: preset picker + custom recipe editor -->
+          <div class="wd-session-title" style="margin-top:16px;" data-i18n="wifiaudit.mask_title">ATAQUE DE FUERZA BRUTA (MÁSCARA)</div>
+          <div class="wd-mask-panel" id="wd-mask-panel">
+            <div class="wd-mask-run-status" id="wd-mask-run-status"></div>
+            <div class="wd-mask-run" id="wd-mask-run"></div>
+          </div>
+          <div class="wd-mask-presets" id="wd-mask-presets"></div>
+
+          <!-- New mask recipe form -->
+          <div class="wd-mask-new" id="wd-mask-new">
+            <div class="wd-session-title" style="font-size:12px; margin-top:14px;" data-i18n="wifiaudit.mask_new_title">+ NUEVA MÁSCARA</div>
+            <div class="wd-mask-form">
+              <label><span data-i18n="wifiaudit.mask_form_name">Nombre</span>
+                <input id="wd-mask-name" type="text" autocomplete="off" placeholder="p.ej. Tenda por defecto" />
+              </label>
+              <label><span data-i18n="wifiaudit.mask_form_pattern">Patrón</span>
+                <input id="wd-mask-pattern" type="text" autocomplete="off" placeholder="@@@@  (@=dígito, #=minúscula)" />
+              </label>
+              <label class="wd-mask-check"><input id="wd-mask-mac" type="checkbox" />
+                <span data-i18n="wifiaudit.mask_form_mac">Sufijo MAC (añade los últimos 4 hex del BSSID al lanzar)</span>
+              </label>
+              <label class="wd-mask-desc"><span data-i18n="wifiaudit.mask_form_desc">Descripción (a qué equipos aplica y cómo se construye la contraseña)</span>
+                <textarea id="wd-mask-description" rows="3" placeholder="p.ej. Módems AXTEL XTREMO: 4 dígitos aleatorios + últimos 4 de la MAC..."></textarea>
+              </label>
+              <button id="wd-mask-save" data-i18n="wifiaudit.mask_form_save">Guardar máscara</button>
+            </div>
+            <div id="wd-mask-msg" class="muted" style="font-size:11px; margin-top:6px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Handshake-celebration modal: confetti + pirate flag on a fresh
+           capture, with the SSID and a direct link into Crack Station. -->
+      <div id="wd-celebrate-modal" class="wd-modal hidden">
+        <div class="wd-modal-backdrop"></div>
+        <div class="wd-modal-content wd-celebrate-content" style="max-width: 420px;">
+          <canvas id="wd-celebrate-canvas" class="wd-confetti-canvas"></canvas>
+          <div class="wd-modal-header">
+            <span data-i18n="wifiaudit.celebrate_title">¡HANDSHAKE CAPTURADO!</span>
+            <div class="wd-modal-actions">
+              <button id="wd-celebrate-close" class="secondary" data-i18n="wifiaudit.celebrate_close">Cerrar</button>
+            </div>
+          </div>
+          <div class="wd-celebrate-body">
+            <div class="wd-celebrate-flag">🏴‍☠️</div>
+            <div class="wd-celebrate-ssid" id="wd-celebrate-ssid">—</div>
+            <div class="wd-celebrate-sub" data-i18n="wifiaudit.celebrate_sub">El handshake ya está en Crack Station — crackealo con diccionario o máscara.</div>
+            <div class="wd-celebrate-actions">
+              <button id="wd-celebrate-dict" class="wd-dict-btn" data-i18n="wifiaudit.celebrate_dict">Dictionary attack (rockyou)</button>
+              <button id="wd-celebrate-crack" data-i18n="wifiaudit.celebrate_crack">Abrir Crack Station →</button>
+            </div>
+          </div>
         </div>
       </div>
 

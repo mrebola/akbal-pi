@@ -240,6 +240,174 @@ export function resolveHashPath(sessionDir: string, files: string[]): string | n
   return null;
 }
 
+// ─── Mask / stdin wordlist attack (Crack Station) ──────────────────────────
+// Brute-force recipes compile to a mask pattern fed to aircrack-ng's
+// `--wep/-w` stdin equivalent: we GENERATE the candidate list locally
+// (same semantics as `crunch <len> <len> -t <pattern> | aircrack-ng -w -`)
+// so no extra tooling is needed on the Pi. Pattern syntax (crunch-style):
+//   @ = 0-9 a-z ... we keep it tight: @ = dígito (0-9), # = minúscula (a-z)
+//   any other char = literal. `autoMacSuffix` replaces a literal "@@@@"-like
+//   trailing marker with the target's last-4 MAC hex at spawn time — but the
+//   UI bakes that in client-side; here pattern is already the final literal.
+export type MaskRunState = {
+  running: boolean;
+  pattern: string;
+  bssid: string;
+  progress: DictProgress;
+  result: CrackResult | null;
+};
+
+// Count the total candidates a mask will produce (for the progress bar).
+export function maskTotal(pattern: string): number {
+  let total = 1;
+  for (const ch of pattern) {
+    if (ch === "@") total *= 10; // dígito 0-9
+    else if (ch === "#") total *= 26; // minúscula a-z
+    else if (ch === "$") total *= 16; // hex 0-9a-f
+  }
+  return total;
+}
+
+// Deterministic order: vary the RIGHTmost wildcard fastest (like crunch -t).
+function maskAt(pattern: string, index: number): string {
+  let rest = index;
+  const chars: string[] = [];
+  for (let i = pattern.length - 1; i >= 0; i--) {
+    const ch = pattern[i];
+    if (ch === "@") {
+      chars.unshift(String(rest % 10));
+      rest = Math.floor(rest / 10);
+    } else if (ch === "#") {
+      chars.unshift(String.fromCharCode(97 + (rest % 26)));
+      rest = Math.floor(rest / 26);
+    } else if (ch === "$") {
+      chars.unshift("0123456789abcdef"[rest % 16]);
+      rest = Math.floor(rest / 16);
+    } else {
+      chars.unshift(ch);
+    }
+  }
+  return chars.join("");
+}
+
+export class MaskCrack extends EventEmitter {
+  private proc: any = null;
+  private running = false;
+  private state: DictCrackState = {
+    running: false,
+    progress: { tried: 0, total: 0, fps: 0, elapsedSec: 0 },
+    result: null,
+  };
+
+  constructor(
+    private capPath: string,
+    private bssid: string,
+    private pattern: string,
+  ) {
+    super();
+  }
+
+  getState(): DictCrackState {
+    return { ...this.state, progress: { ...this.state.progress } };
+  }
+
+  start(): void {
+    if (this.running) return;
+    this.running = true;
+    const total = maskTotal(this.pattern);
+    this.state = {
+      running: true,
+      progress: { tried: 0, total, fps: 0, elapsedSec: 0 },
+      result: null,
+    };
+    const startedAt = Date.now();
+    const child = spawn("aircrack-ng", ["-w", "-", "-b", this.bssid, "-p", "2", this.capPath], {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    this.proc = child;
+    let out = "";
+    // Pipe candidates in bounded batches so we can parse progress between
+    // writes and cancel stays responsive (no multi-GB stdin buffering).
+    const writeChunk = (from: number): void => {
+      if (this.state.result) return;
+      const step = Math.max(1, Math.floor(total / 5000) || 1);
+      let buf = "";
+      let wrote = 0;
+      for (let i = from; i < Math.min(from + step * 50, total); i++) {
+        buf += maskAt(this.pattern, i) + "\n";
+      }
+      const upTo = Math.min(from + step * 50, total);
+      if (upTo >= total) {
+        child.stdin?.end(buf);
+        return;
+      }
+      child.stdin?.write(buf, () => {
+        this.state.progress.tried = upTo;
+        const elapsedSec = Math.round((Date.now() - startedAt) / 1000) || 1;
+        this.state.progress.elapsedSec = elapsedSec;
+        this.state.progress.fps = upTo / elapsedSec;
+        setTimeout(() => writeChunk(upTo), 300);
+      });
+    };
+    writeChunk(0);
+    void total;
+    child.stdout?.on("data", (chunk: Buffer) => {
+      out += chunk.toString("utf8");
+    });
+    child.stderr?.on("data", (chunk: Buffer) => {
+      out += chunk.toString("utf8");
+    });
+    child.on("error", (err) => {
+      this.running = false;
+      this.state.running = false;
+      this.state.result = { verdict: "error", matched: false, eapolPackets: 0, handshakeHint: false, output: `aircrack-ng: ${err?.message || err}` };
+      this.emit("done", this.state);
+    });
+    child.on("close", (code) => {
+      this.running = false;
+      this.state.running = false;
+      this.state.progress.elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+      const parsed = parseAircrackOutput(out);
+      if (parsed.found) {
+        this.state.result = {
+          verdict: "verified",
+          matched: true,
+          eapolPackets: parsed.eapol,
+          handshakeHint: parsed.hint,
+          output: parsed.clean.slice(-4000),
+        };
+      } else if (code === null || code === 137) {
+        this.state.result = {
+          verdict: "error",
+          matched: false,
+          eapolPackets: parsed.eapol,
+          handshakeHint: parsed.hint,
+          output: `cancelado tras ${this.state.progress.tried} contraseñas`,
+        };
+      } else {
+        this.state.result = {
+          verdict: "handshake_wrong_password",
+          matched: false,
+          eapolPackets: parsed.eapol,
+          handshakeHint: parsed.hint,
+          output: parsed.clean.slice(-4000),
+        };
+      }
+      this.emit("done", this.state);
+    });
+  }
+
+  stop(): void {
+    if (this.proc?.pid) {
+      try {
+        this.proc.kill("SIGKILL");
+      } catch {
+        /* already gone */
+      }
+    }
+  }
+}
+
 // ─── Dictionary crack (rockyou) ────────────────────────────────────────────
 // aircrack-ng -w <wordlist> streams its progress line to stdout every ~2s:
 //   "PROGRESS: 1234 (10.23%) 0.5 fps" (older) or

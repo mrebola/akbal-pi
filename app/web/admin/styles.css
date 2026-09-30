@@ -2881,3 +2881,269 @@ body { font-family: var(--font-sans); }
 .wd-audit-btn:disabled,
 .wd-deauth-btn:disabled,
 .wd-both-btn:disabled { opacity: 0.5; cursor: wait; }
+
+/* ---- Crack Station (persistent handshake inventory) ---- */
+
+.wd-crack-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.wd-crack-table td { vertical-align: middle; }
+
+.wd-crack-table .wd-action-group {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.wd-crack-dict {
+  font-size: 11px;
+  padding: 5px 10px;
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.wd-crack-dict:hover { background: rgba(239, 68, 68, 0.12); }
+
+.wd-crack-mask {
+  font-size: 11px;
+  padding: 5px 10px;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.wd-crack-mask:hover { background: rgba(80, 255, 120, 0.08); }
+
+/* ---- Mask presets (brute-force recipes) ---- */
+
+.wd-mask-panel {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.wd-mask-run-status { font-size: 11px; min-height: 14px; margin-bottom: 6px; }
+
+.wd-mask-run:empty { display: none; }
+
+.wd-mask-presets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.wd-mask-preset {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.wd-mask-preset-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.wd-mask-preset-pattern {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.wd-mask-preset-pattern code {
+  font-family: ui-monospace, monospace;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  color: var(--accent);
+}
+
+.wd-mask-preset-pattern em { color: var(--danger); font-style: normal; }
+
+.wd-mask-preset-desc {
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.wd-mask-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.wd-mask-actions input {
+  flex: 1;
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+  padding: 6px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+}
+
+.wd-mask-actions button {
+  font-size: 12px;
+  padding: 6px 12px;
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.wd-mask-del {
+  font-size: 12px;
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.wd-mask-stop,
+.wd-mask-clear {
+  font-size: 11px;
+  padding: 4px 12px;
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.wd-mask-clear { color: var(--text-secondary); border-color: var(--border); }
+
+/* Nueva máscara form */
+.wd-mask-new {
+  margin-top: 16px;
+  padding: 12px 14px;
+  background: var(--bg-raised);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
+
+.wd-mask-form { display: flex; flex-direction: column; gap: 8px; font-size: 12px; }
+
+.wd-mask-form label { display: flex; flex-direction: column; gap: 4px; color: var(--text-secondary); }
+
+.wd-mask-form input[type="text"],
+.wd-mask-form textarea {
+  font-size: 12px;
+  padding: 7px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+}
+
+.wd-mask-form textarea { resize: vertical; font-family: inherit; }
+
+.wd-mask-check {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 8px !important;
+}
+
+.wd-mask-form button {
+  align-self: flex-start;
+  font-size: 12px;
+  padding: 7px 14px;
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+/* Celebration modal (handshake capturado) */
+
+.wd-celebrate-content { position: relative; overflow: hidden; }
+
+.wd-confetti-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.wd-celebrate-body {
+  padding: 18px 20px 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.wd-celebrate-flag {
+  font-size: 56px;
+  line-height: 1;
+  filter: drop-shadow(0 4px 18px rgba(251, 146, 60, 0.45));
+  animation: wd-flag-wave 1.6s ease-in-out infinite;
+}
+
+@keyframes wd-flag-wave {
+  0%, 100% { transform: rotate(-6deg) translateY(0); }
+  50% { transform: rotate(6deg) translateY(-5px); }
+}
+
+.wd-celebrate-ssid {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-family: ui-monospace, monospace;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wd-celebrate-sub {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  max-width: 340px;
+}
+
+.wd-celebrate-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 4px;
+}
+
+.wd-celebrate-actions .wd-crack-station-open,
+.wd-celebrate-actions #wd-celebrate-crack {
+  font-size: 12px;
+  padding: 7px 14px;
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}

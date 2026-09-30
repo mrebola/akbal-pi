@@ -426,6 +426,39 @@ export class DriveDb {
     }
   }
 
+  // Crack Station write-back for a driving-session capture: unlike Wifi
+  // Audit sessions (one session.json per folder), a drive-* folder has no
+  // JSON file to patch — wifi-audit/service.ts's persistPastSessionPassword
+  // falls back here when that file is absent. BSSID alone is enough: it's
+  // the primary key's first-class lookup and a target only ever has one
+  // outstanding (uncracked) handshake row.
+  setCrackedByBssid(bssid: string, password: string): void {
+    try {
+      this.db
+        .prepare(`UPDATE handshakes SET password = ?, cracked = 1 WHERE bssid = ? AND cracked = 0`)
+        .run(password, bssid);
+    } catch {
+      // never fatal
+    }
+  }
+
+  // Every captured handshake this driving-capture module knows about —
+  // Crack Station (wifi-audit/service.ts's handshakeInventory()) merges
+  // these into its own per-session inventory so one page can crack
+  // handshakes from both capture tools (same ~/wardrive-sessions root).
+  listHandshakes(): HandshakeRow[] {
+    try {
+      return this.db
+        .prepare(
+          `SELECT ssid, bssid, security, method, captured_at, session_id, session_dir, cap_file, hash_file, password, cracked
+           FROM handshakes ORDER BY captured_at DESC`,
+        )
+        .all() as HandshakeRow[];
+    } catch {
+      return [];
+    }
+  }
+
   // Distinct-SSID counters for the status payload.
   stats(): { unique: number; handshakes: number } {
     const unique = (this.db.prepare(`SELECT COUNT(*) AS n FROM networks_seen`).get() as { n: number }).n;
@@ -677,6 +710,22 @@ export type SessionNetworkRow = {
   deauth_attempts: number;
   last_method: string | null;
   hs_method: string | null;
+  password: string | null;
+  cracked: 0 | 1;
+};
+
+// One row of the `handshakes` table — what listHandshakes() returns for
+// Crack Station's merge (lat/lon omitted, not needed there).
+export type HandshakeRow = {
+  ssid: string;
+  bssid: string;
+  security: string;
+  method: string;
+  captured_at: number;
+  session_id: string;
+  session_dir: string;
+  cap_file: string;
+  hash_file: string | null;
   password: string | null;
   cracked: 0 | 1;
 };

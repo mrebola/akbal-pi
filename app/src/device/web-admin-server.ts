@@ -298,6 +298,18 @@ export class WebAdminServer {
       ctx.body = fs.createReadStream(path.resolve(__dirname, "../..", "web", "admin", "wardrive.html"));
     });
 
+    // CRACK STATION — persistent handshake inventory + crack controls
+    // (dictionary rockyou + mask brute force). Own page like /wardrive: it
+    // works on handshakes from BOTH Wifi Audit and Wardrive (merged by
+    // handshakeInventory() in wifi-audit/service.ts), so it doesn't belong
+    // under just one of the two anymore. Live data comes from the existing
+    // /api/wardrive/handshakes, /mask/* and /dict/* endpoints below.
+    router.get("/crack-station", (ctx) => {
+      ctx.set("Cache-Control", "no-store");
+      ctx.type = "text/html";
+      ctx.body = fs.createReadStream(path.resolve(__dirname, "../..", "web", "admin", "crack-station.html"));
+    });
+
     router.get("/api/gps/status", async (ctx) => {
       ctx.body = await getGpsStatus();
     });
@@ -1166,8 +1178,11 @@ export class WebAdminServer {
     });
 
     // ── Crack Station (persistent captured-handshake inventory) ──
-    // List every captured handshake (live + past sessions) with SSID, MAC,
-    // handshake/password flags. No file contents leave the device.
+    // List every captured handshake — Wifi Audit's live + past sessions,
+    // PLUS Wardrive's driving sessions (handshakeInventory() merges both,
+    // see wifi-audit/service.ts) — with SSID, MAC, handshake/password
+    // flags. No file contents leave the device from this endpoint; see
+    // /api/wardrive/files for that (works for either source, same root).
     router.get("/api/wardrive/handshakes", (ctx) => {
       ctx.body = { ok: true, ...wardrive.handshakeInventory() };
     });

@@ -8,6 +8,7 @@ import { enterMonitorMode, exitMonitorMode } from "./monitor";
 import { setChannel } from "./rf";
 import { AirodumpCapture, DeauthRunner, scanTarget } from "./attack";
 import { PmkidDriveRunner } from "../wardrive/attack";
+import { driveDb } from "../wardrive/drive-db";
 import { WardriveSession, SESSIONS_ROOT } from "./session";
 import { discoverTargets } from "./discovery";
 import {
@@ -282,8 +283,14 @@ export class WardriveService extends EventEmitter {
     return pattern + hex.slice(-4);
   }
 
-  // Persistent inventory for Crack Station: every captured handshake the
-  // device knows about, live session first, then every past session folder.
+  // Persistent inventory for Crack Station (its own page, /crack-station —
+  // see web-admin-server.ts): every captured handshake the device knows
+  // about, live wifi-audit session first, then every past wifi-audit
+  // session folder, then every handshake Wardrive's driving sessions
+  // captured. Both tools write under the same ~/wardrive-sessions root but
+  // index themselves differently (wifi-audit: one session.json per dated
+  // folder; wardrive: SQLite, drive-* folders) — merging here is what lets
+  // one page crack handshakes from either.
   handshakeInventory(): { items: HandshakeEntry[] } {
     const items: HandshakeEntry[] = [];
     const active = this.session;
@@ -299,6 +306,7 @@ export class WardriveService extends EventEmitter {
           verified: t.verified === true,
           live: true,
           capFile: (t.files || []).find((f) => /\.(cap|pcapng)$/i.test(f)) || null,
+          source: "wifi-audit",
         });
       }
     }
@@ -313,7 +321,8 @@ export class WardriveService extends EventEmitter {
         try {
           targets = (JSON.parse(fs.readFileSync(path.join(root, id, "session.json"), "utf8")).targets || []) as any[];
         } catch {
-          // no/corrupt meta — skip the folder (it may lack session.json)
+          // no/corrupt meta — skip the folder (it may lack session.json,
+          // e.g. a wardrive drive-* folder, picked up separately below)
           continue;
         }
         for (const t of targets) {
@@ -327,11 +336,32 @@ export class WardriveService extends EventEmitter {
             verified: t.verified === true,
             live: false,
             capFile: (t.files || []).find((f: string) => /\.(cap|pcapng)$/i.test(f)) || null,
+            source: "wifi-audit",
           });
         }
       }
     } catch {
       // no sessions root yet
+    }
+    try {
+      const seen = new Set(items.map((i) => i.bssid));
+      for (const row of driveDb.listHandshakes()) {
+        if (seen.has(row.bssid)) continue; // captured by both tools — wifi-audit's record wins
+        seen.add(row.bssid);
+        items.push({
+          sessionId: row.session_id,
+          bssid: row.bssid,
+          ssid: row.ssid || "",
+          hasHandshake: true,
+          password: row.password || null,
+          verified: false,
+          live: false,
+          capFile: row.cap_file ? path.basename(row.cap_file) : null,
+          source: "wardrive",
+        });
+      }
+    } catch {
+      // driveDb unavailable — wifi-audit's own inventory still works
     }
     return { items };
   }
@@ -655,9 +685,19 @@ export class WardriveService extends EventEmitter {
   // recovered password into that session folder: session.json (targets[]
   // password field, via a surgical read-modify-write) + the target's
   // info.txt. Never fatal.
+  //
+  // Crack Station also launches these crack attacks against Wardrive
+  // (driving-session) captures — same ~/wardrive-sessions root, but a
+  // drive-* folder has no session.json (wardrive indexes itself in
+  // SQLite instead, see drive-db.ts). Detect that case and write the
+  // result where THAT inventory reads it back from.
   private persistPastSessionPassword(sessionDir: string, bssid: string, password: string): void {
+    const metaFile = path.join(sessionDir, "session.json");
+    if (!fs.existsSync(metaFile)) {
+      driveDb.setCrackedByBssid(bssid, password);
+      return;
+    }
     try {
-      const metaFile = path.join(sessionDir, "session.json");
       const meta = JSON.parse(fs.readFileSync(metaFile, "utf8"));
       for (const t of meta.targets || []) {
         if (String(t.bssid).toUpperCase() === bssid) t.password = password;

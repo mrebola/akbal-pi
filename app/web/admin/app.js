@@ -2229,16 +2229,20 @@ document.getElementById("wd-verify-list")?.addEventListener("click", async (ev) 
   void wdLoadSessions();
 });
 
-// ---- Crack Station (persistent handshake inventory + crack control) ----
+// ---- Crack Station handshake watch (celebrate-on-new-capture only) ----
+// The full inventory + crack controls live on their own page now
+// (/crack-station, web/admin/crack-station.{html,js}) — it works on
+// handshakes from both this tab's audit sessions AND Wardrive's driving
+// sessions, so it no longer belongs under just one of the two. This tab
+// keeps only a light poll of the same inventory endpoint so a fresh
+// capture during a live audit still pops the celebration modal.
 
-let wdCrackCache = []; // HandshakeEntry[]
 let wdCrackBssids = new Set(); // BSSIDs already known — for celebrate-on-new
-let wdCrackTimer = null; // mask-run polling while running
 let wdCrackTickedOnce = false;
 let wdCelebrateCtx = null; // { bssid, ssid, cap } of the celebrated capture
 
-// Inventory tick: fetch + render. Also detects NEW captures (vs last
-// snapshot) to pop the celebration modal.
+// Inventory tick: detects NEW captures (vs last snapshot) to pop the
+// celebration modal. No rendering here anymore — see crack-station.js.
 async function wdTickCrackStation() {
   try {
     const res = await fetch("/api/wardrive/handshakes");
@@ -2254,88 +2258,8 @@ async function wdTickCrackStation() {
     }
     wdCrackTickedOnce = true;
     wdCrackBssids = new Set(items.map((i) => i.bssid));
-    wdCrackCache = items;
-    wdRenderCrackStation();
-    await wdRenderMaskRun();
   } catch { /* non-fatal */ }
 }
-
-async function wdLoadCrackStation() {
-  wdCrackTickedOnce = false;
-  await wdTickCrackStation();
-}
-
-function wdCrackStatusHtml(item) {
-  if (item.password) {
-    return `<span class="wd-verify-badge ok" title="crackeada — usa el ojo en Sesiones para verla">✓</span>`;
-  }
-  return '<span class="wd-verify-badge none">capturado</span>';
-}
-
-function wdRenderCrackStation() {
-  const body = document.getElementById("wd-crack-body");
-  const status = document.getElementById("wd-crack-status");
-  if (!body) return;
-  const items = wdCrackCache;
-  if (status) {
-    status.textContent = items.length
-      ? `${items.length} handshake(s) en el inventario`
-      : "Sin handshakes aún — auditá una red en la pestaña 1";
-  }
-  if (items.length === 0) {
-    body.innerHTML = '<tr><td colspan="5" class="muted">Aún no hay handshakes capturados.</td></tr>';
-    return;
-  }
-  const capOf = (it) => (it.capFile ? `${it.sessionId}/${it.capFile}` : "");
-  body.innerHTML = items
-    .map((it) => {
-      const capPath = capOf(it);
-      const crackButtons = [];
-      if (!it.password) {
-        crackButtons.push(
-          `<button class="wd-crack-dict" data-bssid="${it.bssid}" data-cap="${escapeHtml(capPath)}" data-session="${it.sessionId}"
-             title="Rockyou contra este handshake">rockyou</button>`,
-        );
-        crackButtons.push(
-          `<button class="wd-crack-mask" data-bssid="${it.bssid}" data-ssid="${escapeHtml(it.ssid || "")}"
-             data-cap="${escapeHtml(capPath)}" title="Fuerza bruta con máscara (p.ej. @@@@+MAC)">máscara…</button>`,
-        );
-      }
-      return `<tr data-bssid="${it.bssid}" data-ssid="${escapeHtml(it.ssid || "")}"
-                  data-session="${it.sessionId}" data-cap="${escapeHtml(capPath)}">
-        <td class="wd-ssid">${it.live ? '<span class="demo-badge" style="background:rgba(80,255,120,.12);color:#34d351;">EN VIVO</span> ' : ""}${escapeHtml(it.ssid || "(oculta)")}</td>
-        <td style="font-family: ui-monospace, monospace; font-size: 11px;">${escapeHtml(it.bssid)}</td>
-        <td>${it.hasHandshake ? '<span class="wd-verify-badge ok">✓ .cap</span>' : "—"}</td>
-        <td>${it.password ? `<span class="wd-verify-badge ok" style="max-width:180px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(it.password)}</span>` : "—"}</td>
-        <td><div class="wd-action-group">${it.password ? '<span class="muted">✓</span>' : crackButtons.join("")}</div></td>
-      </tr>`;
-    })
-    .join("");
-}
-
-// Launch points: Crack Station rows.
-document.getElementById("wd-crack-body")?.addEventListener("click", async (ev) => {
-  const dictBtn = ev.target.closest(".wd-crack-dict");
-  if (dictBtn) {
-    const res = await wdApi("dict/start", { bssid: dictBtn.dataset.bssid, cap: dictBtn.dataset.cap });
-    if (res?.error) {
-      wdError.textContent = res.error;
-      return;
-    }
-    toast("Diccionario lanzado — mira el progreso en esta misma tabla", "success");
-    void wdTickCrackStation();
-    return;
-  }
-  const maskBtn = ev.target.closest(".wd-crack-mask");
-  if (maskBtn) {
-    wdArmMaskLaunch(maskBtn.dataset.bssid, maskBtn.dataset.ssid, maskBtn.dataset.cap);
-    // Focus the mask panel and switch to Crack Station if elsewhere.
-    document.querySelector('.wd-subtab[data-subtab="crack"]')?.click();
-    document.getElementById("wd-mask-panel")?.scrollIntoView({ block: "start", behavior: "smooth" });
-  }
-});
-
-document.getElementById("wd-crack-refresh")?.addEventListener("click", () => void wdTickCrackStation());
 
 // ---- Celebration modal (fresh capture): confetti + flag + SSID ----
 
@@ -2400,7 +2324,11 @@ document.getElementById("wd-celebrate-close")?.addEventListener("click", () => {
 
 document.getElementById("wd-celebrate-crack")?.addEventListener("click", () => {
   document.getElementById("wd-celebrate-modal")?.classList.add("hidden");
-  document.querySelector('.wd-subtab[data-subtab="crack"]')?.click();
+  // Crack Station is its own page now — carry the BSSID over so it can
+  // scroll/highlight the row (crack-station.js reads ?bssid=).
+  window.location.href = wdCelebrateCtx?.bssid
+    ? `/crack-station?bssid=${encodeURIComponent(wdCelebrateCtx.bssid)}`
+    : "/crack-station";
 });
 
 document.getElementById("wd-celebrate-dict")?.addEventListener("click", async () => {
@@ -2412,214 +2340,8 @@ document.getElementById("wd-celebrate-dict")?.addEventListener("click", async ()
     wdError.textContent = res.error;
     return;
   }
-  toast("Diccionario lanzado — Crack Station muestra el progreso", "success");
-  document.querySelector('.wd-subtab[data-subtab="crack"]')?.click();
+  toast("Diccionario lanzado — mira el progreso en Crack Station", "success");
 });
-
-// ---- Mask brute force (Crack Station) ----
-
-let wdMaskArmed = null; // { bssid, ssid, cap } preselected from a row
-
-function wdArmMaskLaunch(bssid, ssid, cap) {
-  wdMaskArmed = { bssid, ssid, cap };
-}
-
-// Pattern → readable total ("38.4M claves"); same syntax as the backend
-// (@ dígito, # minúscula, $ hex, resto literal).
-function wdMaskTotalPreview(pattern) {
-  let total = 1;
-  for (const ch of pattern) {
-    if (ch === "@") total *= 10;
-    else if (ch === "#") total *= 26;
-    else if (ch === "$") total *= 16;
-  }
-  return total;
-}
-
-function wdHumanKeys(n) {
-  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}G claves`;
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M claves`;
-  if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K claves`;
-  return `${n} claves`;
-}
-
-async function wdRenderMaskPresets() {
-  const wrap = document.getElementById("wd-mask-presets");
-  if (!wrap) return;
-  let presets = [];
-  try {
-    const res = await fetch("/api/wardrive/mask/status");
-    if (res.ok) presets = (await res.json()).presets || [];
-  } catch { return; }
-  wrap.innerHTML = presets
-    .map((m) => {
-      // MAC suffix adds 4 hex chars (0-9a-f = '$' in mask syntax).
-      const total = wdMaskTotalPreview(m.pattern + (m.autoMacSuffix ? "$$$$" : ""));
-      return `<div class="wd-mask-preset" data-id="${m.id}">
-        <div class="wd-mask-preset-head">
-          <strong>${escapeHtml(m.name)}</strong>
-          ${m.id.startsWith("builtin-") ? '<span class="wd-verify-badge none">fábrica</span>' : '<button class="wd-mask-del" data-id="' + m.id + '" title="Borrar máscara">🗑</button>'}
-        </div>
-        <div class="wd-mask-preset-pattern"><code>${escapeHtml(m.pattern)}${m.autoMacSuffix ? "<em>+MAC4</em>" : ""}</code>
-          <span class="muted">· ${wdHumanKeys(wdMaskTotalPreview(m.pattern + (m.autoMacSuffix ? "$$$$" : "")))}${m.autoMacSuffix ? " · +sufijo MAC" : ""}</span></div>
-        <div class="wd-mask-preset-desc">${escapeHtml(m.description)}</div>
-        <div class="wd-mask-actions">
-          <input type="text" class="wd-mask-target-input" placeholder="BSSID del objetivo (AA:BB:…)" data-preset="${m.id}" />
-          <button class="wd-mask-launch" data-id="${m.id}">Lanzar ataque</button>
-        </div>
-      </div>`;
-    })
-    .join("");
-}
-
-document.getElementById("wd-mask-presets")?.addEventListener("click", async (ev) => {
-  const delBtn = ev.target.closest(".wd-mask-del");
-  if (delBtn) {
-    await apiFetch("/api/wardrive/mask/presets/remove", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: delBtn.dataset.id }),
-    });
-    void wdRenderMaskPresets();
-    return;
-  }
-  const launchBtn = ev.target.closest(".wd-mask-launch");
-  if (!launchBtn) return;
-  const wrap = launchBtn.closest(".wd-mask-preset");
-  const bssid = (wrap.querySelector(".wd-mask-target-input")?.value || "").trim().toUpperCase();
-  if (!/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(bssid)) {
-    document.getElementById("wd-mask-msg").textContent = "Escribe el BSSID del objetivo (formato AA:BB:CC:DD:EE:FF)";
-    return;
-  }
-  const presetId = launchBtn.dataset.id;
-  const armed = wdMaskArmed;
-  wdMaskArmed = null;
-  wdMaskLaunch(presetId, null, bssid, armed?.cap, armed?.autoMacSuffix);
-});
-
-document.getElementById("wd-mask-save")?.addEventListener("click", async () => {
-  const msg = document.getElementById("wd-mask-msg");
-  const name = document.getElementById("wd-mask-name")?.value?.trim() || "";
-  const pattern = document.getElementById("wd-mask-pattern")?.value?.trim() || "";
-  const description = document.getElementById("wd-mask-description")?.value?.trim() || "";
-  const autoMacSuffix = document.getElementById("wd-mask-mac")?.checked === true;
-  if (!name || !pattern) {
-    msg.textContent = "Nombre y patrón requeridos";
-    return;
-  }
-  try {
-    const res = await apiFetch("/api/wardrive/mask/presets", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, pattern, description, autoMacSuffix }),
-    });
-    const data = await res.json();
-    msg.textContent = data?.ok ? "Máscara guardada" : data?.error || "No se pudo guardar";
-    if (data?.ok) {
-      document.getElementById("wd-mask-name").value = "";
-      document.getElementById("wd-mask-pattern").value = "";
-      document.getElementById("wd-mask-description").value = "";
-      document.getElementById("wd-mask-mac").checked = false;
-      void wdRenderMaskPresets();
-    }
-  } catch {
-    msg.textContent = "Error de red";
-  }
-});
-
-async function wdMaskLaunch(presetId, pattern, bssid, cap, autoMacSuffixBaked) {
-  const status = document.getElementById("wd-mask-run-status");
-  if (status) status.textContent = "Lanzando attack de máscara...";
-  try {
-    const res = await apiFetch("/api/wardrive/mask/run", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(
-        presetId
-          ? { bssid, presetId, cap }
-          : { bssid, pattern, autoMacSuffix: autoMacSuffixBaked === true, cap },
-      ),
-    });
-    const data = await res.json();
-    if (!data?.ok) {
-      if (status) status.textContent = data?.error || "No se pudo lanzar";
-      return;
-    }
-    if (status) status.textContent = "";
-    wdCrackTimer = wdCrackTimer || setInterval(() => {
-      const crackVisible = document.getElementById("wd-sub-crack")?.classList.contains("active");
-      if (crackVisible) void wdRenderMaskRun();
-    }, 3000);
-    void wdRenderMaskRun();
-  } catch (err) {
-    if (status) status.textContent = err.message || "Error de red";
-  }
-}
-
-// Launch directly from a row's "máscara…" button → render "launch with
-// custom pattern against <ssid>" panel.
-async function wdRenderMaskRun() {
-  const runBox = document.getElementById("wd-mask-run");
-  const status = document.getElementById("wd-mask-run-status");
-  if (!runBox) return;
-  let data = null;
-  try {
-    const res = await fetch("/api/wardrive/mask/status");
-    if (res.ok) data = await res.json();
-  } catch { return; }
-  const st = data?.state;
-  // Presets list may have changed server-side; render fresh.
-  void wdRenderMaskPresets();
-  if (!data?.state || (!data.state.running && !data.state.done)) {
-    runBox.innerHTML = "";
-    if (status && wdMaskArmed) {
-      status.textContent = `Objetivo preseleccionado: ${wdMaskArmed.ssid || wdMaskArmed.bssid}`;
-    } else if (status) {
-      status.textContent = "";
-    }
-    return;
-  }
-  const { state } = data;
-  const p = state.progress;
-  const pct = p.total > 0 ? Math.min(100, (p.tried / p.total) * 100) : 0;
-  const ssid = state.bssid
-    ? wdCrackCache.find((i) => i.bssid === state.bssid)?.ssid
-      || wdStatus?.targets?.find((t) => t.bssid === state.bssid)?.ssid
-      || state.bssid
-    : "";
-  const resultMsg = state.result
-    ? state.result.matched
-      ? `<span class="wd-verify-badge ok">✓ ENCONTRADA — ${escapeHtml(state.result.output?.match(/KEY FOUND!\s*\[\s*(.*?)\s*\]/)?.[1] || "")}</span>`
-      : state.result.verdict === "handshake_wrong_password"
-        ? '<span class="wd-verify-badge wrong">Máscara agotada — sin match</span>'
-        : `<span class="wd-verify-badge err">${escapeHtml(state.result.output || "cancelado")}</span>`
-    : "";
-  runBox.innerHTML = `
-    <div class="wd-dict-head">
-      <span>Máscara <code>${escapeHtml(state.pattern)}</code> · <strong>${escapeHtml(ssid)}</strong></span>
-      <span style="display:inline-flex; gap:6px;">
-        ${state.running ? '<button class="wd-mask-stop">Cancelar</button>' : ""}
-        ${!state.running ? '<button class="wd-mask-clear">✕</button>' : ""}
-      </span>
-    </div>
-    <div class="wd-dict-bar"><div class="wd-dict-bar-fill" style="width:${pct.toFixed(1)}%"></div></div>
-    <div class="wd-dict-meta muted">${p.tried.toLocaleString()} / ${p.total.toLocaleString()} claves · ${(p.fps || 0).toFixed(0)} pass/s · ${p.elapsedSec}s ${state.running ? "· corriendo..." : state.result ? "· terminado" : "· cancelado"}</div>
-    <div class="wd-dict-result">${resultMsg}</div>
-  `;
-}
-
-document.getElementById("wd-mask-run")?.addEventListener("click", async (ev) => {
-  if (ev.target.closest(".wd-mask-clear")) {
-    await apiFetch("/api/wardrive/mask/clear", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-    void wdRenderMaskRun();
-    return;
-  }
-  if (!ev.target.closest(".wd-mask-stop")) return;
-  await apiFetch("/api/wardrive/mask/stop", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-  void wdRenderMaskRun();
-});
-
-// ---- End Crack Station ----
 
 
 const wdProgressModal = document.getElementById("wd-progress-modal");
@@ -3219,9 +2941,6 @@ function wdStartSessionsTimer() {
     // churn on the Pi while the operator works the audit subtab.
     const sessionsVisible = document.getElementById("wd-sub-sessions")?.classList.contains("active");
     if (active && sessionsVisible) void wdLoadSessions();
-    // Crack Station polls too (its own slower cadence — same cheap reads).
-    const crackVisible = document.getElementById("wd-sub-crack")?.classList.contains("active");
-    if (active && crackVisible) void wdTickCrackStation();
   }, 4000);
   void wdLoadSessions();
 }
@@ -3236,9 +2955,7 @@ function wdInitSubtabs() {
       tabs.forEach((t) => t.classList.toggle("active", t === tab));
       document.getElementById("wd-sub-audit")?.classList.toggle("active", target === "audit");
       document.getElementById("wd-sub-sessions")?.classList.toggle("active", target === "sessions");
-      document.getElementById("wd-sub-crack")?.classList.toggle("active", target === "crack");
       if (target === "sessions") void wdLoadSessions();
-      if (target === "crack") void wdLoadCrackStation();
     });
   });
 }
@@ -3414,8 +3131,8 @@ function wdEnsurePollTimer() {
     // the progress bar doesn't blink away (only while it's running).
     if (active && wdDictTimer) void wdRenderDictProgress();
     // Celebrate fresh captures as soon as they land (regardless of which
-    // wifi-audit subtab is visible) and keep the Crack Station cache warm
-    // so its render is instant on switch.
+    // wifi-audit subtab is visible) — the inventory itself now lives on
+    // its own page (/crack-station).
     if (active) void wdTickCrackStation();
   }, 2000);
 }

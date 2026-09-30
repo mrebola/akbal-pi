@@ -76,7 +76,10 @@ export const ATTACK_STEPS: Record<AttackStep, string> = {
 };
 
 // Inventory entry for Crack Station: one captured handshake (live or past
-// session) with what's known about it.
+// session) with what's known about it. Crack Station itself is a separate
+// admin page (/crack-station) that draws from BOTH capture tools —
+// `source` says which one produced this entry (they share the same
+// ~/wardrive-sessions root, see handshakeInventory() in service.ts).
 export type HandshakeEntry = {
   sessionId: string; // session folder name (the id)
   bssid: string;
@@ -86,6 +89,7 @@ export type HandshakeEntry = {
   verified: boolean;
   live: boolean; // belongs to the in-progress session
   capFile: string | null; // capture file name (relative to the session dir)
+  source: "wifi-audit" | "wardrive";
 };
 
 // Mask brute-force recipe (Crack Station, web UI): pattern where '@' =

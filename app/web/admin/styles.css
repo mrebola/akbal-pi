@@ -2893,6 +2893,14 @@ body { font-family: var(--font-sans); }
 
 .wd-crack-table td { vertical-align: middle; }
 
+/* Deep-link from the celebrate modal (/crack-station?bssid=...): a short
+   fade so the operator finds the row that brought them here. */
+.wd-crack-row-highlight { animation: wd-crack-row-flash 2.4s ease-out 1; }
+@keyframes wd-crack-row-flash {
+  0% { background: var(--accent-soft); }
+  100% { background: transparent; }
+}
+
 .wd-crack-table .wd-action-group {
   display: inline-flex;
   gap: 6px;

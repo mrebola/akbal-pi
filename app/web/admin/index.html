@@ -21,6 +21,7 @@
       <a href="/aircraft-radar" class="tab-link" title="Aeronaves cercanas vía ADS-B" data-i18n="topbar.tab_aircraft" data-i18n-title="topbar.tab_aircraft_title">Radar de Aviones</a>
       <button class="tab-btn" data-tab="wifi-audit" data-i18n="topbar.tab_wifiaudit">Wifi Audit</button>
       <a href="/wardrive" class="tab-link" title="Wardrive: mapa + handshakes en el auto" data-i18n="topbar.tab_wardrive" data-i18n-title="topbar.tab_wardrive_title">Wardrive</a>
+      <a href="/crack-station" class="tab-link" title="Crack Station: handshakes de Wifi Audit y Wardrive" data-i18n="topbar.tab_crackstation" data-i18n-title="topbar.tab_crackstation_title">Crack Station</a>
       <a href="/gps" class="tab-link" title="Posición GPS del dispositivo" data-i18n="topbar.tab_gps" data-i18n-title="topbar.tab_gps_title">GPS</a>
       <button class="tab-btn" data-tab="music" data-i18n="topbar.tab_music">Jukebox</button>
       <button class="tab-btn" data-tab="settings" title="Ajustes" data-i18n="topbar.tab_settings" data-i18n-title="topbar.tab_settings">Ajustes</button>
@@ -178,7 +179,6 @@
       <div class="wd-subtabs">
         <button class="wd-subtab active" data-subtab="audit" data-i18n="wifiaudit.subtab_audit">1 · Auditoría</button>
         <button class="wd-subtab" data-subtab="sessions" data-i18n="wifiaudit.subtab_sessions">2 · Sesiones</button>
-        <button class="wd-subtab" data-subtab="crack" data-i18n="wifiaudit.subtab_crack">3 · Crack Station</button>
       </div>
 
       <div id="wd-sub-audit" class="wd-subtab-panel active">
@@ -221,63 +221,11 @@
         </div>
       </div>
 
-      <div id="wd-sub-crack" class="wd-subtab-panel">
-        <!-- Crack Station: persistent inventory of captured handshakes with
-             crack controls (dictionary rockyou + mask brute force with
-             operator-managed recipes like @@@@<MAC4> for AXTEL default keys). -->
-        <div class="wd-session-block" id="wd-crack-block" style="margin-top: 0;">
-          <div class="wd-session-title" data-i18n="wifiaudit.crack_title">CRACK STATION — HANDSHAKES CAPTURADOS</div>
-          <div class="wd-crack-toolbar">
-            <button id="wd-crack-refresh" class="secondary" data-i18n="wifiaudit.crack_refresh">Refrescar inventario</button>
-            <span id="wd-crack-status" class="muted"></span>
-          </div>
-          <div class="wd-list-wrap">
-            <table class="wd-table wd-crack-table">
-              <thead>
-                <tr>
-                  <th data-i18n="wifiaudit.crack_col_ssid">SSID</th>
-                  <th data-i18n="wifiaudit.crack_col_mac">MAC (BSSID)</th>
-                  <th data-i18n="wifiaudit.crack_col_hs">Handshake</th>
-                  <th data-i18n="wifiaudit.crack_col_pass">Contraseña</th>
-                  <th data-i18n="wifiaudit.crack_col_actions">Ataques</th>
-                </tr>
-              </thead>
-              <tbody id="wd-crack-body">
-                <tr><td colspan="5" class="muted">—</td></tr>
-              </tbody>
-            </table>
-          </div>
-
-          <!-- Mask brute-force: preset picker + custom recipe editor -->
-          <div class="wd-session-title" style="margin-top:16px;" data-i18n="wifiaudit.mask_title">ATAQUE DE FUERZA BRUTA (MÁSCARA)</div>
-          <div class="wd-mask-panel" id="wd-mask-panel">
-            <div class="wd-mask-run-status" id="wd-mask-run-status"></div>
-            <div class="wd-mask-run" id="wd-mask-run"></div>
-          </div>
-          <div class="wd-mask-presets" id="wd-mask-presets"></div>
-
-          <!-- New mask recipe form -->
-          <div class="wd-mask-new" id="wd-mask-new">
-            <div class="wd-session-title" style="font-size:12px; margin-top:14px;" data-i18n="wifiaudit.mask_new_title">+ NUEVA MÁSCARA</div>
-            <div class="wd-mask-form">
-              <label><span data-i18n="wifiaudit.mask_form_name">Nombre</span>
-                <input id="wd-mask-name" type="text" autocomplete="off" placeholder="p.ej. Tenda por defecto" />
-              </label>
-              <label><span data-i18n="wifiaudit.mask_form_pattern">Patrón</span>
-                <input id="wd-mask-pattern" type="text" autocomplete="off" placeholder="@@@@  (@=dígito, #=minúscula)" />
-              </label>
-              <label class="wd-mask-check"><input id="wd-mask-mac" type="checkbox" />
-                <span data-i18n="wifiaudit.mask_form_mac">Sufijo MAC (añade los últimos 4 hex del BSSID al lanzar)</span>
-              </label>
-              <label class="wd-mask-desc"><span data-i18n="wifiaudit.mask_form_desc">Descripción (a qué equipos aplica y cómo se construye la contraseña)</span>
-                <textarea id="wd-mask-description" rows="3" placeholder="p.ej. Módems AXTEL XTREMO: 4 dígitos aleatorios + últimos 4 de la MAC..."></textarea>
-              </label>
-              <button id="wd-mask-save" data-i18n="wifiaudit.mask_form_save">Guardar máscara</button>
-            </div>
-            <div id="wd-mask-msg" class="muted" style="font-size:11px; margin-top:6px;"></div>
-          </div>
-        </div>
-      </div>
+      <!-- Crack Station moved to its own top-level page (/crack-station):
+           it works on handshakes from BOTH this tab's audit sessions and
+           Wardrive's driving sessions, so it no longer belongs under just
+           one of the two. See web-admin-server.ts's /crack-station route
+           and web/admin/crack-station.{html,js}. -->
 
       <!-- Handshake-celebration modal: confetti + pirate flag on a fresh
            capture, with the SSID and a direct link into Crack Station. -->

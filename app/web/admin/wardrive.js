@@ -12,13 +12,17 @@ const MAX_TRACK_POINTS = 1500; // live polyline cap (DB keeps everything)
 
 let map = null;
 let posMarker = null;
-let trackLine = null;
+let trackLayer = null; // polyline segments group (gap-aware, see drawTrack)
 let hsLayer = null; // handshake capture dots (all sessions, "mapa general")
 let apLayer = null; // plain AP dots with position + click-info popup
-let trackPoints = []; // [[lat, lon], ...] live session only
+let trackPoints = []; // {lat, lon, ts} live session only
 let firstFixSeen = false;
 let followCar = true;
 let lastStatus = null;
+// Live car position as a track candidate: appended on fix with the same
+// distance/time gates the backend uses (this is the INSTANT trail — the
+// DB polyline reload every few seconds stays the authoritative one).
+let liveLastPoint = null; // {lat, lon, ts}
 
 const el = (id) => document.getElementById(id);
 const setText = (id, text) => {
@@ -181,7 +185,8 @@ function render(st) {
   // Map
   if (gps.hasFix && gps.latitude != null && gps.longitude != null) {
     updateCar(gps.latitude, gps.longitude);
-    if (st.session && !trackLine) loadLiveTrack(st.session.id);
+    appendLivePoint(gps.latitude, gps.longitude);
+    if (st.session && !trackLayer) void loadLiveTrack(st.session.id);
   }
   // Map dots (APs + handshakes across ALL sessions) refresh every ~5s —
   // the authoritative sighting positions come from session-networks.
@@ -244,21 +249,98 @@ async function loadLiveTrack(sessionId) {
     const res = await fetch(`/api/wardrive/drive/track?id=${encodeURIComponent(sessionId)}`);
     if (!res.ok) return;
     const data = await res.json();
-    trackPoints = (data.points || []).map((p) => [p.lat, p.lon]);
-    drawLiveTrack();
+    const dbPoints = data.points || [];
+    // DB reload is authoritative up to the last recorded point; anything
+    // the live feed appended BEYOND it (frontend-only trail) is preserved.
+    const liveTail = trackPoints.slice((data.count || dbPoints.length));
+    trackPoints = dbPoints.concat(liveTail.filter((p) => {
+      const last = dbPoints[dbPoints.length - 1];
+      return !last || p.ts > last.ts;
+    }));
+    liveLastPoint = null; // next fix re-anchors the live append
+    drawTrack();
   } catch { /* next poll retries */ }
 }
 
-function drawLiveTrack() {
+// ── Gap-aware track drawing ──
+// The polyline is broken where the track has no points: two consecutive
+// samples separated by more than TRACK_GAP_* are NOT bridged (GPS re-lock,
+// tunnel, the session sat parked for minutes). Straight bridges used to
+// draw routes never driven. Gap size is TIME-first (a parked car emits
+// far-apart points that were still really travelled at <20s gaps):
+//   dt > 40s        → cut the line
+//   distance > 150m → line break too (sample dropout at speed)
+const TRACK_GAP_DT_MS = 40_000;
+const TRACK_GAP_DIST_M = 150;
+
+function trackSegments(points) {
+  const segs = [];
+  let cur = [];
+  for (const p of points) {
+    if (cur.length === 0) {
+      cur.push(p);
+      continue;
+    }
+    const prev = cur[cur.length - 1];
+    const dt = p.ts - prev.ts;
+    const dist = map ? map.distance([prev.lat, prev.lon], [p.lat, p.lon]) : Number.MAX_SAFE_INTEGER;
+    if (dt > TRACK_GAP_DT_MS || dist > TRACK_GAP_DIST_M) {
+      if (cur.length >= 2) segs.push(cur);
+      cur = [p];
+    } else {
+      cur.push(p);
+    }
+  }
+  if (cur.length >= 2) segs.push(cur);
+  return segs;
+}
+
+function drawTrack() {
   if (!map) return;
-  if (trackLine) trackLine.setLatLngs(trackPoints);
-  else {
-    trackLine = L.polyline(trackPoints, {
+  if (trackLayer) trackLayer.remove();
+  trackLayer = L.layerGroup().addTo(map);
+  const segs = trackSegments(trackPoints);
+  for (const seg of segs) {
+    L.polyline(seg.map((p) => [p.lat, p.lon]), {
       color: "#34d351",
       weight: 4,
       opacity: 0.85,
       className: "wd-track-line",
-    }).addTo(map);
+    }).addTo(trackLayer);
+  }
+}
+
+// Live trail: same distance/time gates the backend's track recorder uses
+// (>=6m move or >=20s parked). The DB-backed polyline reload stays
+// authoritative — this only makes the trail grow in realtime between
+// reloads (the old UI only repainted the track every reload cycle).
+const LIVE_MIN_MOVE_M = 6;
+const LIVE_MAX_DT_MS = 20_000;
+
+function appendLivePoint(lat, lon) {
+  const now = Date.now();
+  if (!liveLastPoint) {
+    liveLastPoint = { lat, lon, ts: now };
+    trackPoints.push(liveLastPoint);
+    drawTrack();
+    return;
+  }
+  const prev = liveLastPoint;
+  const moved = map ? map.distance([prev.lat, prev.lon], [lat, lon]) : 0;
+  if (moved >= LIVE_MIN_MOVE_M || now - prev.ts >= LIVE_MAX_DT_MS) {
+    // Skip duplicates of the authoritative reload (points that both came
+    // from the DB poll AND the live feed shouldn't stack twice).
+    const last = trackPoints[trackPoints.length - 1];
+    if (last && Math.abs(last.lat - lat) < 1e-6 && Math.abs(last.lon - lon) < 1e-6) {
+      liveLastPoint = last;
+      return;
+    }
+    liveLastPoint = { lat, lon, ts: now };
+    trackPoints.push(liveLastPoint);
+    if (trackPoints.length > MAX_TRACK_POINTS) {
+      trackPoints.splice(0, trackPoints.length - MAX_TRACK_POINTS);
+    }
+    drawTrack();
   }
 }
 
@@ -413,7 +495,8 @@ function renderApList(st) {
   setText("wd-count-hs", String(st.stats?.newHandshakes ?? 0));
   // Badge per attack state. 🏴 = handshake captured (pirate flag — booty),
   // ⚡ = being attacked right now, ✋ HS = covered by another AP of the SSID,
-  // ✕ = attempts exhausted.
+  // ✕ = attempts exhausted. ⚡ button = manual attack NOW.
+  const attackingNow = Boolean(st.currentAttack);
   list.innerHTML = recent
     .map((ap) => {
       const badge = ap.handshakeHere
@@ -437,6 +520,7 @@ function renderApList(st) {
         <div class="wd-ap-right">
           ${badge}
           <span class="wd-rssi ${rssiClass(ap.rssi)}">${ap.rssi} dBm</span>
+          ${attackingNow ? "" : ap.handshakeHere || ap.handshakeKnown || ap.security === "OPEN" ? "" : `<button class="wd-ap-attack" title="Atacar ahora (PMKID → deauth)">⚡</button>`}
         </div>
       </li>`;
     })
@@ -445,6 +529,25 @@ function renderApList(st) {
     list.innerHTML = '<li class="muted" style="padding:8px;">Sin redes en el aire — iniciá la sesión.</li>';
   }
   for (const row of list.querySelectorAll(".wd-ap-row")) {
+    for (const btn of row.querySelectorAll(".wd-ap-attack")) {
+      btn.addEventListener("click", async (ev) => {
+        ev.stopPropagation();
+        btn.disabled = true;
+        btn.textContent = "…";
+        try {
+          const res = await fetch("/api/wardrive/drive/attack", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ bssid: row.dataset.bssid }),
+          });
+          const data = await res.json();
+          if (!data.ok && data.error) showError(data.error);
+        } catch {
+          showError("No se pudo lanzar el ataque");
+        }
+        void refresh();
+      });
+    }
     row.addEventListener("click", () => {
       const ap = recent.find((a) => a.bssid === row.dataset.bssid);
       if (ap) showApModal(ap);
@@ -609,8 +712,8 @@ async function openSession(id) {
           return;
         }
         drawer.classList.add("hidden");
-        if (trackLine) trackLine.remove();
-        trackLine = null;
+        trackPoints = [];
+        drawTrack();
         void refreshSessions();
         void refreshHandshakeDots();
       } catch {
@@ -622,13 +725,14 @@ async function openSession(id) {
   try {
     const res = await fetch(`/api/wardrive/drive/track?id=${encodeURIComponent(id)}`);
     if (res.ok) {
-      const pts = ((await res.json()).points || []).map((p) => [p.lat, p.lon]);
-      if (trackLine) trackLine.remove();
-      trackLine = null;
+      const pts = (await res.json()).points || [];
+      // Viewing a past session takes over the track layer; the live feed
+      // resumes drawing when the drawer closes (drawer-close reloads it).
+      liveLastPoint = null;
       trackPoints = pts;
-      drawLiveTrack();
+      drawTrack();
       if (pts.length > 0) {
-        map.fitBounds(L.latLngBounds(pts), { padding: [30, 30] });
+        map.fitBounds(L.latLngBounds(pts.map((p) => [p.lat, p.lon])), { padding: [30, 30] });
       }
     }
   } catch { /* ignore */ }
@@ -695,8 +799,8 @@ el("wd-drawer-close")?.addEventListener("click", () => {
   drawer.classList.remove("minimized", "maximized");
   // Back to the live session view
   trackPoints = [];
-  if (trackLine) trackLine.remove();
-  trackLine = null;
+  trackPoints = [];
+  drawTrack();
   if (lastStatus?.session) void loadLiveTrack(lastStatus.session.id);
 });
 
@@ -744,8 +848,8 @@ function initControls() {
       // Reset the live view when stopping
       if (running) {
         trackPoints = [];
-        if (trackLine) trackLine.remove();
-        trackLine = null;
+        trackPoints = [];
+        drawTrack();
         firstFixSeen = false;
       }
     } catch {

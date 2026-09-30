@@ -808,3 +808,17 @@
   flex: 1;
   min-height: 0;
 }
+
+/* ⚡ manual attack button (AP list) */
+.wd-ap-attack {
+  font-size: 12px;
+  line-height: 1;
+  padding: 4px 8px;
+  background: transparent;
+  color: var(--accent, #50ff78);
+  border: 1px solid var(--accent-dim, rgba(80, 255, 120, 0.5));
+  border-radius: 6px;
+  cursor: pointer;
+}
+.wd-ap-attack:hover { background: rgba(80, 255, 120, 0.12); }
+.wd-ap-attack:disabled { opacity: 0.5; cursor: wait; }

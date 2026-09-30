@@ -1566,6 +1566,15 @@ export class WebAdminServer {
       ctx.body = await drive.stop();
     });
 
+    // Manual attack against one visible AP (⚡ button in the wardrive list):
+    // the operator picks the target NOW instead of waiting for the
+    // scheduler — same PMKID→deauth smart round the auto-engine runs.
+    // Refuses: engine off, attack in flight, invisible/protected targets.
+    router.post("/api/wardrive/drive/attack", async (ctx) => {
+      const { bssid, method } = (ctx.request.body as any) || {};
+      ctx.body = await drive.attackApExternal(String(bssid || ""), method === "deauth" ? "deauth" : method === "pmkid" ? "pmkid" : undefined);
+    });
+
     // The deauth toggle is gone from the UI: the engine runs PMKID first
     // and the deauth fallback fires automatically when slow/stopped. This
     // route stays as a no-op for older clients that POST to it.

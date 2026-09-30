@@ -1,6 +1,7 @@
 import { execFile, spawn } from "child_process";
 import { promisify } from "util";
 import fs from "fs";
+import path from "path";
 
 const execFileAsync = promisify(execFile);
 
@@ -92,8 +93,26 @@ export const MIN_SATS_FOR_FIX = 3;
 // USB GNSS receivers surface as serial devices: ttyACM* (CDC-ACM, most
 // u-blox) or ttyUSB* (USB-serial bridges, CP210x/PL2303 based units).
 const DEV_DIR = "/dev";
+const SERIAL_BY_ID_DIR = "/dev/serial/by-id";
 
 async function findGpsDevice(): Promise<string | null> {
+  // Identify the GPS by its USB descriptor (the udev-generated symlink name
+  // under /dev/serial/by-id, e.g. "usb-u-blox_AG_-_...-if00") instead of
+  // just grabbing the first ttyACM* — this device's other USB gadgets
+  // (HackRF/PortaPack for aircraft-radar) also enumerate as ttyACM*, so
+  // "first one wins" silently reads the wrong port whenever enumeration
+  // order shifts (any USB replug/reset elsewhere reshuffles ttyACM
+  // numbering for everything, not just the device that moved).
+  try {
+    const byId = await fs.promises.readdir(SERIAL_BY_ID_DIR);
+    const gpsLink = byId.find((name) => /gps|gnss|u-?blox/i.test(name));
+    if (gpsLink) {
+      const real = await fs.promises.realpath(path.join(SERIAL_BY_ID_DIR, gpsLink)).catch(() => "");
+      if (real) return real;
+    }
+  } catch {
+    /* /dev/serial/by-id unavailable — fall through to the naive scan */
+  }
   try {
     const entries = await fs.promises.readdir(DEV_DIR);
     const candidates = entries

@@ -57,6 +57,39 @@ No hay tests automatizados (`npm test` es placeholder); la validación real es
 en el hardware. Desde el host solo se puede verificar compilación de
 TypeScript y sintaxis de Python/bash.
 
+## Deploy / actualizar el dispositivo real
+
+Detalle completo en [`docs/deploy.md`](docs/deploy.md) — resumen para no
+tener que abrirlo si solo hace falta actualizar código ya desplegado:
+
+```bash
+ssh <usuario>@<host-de-la-pi>
+whisplay update           # git pull --ff-only + install_dependencies.sh + build
+whisplay service restart
+```
+
+Puntos que un agente nuevo necesita saber antes de tocar esto:
+
+- El dispositivo corre desde un **clon real de este repo** (no una copia
+  por rsync) — `app/` es el `WorkingDirectory` del `chatbot.service`, pero
+  la raíz del `.git` está un nivel arriba (`~/akbal-pi`, no
+  `~/akbal-pi/app`). `whisplay update` ya sabe resolver esto solo
+  (`resolve_update_git_root` en `app/cli/common.sh`) — no asumas que
+  `app/` tiene su propio `.git`.
+- `whisplay update` **no reinicia el servicio solo** — `whisplay service
+  restart` (o `sudo systemctl restart chatbot.service`) es un paso aparte,
+  a propósito (permite revisar que el build salió bien antes de tirar la
+  sesión de voz/chat en curso).
+- Si el dispositivo con el que estás trabajando todavía tiene una copia
+  vieja por rsync (sin `.git`, típicamente en `~/whisplay-ai-chatbot/app`
+  en vez de `~/akbal-pi/app`): no lo actualices con rsync de nuevo sin
+  preguntar primero — `docs/deploy.md` tiene los pasos para migrarlo a un
+  clon real sin perder `.env`/`data/`/`knowledge/`.
+- Antes de cualquier cambio en un dispositivo real (rsync, `git pull`,
+  reiniciar el servicio, tocar `chatbot.service`): confirmá que tenés
+  acceso real (`ssh ... echo ok`) y avisá qué vas a hacer — es hardware de
+  alguien corriendo en producción, no un sandbox descartable.
+
 ## Convenciones
 
 - **TypeScript**: ES2020, CommonJS, strict. Imports relativos dentro de `src/`.

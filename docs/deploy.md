@@ -85,3 +85,12 @@ ssh <usuario>@<host-de-la-pi> "cd ~/whisplay-ai-chatbot/app && bash build.sh && 
 Sin `--delete` (no borra en el destino lo que ya no exista en el origen —
 más lento para limpiar cruft, pero no arriesga borrar algo por accidente),
 y excluyendo lo mismo que `.env`/`.gitignore` ya marcan como runtime-only.
+
+## Validado en un dispositivo real
+
+Este flujo (migración de rsync a clon + `whisplay update` + `startup.sh`
+regenerando el service) se probó de punta a punta en un Whisplay HAT real
+(29/09/2026): clon, copia de `.env`/`data`/`knowledge`, build,
+`startup.sh`, verificación (servicio activo, 0 reinicios, `whisplay
+update`/`whisplay version` corriendo bien), y recién ahí se archivó
+(nunca se borró) la instalación vieja por rsync.

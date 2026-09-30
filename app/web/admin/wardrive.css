@@ -870,3 +870,44 @@
 .wd-pick-row:hover { border-color: var(--accent, #50ff78); }
 .wd-pick-ssid { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wd-pick-meta { font-size: 10px; color: var(--text-secondary, #94a3b8); font-family: ui-monospace, monospace; }
+
+/* Rainbow live track: soft glow under the per-point colored ribbon */
+.wd-track-halo {
+  filter: blur(1px);
+}
+
+/* ── Heading arrow (direction the car is traveling) ──
+   Rotates via inline transform; the divs make a slim kite with a bright
+   tip + soft glow. Points the way the car moves; hidden while parked. */
+.wd-heading-wrap {
+  background: transparent;
+  border: none;
+}
+
+.wd-heading-arrow {
+  width: 46px;
+  height: 46px;
+  /* transform-origin at the anchor point (bottom=center = tip position) */
+  transform-origin: 50% 100%;
+  transition: transform 0.9s cubic-bezier(0.4, 0, 0.2, 1);
+  filter: drop-shadow(0 0 6px rgba(80, 255, 120, 0.65));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.wd-heading-shaft {
+  width: 4px;
+  flex: 1;
+  border-radius: 3px;
+  background: linear-gradient(to top, rgba(80, 255, 120, 0.05), rgba(80, 255, 120, 0.85));
+}
+
+.wd-heading-tip {
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 14px solid rgba(120, 255, 160, 0.95);
+  filter: drop-shadow(0 0 4px rgba(122, 255, 160, 0.8));
+}

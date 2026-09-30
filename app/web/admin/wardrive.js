@@ -204,6 +204,20 @@ function render(st) {
   // Map
   if (gps.hasFix && gps.latitude != null && gps.longitude != null) {
     updateCar(gps.latitude, gps.longitude);
+    // Heading arrow: GPS heading when moving (most devices null it while
+    // parked — fallback to bearing between the last two track points).
+    let heading = gps.headingDeg;
+    if (heading == null && trackPoints.length >= 2) {
+      const a = trackPoints[trackPoints.length - 2];
+      const b = trackPoints[trackPoints.length - 1];
+      const dLon = ((b.lon - a.lon) * Math.PI) / 180;
+      const lat1 = (a.lat * Math.PI) / 180;
+      const lat2 = (b.lat * Math.PI) / 180;
+      const y = Math.sin(dLon) * Math.cos(lat2);
+      const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+      heading = ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+    }
+    updateHeadingMarker(gps.latitude, gps.longitude, heading);
     appendLivePoint(gps.latitude, gps.longitude);
     if (st.session && !trackLayer) void loadLiveTrack(st.session.id);
   }
@@ -319,13 +333,81 @@ function drawTrack() {
   if (trackLayer) trackLayer.remove();
   trackLayer = L.layerGroup().addTo(map);
   const segs = trackSegments(trackPoints);
+  // Rainbow trace: each point gets a hue from a slow cycle (rainbow ribbon
+  // behind the car). Per-point hue = index * STEP mod 360; drawing
+  // two-point polylines per segment keeps colors smooth without any
+  // per-poll rebuild beyond what the plain track already did (same data).
+  const HUE_STEP = 24; // degrees of hue per point — soft pastel cycling
+  const BASE_OPACITY = 0.55; // tenue: visible pero no tapa los dots
+  let idx = 0;
   for (const seg of segs) {
     L.polyline(seg.map((p) => [p.lat, p.lon]), {
-      color: "#34d351",
-      weight: 4,
-      opacity: 0.85,
-      className: "wd-track-line",
+      color: "rgba(120,255,160,0.18)", // halo under the rainbow ribbon
+      weight: 9,
+      opacity: 0.6,
+      lineCap: "round",
+      className: "wd-track-halo",
+      interactive: false,
     }).addTo(trackLayer);
+    for (let i = 1; i < seg.length; i++) {
+      const hue = (idx * HUE_STEP) % 360;
+      idx += 1;
+      L.polyline(
+        [
+          [seg[i - 1].lat, seg[i - 1].lon],
+          [seg[i].lat, seg[i].lon],
+        ],
+        {
+          color: `hsl(${hue.toFixed(0)}, 70%, 62%)`,
+          weight: 4,
+          opacity: BASE_OPACITY,
+          lineCap: "round",
+          className: "wd-track-line",
+          interactive: false,
+        },
+      ).addTo(trackLayer);
+    }
+  }
+}
+
+// ── Heading arrow marker ──
+// A rotating arrow at the car's tip: from GPS heading when present, else
+// from the last two track points (course-over-ground). No heading data →
+// the arrow hides (parked / warm-up).
+let headingMarker = null;
+let lastHeadingDeg = null;
+
+const HEADING_ARROW_HTML =
+  '<div class="wd-heading-arrow">' +
+  '<div class="wd-heading-tip"></div>' +
+  '<div class="wd-heading-shaft"></div>' +
+  "</div>";
+
+function updateHeadingMarker(lat, lon, headingDeg) {
+  if (!map) return;
+  if (headingDeg == null || Number.isNaN(headingDeg)) {
+    headingMarker?.remove();
+    headingMarker = null;
+    lastHeadingDeg = null;
+    return;
+  }
+  lastHeadingDeg = headingDeg;
+  const pos = [lat, lon];
+  if (!headingMarker) {
+    const icon = L.divIcon({
+      className: "wd-heading-wrap",
+      html: HEADING_ARROW_HTML,
+      iconSize: [46, 46],
+      iconAnchor: [23, 46], // tip of the arrow sits at the car position
+    });
+    headingMarker = L.marker(pos, { icon, interactive: false, zIndexOffset: 400 }).addTo(map);
+  } else {
+    headingMarker.setLatLng(pos);
+  }
+  const arrowEl = headingMarker.getElement()?.querySelector(".wd-heading-arrow");
+  if (arrowEl) {
+    // Smooth rotation (shortest path): CSS transitions handle the glide.
+    arrowEl.style.transform = `rotate(${headingDeg.toFixed(1)}deg)`;
   }
 }
 
@@ -1013,6 +1095,8 @@ function initControls() {
         trackPoints = [];
         liveLastPoint = null;
         dotsSessionFilter = null;
+        headingMarker?.remove();
+        headingMarker = null;
         void refreshHandshakeDots();
         drawTrack();
         firstFixSeen = false;

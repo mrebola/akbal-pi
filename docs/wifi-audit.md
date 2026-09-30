@@ -343,9 +343,9 @@ sudo apt-get install -y aircrack-ng hcxtools iw
 ## Cómo usarlo (desde el admin web)
 
 1. Entrar a `http://<ip-del-dispositivo>:8090`, loguearse
-   ([web-ui.md](./web-ui.md)) y abrir la pestaña **WARDRIVING**.
-2. Botón **Entrar** — la radio pasa a wardrive (el radar se detiene, el
-   LCD del dispositivo muestra la pantalla WARDRIVE).
+   ([web-ui.md](./web-ui.md)) y abrir la pestaña **Wifi Audit**.
+2. Botón **Entrar** — la radio pasa a audit (el radar se detiene, el
+   LCD del dispositivo muestra la pantalla WIFI AUDIT).
 3. **Escanear** lista las redes visibles; **Autorizar** agrega el BSSID al
    allowlist (paso obligatorio, es el security boundary). La tabla tiene
    buscador (SSID/BSSID/canal/seguridad) y columnas ordenables (click en

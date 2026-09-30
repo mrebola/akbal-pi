@@ -18,7 +18,7 @@ El proyecto toma como base el repositorio [PiSugar/whisplay-ai-chatbot](https://
 | **Uso del dispositivo** | | |
 | — | [Conversación por voz](#conversación-por-voz-uso-principal) | El flujo principal: botón → hablar → respuesta |
 | — | [Comandos de voz](#comandos-de-voz-instantáneos-no-gastan-turno) | Atajos instantáneos ("ayuda", volumen, modelo...) |
-| — | [Menú rápido](#menú-rápido-click-corto-en-reposo) | Los 10 modos de la app física y sus gestos |
+| — | [Menú rápido](#menú-rápido-click-corto-en-reposo) | Los 12 modos de la app física y sus gestos |
 | — | [WiFi Radar en pantalla](#wifi-radar-pantalla) | Radar de redes en la LCD física |
 | — | [Aircraft Radar en pantalla](#aircraft-radar-pantalla) | Radar de aeronaves (ADS-B) en la LCD física |
 | **Sitio web** (`http://<ip>:8090`) | | |
@@ -26,11 +26,14 @@ El proyecto toma como base el repositorio [PiSugar/whisplay-ai-chatbot](https://
 | — | [WiFi](#wifi-pestaña-sub-pestañas-conexión-redes) | Conexión, redes, punto de acceso |
 | — | [WIFIRADAR 3D](#wifiradar-wifiradar-link-radar-wi-fi) | Radar 3D con toggle REAL/DEMO |
 | — | [Aircraft Radar](#aircraft-radar-aircraft-radar-link-radar-de-aviones) | Tráfico aéreo (ADS-B) vía HackRF One |
-| — | [Wardriving](#wardriving-pestaña) | Auditoría de handshakes (allowlist, ataques, sesiones) |
+| — | [Wifi Audit](#wifi-audit-pestaña) | Auditoría de laboratorio: allowlist, ataques, sesiones |
+| — | [Wardrive](#wardrive-wardrive) | Captura mientras se conduce: mapa GPS + deauth oportunista |
+| — | [GPS](#gps-página-gps) | Posición en vivo + satélites (GNSS, cacheado y offline-first) |
 | — | [OST](#ost-pestaña-ost) | Jukebox de música |
 | — | [Dispositivos](#dispositivos-pestaña-usb) | USB, montaje, adaptadores WiFi |
 | — | [Ajustes](#ajustes) | Volumen, bocina Bluetooth, respaldos |
 | — | [API HTTP](#api-http-para-integraciones) | Endpoints para integraciones |
+| — | [Idioma (ES/EN)](#idioma-esen) | Selector siempre visible en el topbar |
 | **Docs por archivo** | | |
 | — | [`docs/`](docs/) | Bitácora de instalación, fixes y decisiones (índice en [`docs/SETUP.md`](docs/SETUP.md)) |
 | — | [`app/AGENTS.md`](app/AGENTS.md) | Arquitectura interna de la app (para agentes/mantenedores) |
@@ -62,9 +65,11 @@ Raspberry Pi OS 64-bit, basado en Debian Trixie.
 | Comandos de voz | Volumen, cambio/consulta de modelo de LLM y modo agente/local, resueltos por expresiones regulares antes de llegar al LLM — instantáneo, sin gastar un turno. Decir "ayuda" con el botón presionado muestra un resumen de todos estos comandos en pantalla ([`docs/voice-commands.md`](docs/voice-commands.md)) |
 | Wifi | Menú físico "WiFi directo" (AP directo + QR, ver [`docs/wifi.md`](docs/wifi.md)) + interfaz web con chat a los modelos locales, wifi completo (buscar, conectar con contraseña, olvidar redes), USB y batería/CPU/RAM en vivo en `http://<ip-del-dispositivo>:8090` ([`docs/web-ui.md`](docs/web-ui.md)) |
 | WiFi Radar | Visualización 3D (Three.js) del espacio WiFi alrededor del Pi, capturado pasivamente con cualquier adaptador USB en modo monitor (detección genérica; probado con Atheros AR9271 y Ralink RT5372) — toggle real/demo y caída a demo con datos simulados si no hay hardware conectado. Fabricantes resueltos del registro IEEE local (ieee-data), con fallback opcional a la API de macvendors.com ([`docs/wifiradar.md`](docs/wifiradar.md)) |
-| Wardriving | Captura de handshakes para laboratorio/tesis: allowlist explícita de BSSIDs como único mecanismo de autorización, ataques pmkid/deauth con aircrack-ng, sesiones con artifacts descargables desde la web, contraseñas crackeadas visibles por sesión (ojo con revelado) y dictionary attack (rockyou) desde el listado de sesiones — probado contra un AP de laboratorio dedicado ([`docs/wardrive.md`](docs/wardrive.md), [`docs/lab-wireless.md`](docs/lab-wireless.md)) |
-| GPS | Mapa mundial con la posición en vivo del dongle GPS USB: marcador, precisión, sky plot de satélites (en fix / visibles / necesarios) — [`docs/gps.md`](docs/gps.md) |
+| Wifi Audit | Captura de handshakes para laboratorio/tesis: allowlist explícita de BSSIDs como único mecanismo de autorización, ataques pmkid/deauth con aircrack-ng, sesiones con artifacts descargables desde la web, contraseñas crackeadas visibles por sesión (ojo con revelado) y dictionary attack (rockyou) desde el listado de sesiones — probado contra un AP de laboratorio dedicado ([`docs/wifi-audit.md`](docs/wifi-audit.md), [`docs/lab-wireless.md`](docs/lab-wireless.md)) |
+| Wardrive | Captura mientras se conduce, sobre la misma radio: registro pasivo continuo de redes/handshakes por SSID (SQLite), deauth oportunista opcional (apagado por defecto, con varios frenos de seguridad), track GPS y mapa en vivo, export CSV (WiGLE)/GPX — módulo aparte de Wifi Audit, nunca corren a la vez ([`docs/wardrive.md`](docs/wardrive.md)) |
+| GPS + GNSS | Mapa mundial con la posición en vivo del dongle GPS USB: marcador, precisión, sky plot de satélites (en fix / visibles / necesarios) — [`docs/gps.md`](docs/gps.md). Cada satélite se enriquece con metadata cacheada en SQLite + datos orbitales de CelesTrak (nombre, catálogo NORAD): offline-first, nunca bloquea la UI si falla Internet — [`docs/gnss.md`](docs/gnss.md) |
 | Aircraft Radar | Aeronaves cercanas por ADS-B (1090MHz, decodificado con `readsb`) con un HackRF One en modo RX-only: mapa real en modo oscuro con cada avión moviéndose por su posición real, o radar circular por distancia/rumbo (vía el GPS del Pi); identidad (matrícula/modelo/aerolínea) y ruta resueltas por caché local + adsbdb.com, historial en SQLite y caída a demo si no hay HackRF conectado ([`docs/aircraft-radar.md`](docs/aircraft-radar.md)) |
+| Idioma (i18n) | Selector ES/EN siempre visible en el topbar de la web admin: detecta el idioma del navegador en la primera visita, la selección manual persiste y tiene prioridad — [`docs/i18n.md`](docs/i18n.md) |
 
 Detalle completo del setup en [`docs/SETUP.md`](docs/SETUP.md).
 
@@ -277,17 +282,20 @@ volumen y modelo de LLM por voz — incluye el menú visual en pantalla para
 elegir modelo con el botón del Whisplay HAT (click para recorrer opciones,
 mantener ~0.9 segundos para confirmar, doble clic para cancelar), la
 pantalla de carga con spinner indeterminado mientras Ollama carga el modelo
-elegido, un menú rápido (click corto en reposo: Modelo/Modo/Ayuda/Cámara/
-Volumen/Internet emergencia — este último es un administrador de wifi
-básico, ver [`docs/wifi.md`](docs/wifi.md)) y
-una pantalla de ayuda (decir "ayuda" con el botón presionado, o elegirla del
-menú rápido) que resume los comandos de voz en a lo sumo 2 pantallas.
+elegido, el menú rápido completo (ver la tabla en [Menú
+rápido](#menú-rápido-click-corto-en-reposo) más abajo — creció bastante
+desde esta primera versión) y una pantalla de ayuda (decir "ayuda" con el
+botón presionado, o elegirla del menú rápido) que resume los comandos de
+voz en a lo sumo 2 pantallas.
 [`docs/llm-model-selection.md`](docs/llm-model-selection.md) documenta cómo
 se eligió el modelo por defecto y por qué el menú de voz ya no cambia de
 modelo a ciegas ante un comando mal reconocido (causó una regresión real:
 dejó activado un modelo con problemas de eco en respuestas cortas).
 
-Pendiente: wake word (activación por voz sin botón).
+Wake word (activación por voz sin botón) ya está implementado
+(`WAKE_WORD_ENABLED=true` en `.env`, motor tipo openWakeWord con el modelo
+`hey_jarvis` por defecto — ver `app/src/device/wakeword.ts` y
+`app/python/wakeword.py`), apagado por defecto.
 
 ---
 
@@ -332,7 +340,7 @@ con estos modos, cada uno con su propio control:
 | Ítem (pantalla) | Qué hace | Gestos dentro del modo |
 |---|---|---|
 | **Modelo** | Elegir modelo de IA entre los descargados en Ollama. Click recorre opciones, mantener confirma (spinner mientras Ollama carga el modelo), doble clic cancela sin cambiar. No reinicia el servicio. |
-| **Modo** | Alterna el origen de las respuestas: **"Modo agente"** (conversa vía OpenClaw, un agente externo puenteado por `whisplay-im`) o **"Modo local"** (el LLM corre en la propia Pi). Click navega, mantener confirma; queda persistido en `.env` y el top-bar de la pantalla lo indica (`agent`/`local`). |
+| **Modo** | Alterna el origen de las respuestas: **"Modo agente"** (conversa vía OpenClaw, un agente externo puenteado por `whisplay-im` — ver [`docs/agent-mode.md`](docs/agent-mode.md)) o **"Modo local"** (el LLM corre en la propia Pi). Click navega, mantener confirma; queda persistido en `.env`. La pantalla física no indica cuál está activo (ver este menú o Ajustes → General en la web para confirmarlo). |
 | **Audio** | Salida de sonido: **bocina de la Pi** (Whisplay HAT, ALSA directo) o **bocina externa Bluetooth** ya emparejada desde la web (Ajustes → Salida de audio — ahí se escanea, vincula y elimina). Al confirmar una BT el dispositivo la conecta y suelta cualquier otra; ver la sección Ajustes para el detalle. Persiste en `.env`. |
 | **OST** | Reproductor dedicado del OST de Cypher con barra de progreso: **click** play/pausa · **doble clic** siguiente pista · **mantener** salir. Muestra título y progreso de la pista actual. |
 | **Volumen** | Cada **click** sube +10% en vivo (barra de progreso en pantalla); **doble clic** sale sin cambios; mantener también sale. |
@@ -342,6 +350,7 @@ con estos modos, cada uno con su propio control:
 | **Conexión web** | Muestra la IP LAN y de Tailscale del dispositivo + QR apuntando a la web admin (`http://<ip>:8090`). Es la forma de saber a qué URL conectarse. |
 | **WiFi Radar** | Versión de pantalla del radar WiFi (detalle abajo): discos con puntos por red cercana, texto inferior rotando nombre + dBm. **Mantener** para salir. |
 | **Radar de Aviones** | Versión de pantalla del Aircraft Radar (detalle abajo): disco con un punto por aeronave, ubicado por su rumbo/distancia GPS reales. **Mantener** para salir. |
+| **Wardrive** | Arranca/detiene una sesión de captura mientras se conduce (mismo servicio que la página web `/wardrive` — arrancar acá y seguirla desde el celular funciona igual que al revés). **Mantener** inicia la sesión (o la termina si ya está corriendo); **click** refresca contadores en pantalla (tiempo, distancia, redes, handshakes). |
 
 El menú se cierra solo tras **60 segundos** sin tocar el botón.
 
@@ -407,11 +416,14 @@ de teléfonos/laptops modernos se etiquetan "Random MAC" sin intentar resolverla
 En el modal de detalles, las MAC van enmascaradas (`AA:BB:CC:••:••:••`) con un
 botón 👁 para revelarlas.
 
-### WARDRIVING (pestaña)
+### Wifi Audit (pestaña)
 
 Captura de handshakes para laboratorio/tesis, sobre la misma radio del radar.
-Flujo, ciclo de ataque con comandos exactos, modelo de allowlist y sesiones:
-ver [`docs/wardrive.md`](./docs/wardrive.md). Resumen:
+Distinto de "Wardrive" (página aparte, más abajo): acá se autoriza y ataca
+una red por vez, quieto; Wardrive registra todo mientras se conduce, sin
+ataques dirigidos. Flujo, ciclo de ataque con comandos exactos, modelo de
+allowlist y sesiones: ver [`docs/wifi-audit.md`](./docs/wifi-audit.md).
+Resumen:
 
 1. **Entrar** (banner superior) toma la radio en modo monitor — el radar deja de
    capturar hasta que salgas (se retoma solo al salir).
@@ -438,6 +450,29 @@ ver [`docs/wardrive.md`](./docs/wardrive.md). Resumen:
    (rockyou contra esa captura, con barra de progreso y cancelación).
 9. **Salir** restaura la radio a modo normal y devuelve el control al radar.
 
+### Wardrive (`/wardrive`)
+
+Página fullscreen aparte (no una pestaña del index): captura pasiva y
+continua mientras se conduce, sobre la misma radio que el radar/Wifi Audit
+(nunca corren a la vez). Detalle completo en
+[`docs/wardrive.md`](./docs/wardrive.md). Resumen:
+
+1. **▶ INICIAR** toma la radio (detiene WIFIRADAR), entra en modo monitor y
+   arranca el hop 2.4GHz + el track GPS. Arrancable también desde el menú
+   físico ("Wardrive" en el menú rápido) — es el mismo servicio, entrar por
+   un lado se ve y se controla igual desde el otro.
+2. Cada red vista se registra por SSID (no por BSSID) en SQLite — un mismo
+   SSID visto por varios APs no se re-ataca una vez que uno de ellos ya dio
+   handshake (✋ capturado / ✓ cubierto por otro AP / ✕ agotado).
+3. **Deauth oportunista** (toggle rojo, apagado por defecto): solo dispara a
+   ≤25km/h, RSSI ≥ −72dBm, seguridad conocida, sin handshake todavía, y con
+   límite de 3 intentos + cooldown de 45s por AP. La captura pasiva de EAPOL
+   siempre está activa, dispare o no el deauth.
+4. Mapa Leaflet en vivo con el recorrido, redes vistas y handshakes
+   capturados; pestaña de sesiones pasadas con export CSV (formato WiGLE) y
+   GPX.
+5. **■ DETENER** restaura la radio a modo normal.
+
 ### GPS (página /gps)
 
 Mapa mundial fullscreen con la posición en vivo del dongle GPS USB de la Pi:
@@ -446,6 +481,12 @@ velocidad/rumbo/HDOP y un panel de satélites con sky plot (en fix N/4,
 visibles M/total, coloreados por SNR). Sin fix indica cuántos satélites hay
 y cuántos faltan. Funciona con u-blox y clones (`ttyACM*`/`ttyUSB*`), con o
 sin `gpsd` — ver [`docs/gps.md`](docs/gps.md).
+
+Cada satélite se enriquece con metadata GNSS: nombre y catálogo NORAD
+cacheados en SQLite, con datos orbitales de CelesTrak actualizados en
+segundo plano si hay Internet. Offline-first: si no hay Internet o falla la
+API, se sigue mostrando lo cacheado — nunca bloquea la pantalla ni la web.
+Ver [`docs/gnss.md`](docs/gnss.md).
 
 ### Aircraft Radar (`/aircraft-radar`, link "Radar de Aviones")
 
@@ -512,6 +553,20 @@ misma sesión de cookie: `/api/status`, `/api/chat`, `/api/wifi/scan`,
 `/api/wifiradar/snapshot` + `POST /api/wifiradar/mode`
 (`{"mode":"live"|"demo"}`), `/api/aircraft` + `/api/aircraft/:icao` +
 `/api/aircraft/nearest` + `/api/aircraft/history` + `POST /api/aircraft/mode`,
-`/api/wardrive/*` (`enter`, `exit`, `source`,
-`allowlist`, `attack/one`, ...), `/api/music/*`, `/api/usb/*`, `/api/backup/*`.
+`/api/wardrive/*` — Wifi Audit, el nombre de ruta no se renombró junto con la
+pestaña (`enter`, `exit`, `source`, `allowlist`, `attack/one`, ...),
+`/api/wardrive/drive/*` — Wardrive/conducción (`start`, `stop`, `status`,
+`sessions`, `export/csv`, `export/gpx`, ...), `/api/gnss/status` +
+`/api/gnss/history`, `/api/music/*`, `/api/usb/*`, `/api/backup/*`.
 Ver `app/src/device/web-admin-server.ts` para la lista completa.
+
+### Idioma (ES/EN)
+
+Selector siempre visible en el topbar de toda la web admin (mismo lugar en
+todas las pestañas). En la primera visita detecta el idioma del navegador
+(español → ES, cualquier otro → EN); a partir de ahí la selección manual
+persiste en el navegador y tiene prioridad sobre esa detección. Motor propio
+sin dependencias (`app/web/admin/i18n.js` + diccionarios en
+`app/web/admin/i18n/{es,en}.json`) — ver [`docs/i18n.md`](docs/i18n.md) para
+cómo agregar una clave nueva y qué páginas/textos todavía quedan pendientes
+de traducir.

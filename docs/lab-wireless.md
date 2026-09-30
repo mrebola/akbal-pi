@@ -70,7 +70,7 @@ beacons: `SecurityKind = "WEP"` en app/src/wifiradar/types.ts).
 2. Dongle AR9271 enchufado → WIFIRADAR debe reportar modo live
    (ver [wifiradar.md](./wifiradar.md)); `akbal_lab` tiene que aparecer en
    la visualización 3D con su canal y seguridad WPA2.
-3. Pestaña WARDRIVING → Entrar → Escanear → `akbal_lab` debería aparecer
+3. Pestaña Wifi Audit → Entrar → Escanear → `akbal_lab` debería aparecer
    con RSSI fuerte si estás cerca. Autorizar el BSSID del AP → Auditar.
 4. **Para que el deauth funcione** tiene que haber un cliente asociado al
    AP (el AP no genera handshakes solo): conectar la laptop u otro equipo

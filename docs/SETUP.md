@@ -133,6 +133,8 @@ Raspberry Pi OS 64-bit (Debian Trixie), conectando por SSH al hostname Tailscale
 
 ## Pendiente / posibles siguientes pasos
 
-- Wake word (activación por voz sin botón) — ver wiki de whisplay-ai-chatbot.
+- ~~Wake word (activación por voz sin botón)~~ — implementado después de este
+  setup inicial (`WAKE_WORD_ENABLED` en `.env`, `app/src/device/wakeword.ts`),
+  apagado por defecto. No estaba disponible todavía cuando se armó esta Pi.
 - Decidir si conviene pasar a modo headless (`startup.sh` puede rehacerse para
   deshabilitar la GUI).

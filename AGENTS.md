@@ -26,9 +26,12 @@ akbal-pi/
 │   │   ├── device/        # Hardware: audio, display, batería, web-admin
 │   │   ├── cloud-api/     # Proveedores ASR/LLM/TTS (local/ = ollama, whisper, piper)
 │   │   ├── wifiradar/     # Visualización WiFi 3D con AR9271 en modo monitor
+│   │   ├── wifi-audit/    # Captura de handshakes de laboratorio (allowlist, ataques dirigidos)
+│   │   ├── wardrive/      # Captura mientras se conduce (mapa + GPS + deauth oportunista)
+│   │   ├── services/      # adsb/ (Aircraft Radar) y gnss/ (metadata de satélites GNSS)
 │   │   └── utils/         # wifi (nmcli), usb, system-stats, volume
 │   ├── python/            # Interfaz de hardware (GPIO/SPI/LCD, socket 12345)
-│   ├── web/               # Frontends estáticos sin build: admin/ y whisplay-display/
+│   ├── web/               # Frontends estáticos sin build: admin/ (+ i18n/) y whisplay-display/
 │   ├── cli/               # CLI bash (bin/whisplay)
 │   └── dist/              # Compilado (no commitear)
 ├── docs/                  # Bitácora: SETUP.md, fixes de hardware, decisiones

@@ -30,15 +30,23 @@ Ya no usa el diálogo nativo de autenticación básica del navegador —
   imágenes, descarga de todo lo demás).
 - **WIFIRADAR**: visualización 3D del espacio WiFi con Three.js — página
   aparte, ver [`wifiradar.md`](./wifiradar.md).
-- **WARDRIVING**: captura de handshakes de laboratorio con allowlist
-  explícita — ver [`wifi-audit.md`](./wifi-audit.md). Para las pruebas reales
-  se usa un AP dedicado (SSID `akbal_lab`), ver
+- **Wifi Audit**: captura de handshakes de laboratorio con allowlist
+  explícita — ver [`wifi-audit.md`](./wifi-audit.md) (este módulo se llamaba
+  "Wardrive" antes de renombrarse; el wardrive de conducción es una página
+  aparte, `/wardrive`, ver [`wardrive.md`](./wardrive.md)). Para las pruebas
+  reales se usa un AP dedicado (SSID `akbal_lab`), ver
   [`lab-wireless.md`](./lab-wireless.md). Las redes visibles se listan en
   una tabla con buscador y columnas ordenables; click en una fila abre el
   modal de detalles de la red (BSSID enmascarado `AA:BB:CC:••:••:••`, con
   botón 👁 para revelar — el mismo toggle del radar).
 - Indicadores en la topbar: batería (%, carga), CPU/RAM/disco del Pi —
-  todos se refrescan solos cada 60s sin recargar la página.
+  todos se refrescan solos cada 60s sin recargar la página; selector de
+  idioma ES/EN siempre visible, ver [`i18n.md`](./i18n.md).
+- Este doc cubre la arquitectura/seguridad del servidor web y las páginas
+  originales (chat, wifi, USB, WIFIRADAR, Wifi Audit); el resto de las
+  páginas agregadas después (Wardrive, GPS/GNSS, Aircraft Radar, OST,
+  Ajustes) están documentadas en el [`README`](../README.md#sitio-web-de-administración-httpip8090)
+  y en su propio doc de `docs/`.
 
 ## Cómo prenderla/apagarla y cambiar las credenciales
 

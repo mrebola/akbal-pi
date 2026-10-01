@@ -55,7 +55,7 @@ import {
 } from "./bluetooth-audio";
 import { getCurrentLogPercent, setVolumeByAmixer } from "../utils/volume";
 import { getBatteryReading } from "../status/battery-status";
-import { getSystemStats } from "../utils/system-stats";
+import { getSystemStats, getLocalIp } from "../utils/system-stats";
 import {
   listBackups,
   createBackup,
@@ -376,6 +376,7 @@ export class WebAdminServer {
         wifi,
         battery: getBatteryReading(),
         system,
+        ip: getLocalIp(),
       };
     });
 

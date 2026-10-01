@@ -405,12 +405,11 @@ function setText(id, text) {
   if (el) el.textContent = text;
 }
 
-// ---- Header (same /api/status pipeline as index.html) ----
+// ---- Header: only the LIVE/DEMO platform toggle is page-specific now —
+// the hamburger/drawer, AKBAL OK panel and its /api/status poll live in
+// topbar.js (shared across all 6 pages, see that file). ----
 
 function initHeader() {
-  // Copy of index.html's loadStatus, trimmed to what this page shows.
-  void loadStatus();
-  setInterval(() => void loadStatus(), 60000);
   // Platform LIVE/DEMO toggle (device-wide; the backend parks the dongle in
   // demo and serves a synthetic fix, so this page needs no special casing).
   const plx = document.getElementById("platform-toggle");
@@ -444,62 +443,4 @@ function initHeader() {
       }
     } catch { /* default live */ }
   })();
-  const toggle = document.getElementById("sys-toggle");
-  const pop = document.getElementById("sys-popover");
-  toggle?.addEventListener("click", (e) => {
-    e.stopPropagation();
-    pop?.classList.toggle("hidden");
-  });
-  document.addEventListener("click", (e) => {
-    if (pop && !pop.contains(e.target) && e.target !== toggle) pop?.classList.add("hidden");
-  });
-  const logout = document.getElementById("logout-btn");
-  logout?.addEventListener("click", async () => {
-    try {
-      await fetch("/api/logout", { method: "POST" });
-    } catch { /* ignore */ }
-    window.location.href = "/login";
-  });
-  const navToggle = document.getElementById("nav-toggle");
-  navToggle?.addEventListener("click", () => {
-    const tabs = document.getElementById("main-tabs");
-    const backdrop = document.getElementById("nav-backdrop");
-    const expanded = navToggle.getAttribute("aria-expanded") === "true";
-    navToggle.setAttribute("aria-expanded", String(!expanded));
-    tabs?.classList.toggle("open", !expanded);
-    backdrop?.classList.toggle("hidden", expanded);
-  });
-}
-
-async function loadStatus() {
-  try {
-    const res = await fetch("/api/status");
-    if (!res.ok) return;
-    const data = await res.json();
-    const wifiLabel = data.wifi?.connected ? data.wifi.ssid : "sin wifi";
-    const pill = document.getElementById("status-pill");
-    if (pill) pill.textContent = `${data.model} · ${wifiLabel}`;
-    setText("hdr-model", data.model || "—");
-    setText("hdr-model-full", data.model || "—");
-    setText("hdr-wifi", wifiLabel);
-    document.getElementById("hdr-online-dot")?.classList.add("online");
-    const battery = data.battery;
-    const pct = document.getElementById("battery-pct");
-    const icon = document.getElementById("battery-icon");
-    if (pct && icon) {
-      if (!battery || !battery.connected || battery.level == null) {
-        pct.textContent = "N/A";
-        icon.textContent = "🔋";
-      } else {
-        pct.textContent = `${battery.level}%`;
-        icon.textContent = battery.charging ? "⚡" : "🔋";
-      }
-    }
-    const sys = data.system;
-    setText("stat-cpu", sys ? `${sys.cpuPercent}%` : "—");
-    setText("stat-ram", sys ? `${Math.round(sys.ram.percent)}%` : "—");
-    setText("stat-disk", sys ? `${Math.round(sys.disk.percent)}%` : "—");
-  } catch {
-    setText("hdr-model", "sin conexión");
-  }
 }

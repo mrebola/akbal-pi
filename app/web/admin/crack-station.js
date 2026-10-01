@@ -83,66 +83,9 @@ function wdFormatDateShort(ms) {
   return `${day}/${mon}/${yr}`;
 }
 
-// ---- Header (same /api/status pipeline as wardrive.js/gps.js) ----
-
-function initHeader() {
-  void loadStatus();
-  setInterval(() => void loadStatus(), 60000);
-  const toggle = el("sys-toggle");
-  const pop = el("sys-popover");
-  toggle?.addEventListener("click", (e) => {
-    e.stopPropagation();
-    pop?.classList.toggle("hidden");
-  });
-  document.addEventListener("click", (e) => {
-    if (pop && !pop.contains(e.target) && e.target !== toggle) pop?.classList.add("hidden");
-  });
-  el("logout-btn")?.addEventListener("click", async () => {
-    try {
-      await fetch("/api/logout", { method: "POST" });
-    } catch { /* ignore */ }
-    window.location.href = "/login";
-  });
-  el("nav-toggle")?.addEventListener("click", () => {
-    const tabs = el("main-tabs");
-    const backdrop = el("nav-backdrop");
-    const expanded = el("nav-toggle").getAttribute("aria-expanded") === "true";
-    el("nav-toggle").setAttribute("aria-expanded", String(!expanded));
-    tabs?.classList.toggle("open", !expanded);
-    backdrop?.classList.toggle("hidden", expanded);
-  });
-}
-
-async function loadStatus() {
-  try {
-    const res = await fetch("/api/status");
-    if (!res.ok) return;
-    const data = await res.json();
-    const battery = data.battery;
-    const pct = el("battery-pct");
-    const icon = el("battery-icon");
-    if (pct && icon) {
-      if (!battery || !battery.connected || battery.level == null) {
-        pct.textContent = "N/A";
-        icon.textContent = "🔋";
-      } else {
-        pct.textContent = `${battery.level}%`;
-        icon.textContent = battery.charging ? "⚡" : "🔋";
-      }
-    }
-    const sys = data.system;
-    const sText = (id, text) => { const n = el(id); if (n) n.textContent = text; };
-    sText("stat-cpu", sys ? `${sys.cpuPercent}%` : "—");
-    sText("stat-ram", sys ? `${Math.round(sys.ram.percent)}%` : "—");
-    sText("stat-disk", sys ? `${Math.round(sys.disk.percent)}%` : "—");
-    sText("hdr-model", data.model || "—");
-    sText("hdr-model-full", data.model || "—");
-    sText("hdr-wifi", data.wifi?.connected ? data.wifi.ssid : "sin wifi");
-    el("hdr-online-dot")?.classList.add("online");
-  } catch { /* transient — keep last-known values on screen */ }
-}
-
-initHeader();
+// The hamburger/drawer, AKBAL OK panel and its /api/status poll are owned
+// by topbar.js now (shared across all 6 pages) — this page has no
+// page-specific header controls of its own, so there's nothing left here.
 
 // ---- Crack Station: persistent handshake inventory + crack controls ----
 // Backend merges Wifi Audit's per-session session.json inventory with
@@ -284,16 +227,16 @@ function wdRenderCrackStation() {
       const rowClass = it.bssid === wdHighlightBssid ? "wd-crack-row-highlight" : "";
       return `<tr class="${rowClass}" data-bssid="${it.bssid}" data-ssid="${escapeHtml(it.ssid || "")}"
                   data-session="${it.sessionId}" data-cap="${escapeHtml(capPath)}">
-        <td class="wd-ssid">${it.live ? '<span class="demo-badge" style="background:rgba(80,255,120,.12);color:#34d351;">EN VIVO</span> ' : ""}${escapeHtml(it.ssid || "(oculta)")}</td>
-        <td style="font-family: ui-monospace, monospace; font-size: 11px;">${escapeHtml(it.bssid)}</td>
-        <td>${wdOriginBadge(it.source)}</td>
-        <td class="muted" style="font-size:11px; white-space:nowrap;" title="${escapeHtml(wdFormatDateTime(it.capturedAt))}">${escapeHtml(wdFormatDateShort(it.capturedAt))}</td>
-        <td>${gps}</td>
-        <td>${it.hasHandshake ? '<span class="wd-verify-badge ok">✓ .cap</span>' : "—"}</td>
-        <td>${it.password ? `<span class="wd-verify-badge ok" style="max-width:180px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(it.password)}</span>` : "—"}</td>
-        <td class="wd-row-status-cell">${statusHtml}</td>
-        <td><div class="wd-action-group">${actionsHtml}</div></td>
-        <td><button class="wd-crack-files-btn" data-session="${escapeHtml(it.sessionId)}" data-ssid="${escapeHtml(it.ssid || "")}" data-bssid="${it.bssid}" data-source="${it.source}">${escapeHtml(t("crackstation.files_btn", "Ver archivos"))}</button></td>
+        <td class="wd-ssid" data-label="SSID">${it.live ? '<span class="demo-badge" style="background:rgba(80,255,120,.12);color:#34d351;">EN VIVO</span> ' : ""}${escapeHtml(it.ssid || "(oculta)")}</td>
+        <td data-label="MAC" style="font-family: ui-monospace, monospace; font-size: 11px;">${escapeHtml(it.bssid)}</td>
+        <td data-label="Origen">${wdOriginBadge(it.source)}</td>
+        <td class="muted" data-label="Fecha" style="font-size:11px; white-space:nowrap;" title="${escapeHtml(wdFormatDateTime(it.capturedAt))}">${escapeHtml(wdFormatDateShort(it.capturedAt))}</td>
+        <td data-label="GPS">${gps}</td>
+        <td data-label="Handshake">${it.hasHandshake ? '<span class="wd-verify-badge ok">✓ .cap</span>' : "—"}</td>
+        <td data-label="Contraseña">${it.password ? `<span class="wd-verify-badge ok" style="max-width:180px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(it.password)}</span>` : "—"}</td>
+        <td class="wd-row-status-cell" data-label="Estado">${statusHtml}</td>
+        <td data-label="Ataques"><div class="wd-action-group">${actionsHtml}</div></td>
+        <td data-label="Archivos"><button class="wd-crack-files-btn" data-session="${escapeHtml(it.sessionId)}" data-ssid="${escapeHtml(it.ssid || "")}" data-bssid="${it.bssid}" data-source="${it.source}">${escapeHtml(t("crackstation.files_btn", "Ver archivos"))}</button></td>
       </tr>`;
     })
     .join("");

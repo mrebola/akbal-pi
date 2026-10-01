@@ -10,13 +10,6 @@ const chatCancel = document.getElementById("chat-cancel");
 const modelSelect = document.getElementById("model-select");
 const statusPill = document.getElementById("status-pill");
 const avatar = document.getElementById("avatar");
-const batteryIndicator = document.getElementById("battery-indicator");
-const batteryIcon = document.getElementById("battery-icon");
-const batteryPct = document.getElementById("battery-pct");
-const statCpu = document.getElementById("stat-cpu");
-const statRam = document.getElementById("stat-ram");
-const statDisk = document.getElementById("stat-disk");
-const logoutBtn = document.getElementById("logout-btn");
 const modelLoadIndicator = document.getElementById("model-load-indicator");
 const unloadModelBtn = document.getElementById("unload-model-btn");
 const audioOutputSelect = document.getElementById("audio-output-select");
@@ -26,10 +19,8 @@ const btScanBtn = document.getElementById("bt-scan-btn");
 const btScanStatus = document.getElementById("bt-scan-status");
 const btFoundList = document.getElementById("bt-found-list");
 
-logoutBtn.addEventListener("click", async () => {
-  await fetch("/api/logout", { method: "POST" }).catch(() => {});
-  window.location.href = "/login";
-});
+// logout-btn's click handler lives in topbar.js now (the AKBAL OK panel
+// owns that button across all 6 pages).
 
 // The session cookie can expire (or the server can restart, which throws
 // away the in-memory signing key — see web-admin-server.ts) while this
@@ -63,38 +54,6 @@ function setAvatarTalking(isTalking) {
   avatar.src = isTalking ? "/avatar/talking.gif" : "/avatar/standing.gif";
 }
 
-function updateBatteryIndicator(battery) {
-  // "N/A" when there's no usable reading: no PiSugar daemon, or the daemon
-  // can't reach the chip (backend sends level: null).
-  if (!battery || !battery.connected || battery.level == null) {
-    batteryPct.textContent = "N/A";
-    batteryIcon.textContent = "🔋";
-    batteryIndicator.classList.remove("low", "charging");
-    return;
-  }
-  batteryPct.textContent = `${battery.level}%`;
-  batteryIcon.textContent = battery.charging ? "⚡" : "🔋";
-  batteryIndicator.classList.toggle("low", battery.level <= 15 && !battery.charging);
-  batteryIndicator.classList.toggle("charging", Boolean(battery.charging));
-}
-
-function updateSystemStats(system) {
-  if (!system) {
-    statCpu.textContent = "—";
-    statRam.textContent = "—";
-    statDisk.textContent = "—";
-    statCpu.classList.remove("warn");
-    statRam.classList.remove("warn");
-    statDisk.classList.remove("warn");
-    return;
-  }
-  statCpu.textContent = `${system.cpuPercent}%`;
-  statRam.textContent = `${system.ram.percent}%`;
-  statDisk.textContent = `${system.disk.percent}%`;
-  statCpu.classList.toggle("warn", system.cpuPercent >= 85);
-  statRam.classList.toggle("warn", system.ram.percent >= 85);
-  statDisk.classList.toggle("warn", system.disk.percent >= 90);
-}
 
 function addMessage(role, text) {
   const empty = document.getElementById("chat-empty");
@@ -116,20 +75,17 @@ function addMessage(role, text) {
   return el;
 }
 
+// The topbar's own model/wifi/battery/cpu/ram/disk display (the AKBAL OK
+// panel) is now polled independently by topbar.js (shared across all 6
+// pages, see that file) — this loadStatus() keeps only what's unique to
+// this page: the Settings tab's live overview, the model-load indicator,
+// and keeping the audio-output <select> in sync.
 async function loadStatus() {
   try {
     const res = await apiFetch("/api/status");
     const data = await res.json();
     const wifiLabel = data.wifi?.connected ? data.wifi.ssid : "sin wifi";
     statusPill.textContent = `${data.model} · ${wifiLabel}`;
-    // Compact header summary + system popover.
-    setText("hdr-model", data.model || "—");
-    setText("hdr-model-full", data.model || "—");
-    setText("hdr-wifi", wifiLabel);
-    const onlineDot = document.getElementById("hdr-online-dot");
-    if (onlineDot) onlineDot.classList.add("online");
-    updateBatteryIndicator(data.battery);
-    updateSystemStats(data.system);
     modelLoadIndicator.textContent = data.modelLoaded ? "Cargado" : "Descargado";
     modelLoadIndicator.classList.toggle("loaded", Boolean(data.modelLoaded));
     modelLoadIndicator.classList.toggle("ok", Boolean(data.modelLoaded));
@@ -139,25 +95,8 @@ async function loadStatus() {
     updateSettingsOverview(data);
   } catch {
     statusPill.textContent = "sin conexión con el dispositivo";
-    const onlineDot = document.getElementById("hdr-online-dot");
-    if (onlineDot) onlineDot.classList.remove("online");
-    setText("hdr-model", "sin conexión");
   }
 }
-
-// ---- Header system popover ----
-(function () {
-  const toggle = document.getElementById("sys-toggle");
-  const pop = document.getElementById("sys-popover");
-  if (!toggle || !pop) return;
-  toggle.addEventListener("click", (e) => {
-    e.stopPropagation();
-    pop.classList.toggle("hidden");
-  });
-  document.addEventListener("click", (e) => {
-    if (!pop.contains(e.target) && e.target !== toggle) pop.classList.add("hidden");
-  });
-})();
 
 // ---- Toasts ----
 function toast(message, kind = "info") {
@@ -628,38 +567,13 @@ for (const btn of document.querySelectorAll(".tab-btn")) {
   });
 }
 
-// ---- Mobile nav: hamburger dropdown (see the 720px media query in
-// styles.css) — the same .tabs markup used on desktop, just repositioned
-// and toggled by this button below that breakpoint.
-const navToggle = document.getElementById("nav-toggle");
-const mainTabs = document.getElementById("main-tabs");
-const navBackdrop = document.getElementById("nav-backdrop");
-
+// The hamburger/drawer itself (open/close, accordions, backdrop, Escape,
+// auto-close past the desktop breakpoint) is owned by topbar.js now —
+// shared across all 6 pages. This just delegates the one call site above
+// (a .tab-btn click should close the drawer if it's open) to it.
 function closeMobileNav() {
-  mainTabs?.classList.remove("open");
-  navBackdrop?.classList.add("hidden");
-  navToggle?.setAttribute("aria-expanded", "false");
+  window.AkbalTopbar?.closeDrawer();
 }
-
-function openMobileNav() {
-  mainTabs?.classList.add("open");
-  navBackdrop?.classList.remove("hidden");
-  navToggle?.setAttribute("aria-expanded", "true");
-}
-
-navToggle?.addEventListener("click", () => {
-  if (mainTabs?.classList.contains("open")) closeMobileNav();
-  else openMobileNav();
-});
-navBackdrop?.addEventListener("click", closeMobileNav);
-// .tab-link (Radar Wi-Fi) navigates away instead of going through
-// activateTab, so it needs its own close-on-click.
-for (const link of document.querySelectorAll(".tab-link")) {
-  link.addEventListener("click", closeMobileNav);
-}
-window.addEventListener("resize", () => {
-  if (window.innerWidth > 720) closeMobileNav();
-});
 
 // The initial tab is activated at the very end of this file (see boot), after
 // all section modules (music player, file manager, etc.) have initialized their

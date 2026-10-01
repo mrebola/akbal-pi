@@ -9,110 +9,13 @@
 // browsers/devices silently give a blank canvas with no visible error) —
 // plain divIcon markers work universally and are simpler to keep correct.
 
-// ---- shared topbar wiring (same markup/classes as the rest of the admin
-// UI — see wifiradar.js/gps.js, duplicated per page since these are
-// build-step-free static pages) ----
-const statusPill = document.getElementById("status-pill");
-const batteryIndicator = document.getElementById("battery-indicator");
-const batteryIcon = document.getElementById("battery-icon");
-const batteryPct = document.getElementById("battery-pct");
-const statCpu = document.getElementById("stat-cpu");
-const statRam = document.getElementById("stat-ram");
-const statDisk = document.getElementById("stat-disk");
-const logoutBtn = document.getElementById("logout-btn");
-
-logoutBtn.addEventListener("click", async () => {
-  await fetch("/api/logout", { method: "POST" }).catch(() => {});
-  window.location.href = "/login";
-});
-
+// topbar.js (shared across all 6 pages) now owns the hamburger/drawer, the
+// AKBAL OK panel and its /api/status poll — this page keeps only its own
+// radar-specific DOM writes, via this generic helper.
 function setTxt(id, t) {
   const el = document.getElementById(id);
   if (el) el.textContent = t;
 }
-
-function updateBatteryIndicator(battery) {
-  if (!battery || !battery.connected || battery.level == null) {
-    batteryPct.textContent = "N/A";
-    batteryIcon.textContent = "🔋";
-    batteryIndicator.classList.remove("low", "charging");
-    return;
-  }
-  batteryPct.textContent = `${battery.level}%`;
-  batteryIcon.textContent = battery.charging ? "⚡" : "🔋";
-  batteryIndicator.classList.toggle("low", battery.level <= 15 && !battery.charging);
-  batteryIndicator.classList.toggle("charging", Boolean(battery.charging));
-}
-
-function updateSystemStats(system) {
-  if (!system) return;
-  statCpu.textContent = `${system.cpuPercent}%`;
-  statRam.textContent = `${system.ram.percent}%`;
-  statDisk.textContent = `${system.disk.percent}%`;
-  statCpu.classList.toggle("warn", system.cpuPercent >= 85);
-  statRam.classList.toggle("warn", system.ram.percent >= 85);
-  statDisk.classList.toggle("warn", system.disk.percent >= 90);
-}
-
-async function loadTopbarStatus() {
-  try {
-    const res = await fetch("/api/status");
-    if (res.status === 401) {
-      window.location.href = "/login";
-      return;
-    }
-    const data = await res.json();
-    const wifiLabel = data.wifi?.connected ? data.wifi.ssid : "sin wifi";
-    statusPill.textContent = `${data.model} · ${wifiLabel}`;
-    setTxt("hdr-model", data.model || "—");
-    setTxt("hdr-model-full", data.model || "—");
-    setTxt("hdr-wifi", wifiLabel);
-    const dot = document.getElementById("hdr-online-dot");
-    if (dot) dot.classList.add("online");
-    updateBatteryIndicator(data.battery);
-    updateSystemStats(data.system);
-  } catch {
-    statusPill.textContent = "sin conexión con el dispositivo";
-    const dot = document.getElementById("hdr-online-dot");
-    if (dot) dot.classList.remove("online");
-  }
-}
-
-(function mobileNav() {
-  const toggle = document.getElementById("nav-toggle");
-  const tabs = document.getElementById("main-tabs");
-  const backdrop = document.getElementById("nav-backdrop");
-  if (!toggle || !tabs || !backdrop) return;
-  function close() {
-    tabs.classList.remove("open");
-    backdrop.classList.add("hidden");
-    toggle.setAttribute("aria-expanded", "false");
-  }
-  function open() {
-    tabs.classList.add("open");
-    backdrop.classList.remove("hidden");
-    toggle.setAttribute("aria-expanded", "true");
-  }
-  toggle.addEventListener("click", () => (tabs.classList.contains("open") ? close() : open()));
-  backdrop.addEventListener("click", close);
-  for (const link of tabs.querySelectorAll(".tab-link")) link.addEventListener("click", close);
-})();
-
-(function sysPopover() {
-  const toggle = document.getElementById("sys-toggle");
-  const pop = document.getElementById("sys-popover");
-  if (!toggle || !pop) return;
-  toggle.addEventListener("click", (e) => {
-    e.stopPropagation();
-    pop.classList.toggle("hidden");
-  });
-  document.addEventListener("click", (e) => {
-    if (!pop.contains(e.target) && e.target !== toggle) pop.classList.add("hidden");
-  });
-})();
-
-void loadTopbarStatus();
-setInterval(loadTopbarStatus, 60000);
 
 // ---- platform toggle (LIVE/DEMO) — per-feature, posts /api/aircraft/mode
 // (unlike WIFIRADAR's toggle, which posts the device-wide /api/platform/mode

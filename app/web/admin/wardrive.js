@@ -1138,11 +1138,11 @@ function initControls() {
   });
 }
 
-// ---- Header (same /api/status pipeline as gps.js) ----
+// ---- Header: only the LIVE/DEMO platform toggle is page-specific now —
+// the hamburger/drawer, AKBAL OK panel and its /api/status poll live in
+// topbar.js (shared across all 6 pages, see that file). ----
 
 function initHeader() {
-  void loadStatus();
-  setInterval(() => void loadStatus(), 60000);
   const plx = el("platform-toggle");
   plx?.addEventListener("click", async (ev) => {
     const label = ev.target.closest(".plx-toggle-label");
@@ -1174,60 +1174,4 @@ function initHeader() {
       }
     } catch { /* default live */ }
   })();
-  const toggle = el("sys-toggle");
-  const pop = el("sys-popover");
-  toggle?.addEventListener("click", (e) => {
-    e.stopPropagation();
-    pop?.classList.toggle("hidden");
-  });
-  document.addEventListener("click", (e) => {
-    if (pop && !pop.contains(e.target) && e.target !== toggle) pop?.classList.add("hidden");
-  });
-  el("logout-btn")?.addEventListener("click", async () => {
-    try {
-      await fetch("/api/logout", { method: "POST" });
-    } catch { /* ignore */ }
-    window.location.href = "/login";
-  });
-  el("nav-toggle")?.addEventListener("click", () => {
-    const tabs = el("main-tabs");
-    const backdrop = el("nav-backdrop");
-    const expanded = el("nav-toggle").getAttribute("aria-expanded") === "true";
-    el("nav-toggle").setAttribute("aria-expanded", String(!expanded));
-    tabs?.classList.toggle("open", !expanded);
-    backdrop?.classList.toggle("hidden", expanded);
-  });
-}
-
-async function loadStatus() {
-  try {
-    const res = await fetch("/api/status");
-    if (!res.ok) return;
-    const data = await res.json();
-    const wifiLabel = data.wifi?.connected ? data.wifi.ssid : "sin wifi";
-    const pill = el("status-pill");
-    if (pill) pill.textContent = `${data.model} · ${wifiLabel}`;
-    setText("hdr-model", data.model || "—");
-    setText("hdr-model-full", data.model || "—");
-    setText("hdr-wifi", wifiLabel);
-    el("hdr-online-dot")?.classList.add("online");
-    const battery = data.battery;
-    const pct = el("battery-pct");
-    const icon = el("battery-icon");
-    if (pct && icon) {
-      if (!battery || !battery.connected || battery.level == null) {
-        pct.textContent = "N/A";
-        icon.textContent = "🔋";
-      } else {
-        pct.textContent = `${battery.level}%`;
-        icon.textContent = battery.charging ? "⚡" : "🔋";
-      }
-    }
-    const sys = data.system;
-    setText("stat-cpu", sys ? `${sys.cpuPercent}%` : "—");
-    setText("stat-ram", sys ? `${Math.round(sys.ram.percent)}%` : "—");
-    setText("stat-disk", sys ? `${Math.round(sys.disk.percent)}%` : "—");
-  } catch {
-    setText("hdr-model", "sin conexión");
-  }
 }

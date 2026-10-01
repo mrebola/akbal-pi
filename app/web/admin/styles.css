@@ -47,16 +47,24 @@ body {
   width: 100%;
 }
 
+/* Built by topbar.js (shared across all 6 admin pages, see that file) —
+   stacks two rows: .navbar (brand/nav/hdr-right/hamburger) and, only when
+   a page has page-specific controls, .page-toolbar below it. */
 .topbar {
   position: sticky;
   top: 0;
   z-index: 100;
   display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 12px 16px;
+  flex-direction: column;
   border-bottom: 1px solid var(--border);
   background: var(--bg-raised);
+}
+
+.navbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
 }
 
 .brand-group {
@@ -545,8 +553,8 @@ button.secondary {
 .rf-table .rf-weak { color: var(--danger); }
 
 .avatar {
-  width: 80px;
-  height: 80px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   object-fit: cover;
   border: 1px solid var(--border);
@@ -690,7 +698,6 @@ button.secondary {
 
 @media (max-width: 560px) {
   .msg { max-width: 92%; }
-  .topbar { flex-wrap: wrap; }
 }
 
 /* ---- Wifi Audit tab (id="tab-wifi-audit") — class prefix "wd-" stayed
@@ -2398,24 +2405,17 @@ body { font-family: var(--font-sans); }
 .mono { font-family: var(--font-mono); }
 
 /* ---- Topbar / navegación ---- */
-.topbar { gap: 12px; padding: 10px 16px; }
-/* 9 nav items (Local AI/Wi-Fi Radar/Aircraft Radar/Wifi Audit/Wardrive/
-   Crack Station/GPS/Jukebox/Settings) plus the brand and .hdr-right's own
-   toggle cluster no longer fit one row on a lot of real "desktop" widths
-   (a maximized 1366-1440px laptop window, not just phones) — flex-wrap
-   used to drop the overflow onto a visually broken second line under the
-   brand. Scroll horizontally instead (same pattern as .cfg-nav below):
-   the row never breaks, and every tab stays one swipe/scroll away. Below
-   720px this is moot — .tabs becomes the dropdown menu instead (see that
-   media query), so this never fights with the hamburger. */
+/* Desktop: 5 top-level items now (IA Local / Recon▾ / Wi-Fi▾ / Jukebox /
+   Ajustes — the old flat 9-item list grouped into dropdowns), comfortably
+   one row even on a modest laptop width — no overflow-x fallback needed
+   anymore, and it would clip the absolutely-positioned dropdowns below
+   (overflow-x:auto forces overflow-y to clip too, a classic CSS trap). */
 .tabs {
+  display: flex;
+  align-items: center;
   gap: 2px;
   flex-wrap: nowrap;
-  overflow-x: auto;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
 }
-.tabs::-webkit-scrollbar { display: none; }
 .tabs .tab-btn, .tabs .tab-link { flex: none; }
 .tab-btn, .tab-link {
   padding: 8px 12px;
@@ -2423,6 +2423,9 @@ body { font-family: var(--font-sans); }
   font-size: 13px;
   font-weight: 600;
   transition: background 0.15s, color 0.15s;
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
 }
 .tab-btn:hover, .tab-link:hover { background: var(--bg-elevated); color: var(--text-primary); }
 .tab-btn.active, .tab-link.active {
@@ -2431,13 +2434,10 @@ body { font-family: var(--font-sans); }
   box-shadow: inset 0 -2px 0 var(--accent);
 }
 
-/* ---- Header derecha: resumen compacto + popover ---- */
-/* flex-wrap + justify-content:flex-end: con el toggle de idioma sumado a
-   LIVE/DEMO + (en gps/aircraft-radar) el toggle de vista + el resumen de
-   sistema, el total ya no entra en una sola fila en 320-375px de ancho —
-   sin wrap, el exceso quedaba recortado en silencio por el overflow-x:
-   hidden global en vez de pasar a una segunda línea visible y tocable. */
-.hdr-right { position: relative; display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 6px 8px; }
+.brand-link { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+
+/* ---- Header derecha: idioma + campana (wd-notify.js) + AKBAL OK ---- */
+.hdr-right { position: relative; display: flex; align-items: center; flex-wrap: nowrap; justify-content: flex-end; gap: 8px; }
 
 /* ---- Platform source toggle (LIVE/DEMO) — hacker terminal switch ----
    Sliding pill with scanline texture; DEMO lights amber with a soft blink,
@@ -2586,18 +2586,11 @@ body { font-family: var(--font-sans); }
 .wd-bell-item.running .wd-bell-item-status { color: #fb923c; }
 .wd-bell-item-meta { font-size: 10px; margin-top: 2px; }
 
-.hdr-summary {
-  display: flex; align-items: center; gap: 10px;
-  background: var(--bg); color: var(--text-primary);
-  border: 1px solid var(--border); border-radius: 999px;
-  padding: 6px 12px; height: 36px; font-size: 13px; font-weight: 600; cursor: pointer;
-}
-.hdr-summary:hover { border-color: var(--border-strong); }
-.hdr-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); flex: none; }
-.hdr-dot.online { background: var(--accent); box-shadow: 0 0 8px rgba(80,255,120,0.6); }
-.hdr-model { color: var(--text-secondary); font-family: var(--font-mono); font-size: 12px; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hdr-gear { color: var(--text-secondary); font-size: 14px; }
 .battery-indicator { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; }
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
 .popover {
   position: absolute; right: 0; top: 44px; z-index: 200;
   background: var(--bg-elevated); border: 1px solid var(--border-strong);
@@ -2608,7 +2601,207 @@ body { font-family: var(--font-sans); }
 .popover-sep { height: 1px; background: var(--border); margin: 10px 0; }
 .metric-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 5px 0; font-size: 13px; }
 .metric-key { color: var(--text-secondary); }
-.metric-val { color: var(--text-primary); font-weight: 600; }
+.metric-val { color: var(--text-primary); font-weight: 600; text-align: right; }
+
+/* =====================================================================
+   TOPBAR REDESIGN (topbar.js) — nav groups (Recon/Wi-Fi dropdowns), the
+   language dropdown, the AKBAL OK status button/panel, the contextual
+   toolbar row, and the mobile drawer. Breakpoints tested at roughly
+   1440/1024/768/480/375px (see the media queries below) — the drawer
+   kicks in at 900px (DRAWER_BREAKPOINT in topbar.js; keep both in sync).
+   ===================================================================== */
+
+.nav-caret { font-size: 9px; opacity: 0.7; }
+
+/* ---- Desktop dropdown groups (Recon ▾ / Wi-Fi ▾) ---- */
+.nav-group { position: relative; }
+.nav-group-trigger {
+  background: transparent; border: none; cursor: pointer;
+  font-family: inherit; color: var(--text-secondary);
+}
+.nav-dropdown {
+  display: none;
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 160;
+  min-width: 200px; padding: 6px;
+  background: var(--bg-elevated); border: 1px solid var(--border-strong);
+  border-radius: var(--radius); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+.nav-group.open .nav-dropdown { display: flex; flex-direction: column; gap: 2px; }
+.nav-group.open .nav-group-trigger { background: var(--bg-elevated); color: var(--text-primary); }
+.nav-dropdown .tab-btn, .nav-dropdown .tab-link { width: 100%; text-align: left; }
+
+/* ---- Language dropdown (ES ▾) — i18n.js still owns the actual switch,
+   delegated via [data-lang] inside #lang-toggle; this is skin only. ---- */
+.lang-dd { position: relative; }
+.lang-dd-trigger {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 36px; padding: 0 10px;
+  background: var(--bg); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-family: var(--font-mono); font-size: 12px; font-weight: 700;
+  letter-spacing: 0.04em; cursor: pointer;
+}
+.lang-dd-trigger:hover { border-color: var(--border-strong); }
+.lang-dd-menu {
+  display: none;
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 160;
+  min-width: 140px; padding: 6px; flex-direction: column; gap: 2px;
+  background: var(--bg-elevated); border: 1px solid var(--border-strong);
+  border-radius: var(--radius); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+.lang-dd.open .lang-dd-menu { display: flex; }
+.lang-dd-menu .plx-toggle-label {
+  all: unset; box-sizing: border-box;
+  display: block; width: 100%; padding: 8px 10px; border-radius: var(--radius-sm);
+  font-family: var(--font-sans); font-size: 13px; font-weight: 600;
+  color: var(--text-secondary); cursor: pointer;
+}
+.lang-dd-menu .plx-toggle-label:hover { background: var(--bg); color: var(--text-primary); }
+.lang-dd-menu .plx-toggle-label.active { color: var(--accent); }
+
+/* ---- AKBAL OK — the status pill + panel (was .hdr-summary/#sys-popover) ---- */
+.akbal-ok {
+  display: inline-flex; align-items: center; gap: 8px;
+  height: 36px; padding: 0 12px;
+  background: var(--bg); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: 999px;
+  font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.akbal-ok:hover { border-color: var(--border-strong); }
+.akbal-ok-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); flex: none; }
+.akbal-ok-dot.ok { background: var(--accent); box-shadow: 0 0 8px rgba(80, 255, 120, 0.6); }
+.akbal-ok-dot.warn { background: var(--warning); box-shadow: 0 0 8px rgba(255, 209, 102, 0.6); animation: plx-demo-blink 1.6s ease-in-out infinite; }
+.akbal-ok-label { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+.akbal-ok-panel { min-width: 260px; max-height: 70vh; overflow-y: auto; }
+
+/* ---- Mobile "estado esencial" dot — next to the hamburger, opens the
+   AKBAL OK panel directly (its full form lives in the drawer below). ---- */
+.mobile-dot {
+  display: none;
+  width: 36px; height: 36px; border-radius: 50%;
+  align-items: center; justify-content: center;
+  background: var(--bg); border: 1px solid var(--border); cursor: pointer;
+}
+
+/* ---- Contextual toolbar — page-specific controls (LIVE/DEMO, view
+   toggles...) relocated here from the navbar, below it. Empty on pages
+   with none (hidden by topbar.js). ---- */
+.page-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  padding: 10px 16px; border-top: 1px solid var(--border);
+}
+#page-toolbar-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+
+/* Aircraft Radar's own pre-existing toolbar row (title + summary) gains a
+   middle slot for LIVE/DEMO + MAPA/RADAR, same wrap-friendly flex row. */
+.ar-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+
+/* ---- Mobile/tablet drawer (≤900px — see DRAWER_BREAKPOINT in
+   topbar.js): hamburger opens a right-side sheet with the full nav
+   (Recon/Wi-Fi as accordions), language, bell and the AKBAL OK panel —
+   the navbar itself stays to brand + essential status + hamburger. ---- */
+.nav-drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 200;
+  width: min(320px, 86vw);
+  display: flex; flex-direction: column;
+  background: var(--bg-elevated); border-left: 1px solid var(--border-strong);
+  box-shadow: -16px 0 40px rgba(0, 0, 0, 0.5);
+  transform: translateX(100%);
+  transition: transform 0.22s ease;
+  overflow-y: auto;
+}
+.nav-drawer.open { transform: translateX(0); }
+.nav-drawer-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px; border-bottom: 1px solid var(--border);
+}
+.drawer-close {
+  width: 36px; height: 36px; border-radius: var(--radius-sm);
+  background: transparent; border: 1px solid var(--border); color: var(--text-primary);
+  font-size: 16px; cursor: pointer;
+}
+.drawer-nav { padding: 10px; display: flex; flex-direction: column; gap: 2px; }
+.drawer-item .tab-btn, .drawer-item .tab-link, .drawer-item span.tab-link {
+  display: block; width: 100%; text-align: left; padding: 12px 14px; min-height: 44px;
+  box-sizing: border-box;
+}
+.drawer-accordion { border-radius: var(--radius-sm); overflow: hidden; }
+.drawer-accordion-trigger {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px; min-height: 44px;
+  background: transparent; border: none; color: var(--text-secondary);
+  font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.drawer-accordion.open .drawer-accordion-trigger { color: var(--text-primary); }
+.drawer-accordion.open .nav-caret { transform: rotate(180deg); }
+.drawer-accordion-body { display: none; flex-direction: column; padding-left: 10px; }
+.drawer-accordion.open .drawer-accordion-body { display: flex; }
+.drawer-accordion-body .tab-btn, .drawer-accordion-body .tab-link, .drawer-accordion-body span.tab-link {
+  display: block; width: 100%; text-align: left; padding: 11px 14px; min-height: 44px;
+  box-sizing: border-box; font-size: 13px;
+}
+.drawer-hdr-right-mount { padding: 10px 16px 18px; border-top: 1px solid var(--border); margin-top: 6px; }
+.drawer-hdr-right-mount .hdr-right { flex-wrap: wrap; justify-content: flex-start; }
+/* Still gated by .lang-dd.open (and .nav-dropdown has no real use here —
+   Recon/Wi-Fi render as accordions in the drawer instead — kept as a
+   defensive no-op). Only position/shadow change: the menu sits inline
+   below its trigger instead of floating, since there's no cramped corner
+   to float away from inside the drawer. */
+.drawer-hdr-right-mount .nav-dropdown { position: static; box-shadow: none; margin-top: 6px; }
+.drawer-hdr-right-mount .lang-dd.open .lang-dd-menu { position: static; display: flex; flex-direction: column; box-shadow: none; margin-top: 6px; width: 100%; }
+.drawer-hdr-right-mount .popover { position: static; box-shadow: none; margin-top: 10px; width: 100%; }
+
+@media (max-width: 900px) {
+  .tabs, .hdr-right { display: none; } /* desktop nav row hides — everything moves into the drawer */
+  .mobile-dot { display: inline-flex; }
+  .nav-toggle { display: flex; }
+  .navbar { gap: 10px; }
+}
+/* Below 900px, .hdr-right is re-parented into the drawer by topbar.js, so
+   it needs to actually show there regardless of the rule above (that rule
+   only hides it in the navbar's own flow, by then it's not a .navbar
+   child anymore — still, be explicit since specificity order matters). */
+.drawer-hdr-right-mount .hdr-right { display: flex; }
+
+@media (max-width: 1024px) {
+  .navbar { padding: 10px 14px; gap: 10px; }
+}
+
+@media (max-width: 768px) {
+  .page-toolbar, #page-toolbar-controls, .as-toolbar, .ar-controls { gap: 8px; }
+  .tab-panel { padding: 16px 12px; }
+}
+
+@media (max-width: 480px) {
+  .brand .nav-caret { display: none; }
+  .akbal-ok-label { max-width: 90px; }
+  .nav-drawer { width: 100vw; }
+}
+
+/* ---- Crack Station's main table → cards on narrow screens (the one
+   genuinely column-heavy table in the app: 10 columns). Pure CSS table
+   reflow (display:block on rows/cells + data-label content), no JS/markup
+   duplication needed. ---- */
+@media (max-width: 768px) {
+  .wd-crack-table thead { display: none; }
+  .wd-crack-table, .wd-crack-table tbody, .wd-crack-table tr, .wd-crack-table td {
+    display: block; width: 100%;
+  }
+  .wd-crack-table tr {
+    margin-bottom: 10px; padding: 10px 12px;
+    background: var(--bg-raised); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  }
+  .wd-crack-table td {
+    padding: 6px 0; border: none; text-align: left;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  .wd-crack-table td::before {
+    content: attr(data-label);
+    font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--text-muted); flex: none;
+  }
+  .wd-crack-table td:empty, .wd-crack-table td[data-label=""] { display: none; }
+}
 
 /* ---- Anchos de contenido consistentes ---- */
 .tab-panel { padding: 24px 20px; }

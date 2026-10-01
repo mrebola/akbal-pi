@@ -905,7 +905,7 @@
 .wd-pick-ssid { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wd-pick-meta { font-size: 10px; color: var(--text-secondary, #94a3b8); font-family: ui-monospace, monospace; }
 
-/* Rainbow live track: soft glow under the per-point colored ribbon */
+/* Live track: soft glow under the solid neon-green line */
 .wd-track-halo {
   filter: blur(1px);
 }

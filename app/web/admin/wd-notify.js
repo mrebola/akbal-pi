@@ -193,14 +193,22 @@
     if (!host || document.getElementById("wd-bell")) return;
     const wrap = document.createElement("div");
     wrap.className = "wd-bell-wrap";
+    // data-i18n* (not just the one-shot t() calls below) matters here: this
+    // runs synchronously at script load, BEFORE i18n.js's dictionary fetch
+    // resolves (fetch() never resolves synchronously, so the race always
+    // goes this way) — t() falls back to the literal key ("notify.title")
+    // at this exact moment. i18n.js's own applyTranslations() sweep (run
+    // once the dictionary actually loads) fixes anything tagged data-i18n*
+    // regardless of when it was added to the DOM; without the tag, the
+    // wrong/literal text set here would never self-correct.
     wrap.innerHTML = `
-      <button id="wd-bell" class="wd-bell" type="button" title="${escapeAttr(t("notify.title", "Notificaciones"))}" aria-label="${escapeAttr(t("notify.title", "Notificaciones"))}">
+      <button id="wd-bell" class="wd-bell" type="button" title="${escapeAttr(t("notify.title", "Notificaciones"))}" aria-label="${escapeAttr(t("notify.title", "Notificaciones"))}" data-i18n-title="notify.title" data-i18n-aria-label="notify.title">
         🔔<span id="wd-bell-dot" class="wd-bell-dot hidden"></span>
       </button>
       <div id="wd-bell-dropdown" class="wd-bell-dropdown hidden">
         <div class="wd-bell-dropdown-head">
-          <span class="wd-bell-dropdown-title">${escapeAttr(t("notify.title", "Notificaciones"))}</span>
-          <button type="button" id="wd-bell-clear-all" class="wd-bell-clear-all hidden">${escapeAttr(t("notify.clear_all", "Borrar todas"))}</button>
+          <span class="wd-bell-dropdown-title" data-i18n="notify.title">${escapeAttr(t("notify.title", "Notificaciones"))}</span>
+          <button type="button" id="wd-bell-clear-all" class="wd-bell-clear-all hidden" data-i18n="notify.clear_all">${escapeAttr(t("notify.clear_all", "Borrar todas"))}</button>
         </div>
         <div id="wd-bell-list" class="wd-bell-list"></div>
       </div>`;

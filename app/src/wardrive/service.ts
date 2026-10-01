@@ -1224,28 +1224,40 @@ export class DriveWardriveService extends EventEmitter {
       ? haversineM(this.lastPointLat, this.lastPointLon, this.gpsLat, this.gpsLon)
       : Infinity;
     if (this.lastPointAt === 0) {
-      this.recordPoint(now);
+      this.recordPoint(now, true);
       return;
     }
     if (moved >= POINT_MIN_MOVE_M) {
-      this.recordPoint(now);
+      this.recordPoint(now, true);
       return;
     }
     if (now - this.lastPointAt >= POINT_MAX_DT_MS) {
-      this.recordPoint(now);
+      // Parked: still emit a point every POINT_MAX_DT_MS so the timeline
+      // doesn't gap for minutes, but NOT moving=true — see recordPoint.
+      this.recordPoint(now, false);
     }
   }
 
-  private recordPoint(now: number): void {
-    if (this.lastPointLat != null && this.lastPointLon != null && this.gpsLat != null && this.gpsLon != null) {
-      this.distanceM += haversineM(this.lastPointLat, this.lastPointLon, this.gpsLat, this.gpsLon);
+  // moving=true: a real >=6m displacement — record the actual GPS fix and
+  // extend the odometer. moving=false: a time-triggered "still parked"
+  // heartbeat — anchor the point to the LAST KNOWN STABLE position instead
+  // of the current (GPS-noise) reading. Letting the anchor itself drift a
+  // couple of meters every 20s while stationary was the bug behind the
+  // car's track "circling" a parked spot on the map: each noisy anchor
+  // became the new reference for the next 6m check, so pure GPS jitter
+  // kept reading back as movement in random directions.
+  private recordPoint(now: number, moving: boolean): void {
+    const lat = moving || this.lastPointLat == null ? this.gpsLat! : this.lastPointLat;
+    const lon = moving || this.lastPointLon == null ? this.gpsLon! : this.lastPointLon;
+    if (moving && this.lastPointLat != null && this.lastPointLon != null) {
+      this.distanceM += haversineM(this.lastPointLat, this.lastPointLon, lat, lon);
     }
     this.lastPointAt = now;
-    this.lastPointLat = this.gpsLat!;
-    this.lastPointLon = this.gpsLon!;
+    this.lastPointLat = lat;
+    this.lastPointLon = lon;
     this.points += 1;
     if (this.sessionId) {
-      driveDb.addTrackPoint(this.sessionId, now, this.gpsLat!, this.gpsLon!, this.gpsSpeed, this.gpsHeading, this.gpsHdop);
+      driveDb.addTrackPoint(this.sessionId, now, lat, lon, this.gpsSpeed, this.gpsHeading, this.gpsHdop);
     }
   }
 

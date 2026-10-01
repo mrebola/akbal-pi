@@ -338,45 +338,37 @@ function trackSegments(points) {
   return segs;
 }
 
+// Solid neon green (same accent as the rest of the UI — LIVE indicators,
+// buttons, etc.) — used to cycle a rainbow hue per point, which read as a
+// confusing multicolor ribbon rather than a clear route.
+const TRACK_COLOR = "#50ff78";
+const TRACK_HALO_COLOR = "rgba(80, 255, 120, 0.18)";
+
 function drawTrack() {
   if (!map) return;
   if (trackLayer) trackLayer.remove();
   trackLayer = L.layerGroup().addTo(map);
   const segs = trackSegments(trackPoints);
-  // Rainbow trace: each point gets a hue from a slow cycle (rainbow ribbon
-  // behind the car). Per-point hue = index * STEP mod 360; drawing
-  // two-point polylines per segment keeps colors smooth without any
-  // per-poll rebuild beyond what the plain track already did (same data).
-  const HUE_STEP = 24; // degrees of hue per point — soft pastel cycling
-  const BASE_OPACITY = 0.55; // tenue: visible pero no tapa los dots
-  let idx = 0;
   for (const seg of segs) {
-    L.polyline(seg.map((p) => [p.lat, p.lon]), {
-      color: "rgba(120,255,160,0.18)", // halo under the rainbow ribbon
+    const latlngs = seg.map((p) => [p.lat, p.lon]);
+    L.polyline(latlngs, {
+      color: TRACK_HALO_COLOR, // halo under the line — keeps it legible over dark tiles
       weight: 9,
       opacity: 0.6,
       lineCap: "round",
+      lineJoin: "round",
       className: "wd-track-halo",
       interactive: false,
     }).addTo(trackLayer);
-    for (let i = 1; i < seg.length; i++) {
-      const hue = (idx * HUE_STEP) % 360;
-      idx += 1;
-      L.polyline(
-        [
-          [seg[i - 1].lat, seg[i - 1].lon],
-          [seg[i].lat, seg[i].lon],
-        ],
-        {
-          color: `hsl(${hue.toFixed(0)}, 70%, 62%)`,
-          weight: 4,
-          opacity: BASE_OPACITY,
-          lineCap: "round",
-          className: "wd-track-line",
-          interactive: false,
-        },
-      ).addTo(trackLayer);
-    }
+    L.polyline(latlngs, {
+      color: TRACK_COLOR,
+      weight: 4,
+      opacity: 0.9,
+      lineCap: "round",
+      lineJoin: "round",
+      className: "wd-track-line",
+      interactive: false,
+    }).addTo(trackLayer);
   }
 }
 
@@ -438,15 +430,25 @@ function appendLivePoint(lat, lon) {
   }
   const prev = liveLastPoint;
   const moved = map ? map.distance([prev.lat, prev.lon], [lat, lon]) : 0;
-  if (moved >= LIVE_MIN_MOVE_M || now - prev.ts >= LIVE_MAX_DT_MS) {
+  const movedEnough = moved >= LIVE_MIN_MOVE_M;
+  if (movedEnough || now - prev.ts >= LIVE_MAX_DT_MS) {
+    // Parked (time-triggered, not a real move): pin the point to the last
+    // STABLE position instead of the current GPS-noise reading — matches
+    // the backend's own fix (wardrive/service.ts's recordPoint) for the
+    // same bug: letting the anchor itself drift a couple of meters every
+    // ~20s while stationary made pure GPS jitter read back as the car
+    // circling a parked spot (each noisy anchor became the reference for
+    // the next "did we move 6m" check).
+    const pointLat = movedEnough ? lat : prev.lat;
+    const pointLon = movedEnough ? lon : prev.lon;
     // Skip duplicates of the authoritative reload (points that both came
     // from the DB poll AND the live feed shouldn't stack twice).
     const last = trackPoints[trackPoints.length - 1];
-    if (last && Math.abs(last.lat - lat) < 1e-6 && Math.abs(last.lon - lon) < 1e-6) {
+    if (last && Math.abs(last.lat - pointLat) < 1e-6 && Math.abs(last.lon - pointLon) < 1e-6) {
       liveLastPoint = last;
       return;
     }
-    liveLastPoint = { lat, lon, ts: now };
+    liveLastPoint = { lat: pointLat, lon: pointLon, ts: now };
     trackPoints.push(liveLastPoint);
     if (trackPoints.length > MAX_TRACK_POINTS) {
       trackPoints.splice(0, trackPoints.length - MAX_TRACK_POINTS);

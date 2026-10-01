@@ -15,7 +15,7 @@
 
   <div id="boot-overlay" class="boot-overlay">
     <div class="boot-text">AKBAL // WIFIRADAR<span class="cursor"></span></div>
-    <div class="boot-sub" id="boot-sub">inicializando radar...</div>
+    <div class="boot-sub" id="boot-sub" data-i18n="wifiradar.boot_sub">inicializando radar...</div>
   </div>
 
   <!-- Same topbar as the rest of the admin UI (see index.html) — same
@@ -40,17 +40,17 @@
         <span class="plx-toggle-label mode-demo" data-mode="demo" data-i18n="topbar.demo">DEMO</span>
       </div>
       <div class="as-search">
-        <input id="search-input" type="text" placeholder="buscar SSID o BSSID..." autocomplete="off" />
+        <input id="search-input" type="text" placeholder="buscar SSID o BSSID..." data-i18n-placeholder="wifiradar.search_placeholder" autocomplete="off" />
       </div>
 
       <div class="as-controls">
-        <button id="sec-toggle-open" class="as-btn active" data-sec="OPEN" title="Mostrar/ocultar redes abiertas">OPEN</button>
-        <button id="sec-toggle-wep" class="as-btn active" data-sec="WEP" title="Mostrar/ocultar redes WEP">WEP</button>
-        <button id="sec-toggle-wpa" class="as-btn active" data-sec="WPA" title="Mostrar/ocultar redes WPA/WPA2/WPA3">WPA</button>
-        <button id="live-pause-btn" class="as-btn active" title="Pausar/reanudar el stream">LIVE</button>
-        <button id="reset-view-btn" class="as-btn" title="Restablecer cámara">RESET VIEW</button>
-        <button id="dim-toggle-btn" class="as-btn" title="Alternar 2D/3D">3D</button>
-        <select id="quality-select" class="as-select" title="Calidad gráfica">
+        <button id="sec-toggle-open" class="as-btn active" data-sec="OPEN" title="Mostrar/ocultar redes abiertas" data-i18n-title="wifiradar.sec_open_title">OPEN</button>
+        <button id="sec-toggle-wep" class="as-btn active" data-sec="WEP" title="Mostrar/ocultar redes WEP" data-i18n-title="wifiradar.sec_wep_title">WEP</button>
+        <button id="sec-toggle-wpa" class="as-btn active" data-sec="WPA" title="Mostrar/ocultar redes WPA/WPA2/WPA3" data-i18n-title="wifiradar.sec_wpa_title">WPA</button>
+        <button id="live-pause-btn" class="as-btn active" title="Pausar/reanudar el stream" data-i18n-title="wifiradar.live_pause_title">LIVE</button>
+        <button id="reset-view-btn" class="as-btn" title="Restablecer cámara" data-i18n-title="wifiradar.reset_view_title">RESET VIEW</button>
+        <button id="dim-toggle-btn" class="as-btn" title="Alternar 2D/3D" data-i18n-title="wifiradar.dim_toggle_title">3D</button>
+        <select id="quality-select" class="as-select" title="Calidad gráfica" data-i18n-title="wifiradar.quality_title">
           <option value="auto">AUTO</option>
           <option value="low">LOW</option>
           <option value="medium">MEDIUM</option>
@@ -61,15 +61,15 @@
   </div>
 
   <div class="hud-topleft" id="hud">
-    <div class="hud-row"><span class="hud-label">APs</span><span class="hud-value" id="hud-aps">0</span></div>
-    <div class="hud-row"><span class="hud-label">Devices</span><span class="hud-value" id="hud-devices">0</span></div>
-    <div class="hud-row"><span class="hud-label">Channel</span><span class="hud-value" id="hud-channel">—</span></div>
-    <div class="hud-row"><span class="hud-label">Frames/min</span><span class="hud-value" id="hud-fpm">0</span></div>
-    <div class="hud-row"><span class="hud-label">Alerts</span><span class="hud-value hud-alerts" id="hud-alerts">0</span></div>
-    <div class="hud-spectrum" id="hud-spectrum" title="Actividad observada por canal (no es un analizador RF real)"></div>
-    <div class="hud-note">actividad observada · no es un analizador RF real</div>
-    <label class="hud-dongle" title="Adaptador USB a usar — se sugiere el más compatible con modo monitor">
-      <span class="hud-label">Dongle</span>
+    <div class="hud-row"><span class="hud-label" data-i18n="wifiradar.hud_aps">APs</span><span class="hud-value" id="hud-aps">0</span></div>
+    <div class="hud-row"><span class="hud-label" data-i18n="wifiradar.hud_devices">Devices</span><span class="hud-value" id="hud-devices">0</span></div>
+    <div class="hud-row"><span class="hud-label" data-i18n="wifiradar.hud_channel">Channel</span><span class="hud-value" id="hud-channel">—</span></div>
+    <div class="hud-row"><span class="hud-label" data-i18n="wifiradar.hud_fpm">Frames/min</span><span class="hud-value" id="hud-fpm">0</span></div>
+    <div class="hud-row"><span class="hud-label" data-i18n="wifiradar.hud_alerts">Alerts</span><span class="hud-value hud-alerts" id="hud-alerts">0</span></div>
+    <div class="hud-spectrum" id="hud-spectrum" title="Actividad observada por canal (no es un analizador RF real)" data-i18n-title="wifiradar.hud_spectrum_title"></div>
+    <div class="hud-note" data-i18n="wifiradar.hud_note">actividad observada · no es un analizador RF real</div>
+    <label class="hud-dongle" title="Adaptador USB a usar — se sugiere el más compatible con modo monitor" data-i18n-title="wifiradar.hud_dongle_title">
+      <span class="hud-label" data-i18n="wifiradar.hud_dongle_label">Dongle</span>
       <select id="hud-dongle-select">
         <option value="">auto</option>
       </select>
@@ -85,27 +85,27 @@
     <div class="apm-backdrop"></div>
     <div class="apm-card">
       <div class="apm-close-group">
-        <button id="ap-info-eye" class="apm-close" title="Mostrar datos completos (MAC reales)">🙈</button>
+        <button id="ap-info-eye" class="apm-close" title="Mostrar datos completos (MAC reales)" data-i18n-title="wifiradar.apm_eye_title">🙈</button>
         <button id="ap-info-close" class="apm-close">✕</button>
       </div>
       <div class="apm-head">
         <div class="apm-title" id="apm-ssid">—</div>
-        <div class="apm-sub">Detalles de la red</div>
+        <div class="apm-sub" data-i18n="wifiradar.apm_sub">Detalles de la red</div>
       </div>
       <div class="apm-grid">
-        <div class="apm-row"><span>MAC Address (BSSID)</span><span id="apm-bssid">—</span></div>
-        <div class="apm-row"><span>Marca / fabricante</span><span id="apm-vendor">—</span></div>
-        <div class="apm-row"><span>Seguridad</span><span id="apm-security">—</span></div>
-        <div class="apm-row"><span>Canal</span><span id="apm-channel">—</span></div>
-        <div class="apm-row"><span>Potencia (RSSI)</span><span id="apm-rssi">—</span></div>
-        <div class="apm-row"><span>Distancia aprox.</span><span id="apm-distance">—</span></div>
-        <div class="apm-row"><span>Frames capturados</span><span id="apm-frames">—</span></div>
-        <div class="apm-row"><span>Primera vez visto</span><span id="apm-first">—</span></div>
-        <div class="apm-row"><span>Última vez visto</span><span id="apm-last">—</span></div>
+        <div class="apm-row"><span data-i18n="wifiradar.apm_mac">MAC Address (BSSID)</span><span id="apm-bssid">—</span></div>
+        <div class="apm-row"><span data-i18n="wifiradar.apm_vendor">Marca / fabricante</span><span id="apm-vendor">—</span></div>
+        <div class="apm-row"><span data-i18n="wifiradar.apm_security">Seguridad</span><span id="apm-security">—</span></div>
+        <div class="apm-row"><span data-i18n="wifiradar.apm_channel">Canal</span><span id="apm-channel">—</span></div>
+        <div class="apm-row"><span data-i18n="wifiradar.apm_rssi">Potencia (RSSI)</span><span id="apm-rssi">—</span></div>
+        <div class="apm-row"><span data-i18n="wifiradar.apm_distance">Distancia aprox.</span><span id="apm-distance">—</span></div>
+        <div class="apm-row"><span data-i18n="wifiradar.apm_frames">Frames capturados</span><span id="apm-frames">—</span></div>
+        <div class="apm-row"><span data-i18n="wifiradar.apm_first">Primera vez visto</span><span id="apm-first">—</span></div>
+        <div class="apm-row"><span data-i18n="wifiradar.apm_last">Última vez visto</span><span id="apm-last">—</span></div>
       </div>
-      <div class="apm-devices-head">// EQUIPOS CONECTADOS A ESTA RED</div>
+      <div class="apm-devices-head" data-i18n="wifiradar.apm_devices_head">// EQUIPOS CONECTADOS A ESTA RED</div>
       <div id="apm-devices" class="apm-devices"></div>
-      <div class="apm-hint">Para auditar (handshake/deauth) usá la pestaña <strong>Audit WiFi</strong> — este radar es solo observación.</div>
+      <div class="apm-hint" data-i18n-html="wifiradar.apm_hint">Para auditar (handshake/deauth) usá la pestaña <strong>Audit WiFi</strong> — este radar es solo observación.</div>
     </div>
   </div>
 

@@ -5,6 +5,8 @@
 // every 1s — the backend aggregates everything, polling stays cheap.
 "use strict";
 
+const t = (key, fallback, vars) => (window.AkbalI18n ? window.AkbalI18n.t(key, vars) : null) || fallback;
+
 const POLL_MS = 1000;
 const WORLD_VIEW = { lat: 20, lon: 0, zoom: 2 };
 const FIX_ZOOM = 16;
@@ -75,7 +77,7 @@ setInterval(() => void refresh(), POLL_MS);
 function initMap() {
   const container = el("wd-map");
   if (!container || typeof L === "undefined") {
-    showError("No se pudo cargar el motor de mapas (vendor/leaflet) — revisá el deploy.");
+    showError(t("gps.err_map_engine", "No se pudo cargar el motor de mapas (vendor/leaflet) — revisá el deploy."));
     return;
   }
   map = L.map(container, {
@@ -93,7 +95,7 @@ function initMap() {
   });
   tiles.addTo(map);
   tiles.on("tileerror", () => {
-    showError("Los tiles (OpenStreetMap) no cargan — sin salida a internet. El HUD sigue siendo válido.");
+    showError(t("wardrive.err_tiles", "Los tiles (OpenStreetMap) no cargan — sin salida a internet. El HUD sigue siendo válido."));
     clearTimeout(tiles._akbalErrTimer);
     tiles._akbalErrTimer = setTimeout(hideError, 8000);
   });
@@ -206,7 +208,7 @@ function render(st) {
     fix.classList.remove("warn");
   } else {
     fix.classList.add("warn");
-    fix.textContent = gps.error || "Buscando satélites…";
+    fix.textContent = gps.error || t("gps.hud_searching", "Buscando satélites…");
   }
 
   // Map
@@ -558,20 +560,20 @@ function pickDotAt(latlng, clicked) {
 // session-networks row instead of the live air view.
 function showDotInfoModal(n) {
   if (!n) return;
-  setText("wd-apm-title", n.ssid || "(oculta)");
+  setText("wd-apm-title", n.ssid || t("wardrive.hidden_ssid", "(oculta)"));
   setText("wd-apm-bssid", n.bssid || "—");
-  setText("wd-apm-vendor", n.last_method ? `método ${n.last_method}` : "—");
+  setText("wd-apm-vendor", n.last_method ? t("wardrive.method_label", "método {m}", { m: n.last_method }) : "—");
   setText("wd-apm-security", n.security || "—");
   setText("wd-apm-channel", `CH ${n.channel ?? "—"}`);
-  setText("wd-apm-rssi", `${n.best_rssi ?? n.rssi ?? "—"} dBm (mejor señal registrada)`);
+  setText("wd-apm-rssi", t("wardrive.rssi_best", "{rssi} dBm (mejor señal registrada)", { rssi: n.best_rssi ?? n.rssi ?? "—" }));
   setText("wd-apm-packets", String(n.times_seen ?? "—"));
   setText(
     "wd-apm-hs",
     n.handshake
       ? n.cracked
-        ? `🏴‍☠️🏴‍☠️ ${n.password || "crackeada"}`
-        : "🏴‍☠️ Handshake capturado"
-      : "Sin handshake aún",
+        ? `🏴‍☠️🏴‍☠️ ${n.password || t("wardrive.cracked", "crackeada")}`
+        : `🏴‍☠️ ${t("wardrive.handshake_captured", "Handshake capturado")}`
+      : t("wardrive.no_handshake_yet", "Sin handshake aún"),
   );
   setText(
     "wd-apm-attempts",
@@ -758,7 +760,7 @@ function renderApList(st) {
             : ap.status === "attack-scheduled"
               ? '<span class="wd-map-badge scheduled" title="en cola de ataque">⏳</span>'
               : ap.status === "exhausted"
-                ? '<span class="wd-map-badge fail" title="agotó intentos">✕</span>'
+                ? `<span class="wd-map-badge fail" title="${t("wardrive.exhausted_attempts", "agotó intentos")}">✕</span>`
                 : ap.security === "OPEN"
                   ? '<span class="wd-map-badge open">OPEN</span>'
                   : "";
@@ -880,11 +882,15 @@ function showApModal(ap) {
   setText("wd-apm-vendor", ap.vendor || "—");
   setText("wd-apm-security", ap.security);
   setText("wd-apm-channel", `CH ${ap.channel}`);
-  setText("wd-apm-rssi", `${ap.rssi} dBm (mejor ${ap.bestRssi})`);
+  setText("wd-apm-rssi", t("wardrive.rssi_best_short", "{rssi} dBm (mejor {best})", { rssi: ap.rssi, best: ap.bestRssi }));
   setText("wd-apm-packets", String(ap.packets ?? 0));
   setText(
     "wd-apm-hs",
-    ap.handshakeHere ? "🏴‍☠️ Handshake capturado" : ap.handshakeKnown ? "🤝 Cubierto (otro AP del SSID)" : "Sin handshake aún",
+    ap.handshakeHere
+      ? `🏴‍☠️ ${t("wardrive.handshake_captured", "Handshake capturado")}`
+      : ap.handshakeKnown
+        ? `🤝 ${t("wardrive.covered_other_ap", "Cubierto (otro AP del SSID)")}`
+        : t("wardrive.no_handshake_yet", "Sin handshake aún"),
   );
   setText(
     "wd-apm-attempts",
@@ -958,7 +964,7 @@ async function openSession(id) {
         });
         const data = await res.json();
         if (!data.ok) {
-          alert(data.error || "No se pudo borrar la sesión");
+          alert(data.error || t("wardrive.delete_session_failed", "No se pudo borrar la sesión"));
           return;
         }
         drawer.classList.add("hidden");

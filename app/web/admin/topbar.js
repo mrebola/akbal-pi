@@ -434,11 +434,23 @@
 
     // "Problems" = hardware the spec explicitly named (GPS/HackRF/Wi-Fi)
     // that's genuinely missing — not transient states like "buscando fix"
-    // or a battery-less install (PiSugar is optional hardware).
+    // or a battery-less install (PiSugar is optional hardware). The worded
+    // alert ("2 dispositivos faltantes") lives ONLY in the notification
+    // bell now (wd-notify.js, via the akbal:problems-changed event below)
+    // — this panel stays a plain status readout, and the pill itself only
+    // ever says "AKBAL OK" / "sin conexión", never a problem count; the dot
+    // color is the only in-place signal.
     const problems = [];
-    if (status && !status.wifi?.connected) problems.push(t("topbar.problem_wifi", "Wi-Fi desconectado"));
-    if (gps && !gps.present) problems.push(t("topbar.problem_gps", "GPS no detectado"));
-    if (aircraft && !aircraft.hardware && !aircraft.demo) problems.push(t("topbar.problem_hackrf", "HackRF no conectado"));
+    if (status && !status.wifi?.connected) {
+      problems.push({ id: "problem:wifi", message: t("topbar.problem_wifi", "Wi-Fi desconectado"), href: "/#settings" });
+    }
+    if (gps && !gps.present) {
+      problems.push({ id: "problem:gps", message: t("topbar.problem_gps", "GPS no detectado"), href: "/gps" });
+    }
+    if (aircraft && !aircraft.hardware && !aircraft.demo) {
+      problems.push({ id: "problem:hackrf", message: t("topbar.problem_hackrf", "HackRF no conectado"), href: "/aircraft-radar" });
+    }
+    document.dispatchEvent(new CustomEvent("akbal:problems-changed", { detail: { problems, online } }));
 
     const dot = document.getElementById("akbal-ok-dot");
     const mobileDot = document.getElementById("mobile-dot-indicator");
@@ -451,7 +463,8 @@
       dot?.classList.add("warn");
       dot?.classList.remove("ok");
       mobileDot?.classList.add("warn");
-      if (label) label.textContent = t("topbar.problems_n", "{n} dispositivos faltantes", { n: problems.length });
+      mobileDot?.classList.remove("ok");
+      if (label) label.textContent = t("topbar.akbal_ok", "AKBAL OK");
     } else {
       dot?.classList.add("ok");
       dot?.classList.remove("warn");

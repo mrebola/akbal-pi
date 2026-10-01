@@ -2,6 +2,16 @@
    HUD overlays. Same design language as gps.css — dark theme, monospace
    HUD, green accents. The map element reuses .gps-map (fixed inset 0). */
 
+/* Header sits above the map AND above the HUD/panel overlays below (900-950)
+   — without this, .topbar's own z-index:100 (styles.css) traps the navbar's
+   dropdowns/AKBAL OK panel in a stacking context under them. Same fix
+   already applied in gps.css/#gps-header and aircraft-radar.css/.topbar;
+   this page was the one missing it. */
+#wd-header {
+  position: relative;
+  z-index: 1000;
+}
+
 /* ---- Session HUD (top left) ---- */
 
 .wd-hud {

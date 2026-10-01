@@ -9,6 +9,10 @@
 // browsers/devices silently give a blank canvas with no visible error) —
 // plain divIcon markers work universally and are simpler to keep correct.
 
+// i18n helper — named `tr` (not `t`) since setTxt below already uses `t`
+// as its text-argument name.
+const tr = (key, fallback, vars) => (window.AkbalI18n ? window.AkbalI18n.t(key, vars) : null) || fallback;
+
 // topbar.js (shared across all 6 pages) now owns the hamburger/drawer, the
 // AKBAL OK panel and its /api/status poll — this page keeps only its own
 // radar-specific DOM writes, via this generic helper.
@@ -95,7 +99,7 @@ function fmt(value, unit, digits = 0) {
 }
 
 function routeLabel(aircraft) {
-  return aircraft.origin && aircraft.destination ? `${aircraft.origin} → ${aircraft.destination}` : "Route unknown";
+  return aircraft.origin && aircraft.destination ? `${aircraft.origin} → ${aircraft.destination}` : tr("aircraft.route_unknown", "Ruta desconocida");
 }
 
 function displayName(aircraft) {
@@ -124,8 +128,8 @@ function hasDistanceReference(snapshot) {
 
 function distanceLabel(aircraft) {
   if (aircraft.distanceKm !== null) return fmt(aircraft.distanceKm, " km", 1);
-  if (!hasDistanceReference(latestSnapshot)) return "sin fix GPS de Akbal";
-  if (aircraft.latitude === null) return "sin posición aún";
+  if (!hasDistanceReference(latestSnapshot)) return tr("aircraft.no_akbal_fix", "sin fix GPS de Akbal");
+  if (aircraft.latitude === null) return tr("aircraft.no_position_yet", "sin posición aún");
   return "—";
 }
 
@@ -138,8 +142,8 @@ function renderList(snapshot) {
   const noAdapter = snapshot.aircraft.length === 0 && !snapshot.demo && Boolean(snapshot.error);
   emptyEl.classList.toggle("ar-no-adapter", noAdapter);
   emptyEl.textContent = noAdapter
-    ? "🔌 No hay HackRF conectado — enchufalo o activá DEMO arriba"
-    : "Buscando aeronaves…";
+    ? `🔌 ${tr("aircraft.no_hackrf", "No hay HackRF conectado — enchufalo o activá DEMO arriba")}`
+    : tr("aircraft.searching", "Buscando aeronaves…");
   for (const aircraft of snapshot.aircraft) {
     const card = document.createElement("div");
     card.className = "ar-card" + (aircraft.icao === selectedIcao ? " selected" : "");
@@ -149,7 +153,7 @@ function renderList(snapshot) {
         <span class="ar-flight">${displayName(aircraft)}</span>
         <span class="ar-reg">${aircraft.registration || aircraft.icao}</span>
       </div>
-      <div class="ar-model">${aircraft.manufacturer ? `${aircraft.manufacturer} ${aircraft.model || ""}`.trim() : (aircraft.model || "Modelo desconocido")}</div>
+      <div class="ar-model">${aircraft.manufacturer ? `${aircraft.manufacturer} ${aircraft.model || ""}`.trim() : (aircraft.model || tr("aircraft.unknown_model", "Modelo desconocido"))}</div>
       <div class="ar-route">${routeLabel(aircraft)}</div>
       <div class="ar-card-metrics">
         <span>${fmt(aircraft.altitudeFt, " ft")}</span>
@@ -158,7 +162,7 @@ function renderList(snapshot) {
         <span>${aircraft.bearingDeg === null ? "" : `${bearingCompass(aircraft.bearingDeg)} ${Math.round(aircraft.bearingDeg)}°`}</span>
       </div>
       ${aircraft.latitude !== null && aircraft.longitude !== null
-        ? `<button type="button" class="ar-card-note-btn" title="Ver info de ${displayName(aircraft)}">📝</button>`
+        ? `<button type="button" class="ar-card-note-btn" title="${tr("aircraft.view_info_of", "Ver info de {name}", { name: displayName(aircraft) })}">📝</button>`
         : ""}
     `;
     // List click only centers the map on this aircraft — it no longer also
@@ -315,19 +319,19 @@ function openDetail(aircraft) {
       <div class="apm-sub">ICAO ${aircraft.icao}</div>
     </div>
     <div class="apm-grid">
-      <div class="apm-row"><span>Registration</span><span>${aircraft.registration || "—"}</span></div>
-      <div class="apm-row"><span>Callsign</span><span>${aircraft.callsign || "—"}</span></div>
-      <div class="apm-row"><span>Airline</span><span>${aircraft.operator || "—"}</span></div>
-      <div class="apm-row"><span>Aircraft</span><span>${aircraft.manufacturer ? `${aircraft.manufacturer} ${aircraft.model || ""}`.trim() : (aircraft.model || "—")}</span></div>
-      <div class="apm-row"><span>From</span><span>${aircraft.origin || "—"}</span></div>
-      <div class="apm-row"><span>To</span><span>${aircraft.destination || "—"}</span></div>
-      <div class="apm-row"><span>Altitude</span><span>${fmt(aircraft.altitudeFt, " ft")}</span></div>
-      <div class="apm-row"><span>Speed</span><span>${fmt(aircraft.speedKt, " kt")}</span></div>
-      <div class="apm-row"><span>Heading</span><span>${aircraft.headingDeg === null ? "—" : `${Math.round(aircraft.headingDeg)}°`}</span></div>
-      <div class="apm-row"><span>Squawk</span><span>${aircraft.squawk || "—"}</span></div>
-      <div class="apm-row"><span>Distance</span><span>${distanceLabel(aircraft)}</span></div>
-      <div class="apm-row"><span>Bearing</span><span>${aircraft.bearingDeg === null ? "—" : `${bearingCompass(aircraft.bearingDeg)} ${Math.round(aircraft.bearingDeg)}°`}</span></div>
-      <div class="apm-row"><span>Last seen</span><span>${lastSeenLabel(aircraft.lastSeen)}</span></div>
+      <div class="apm-row"><span>${tr("aircraft.detail_registration", "Matrícula")}</span><span>${aircraft.registration || "—"}</span></div>
+      <div class="apm-row"><span>${tr("aircraft.detail_callsign", "Indicativo")}</span><span>${aircraft.callsign || "—"}</span></div>
+      <div class="apm-row"><span>${tr("aircraft.detail_airline", "Aerolínea")}</span><span>${aircraft.operator || "—"}</span></div>
+      <div class="apm-row"><span>${tr("aircraft.detail_aircraft", "Aeronave")}</span><span>${aircraft.manufacturer ? `${aircraft.manufacturer} ${aircraft.model || ""}`.trim() : (aircraft.model || "—")}</span></div>
+      <div class="apm-row"><span>${tr("aircraft.detail_from", "Origen")}</span><span>${aircraft.origin || "—"}</span></div>
+      <div class="apm-row"><span>${tr("aircraft.detail_to", "Destino")}</span><span>${aircraft.destination || "—"}</span></div>
+      <div class="apm-row"><span>${tr("aircraft.detail_altitude", "Altitud")}</span><span>${fmt(aircraft.altitudeFt, " ft")}</span></div>
+      <div class="apm-row"><span>${tr("aircraft.detail_speed", "Velocidad")}</span><span>${fmt(aircraft.speedKt, " kt")}</span></div>
+      <div class="apm-row"><span>${tr("aircraft.detail_heading", "Rumbo")}</span><span>${aircraft.headingDeg === null ? "—" : `${Math.round(aircraft.headingDeg)}°`}</span></div>
+      <div class="apm-row"><span>${tr("aircraft.detail_squawk", "Squawk")}</span><span>${aircraft.squawk || "—"}</span></div>
+      <div class="apm-row"><span>${tr("aircraft.detail_distance", "Distancia")}</span><span>${distanceLabel(aircraft)}</span></div>
+      <div class="apm-row"><span>${tr("aircraft.detail_bearing", "Dirección")}</span><span>${aircraft.bearingDeg === null ? "—" : `${bearingCompass(aircraft.bearingDeg)} ${Math.round(aircraft.bearingDeg)}°`}</span></div>
+      <div class="apm-row"><span>${tr("aircraft.detail_last_seen", "Visto por última vez")}</span><span>${lastSeenLabel(aircraft.lastSeen)}</span></div>
     </div>
   `;
   detailModal.classList.remove("hidden");
@@ -337,8 +341,8 @@ function openDetail(aircraft) {
 
 function lastSeenLabel(ts) {
   const secs = Math.max(0, Math.round((Date.now() - ts) / 1000));
-  if (secs < 60) return `${secs} seg`;
-  return `${Math.round(secs / 60)} min`;
+  if (secs < 60) return `${secs} ${tr("aircraft.unit_sec", "seg")}`;
+  return `${Math.round(secs / 60)} ${tr("aircraft.unit_min", "min")}`;
 }
 
 // ---- distance/bearing, recomputed client-side on every snapshot ----
@@ -428,7 +432,7 @@ function initMap() {
   const errEl = document.getElementById("ar-map-error");
   if (!el || typeof L === "undefined") {
     if (errEl) {
-      errEl.textContent = "No se pudo cargar el motor de mapas (vendor/leaflet) — revisá el deploy.";
+      errEl.textContent = tr("gps.err_map_engine", "No se pudo cargar el motor de mapas (vendor/leaflet) — revisá el deploy.");
       errEl.classList.remove("hidden");
     }
     return;
@@ -449,7 +453,7 @@ function initMap() {
   tiles.addTo(map);
   tiles.on("tileerror", () => {
     if (errEl && errEl.classList.contains("hidden")) {
-      errEl.textContent = "Los tiles del mapa (OpenStreetMap) no cargan — sin salida a internet desde la Pi.";
+      errEl.textContent = tr("aircraft.err_tiles", "Los tiles del mapa (OpenStreetMap) no cargan — sin salida a internet desde la Pi.");
       errEl.classList.remove("hidden");
       clearTimeout(tiles._akbalErrTimer);
       tiles._akbalErrTimer = setTimeout(() => errEl.classList.add("hidden"), 8000);

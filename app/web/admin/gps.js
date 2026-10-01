@@ -4,6 +4,8 @@
 // polling is cheap and reconnects survive navigation.
 "use strict";
 
+const t = (key, fallback, vars) => (window.AkbalI18n ? window.AkbalI18n.t(key, vars) : null) || fallback;
+
 const POLL_MS = 2000;
 // World view until the first fix zooms us in.
 const WORLD_VIEW = { lat: 20, lon: 0, zoom: 2 };
@@ -150,7 +152,7 @@ function initMap() {
     // Leaflet failed to load — make it visible instead of a silent black map.
     const err = document.getElementById("gps-error");
     if (err) {
-      err.textContent = "No se pudo cargar el motor de mapas (vendor/leaflet) — revisá el deploy.";
+      err.textContent = t("gps.err_map_engine", "No se pudo cargar el motor de mapas (vendor/leaflet) — revisá el deploy.");
       err.classList.remove("hidden");
     }
     return;
@@ -177,7 +179,7 @@ function initMap() {
   tiles.on("tileerror", () => {
     const err = document.getElementById("gps-error");
     if (err && err.classList.contains("hidden")) {
-      err.textContent = "Los tiles del mapa (OpenStreetMap) no cargan — sin salida a internet desde la Pi. La posición del HUD sigue siendo válida.";
+      err.textContent = t("gps.err_tiles", "Los tiles del mapa (OpenStreetMap) no cargan — sin salida a internet desde la Pi. La posición del HUD sigue siendo válida.");
       err.classList.remove("hidden");
       clearTimeout(tiles._akbalErrTimer);
       tiles._akbalErrTimer = setTimeout(() => err.classList.add("hidden"), 8000);
@@ -270,8 +272,8 @@ function render(gps) {
     hud?.classList.add("dim");
     satPanel?.classList.add("dim");
     addressPanel?.classList.add("dim");
-    setGpsAddress("Sin dongle GPS conectado", true);
-    if (fixMsg) fixMsg.textContent = "Sin dongle GPS conectado — enchufá el receptor USB";
+    setGpsAddress(t("gps.no_dongle_short", "Sin dongle GPS conectado"), true);
+    if (fixMsg) fixMsg.textContent = t("gps.no_dongle_long", "Sin dongle GPS conectado — enchufá el receptor USB");
     setText("gps-coords", "— , —");
     setText("gps-device", "—");
     setText("gps-alt", "—");
@@ -285,7 +287,7 @@ function render(gps) {
     setText("gps-sat-total", "—");
     renderSatDots([]);
     if (errEl) {
-      errEl.textContent = "No hay dongle GPS conectado a la Raspberry Pi.";
+      errEl.textContent = t("gps.err_no_dongle", "No hay dongle GPS conectado a la Raspberry Pi.");
       errEl.classList.remove("hidden");
     }
     return;
@@ -315,7 +317,7 @@ function render(gps) {
     if (gps.address) {
       setGpsAddress(gps.address, false);
     } else {
-      setGpsAddress("Resolviendo dirección…", true);
+      setGpsAddress(t("gps.address_resolving", "Resolviendo dirección…"), true);
     }
   } else {
     if (lastHadFix) clearMarker();
@@ -351,9 +353,9 @@ function satMessage(gps) {
   const used = gps.satellitesUsed || 0;
   const need = gps.satellitesNeeded || 3;
   const view = gps.satellitesInView || 0;
-  if (view === 0) return "Buscando satélites… (0 visibles — asegurate de tener cielo despejado)";
-  if (used >= need) return "Señal insuficiente — recalculando…";
-  return `Fix inválido: se necesitan ${need} satélites y hay ${used} en la solución (${view} visibles). Sal a cielo despejado.`;
+  if (view === 0) return t("gps.sat_msg_none_visible", "Buscando satélites… (0 visibles — asegurate de tener cielo despejado)");
+  if (used >= need) return t("gps.sat_msg_weak_signal", "Señal insuficiente — recalculando…");
+  return t("gps.sat_msg_invalid_fix", "Fix inválido: se necesitan {need} satélites y hay {used} en la solución ({view} visibles). Sal a cielo despejado.", { need, used, view });
 }
 
 // ---- Satellite sky plot ----

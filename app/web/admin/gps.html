@@ -27,44 +27,44 @@
         <span class="plx-toggle-label mode-demo" data-mode="demo" data-i18n="topbar.demo">DEMO</span>
       </div>
       <div class="hdr-view-toggle" id="gps-view-toggle" role="switch" aria-checked="false" tabindex="0"
-           title="Ver: mapa de posición / globo 3D con satélites">
-        <span class="hdr-view-label active" id="gps-view-label-map">MAPA</span>
+           title="Ver: mapa de posición / globo 3D con satélites" data-i18n-title="gps.view_toggle_title">
+        <span class="hdr-view-label active" id="gps-view-label-map" data-i18n="gps.view_map">MAPA</span>
         <span class="hdr-view-track"><span class="hdr-view-knob"></span></span>
-        <span class="hdr-view-label" id="gps-view-label-globe">GLOBO 3D</span>
+        <span class="hdr-view-label" id="gps-view-label-globe" data-i18n="gps.view_globe">GLOBO 3D</span>
       </div>
     </div>
   </div>
 
   <!-- Position HUD: coords, altitude, speed, heading, HDOP -->
   <div class="gps-hud" id="gps-hud">
-    <div class="gps-hud-title">POSICIÓN</div>
+    <div class="gps-hud-title" data-i18n="gps.hud_title">POSICIÓN</div>
     <div class="gps-coords mono" id="gps-coords">— , —</div>
     <div class="gps-hud-grid">
-      <div class="gps-hud-item"><span class="k">Alt</span><span class="v mono" id="gps-alt">—</span></div>
-      <div class="gps-hud-item"><span class="k">Vel</span><span class="v mono" id="gps-speed">—</span></div>
-      <div class="gps-hud-item"><span class="k">Rumbo</span><span class="v mono" id="gps-heading">—</span></div>
+      <div class="gps-hud-item"><span class="k" data-i18n="gps.hud_alt">Alt</span><span class="v mono" id="gps-alt">—</span></div>
+      <div class="gps-hud-item"><span class="k" data-i18n="gps.hud_speed">Vel</span><span class="v mono" id="gps-speed">—</span></div>
+      <div class="gps-hud-item"><span class="k" data-i18n="gps.hud_heading">Rumbo</span><span class="v mono" id="gps-heading">—</span></div>
       <div class="gps-hud-item"><span class="k">HDOP</span><span class="v mono" id="gps-hdop">—</span></div>
-      <div class="gps-hud-item"><span class="k">Hora fix</span><span class="v mono" id="gps-time">—</span></div>
-      <div class="gps-hud-item"><span class="k">Dongle</span><span class="v mono" id="gps-device">—</span></div>
+      <div class="gps-hud-item"><span class="k" data-i18n="gps.hud_fix_time">Hora fix</span><span class="v mono" id="gps-time">—</span></div>
+      <div class="gps-hud-item"><span class="k" data-i18n="wifiradar.hud_dongle_label">Dongle</span><span class="v mono" id="gps-device">—</span></div>
     </div>
-    <div id="gps-fix-msg" class="gps-fix-msg">Buscando satélites…</div>
+    <div id="gps-fix-msg" class="gps-fix-msg" data-i18n="gps.hud_searching">Buscando satélites…</div>
   </div>
 
   <!-- Reverse-geocoded street address (Nominatim/OSM). Updates automatically
        when the fix moves beyond the backend's geocode radius. -->
   <div class="gps-address" id="gps-address-panel">
-    <div class="gps-address-title">DIRECCIÓN</div>
-    <div class="gps-address-value" id="gps-address">Resolviendo dirección…</div>
-    <div class="gps-address-note" id="gps-address-note">se actualiza sola al moverte (OpenStreetMap)</div>
+    <div class="gps-address-title" data-i18n="gps.address_title">DIRECCIÓN</div>
+    <div class="gps-address-value" id="gps-address" data-i18n="gps.address_resolving">Resolviendo dirección…</div>
+    <div class="gps-address-note" id="gps-address-note" data-i18n="gps.address_note">se actualiza sola al moverte (OpenStreetMap)</div>
   </div>
 
   <!-- Satellite sky plot + counters -->
   <div class="gps-sat-panel" id="gps-sat-panel">
     <div class="gps-sat-head">
-      <div class="gps-sat-title">SATÉLITES</div>
+      <div class="gps-sat-title" data-i18n="gps.sat_title">SATÉLITES</div>
       <div class="gps-sat-counters">
-        <span class="gps-sat-counter used"><span id="gps-sat-used">0</span>/<span id="gps-sat-need">4</span> en fix</span>
-        <span class="gps-sat-counter view"><span id="gps-sat-view">0</span>/<span id="gps-sat-total">—</span> visibles</span>
+        <span class="gps-sat-counter used"><span id="gps-sat-used">0</span>/<span id="gps-sat-need">4</span> <span data-i18n="gps.sat_in_fix">en fix</span></span>
+        <span class="gps-sat-counter view"><span id="gps-sat-view">0</span>/<span id="gps-sat-total">—</span> <span data-i18n="gps.sat_visible">visibles</span></span>
       </div>
     </div>
     <div class="gps-sat-plot" id="gps-sat-plot">
@@ -75,7 +75,7 @@
       <div class="gps-sat-n">N</div>
       <div id="gps-sat-dots"></div>
     </div>
-    <div class="gps-sat-note">anillo exterior = horizonte · centro = cenit</div>
+    <div class="gps-sat-note" data-i18n="gps.sat_note">anillo exterior = horizonte · centro = cenit</div>
   </div>
 
   <div id="gps-error" class="gps-error hidden"></div>

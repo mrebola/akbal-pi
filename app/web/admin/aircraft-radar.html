@@ -17,19 +17,19 @@
     <!-- LIVE/DEMO + MAPA/RADAR move in here, next to the already-existing
          radar-specific summary readout, instead of a separate toolbar row. -->
     <div class="ar-controls">
-      <div class="plx-toggle" id="platform-toggle" title="Fuente de datos: LIVE usa el HackRF real · DEMO muestra aeronaves sintéticas">
+      <div class="plx-toggle" id="platform-toggle" title="Fuente de datos: LIVE usa el HackRF real · DEMO muestra aeronaves sintéticas" data-i18n-title="aircraft.platform_toggle_title">
         <span class="plx-toggle-label mode-live" data-mode="live" data-i18n="topbar.live">LIVE</span>
         <span class="plx-toggle-label mode-demo" data-mode="demo" data-i18n="topbar.demo">DEMO</span>
       </div>
       <div class="hdr-view-toggle" id="ar-view-toggle" role="switch" aria-checked="false" tabindex="0"
-           title="Ver: mapa real de la zona / radar circular por distancia">
-        <span class="hdr-view-label active" id="ar-view-label-map">MAPA</span>
+           title="Ver: mapa real de la zona / radar circular por distancia" data-i18n-title="aircraft.view_toggle_title">
+        <span class="hdr-view-label active" id="ar-view-label-map" data-i18n="gps.view_map">MAPA</span>
         <span class="hdr-view-track"><span class="hdr-view-knob"></span></span>
-        <span class="hdr-view-label" id="ar-view-label-radar">RADAR</span>
+        <span class="hdr-view-label" id="ar-view-label-radar" data-i18n="aircraft.view_radar">RADAR</span>
       </div>
     </div>
     <div class="ar-summary">
-      <span id="ar-count">0</span> aeronaves detectadas
+      <span id="ar-count">0</span> <span data-i18n="aircraft.summary_detected">aeronaves detectadas</span>
       <span class="ar-sep">·</span>
       <span id="ar-mpm">0</span> msg/min
       <span class="ar-sep">·</span>
@@ -40,8 +40,8 @@
   <main class="ar-main">
     <!-- List: cards sorted by distance, closest first — same content as
          the radar's own labels, just easier to scan/tap than the dots. -->
-    <section class="ar-list" id="ar-list" aria-label="Aeronaves detectadas">
-      <div class="ar-empty" id="ar-empty">Buscando aeronaves…</div>
+    <section class="ar-list" id="ar-list" aria-label="Aeronaves detectadas" data-i18n-aria-label="aircraft.list_aria">
+      <div class="ar-empty" id="ar-empty" data-i18n="aircraft.searching">Buscando aeronaves…</div>
     </section>
 
     <!-- Two views behind the MAPA/RADAR toggle (see index.html/gps.html's
@@ -57,7 +57,7 @@
       <div class="ar-radar-legend hidden" id="ar-radar-legend">
         <span>10</span><span>25</span><span>50</span><span>100 km</span>
       </div>
-      <div class="ar-nofix hidden" id="ar-nofix">Sin fix GPS — mostrando lista sin radar</div>
+      <div class="ar-nofix hidden" id="ar-nofix" data-i18n="aircraft.nofix">Sin fix GPS — mostrando lista sin radar</div>
       <div class="ar-map-error hidden" id="ar-map-error"></div>
     </section>
   </main>

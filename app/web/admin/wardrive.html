@@ -26,22 +26,22 @@
   <!-- Session HUD (top left): big START button + live counters -->
   <div class="wd-hud" id="wd-hud">
     <div class="wd-hud-title">WARDRIVE</div>
-    <button type="button" id="wd-toggle" class="wd-start">▶ INICIAR</button>
-    <button type="button" id="wd-recenter" class="wd-recenter" title="Centrar el mapa en el auto y seguir su posición mientras maneja">🎯 Centrar mapa</button>
+    <button type="button" id="wd-toggle" class="wd-start" data-i18n="wardrive.start_btn">▶ INICIAR</button>
+    <button type="button" id="wd-recenter" class="wd-recenter" title="Centrar el mapa en el auto y seguir su posición mientras maneja" data-i18n-title="wardrive.recenter_title" data-i18n="wardrive.recenter_btn">🎯 Centrar mapa</button>
     <div class="wd-hud-grid">
-      <div class="wd-hud-item"><span class="k">Tiempo</span><span class="v mono" id="wd-time">—</span></div>
-      <div class="wd-hud-item"><span class="k">Distancia</span><span class="v mono" id="wd-dist">—</span></div>
-      <div class="wd-hud-item"><span class="k">En el aire</span><span class="v mono" id="wd-aps">—</span></div>
-      <div class="wd-hud-item"><span class="k">Nuevas (sesión)</span><span class="v mono" id="wd-new">—</span></div>
-      <div class="wd-hud-item"><span class="k">Redes totales</span><span class="v mono" id="wd-unique">—</span></div>
-      <div class="wd-hud-item"><span class="k">Handshakes</span><span class="v mono" id="wd-hs">—</span></div>
-      <div class="wd-hud-item"><span class="k">Canal</span><span class="v mono" id="wd-ch">—</span></div>
-      <div class="wd-hud-item"><span class="k">Dongle</span><span class="v mono" id="wd-iface">—</span></div>
+      <div class="wd-hud-item"><span class="k" data-i18n="wardrive.hud_time">Tiempo</span><span class="v mono" id="wd-time">—</span></div>
+      <div class="wd-hud-item"><span class="k" data-i18n="wardrive.hud_distance">Distancia</span><span class="v mono" id="wd-dist">—</span></div>
+      <div class="wd-hud-item"><span class="k" data-i18n="wardrive.hud_on_air">En el aire</span><span class="v mono" id="wd-aps">—</span></div>
+      <div class="wd-hud-item"><span class="k" data-i18n="wardrive.hud_new_session">Nuevas (sesión)</span><span class="v mono" id="wd-new">—</span></div>
+      <div class="wd-hud-item"><span class="k" data-i18n="wardrive.hud_total_networks">Redes totales</span><span class="v mono" id="wd-unique">—</span></div>
+      <div class="wd-hud-item"><span class="k" data-i18n="wardrive.hud_handshakes">Handshakes</span><span class="v mono" id="wd-hs">—</span></div>
+      <div class="wd-hud-item"><span class="k" data-i18n="wardrive.hud_channel">Canal</span><span class="v mono" id="wd-ch">—</span></div>
+      <div class="wd-hud-item"><span class="k" data-i18n="wifiradar.hud_dongle_label">Dongle</span><span class="v mono" id="wd-iface">—</span></div>
     </div>
     <!-- Dongle picker: only changeable while stopped (the radio is busy
          during a session) -->
-    <label class="wd-dongle" title="Adaptador USB a usar — default: AR9271 (captura EAPOL determinística)">
-      <span class="k">Dongle</span>
+    <label class="wd-dongle" title="Adaptador USB a usar — default: AR9271 (captura EAPOL determinística)" data-i18n-title="wardrive.dongle_picker_title">
+      <span class="k" data-i18n="wifiradar.hud_dongle_label">Dongle</span>
       <select id="wd-dongle-select">
         <option value="">auto</option>
       </select>
@@ -49,8 +49,8 @@
     <div id="wd-dongle-msg" class="wd-dongle-msg"></div>
     <!-- Radio count: 1 dongle (shared, blind during attacks) vs 2 dongles
          (discovery keeps running while the attack radio attacks). -->
-    <label class="wd-dongle" title="Single: 1 dongle compartido (ciego durante ataques). Dual: 2 dongles — discovery sigue en el aire mientras el atacante ataca.">
-      <span class="k">Radios</span>
+    <label class="wd-dongle" title="Single: 1 dongle compartido (ciego durante ataques). Dual: 2 dongles — discovery sigue en el aire mientras el atacante ataca." data-i18n-title="wardrive.radios_picker_title">
+      <span class="k" data-i18n="wardrive.radios_label">Radios</span>
       <select id="wd-radio-select">
         <option value="auto">auto</option>
         <option value="single">1 (single)</option>
@@ -58,18 +58,18 @@
       </select>
     </label>
     <div id="wd-radio-msg" class="wd-dongle-msg"></div>
-    <div class="wd-home-guard" id="wd-home-guard" title="La red a la que Akbal está conectado NUNCA es atacada — el motor la excluye">
-      🔒 <span id="wd-home-ssid">—</span> protegida
+    <div class="wd-home-guard" id="wd-home-guard" title="La red a la que Akbal está conectado NUNCA es atacada — el motor la excluye" data-i18n-title="wardrive.home_guard_title">
+      🔒 <span id="wd-home-ssid">—</span> <span data-i18n="wardrive.home_guard_protected">protegida</span>
     </div>
     <div id="wd-error" class="wd-fix-msg hidden"></div>
   </div>
 
   <!-- 1-vs-2 adapters efficiency comparison (attack_rounds metrics) -->
   <div class="wd-radio-compare" id="wd-radio-compare" style="display:none;">
-    <div class="wd-hud-title">EFICIENCIA RADIOS</div>
+    <div class="wd-hud-title" data-i18n="wardrive.compare_title">EFICIENCIA RADIOS</div>
     <table class="wd-compare-table">
       <thead>
-        <tr><th>Modo</th><th>Rondas</th><th>Éxitos</th><th>%</th><th>Ciego/hora</th></tr>
+        <tr><th data-i18n="wardrive.compare_mode">Modo</th><th data-i18n="wardrive.compare_rounds">Rondas</th><th data-i18n="wardrive.compare_success">Éxitos</th><th>%</th><th data-i18n="wardrive.compare_blind_hour">Ciego/hora</th></tr>
       </thead>
       <tbody id="wd-radio-compare-body"></tbody>
     </table>
@@ -80,8 +80,8 @@
     <div class="wd-hud-title">GPS</div>
     <div class="gps-coords mono" id="wd-coords">— , —</div>
     <div class="wd-hud-grid">
-      <div class="wd-hud-item"><span class="k">Vel</span><span class="v mono" id="wd-speed">—</span></div>
-      <div class="wd-hud-item"><span class="k">Rumbo</span><span class="v mono" id="wd-heading">—</span></div>
+      <div class="wd-hud-item"><span class="k" data-i18n="gps.hud_speed">Vel</span><span class="v mono" id="wd-speed">—</span></div>
+      <div class="wd-hud-item"><span class="k" data-i18n="gps.hud_heading">Rumbo</span><span class="v mono" id="wd-heading">—</span></div>
       <div class="wd-hud-item"><span class="k">HDOP</span><span class="v mono" id="wd-hdop">—</span></div>
     </div>
     <!-- Satellite sky plot: same design as the /gps page's panel -->
@@ -95,24 +95,24 @@
         <div id="wd-sat-dots"></div>
       </div>
       <div class="gps-sat-counters" style="flex-direction: column; display: flex; gap: 4px;">
-        <span class="gps-sat-counter used"><span id="wd-sat-used">0</span>/<span id="wd-sat-need">4</span> en fix</span>
-        <span class="gps-sat-counter view"><span id="wd-sat-view">0</span>/<span id="wd-sat-total">—</span> visibles</span>
+        <span class="gps-sat-counter used"><span id="wd-sat-used">0</span>/<span id="wd-sat-need">4</span> <span data-i18n="gps.sat_in_fix">en fix</span></span>
+        <span class="gps-sat-counter view"><span id="wd-sat-view">0</span>/<span id="wd-sat-total">—</span> <span data-i18n="gps.sat_visible">visibles</span></span>
       </div>
     </div>
-    <div id="wd-fix-msg" class="wd-fix-msg">Buscando satélites…</div>
+    <div id="wd-fix-msg" class="wd-fix-msg" data-i18n="gps.hud_searching">Buscando satélites…</div>
   </div>
 
   <!-- Right panel: tabs over the map (Redes en vivo / Sesiones) -->
   <div class="wd-panel" id="wd-panel">
     <div class="wd-panel-tabs">
-      <button class="wd-panel-tab active" data-panetab="live">REDES EN VIVO</button>
-      <button class="wd-panel-tab" data-panetab="sessions">SESIONES</button>
-      <button class="wd-panel-collapse" id="wd-panel-collapse" title="Colapsar panel">▾</button>
+      <button class="wd-panel-tab active" data-panetab="live" data-i18n="wardrive.panel_tab_live">REDES EN VIVO</button>
+      <button class="wd-panel-tab" data-panetab="sessions" data-i18n="wardrive.panel_tab_sessions">SESIONES</button>
+      <button class="wd-panel-collapse" id="wd-panel-collapse" title="Colapsar panel" data-i18n-title="wardrive.panel_collapse_title">▾</button>
     </div>
     <div class="wd-panel-body" id="wd-panel-body">
       <div class="wd-pane active" id="wd-pane-live">
         <div class="wd-live-stats">
-          <span class="wd-chip"><span id="wd-count-total">0</span> redes</span>
+          <span class="wd-chip"><span id="wd-count-total">0</span> <span data-i18n="wardrive.networks_unit">redes</span></span>
           <span class="wd-chip ok"><span id="wd-count-hs">0</span> 🤝</span>
         </div>
         <ul id="wd-ap-list" class="wd-ap-list"></ul>
@@ -132,14 +132,14 @@
   <!-- Session detail drawer (map + networks + exports) -->
   <div id="wd-session-drawer" class="wd-drawer hidden">
     <div class="wd-drawer-head">
-      <span id="wd-drawer-title">Sesión</span>
+      <span id="wd-drawer-title" data-i18n="wardrive.drawer_title">Sesión</span>
       <div class="wd-drawer-actions">
-        <a id="wd-exp-hist" href="#" download><button class="wd-btn-sm">Historial CSV</button></a>
-        <a id="wd-exp-csv" href="#" download><button class="wd-btn-sm">CSV sesión</button></a>
+        <a id="wd-exp-hist" href="#" download><button class="wd-btn-sm" data-i18n="wardrive.export_history">Historial CSV</button></a>
+        <a id="wd-exp-csv" href="#" download><button class="wd-btn-sm" data-i18n="wardrive.export_session_csv">CSV sesión</button></a>
         <a id="wd-exp-gpx" href="#" download><button class="wd-btn-sm">GPX</button></a>
-        <button id="wd-session-delete" class="wd-btn-sm danger" title="Borrar este recorrido">🗑</button>
-        <button id="wd-drawer-min" class="wd-btn-sm secondary" title="Minimizar (queda como barra en la parte inferior)">▁</button>
-        <button id="wd-drawer-max" class="wd-btn-sm secondary" title="Maximizar (pantalla completa)">⛶</button>
+        <button id="wd-session-delete" class="wd-btn-sm danger" title="Borrar este recorrido" data-i18n-title="wardrive.delete_route_title">🗑</button>
+        <button id="wd-drawer-min" class="wd-btn-sm secondary" title="Minimizar (queda como barra en la parte inferior)" data-i18n-title="wardrive.minimize_title">▁</button>
+        <button id="wd-drawer-max" class="wd-btn-sm secondary" title="Maximizar (pantalla completa)" data-i18n-title="wardrive.maximize_title">⛶</button>
         <button id="wd-drawer-close" class="wd-btn-sm secondary" title="Cerrar">✕</button>
       </div>
     </div>
@@ -175,19 +175,19 @@
       <button id="wd-ap-modal-close" class="apm-close">✕</button>
       <div class="apm-head">
         <div class="apm-title" id="wd-apm-title">—</div>
-        <div class="apm-sub">Red detectada</div>
+        <div class="apm-sub" data-i18n="wardrive.apm_sub">Red detectada</div>
       </div>
       <div class="apm-grid">
-        <div class="apm-row"><span>MAC Address (BSSID)</span><span id="wd-apm-bssid">—</span></div>
-        <div class="apm-row"><span>Marca / fabricante</span><span id="wd-apm-vendor">—</span></div>
-        <div class="apm-row"><span>Seguridad</span><span id="wd-apm-security">—</span></div>
-        <div class="apm-row"><span>Canal</span><span id="wd-apm-channel">—</span></div>
-        <div class="apm-row"><span>Señal (ahora / mejor)</span><span id="wd-apm-rssi">—</span></div>
-        <div class="apm-row"><span>Paquetes vistos</span><span id="wd-apm-packets">—</span></div>
-        <div class="apm-row"><span>Handshake</span><span id="wd-apm-hs">—</span></div>
-        <div class="apm-row"><span>Deauth rounds</span><span id="wd-apm-attempts">—</span></div>
+        <div class="apm-row"><span data-i18n="wifiradar.apm_mac">MAC Address (BSSID)</span><span id="wd-apm-bssid">—</span></div>
+        <div class="apm-row"><span data-i18n="wifiradar.apm_vendor">Marca / fabricante</span><span id="wd-apm-vendor">—</span></div>
+        <div class="apm-row"><span data-i18n="wifiradar.apm_security">Seguridad</span><span id="wd-apm-security">—</span></div>
+        <div class="apm-row"><span data-i18n="wifiradar.apm_channel">Canal</span><span id="wd-apm-channel">—</span></div>
+        <div class="apm-row"><span data-i18n="wardrive.apm_rssi">Señal (ahora / mejor)</span><span id="wd-apm-rssi">—</span></div>
+        <div class="apm-row"><span data-i18n="wardrive.apm_packets">Paquetes vistos</span><span id="wd-apm-packets">—</span></div>
+        <div class="apm-row"><span data-i18n="wardrive.apm_handshake">Handshake</span><span id="wd-apm-hs">—</span></div>
+        <div class="apm-row"><span data-i18n="wardrive.apm_deauth_rounds">Deauth rounds</span><span id="wd-apm-attempts">—</span></div>
       </div>
-      <div class="apm-hint">El mapa registra dónde se vio cada red; los handshakes ya capturados no se vuelven a atacar.</div>
+      <div class="apm-hint" data-i18n="wardrive.apm_hint">El mapa registra dónde se vio cada red; los handshakes ya capturados no se vuelven a atacar.</div>
     </div>
   </div>
 

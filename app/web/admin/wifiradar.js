@@ -5,6 +5,8 @@
 import * as THREE from "three";
 import { OrbitControls } from "./vendor/OrbitControls.js";
 
+const t = (key, fallback, vars) => (window.AkbalI18n ? window.AkbalI18n.t(key, vars) : null) || fallback;
+
 // ---- DOM refs ----
 const canvas = document.getElementById("scene");
 const bootOverlay = document.getElementById("boot-overlay");
@@ -913,7 +915,7 @@ function connectWs() {
     }
   });
   ws.addEventListener("close", () => {
-    wsStatusEl.textContent = "reconectando...";
+    wsStatusEl.textContent = t("wifiradar.ws_reconnecting", "reconectando...");
     setTimeout(connectWs, reconnectDelay);
     reconnectDelay = Math.min(10000, reconnectDelay * 1.6);
   });
@@ -922,7 +924,7 @@ function connectWs() {
 
 // Initial snapshot over plain fetch for instant first paint — the socket
 // takes over a moment later, same data shape either way.
-bootSub.textContent = "conectando con AKBAL...";
+bootSub.textContent = t("wifiradar.boot_connecting", "conectando con AKBAL...");
 fetch("/api/wifiradar/snapshot")
   .then((res) => {
     if (res.status === 401) {
@@ -936,7 +938,7 @@ fetch("/api/wifiradar/snapshot")
     connectWs();
   })
   .catch((err) => {
-    bootSub.textContent = `error: ${err.message}`;
+    bootSub.textContent = `${t("wifiradar.boot_error", "error")}: ${err.message}`;
     connectWs();
   });
 
@@ -956,8 +958,8 @@ async function refreshRadarDongleList() {
       '<option value="">auto</option>' +
       (data.adapters || [])
         .map((a) => {
-          const tag = a.driver === "ath9k_htc" ? " ← recomendado" : "";
-          const label = `${a.iface} · ${a.driver || "?"}${tag}${a.monitorSupported ? "" : " (sin monitor)"}`;
+          const tag = a.driver === "ath9k_htc" ? ` ← ${t("wifiradar.dongle_recommended", "recomendado")}` : "";
+          const label = `${a.iface} · ${a.driver || "?"}${tag}${a.monitorSupported ? "" : ` (${t("wifiradar.dongle_no_monitor", "sin monitor")})`}`;
           // value = MAC, not iface name — wlan* names aren't stable across
           // USB reconnects (confirmed live: a second dongle plugged in/out
           // reshuffled which name this one got).
@@ -967,7 +969,7 @@ async function refreshRadarDongleList() {
     if (cur && !sel.querySelector(`option[value="${CSS.escape(cur)}"]`)) {
       const o = document.createElement("option");
       o.value = cur;
-      o.textContent = `${cur} (no presente)`;
+      o.textContent = `${cur} (${t("wifiradar.dongle_not_present", "no presente")})`;
       o.selected = true;
       sel.appendChild(o);
     } else if (!cur) {
@@ -986,10 +988,10 @@ document.getElementById("hud-dongle-select")?.addEventListener("change", async (
       body: JSON.stringify({ iface: mac }),
     });
     const data = await res.json();
-    if (msg) msg.textContent = data.ok ? "" : data.error || "No se pudo fijar el dongle";
+    if (msg) msg.textContent = data.ok ? "" : data.error || t("wifiradar.dongle_set_failed", "No se pudo fijar el dongle");
     void refreshRadarDongleList();
   } catch {
-    if (msg) msg.textContent = "Error de red";
+    if (msg) msg.textContent = t("wifiradar.network_error", "Error de red");
   }
 });
 

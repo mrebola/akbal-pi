@@ -1728,12 +1728,14 @@ function wdRender() {
   const cap = wdMonitorCap;
   const monitorReady = !cap || cap.monitorSupported;
 
+  const noAdapter = !on && cap && !cap.present;
+  wdBannerStatus.classList.toggle("wd-no-adapter", Boolean(noAdapter));
   wdBannerStatus.textContent = on
     ? `${wdStatus.targets?.length || 0} redes visibles${wdSource === "demo" ? " (demo — simulado)" : ""}`
     : cap?.demo
       ? "Demo — auditar redes sintéticas sin adaptador"
-      : cap && !cap.present
-        ? "Sin adaptador WiFi USB"
+      : noAdapter
+        ? "No hay adaptador WiFi USB conectado — enchufá el dongle para auditar"
         : cap && !cap.monitorSupported
           ? `${cap.description || "Adaptador"} no soporta modo monitor`
           : "Listo para auditar";
@@ -1941,7 +1943,6 @@ function wdRenderVerifyList(capturedTargets) {
   const rows = capturedTargets.filter((t) => !t.verified);
   if (rows.length === 0) {
     wdVerifyList.innerHTML = "";
-    wdRenderDictCrack();
     return;
   }
   // Preserve typed passwords across the 2s status re-render — the table is
@@ -1964,13 +1965,10 @@ function wdRenderVerifyList(capturedTargets) {
         <input type="password" placeholder="contraseña del lab" class="wd-verify-pass" autocomplete="off" value="${escapeHtml(prevPass.get(t.bssid) || "")}" />
         <button class="wd-verify-btn" ${busy ? "disabled" : ""}>${busy ? "Verificando..." : "Verificar"}</button>
         ${cancelBtn}
-        <button class="wd-dict-btn" data-bssid="${t.bssid}" title="Probar con el diccionario rockyou (lento, cancelable)">dictionary attack</button>
         <span class="wd-verify-verdict muted"></span>
       </div>`;
     })
     .join("");
-  // Dict progress lives below the rows, driven by /dict/status.
-  wdRenderDictProgress();
 }
 
 wdVerifyList?.addEventListener("click", async (ev) => {
@@ -2082,154 +2080,13 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "Escape") document.getElementById("wd-session-pwd-modal")?.classList.add("hidden");
 });
 
-// ---- Dictionary crack (rockyou) ----
-// One running at a time; progress: tried/total + fps + elapsed. Cancellable.
-
-async function wdRenderDictProgress() {
-  try {
-    const res = await fetch("/api/wardrive/dict/status");
-    if (!res.ok) return;
-    const data = await res.json();
-    wdRenderDictCrack(data);
-  } catch { /* non-fatal */ }
-}
-
-async function wdRenderDictCrack(statusData) {
-  let data = statusData;
-  if (!data) {
-    try {
-      const res = await fetch("/api/wardrive/dict/status");
-      if (!res.ok) return;
-      data = await res.json();
-    } catch { return; }
-  }
-  if (!data?.bssid || !data?.state) {
-    // No dict attack: clear the inline widget wherever it was placed.
-    document.getElementById("wd-dict-progress")?.replaceChildren();
-    document.getElementById("wd-sessions-dict-progress")?.replaceChildren();
-    document.querySelector(".wd-dict-inline")?.remove();
-    if (wdDictTimer) {
-      clearInterval(wdDictTimer);
-      wdDictTimer = null;
-    }
-    return;
-  }
-  const { bssid, state } = data;
-  const p = state.progress;
-  const pct = p.total > 0 ? Math.min(100, (p.tried / p.total) * 100) : 0;
-  const targetSsid = wdStatus?.session?.targets?.find((t) => t.bssid === bssid)?.ssid
-    || wdStatus?.targets?.find((t) => t.bssid === bssid)?.ssid
-    || wdSessionsCache.find((s) => (s.targets || []).some((t) => t.bssid === bssid))?.targets.find((t) => t.bssid === bssid)?.ssid
-    || bssid;
-  const resultMsg = state.result
-    ? state.result.matched
-      ? '<span class="wd-verify-badge ok">✓ ENCONTRADA — la contraseña del diccionario valida el handshake</span>'
-      : state.result.verdict === "handshake_wrong_password"
-        ? '<span class="wd-verify-badge wrong">Diccionario agotado — contraseña no está en rockyou</span>'
-        : `<span class="wd-verify-badge err">${escapeHtml(state.result.output || "cancelado")}</span>`
-    : "";
-  // A finished crack offers a ✕ dismiss so the banner doesn't stay pinned
-  // while navigating sessions; the outcome is persisted on the session.
-  const dismissBtn = !state.running ? '<button class="wd-dict-clear" title="Cerrar">✕</button>' : "";
-  const widgetHtml = `
-    <div class="wd-dict-head">
-      <span>Diccionario (rockyou) · <strong>${escapeHtml(targetSsid)}</strong></span>
-      <span style="display:inline-flex; gap:6px;">
-        ${state.running ? '<button class="wd-dict-stop">Cancelar</button>' : ""}
-        ${dismissBtn}
-      </span>
-    </div>
-    <div class="wd-dict-bar"><div class="wd-dict-bar-fill" style="width:${pct.toFixed(1)}%"></div></div>
-    <div class="wd-dict-meta muted">${p.tried.toLocaleString()} / ${p.total.toLocaleString()} contraseñas · ${p.fps.toFixed(1)} pass/s · ${p.elapsedSec}s ${state.running ? "· corriendo..." : state.result ? "· terminado" : "· cancelado"}</div>
-    <div class="wd-dict-result">${resultMsg}</div>
-  `;
-  // The widget lives UNDER THE SESSION BEING ATTACKED (inline in the
-  // sessions list). The session may be past (no active session dir) or the
-  // live one — resolve both; fall back to the static blocks.
-  const sessionId = wdSessionsCache.find((s) => (s.targets || []).some((t) => t.bssid === bssid))?.id
-    || wdStatus?.session?.id;
-  let placed = false;
-  document.querySelectorAll(".wd-dict-inline").forEach((el) => el.remove());
-  if (sessionId) {
-    const row = document.querySelector(`.wd-session-row[data-id="${sessionId}"]`);
-    if (row && row.parentElement) {
-      const widget = document.createElement("div");
-      widget.className = "wd-dict-progress wd-dict-inline";
-      widget.innerHTML = widgetHtml;
-      row.parentElement.insertBefore(widget, row.nextSibling);
-      placed = true;
-    }
-  }
-  if (!placed) {
-    const block = document.getElementById("wd-dict-progress");
-    if (block) { block.innerHTML = widgetHtml; }
-    const sessionBlock = document.getElementById("wd-sessions-dict-progress");
-    if (sessionBlock) sessionBlock.innerHTML = widgetHtml;
-  }
-  if (state.running) {
-    if (!wdDictTimer) {
-      // Light polling: aircrack prints progress every ~2s anyway — 4s here
-      // keeps the bar smooth enough without burning the Pi's CPU on JSON.
-      wdDictTimer = setInterval(() => void wdRenderDictProgress(), 4000);
-    }
-  } else if (wdDictTimer) {
-    clearInterval(wdDictTimer);
-    wdDictTimer = null;
-  }
-}
-
-let wdDictTimer = null;
-
-document.getElementById("wd-dict-progress")?.addEventListener("click", async (ev) => {
-  if (ev.target.closest(".wd-dict-clear")) {
-    await apiFetch("/api/wardrive/dict/clear", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-    void wdRenderDictProgress();
-    return;
-  }
-  if (!ev.target.closest(".wd-dict-stop")) return;
-  await apiFetch("/api/wardrive/dict/stop", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-  void wdRenderDictProgress();
-});
-
-// Stop works from the mirrored block in the sessions browser too; the ✕ dismiss.
-document.getElementById("wd-sessions-dict-progress")?.addEventListener("click", async (ev) => {
-  if (ev.target.closest(".wd-dict-clear")) {
-    await apiFetch("/api/wardrive/dict/clear", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-    void wdRenderDictProgress();
-    return;
-  }
-  if (!ev.target.closest(".wd-dict-stop")) return;
-  await apiFetch("/api/wardrive/dict/stop", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-  void wdRenderDictProgress();
-});
-
-// Cancel / dismiss work from the inline dict widget too (it lives inside
-// the sessions list, so the list's delegated listener covers it).
-document.getElementById("wd-sessions-list")?.addEventListener("click", async (ev) => {
-  if (ev.target.closest(".wd-dict-clear")) {
-    await apiFetch("/api/wardrive/dict/clear", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-    void wdRenderDictProgress();
-    return;
-  }
-  if (ev.target.closest(".wd-dict-stop")) {
-    await apiFetch("/api/wardrive/dict/stop", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-    void wdRenderDictProgress();
-  }
-});
-
-document.getElementById("wd-verify-list")?.addEventListener("click", async (ev) => {
-  const btn = ev.target.closest(".wd-dict-btn");
-  if (!btn) return;
-  const res = await wdApi("dict/start", { bssid: btn.dataset.bssid });
-  if (res?.error) {
-    wdError.textContent = res.error;
-    return;
-  }
-  void wdRenderDictProgress();
-  void wdLoadSessions();
-});
-
 // ---- Crack Station handshake watch (celebrate-on-new-capture only) ----
+// Dictionary-crack launching + progress used to live inline in this tab
+// (Auditoría's per-row button, Sesiones' per-session button, both with an
+// inline progress widget) — that no longer belongs here: Crack Station
+// (/crack-station) is now the single place to launch and watch a crack,
+// across both Wifi Audit and Wardrive captures. This tab only celebrates a
+// fresh capture (see below) and points to Crack Station from there.
 // The full inventory + crack controls live on their own page now
 // (/crack-station, web/admin/crack-station.{html,js}) — it works on
 // handshakes from both this tab's audit sessions AND Wardrive's driving
@@ -2621,13 +2478,6 @@ async function wdLoadSessions() {
         const hsBtn = hsTarget
           ? `<button class="wd-session-hs" data-id="${s.id}" data-bssid="${hsTarget.bssid}" title="Descargar el handshake capturado">handshake</button>`
           : "";
-        // Dictionary attack only if the capture has NO recovered password —
-        // once we have the flag 🏴‍☠️, another crack would be pointless.
-        const hasPassword = (s.found || []).some((f) => f.password);
-        const dictTarget = hasPassword ? null : (s.targets || []).find((t) => t.status === "captured");
-        const dictBtn = dictTarget
-          ? `<button class="wd-session-dict" data-id="${s.id}" data-bssid="${dictTarget.bssid}" title="Ataque de diccionario (rockyou) contra este handshake">dictionary attack</button>`
-          : "";
         // SSID for the eye modal reads from the session row (no info.txt parse).
         const rowSsid = (s.targets || []).find((t) => t.status === "captured")?.ssid || "";
         return `<div class="wd-session-row" data-id="${s.id}" data-ssid="${escapeHtml(rowSsid)}">
@@ -2638,7 +2488,6 @@ async function wdLoadSessions() {
           <div class="wd-session-actions">
             ${eyeBtns}
             ${hsBtn}
-            ${dictBtn}
             <button class="wd-session-open" data-id="${s.id}">Ver archivos</button>
             <button class="wd-session-del" data-id="${s.id}" title="Borrar esta sesión">🗑</button>
           </div>
@@ -2732,49 +2581,6 @@ async function wdDownloadSessionHandshake(sessionId, bssid) {
   }
 }
 
-// ── Past-session dictionary attack (rockyou) ──
-// Resolves the .cap inside the old session folder, then reuses the same
-// one-at-a-time DictCrack backend; progress renders inline under the row.
-async function wdStartSessionDictAttack(sessionId, bssid) {
-  try {
-    const prefix = bssid.replace(/:/g, "").toLowerCase();
-    const res = await fetch(`/api/wardrive/files?path=${encodeURIComponent(sessionId)}`);
-    if (!res.ok) throw new Error("no files");
-    const data = await res.json();
-    const cap = (data.items || []).find((it) => it.type === "file" && it.name.startsWith(prefix) && /\.(cap|pcapng)$/i.test(it.name))
-      || (data.items || []).find((it) => it.type === "file" && /\.(cap|pcapng)$/i.test(it.name));
-    if (!cap) {
-      wdError.textContent = "Esta sesión no tiene archivo .cap para el ataque de diccionario";
-      return;
-    }
-    const start = await apiFetch("/api/wardrive/dict/start", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ bssid, cap: cap.path }),
-    });
-    const sdata = await start.json();
-    if (!sdata?.ok) {
-      wdError.textContent = sdata?.error || "No se pudo iniciar el ataque de diccionario";
-      return;
-    }
-    wdError.textContent = "";
-    // The widget renders inline under the attacked session row (see
-    // wdRenderDictCrack) — show the starting state on that row.
-    const row = document.querySelector(`.wd-session-row[data-id="${sessionId}"]`);
-    document.querySelectorAll(".wd-dict-inline").forEach((el) => el.remove());
-    if (row && row.parentElement) {
-      const widget = document.createElement("div");
-      widget.className = "wd-dict-progress wd-dict-inline";
-      widget.innerHTML = '<div class="muted">Iniciando ataque de diccionario...</div>';
-      row.parentElement.insertBefore(widget, row.nextSibling);
-    }
-    void wdLoadSessions();
-    void wdRenderDictProgress();
-  } catch {
-    wdError.textContent = "No se pudo iniciar el ataque de diccionario";
-  }
-}
-
 async function wdOpenSessionFiles(id, clickedRow = null) {
   const filesBlock = document.getElementById("wd-session-files");
   const filesTitle = document.getElementById("wd-session-files-title");
@@ -2852,7 +2658,6 @@ document.getElementById("wd-sessions-list")?.addEventListener("click", async (ev
   const delBtn = ev.target.closest(".wd-session-del");
   const eyeBtn = ev.target.closest(".wd-session-eye");
   const hsBtn = ev.target.closest(".wd-session-hs");
-  const dictBtn = ev.target.closest(".wd-session-dict");
   if (openBtn) {
     await wdOpenSessionFiles(openBtn.dataset.id, openBtn.closest(".wd-session-row"));
     return;
@@ -2863,10 +2668,6 @@ document.getElementById("wd-sessions-list")?.addEventListener("click", async (ev
   }
   if (hsBtn) {
     await wdDownloadSessionHandshake(hsBtn.dataset.id, hsBtn.dataset.bssid);
-    return;
-  }
-  if (dictBtn) {
-    await wdStartSessionDictAttack(dictBtn.dataset.id, dictBtn.dataset.bssid);
     return;
   }
   if (delBtn) {
@@ -3126,10 +2927,6 @@ function wdEnsurePollTimer() {
     if (wdPaused) return;
     const active = document.getElementById("tab-wifi-audit")?.classList.contains("active");
     if (active) void wdRefresh();
-    // The dict-crack widget renders inline in the sessions list, which
-    // wdRefresh/wdLoadSessions rebuild — repaint it after each poll so
-    // the progress bar doesn't blink away (only while it's running).
-    if (active && wdDictTimer) void wdRenderDictProgress();
     // Celebrate fresh captures as soon as they land (regardless of which
     // wifi-audit subtab is visible) — the inventory itself now lives on
     // its own page (/crack-station).
@@ -3242,9 +3039,9 @@ function renderMusicStatus(s) {
   musicDurationMs = s.durationMs || 0;
   if (s.playing && s.title) {
     mpTitle.textContent = s.title;
-    mpSub.textContent = `Cypher OST · ${s.index + 1}/${s.total}${s.paused ? " · en pausa" : ""}`;
+    mpSub.textContent = `Jukebox · ${s.index + 1}/${s.total}${s.paused ? " · en pausa" : ""}`;
   } else {
-    mpTitle.textContent = "Reproductor Cypher OST";
+    mpTitle.textContent = "Reproductor Jukebox";
     mpSub.textContent = s.available ? "Selecciona una pista para empezar" : "Sin biblioteca";
   }
   mpPlayPause.classList.toggle("is-playing", Boolean(s.playing && !s.paused));

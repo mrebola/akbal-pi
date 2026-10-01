@@ -56,6 +56,30 @@
 
 .wd-start.on:hover { background: rgba(239, 68, 68, 0.26); }
 
+/* "Centrar mapa" — re-arms follow-mode after a manual pan/zoom killed it
+   (see followCar in wardrive.js). Secondary to the start/stop button, same
+   glove-friendly full-width sizing since it's used while driving. */
+.wd-recenter {
+  width: 100%;
+  padding: 9px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e8eefc;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  margin-bottom: 10px;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.wd-recenter:hover { background: rgba(255, 255, 255, 0.12); }
+.wd-recenter.active {
+  border-color: rgba(52, 211, 153, 0.55);
+  background: rgba(52, 211, 153, 0.14);
+  color: #34d351;
+}
+
 .wd-hud-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

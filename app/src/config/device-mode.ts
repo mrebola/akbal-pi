@@ -1,5 +1,4 @@
 import dotenv from "dotenv";
-import { LLMServer } from "../type";
 import { persistEnvVar } from "../utils/env-file";
 
 dotenv.config();
@@ -9,22 +8,20 @@ export type DeviceMode = "local" | "agent";
 // "Modo agente" routes conversation through the whisplay-im bridge to an
 // external OpenClaw instance instead of the local LLM provider — see
 // docs/agent-mode.md. Runtime-switchable via voice + the on-screen menu
-// (chat-flow/mode-select-mode.ts), independent of LLM_SERVER (which keeps
-// selecting the *local* provider used in "modo local", e.g. ollama).
+// (chat-flow/mode-select-mode.ts) or the web admin, independent of
+// LLM_SERVER (which keeps selecting the *local* provider used in "modo
+// local", e.g. ollama).
 //
-// Backward compat: before this existed, the only way to enable the bridge
-// was LLM_SERVER=whisplay-im at boot. If DEVICE_MODE isn't set, honor that
-// so an existing .env keeps working — but from here on, switching modes
-// persists DEVICE_MODE instead (see setDeviceMode), which takes over as the
-// source of truth on the next boot.
+// Always boots in "local" unless DEVICE_MODE=agent is explicitly set in
+// .env — agent mode is only ever entered by an explicit switch (voice menu
+// or web, see setDeviceMode below), never inferred from any other setting
+// (e.g. LLM_SERVER, or internet being reachable). A previous version of
+// this also inferred agent mode from LLM_SERVER=whisplay-im as a backward-
+// compat shim; that implicit path is gone — set DEVICE_MODE=agent directly
+// if that's really what's wanted at boot.
 const envDeviceMode = (process.env.DEVICE_MODE || "").toLowerCase();
-const legacyImMode =
-  (process.env.LLM_SERVER || "").toLowerCase() === LLMServer.whisplayim;
 
-let currentMode: DeviceMode =
-  envDeviceMode === "agent" || (!envDeviceMode && legacyImMode)
-    ? "agent"
-    : "local";
+let currentMode: DeviceMode = envDeviceMode === "agent" ? "agent" : "local";
 
 export const getDeviceMode = (): DeviceMode => currentMode;
 

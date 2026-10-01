@@ -27,6 +27,19 @@ import type { MaskPreset } from "./types";
 import { lookupVendorOrRandomAsync, macvendorsEnabled } from "../wifiradar/oui";
 import { demoTargetsWithPassword, DEMO_WD_TARGETS, type DemoWardriveTarget } from "./discovery";
 
+// Dict-crack lifecycle entry — feeds the notification bell (see
+// WardriveService.dictEvents/recordDictEvent/dictEventLog below).
+export interface DictCrackEvent {
+  id: string;
+  bssid: string;
+  ssid: string;
+  wordlist: "rockyou" | "weakpass";
+  status: "running" | "success" | "nomatch" | "error";
+  startedAt: number;
+  endedAt: number | null;
+  password?: string;
+}
+
 // ─── Policy constants ────────────────────────────────────────────────────
 // Scope: thesis/lab capture only. The allowlist below IS the security
 // model — a BSSID is attackable only if the operator explicitly added it
@@ -132,6 +145,39 @@ export class WardriveService extends EventEmitter {
   // (Crack Station shows two buttons, "rockyou" and "weakpass") via
   // dictCrackStatus().
   private dictCrackWordlist: "rockyou" | "weakpass" | null = null;
+  // Lifecycle log for the notification bell (topbar, every admin page):
+  // one entry per dict-crack attempt, newest first, capped — "for now" this
+  // is the bell's only purpose (start/success/fail with timestamps). Not
+  // persisted across a service restart — in-memory only, like the rest of
+  // this class's runtime state.
+  private dictEvents: DictCrackEvent[] = [];
+
+  private recordDictEvent(bssid: string, status: DictCrackEvent["status"], extra: Partial<DictCrackEvent> = {}): void {
+    if (status === "running") {
+      this.dictEvents.unshift({
+        id: `${Date.now()}-${bssid}`,
+        bssid,
+        ssid: this.targetMeta.get(bssid)?.ssid || extra.ssid || "",
+        wordlist: this.dictCrackWordlist || "rockyou",
+        status,
+        startedAt: Date.now(),
+        endedAt: null,
+        ...extra,
+      });
+    } else {
+      const ev = this.dictEvents.find((e) => e.bssid === bssid && e.status === "running");
+      if (ev) {
+        ev.status = status;
+        ev.endedAt = Date.now();
+        if (extra.password) ev.password = extra.password;
+      }
+    }
+    if (this.dictEvents.length > 30) this.dictEvents.length = 30;
+  }
+
+  dictEventLog(): DictCrackEvent[] {
+    return this.dictEvents.slice(0, 20);
+  }
   // Demo attack simulation: when source="demo", runTarget() doesn't touch
   // any radio — it walks the same step/progress pipeline with 3s pauses and
   // always produces a synthetic "handshake captured" (akbal_lab even
@@ -725,6 +771,7 @@ export class WardriveService extends EventEmitter {
     this.dictCrack = new DictCrack(capPath, bssid, source);
     this.dictCrackBssid = bssid;
     this.dictCrackWordlist = wordlistChoice;
+    this.recordDictEvent(bssid, "running");
     this.dictCrack.on("done", () => {
       const st = this.dictCrack?.getState();
       if (st?.result?.matched) {
@@ -742,9 +789,13 @@ export class WardriveService extends EventEmitter {
           } else {
             this.session?.setFoundPassword(bssid, password);
           }
+          this.recordDictEvent(bssid, "success", { password: m?.[1] });
+        } else {
+          this.recordDictEvent(bssid, "success");
         }
         this.appendLog(bssid, "[dict] KEY FOUND — handshake validado con diccionario");
       } else {
+        this.recordDictEvent(bssid, st?.result?.verdict === "handshake_wrong_password" ? "nomatch" : "error");
         this.appendLog(bssid, `[dict] terminado: ${st?.result?.verdict} (${st?.progress.tried || 0} contraseñas)`);
       }
       this.broadcastStatus();
@@ -2048,6 +2099,7 @@ export class WardriveService extends EventEmitter {
       running: true,
       result: null,
     };
+    this.recordDictEvent(bssid, "running", { ssid: demoTarget?.ssid || "" });
     let step = 0;
     this.demoDict.timer = setInterval(() => {
       step++;
@@ -2075,6 +2127,7 @@ export class WardriveService extends EventEmitter {
         }
         this.session?.setFoundPassword(bssid, demoPassword!);
         this.session?.updateTarget(bssid, { verified: true });
+        this.recordDictEvent(bssid, "success", { password: demoPassword });
         this.appendLog(bssid, "[dict] KEY FOUND — handshake validado con diccionario (demo)");
         this.broadcastStatus();
       } else if (step >= DEMO_DICT_STEPS) {
@@ -2087,6 +2140,7 @@ export class WardriveService extends EventEmitter {
           handshakeHint: true,
           output: "KEY NOT FOUND (demo)",
         };
+        this.recordDictEvent(bssid, "nomatch");
         this.appendLog(bssid, `[dict] terminado: handshake_wrong_password (${dict.tried} contraseñas) (demo)`);
         this.broadcastStatus();
       }
@@ -2106,6 +2160,7 @@ export class WardriveService extends EventEmitter {
         handshakeHint: false,
         output: `cancelado tras ${this.demoDict.tried} contraseñas (demo)`,
       };
+      this.recordDictEvent(this.demoDict.bssid, "error");
     }
   }
 

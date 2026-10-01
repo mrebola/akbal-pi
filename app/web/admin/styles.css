@@ -732,6 +732,22 @@ button.secondary {
 
 .wd-banner-status { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
 
+/* "No hay adaptador WiFi USB conectado" — distinct from the plain muted
+   status line: an amber chip with an icon, since this is an actionable
+   state (plug in the dongle), not just informational. */
+.wd-banner-status.wd-no-adapter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #241a05;
+  background: var(--warning, #ffd166);
+  border-radius: 999px;
+  padding: 4px 10px 4px 8px;
+  font-weight: 600;
+  box-shadow: 0 0 10px rgba(255, 209, 102, 0.35);
+}
+.wd-banner-status.wd-no-adapter::before { content: "🔌"; font-size: 13px; }
+
 /* ---- Dongle picker (Wifi Audit banner) ---- */
 .wd-dongle { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 11px; }
 .wd-dongle .k { color: var(--text-secondary); font-family: ui-monospace, monospace; font-size: 10.5px; white-space: nowrap; }
@@ -2383,7 +2399,24 @@ body { font-family: var(--font-sans); }
 
 /* ---- Topbar / navegación ---- */
 .topbar { gap: 12px; padding: 10px 16px; }
-.tabs { gap: 2px; flex-wrap: wrap; }
+/* 9 nav items (Local AI/Wi-Fi Radar/Aircraft Radar/Wifi Audit/Wardrive/
+   Crack Station/GPS/Jukebox/Settings) plus the brand and .hdr-right's own
+   toggle cluster no longer fit one row on a lot of real "desktop" widths
+   (a maximized 1366-1440px laptop window, not just phones) — flex-wrap
+   used to drop the overflow onto a visually broken second line under the
+   brand. Scroll horizontally instead (same pattern as .cfg-nav below):
+   the row never breaks, and every tab stays one swipe/scroll away. Below
+   720px this is moot — .tabs becomes the dropdown menu instead (see that
+   media query), so this never fights with the hamburger. */
+.tabs {
+  gap: 2px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tabs .tab-btn, .tabs .tab-link { flex: none; }
 .tab-btn, .tab-link {
   padding: 8px 12px;
   border-radius: var(--radius-sm);
@@ -2487,6 +2520,72 @@ body { font-family: var(--font-sans); }
 /* Wifiradar toolbar variant (bigger, inside .as-toolbar) */
 .plx-toggle.lg { height: 28px; font-size: 11px; }
 .plx-toggle.lg .plx-toggle-label { padding: 0 14px; line-height: 26px; }
+/* ---- Notification bell (wd-notify.js) — always-visible, every admin page.
+   For now: dictionary-crack lifecycle only (start/in-progress/finish). ---- */
+.wd-bell-wrap { position: relative; }
+.wd-bell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-size: 15px;
+  cursor: pointer;
+}
+.wd-bell-dot {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #94a3b8;
+  border: 1.5px solid var(--bg);
+}
+.wd-bell-dot.running { background: #fb923c; animation: wd-row-status-pulse 1.2s ease-in-out infinite; }
+.wd-bell-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 300px;
+  max-height: 360px;
+  overflow: auto;
+  background: var(--panel, var(--bg));
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  z-index: 60;
+}
+.wd-bell-dropdown-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  padding: 10px 12px 6px;
+}
+.wd-bell-list { display: flex; flex-direction: column; }
+.wd-bell-empty { padding: 14px 12px 16px; font-size: 12px; }
+.wd-bell-item { padding: 8px 12px; border-top: 1px solid var(--border); }
+.wd-bell-item-head { display: flex; align-items: center; gap: 6px; }
+.wd-bell-item-icon { font-size: 13px; }
+.wd-bell-item-ssid {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wd-bell-item-status { font-size: 10px; color: var(--text-secondary); }
+.wd-bell-item.success .wd-bell-item-status { color: #34d351; }
+.wd-bell-item.running .wd-bell-item-status { color: #fb923c; }
+.wd-bell-item-meta { font-size: 10px; margin-top: 2px; }
+
 .hdr-summary {
   display: flex; align-items: center; gap: 10px;
   background: var(--bg); color: var(--text-primary);
@@ -2621,6 +2720,21 @@ body { font-family: var(--font-sans); }
   .avatar { width: 40px; height: 40px; }
   .plx-toggle-label { padding: 0 8px; }
   .hdr-summary { padding: 6px 8px; gap: 6px; }
+
+  /* When brand+hamburger and .hdr-right's toggles don't fit one row, the
+     topbar wraps (.topbar{flex-wrap:wrap}) and .hdr-right drops to its own
+     line below — but as a flex item it was only as wide as its content and
+     sat flush left, same side as the brand above it, not a consistent
+     "top-right" spot. Force it to claim the full second line and stay
+     right-aligned (its own justify-content:flex-end already does the
+     aligning once it has the width to align within), with a thin separator
+     so the two rows read as header, not header + stray toolbar. */
+  .hdr-right {
+    width: 100%;
+    padding-top: 8px;
+    margin-top: 2px;
+    border-top: 1px solid var(--border);
+  }
 
   /* Settings sub-nav (General/Wifi/Audio/IA/...): a single scrollable row
      instead of wrapping into two cramped lines. */
@@ -2965,40 +3079,43 @@ body { font-family: var(--font-sans); }
   max-width: 420px;
 }
 
-/* Inline per-row progress (dict attack running on that exact handshake —
-   Ataques column, replaces rockyou/weakpass/máscara while it runs). */
-.wd-row-progress {
-  display: flex;
+/* Inline per-row status (dict attack on that exact handshake — "Estado"
+   column). No %/bar — just a clear running/found/not-found label, since
+   the numeric progress bar never actually read as useful to the user. */
+.wd-row-status {
+  display: inline-flex;
   align-items: center;
   gap: 4px;
-  width: 64px;
-  background: transparent;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-}
-.wd-row-progress:hover .wd-row-progress-pct { color: var(--text-primary); }
-.wd-row-progress-bar {
-  flex: 1;
-  height: 6px;
-  background: var(--bg);
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 3px 9px;
   border: 1px solid var(--border);
-  border-radius: 3px;
-  overflow: hidden;
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
 }
-.wd-row-progress-fill {
-  height: 100%;
-  background: var(--accent);
-  transition: width 0.2s linear;
+.wd-row-status.running {
+  color: #fb923c;
+  border-color: rgba(251, 146, 60, 0.4);
+  background: rgba(251, 146, 60, 0.12);
+  animation: wd-row-status-pulse 1.6s ease-in-out infinite;
 }
-.wd-row-progress-pct {
-  font-size: 10px;
-  font-family: var(--font-mono);
-  color: var(--text-secondary);
-  min-width: 26px;
-  text-align: right;
+.wd-row-status.ok {
+  color: #34d351;
+  border-color: rgba(52, 211, 153, 0.4);
+  background: rgba(52, 211, 153, 0.15);
 }
-.wd-row-progress-cell { white-space: nowrap; }
+.wd-row-status.fail {
+  color: #94a3b8;
+  border-color: rgba(148, 163, 184, 0.4);
+  background: rgba(148, 163, 184, 0.12);
+}
+@keyframes wd-row-status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+.wd-row-status-cell { white-space: nowrap; }
 
 /* Files modal: handshake captures grouped above everything else, and the
    per-file delete button. */
@@ -3281,4 +3398,17 @@ body { font-family: var(--font-sans); }
   border: none;
   border-radius: 6px;
   cursor: pointer;
+}
+
+.wd-crack-success-password {
+  font-size: 22px;
+  font-weight: 700;
+  font-family: ui-monospace, monospace;
+  color: #34d351;
+  background: rgba(52, 211, 153, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  border-radius: 8px;
+  padding: 8px 16px;
+  max-width: 100%;
+  overflow-wrap: break-word;
 }

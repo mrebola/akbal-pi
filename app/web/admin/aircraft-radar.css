@@ -79,6 +79,19 @@ header.topbar { z-index: 1000; }
   padding: 24px 8px;
 }
 
+/* No HackRF and demo wasn't explicitly requested — actionable, not just
+   informational (same "plug it in" amber treatment as Wifi Audit's and
+   Wardrive's own "no adapter" banners). */
+.ar-empty.ar-no-adapter {
+  color: #241a05;
+  background: var(--warning, #ffd166);
+  border-radius: 10px;
+  margin: 8px;
+  padding: 16px 12px;
+  font-weight: 600;
+  box-shadow: 0 0 10px rgba(255, 209, 102, 0.35);
+}
+
 .ar-card {
   position: relative;
   background: var(--bg-raised);

@@ -85,18 +85,18 @@
         <div class="mx-console">
           <div class="mx-scan" aria-hidden="true"></div>
           <div class="mx-head">
-            <span class="mx-prompt">akbal@cypher</span>:<span class="mx-cwd">~/ost</span>$ <span class="mx-cmd">play</span><span class="mx-cursor">▋</span>
+            <span class="mx-prompt">akbal@cypher</span>:<span class="mx-cwd">~/jukebox</span>$ <span class="mx-cmd">play</span><span class="mx-cursor">▋</span>
             <span id="mp-status-dot" class="mx-status-dot" aria-hidden="true"></span>
           </div>
           <div class="mx-now">
             <div class="mx-cover" aria-hidden="true">
               <span class="mx-cover-glyph">◈</span>
-              <span class="mx-cover-tag">CYPHER//OST</span>
+              <span class="mx-cover-tag">CYPHER//JUKEBOX</span>
             </div>
             <div class="mx-nowinfo">
               <div class="mx-label" data-i18n="music.now_playing">// NOW PLAYING</div>
-              <div id="mp-title" class="mx-title" data-i18n="music.default_title">CYPHER_OST</div>
-              <div id="mp-sub" class="mx-sub" data-i18n="music.default_sub">Cypher OST · selecciona una pista</div>
+              <div id="mp-title" class="mx-title" data-i18n="music.default_title">CYPHER_JUKEBOX</div>
+              <div id="mp-sub" class="mx-sub" data-i18n="music.default_sub">Jukebox · selecciona una pista</div>
             </div>
           </div>
           <div id="mp-visual" class="mx-visual stopped" aria-hidden="true">
@@ -217,7 +217,6 @@
             <div class="muted" data-i18n="wifiaudit.empty_results">Sin capturas aún. Selecciona una red y pulsa Auditar.</div>
           </div>
           <div id="wd-verify-list" class="wd-results-list"></div>
-          <div id="wd-dict-progress" class="wd-dict-progress"></div>
         </div>
       </div>
 
@@ -259,8 +258,6 @@
           <div id="wd-sessions-list" class="wd-sessions-list">
             <div class="muted">—</div>
           </div>
-          <!-- Dictionary attack progress for a past-session handshake -->
-          <div id="wd-sessions-dict-progress" class="wd-dict-progress"></div>
           <div id="wd-session-files" class="wd-sessions-files hidden">
             <div class="wd-session-title" id="wd-session-files-title" style="font-size:12px; margin-top:10px;"></div>
             <!-- Mismo wrapper de scroll horizontal que la tabla principal
@@ -737,6 +734,7 @@
   </div>
 
   <script src="i18n.js"></script>
+  <script src="wd-notify.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

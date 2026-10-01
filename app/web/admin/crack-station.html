@@ -88,7 +88,7 @@
                   <th data-sort="lat" data-i18n="crackstation.col_gps">GPS</th>
                   <th data-i18n="crackstation.col_hs">Handshake</th>
                   <th data-sort="password" data-i18n="crackstation.col_pass">Contraseña</th>
-                  <th data-i18n="crackstation.col_progress">%</th>
+                  <th data-i18n="crackstation.col_status">Estado</th>
                   <th data-i18n="crackstation.col_actions">Ataques</th>
                   <th data-i18n="crackstation.col_files">Archivos</th>
                 </tr>
@@ -99,9 +99,11 @@
             </table>
           </div>
 
-          <!-- Dictionary attack (rockyou/weakpass) progress: lives ONLY in
-               the table's "%" column now (the row being cracked), not as a
-               box down here — click the bar for the detail modal below. -->
+          <!-- Dictionary attack (rockyou/weakpass) status: lives ONLY in the
+               table's "Estado" column now (the row being cracked) — no % /
+               claves probadas, just a clear running/encontrada/sin-match
+               label. Click it for the detail modal below. A success pops
+               the celebration modal (see #wd-crack-success-modal). -->
 
           <!-- Mask brute-force: running-attack progress — launching itself
                happens from a row's "máscara…" button (opens the picker
@@ -198,9 +200,9 @@
     </div>
   </div>
 
-  <!-- Dictionary attack detail: click the "%" bar in the table to see
-       this (SSID, wordlist, keys tried/fps, cancel) — the table itself
-       only ever shows the plain percentage. -->
+  <!-- Dictionary attack detail: click the status badge in the table to see
+       this (SSID, wordlist, clear running/found/not-found banner, cancel).
+       No % anywhere — "el progreso nunca ha servido". -->
   <div id="wd-dict-detail-modal" class="wd-modal hidden">
     <div class="wd-modal-backdrop" onclick="document.getElementById('wd-dict-detail-modal').classList.add('hidden')"></div>
     <div class="wd-modal-content" style="max-width: 460px;">
@@ -211,6 +213,29 @@
         </div>
       </div>
       <div id="wd-dict-detail-body" style="padding: 16px 20px;"></div>
+    </div>
+  </div>
+
+  <!-- Celebration modal: a dictionary attack actually found the password.
+       Same visual pattern as Wifi Audit's handshake-captured celebration
+       (confetti + pirate flag), self-contained here since crack-station is
+       a standalone page (no app.js). -->
+  <div id="wd-crack-success-modal" class="wd-modal hidden">
+    <div class="wd-modal-backdrop" onclick="document.getElementById('wd-crack-success-modal').classList.add('hidden')"></div>
+    <div class="wd-modal-content wd-celebrate-content" style="max-width: 420px;">
+      <canvas id="wd-crack-success-canvas" class="wd-confetti-canvas"></canvas>
+      <div class="wd-modal-header">
+        <span data-i18n="crackstation.success_title">¡CONTRASEÑA ENCONTRADA!</span>
+        <div class="wd-modal-actions">
+          <button id="wd-crack-success-close" class="secondary" data-i18n="crackstation.files_close">Cerrar</button>
+        </div>
+      </div>
+      <div class="wd-celebrate-body">
+        <div class="wd-celebrate-flag">🏴‍☠️</div>
+        <div class="wd-celebrate-ssid" id="wd-crack-success-ssid">—</div>
+        <div class="wd-celebrate-sub" id="wd-crack-success-wordlist">—</div>
+        <div class="wd-crack-success-password" id="wd-crack-success-password">—</div>
+      </div>
     </div>
   </div>
 
@@ -269,6 +294,7 @@
 
   <script src="vendor/leaflet/leaflet.js"></script>
   <script src="i18n.js"></script>
+  <script src="wd-notify.js"></script>
   <script src="crack-station.js"></script>
 </body>
 </html>

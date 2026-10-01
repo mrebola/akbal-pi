@@ -72,6 +72,7 @@
   <div class="wd-hud" id="wd-hud">
     <div class="wd-hud-title">WARDRIVE</div>
     <button type="button" id="wd-toggle" class="wd-start">▶ INICIAR</button>
+    <button type="button" id="wd-recenter" class="wd-recenter" title="Centrar el mapa en el auto y seguir su posición mientras maneja">🎯 Centrar mapa</button>
     <div class="wd-hud-grid">
       <div class="wd-hud-item"><span class="k">Tiempo</span><span class="v mono" id="wd-time">—</span></div>
       <div class="wd-hud-item"><span class="k">Distancia</span><span class="v mono" id="wd-dist">—</span></div>
@@ -157,7 +158,7 @@
       <div class="wd-pane active" id="wd-pane-live">
         <div class="wd-live-stats">
           <span class="wd-chip"><span id="wd-count-total">0</span> redes</span>
-          <span class="wd-chip ok"><span id="wd-count-hs">0</span> ✋</span>
+          <span class="wd-chip ok"><span id="wd-count-hs">0</span> 🤝</span>
         </div>
         <ul id="wd-ap-list" class="wd-ap-list"></ul>
       </div>
@@ -239,6 +240,7 @@
 
   <script src="vendor/leaflet/leaflet.js"></script>
   <script src="i18n.js"></script>
+  <script src="wd-notify.js"></script>
   <script src="wardrive.js"></script>
 </body>
 </html>

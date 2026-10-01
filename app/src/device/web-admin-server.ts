@@ -1184,6 +1184,12 @@ export class WebAdminServer {
       ctx.body = wardrive.dictCrackStatus();
     });
 
+    // Notification bell (every admin page's topbar) — dict-crack lifecycle
+    // log: start/success/fail with timestamps. Newest first, capped at 20.
+    router.get("/api/wardrive/dict/events", (ctx) => {
+      ctx.body = { ok: true, events: wardrive.dictEventLog() };
+    });
+
     // ── Crack Station (persistent captured-handshake inventory) ──
     // List every captured handshake — Wifi Audit's live + past sessions,
     // PLUS Wardrive's driving sessions (handshakeInventory() merges both,

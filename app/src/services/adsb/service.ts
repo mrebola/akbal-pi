@@ -51,8 +51,8 @@ export class AircraftRadarService extends EventEmitter {
     try {
       await this.tryRealCapture();
     } catch (err: any) {
-      console.warn("[aircraft-radar] Real capture unavailable, using DEMO MODE:", err?.message || err);
-      this.fallbackToDemo(err?.message || String(err));
+      console.warn("[aircraft-radar] Real capture unavailable:", err?.message || err);
+      this.handleCaptureFailure(err?.message || String(err));
       this.startRetryLoop();
     }
   }
@@ -89,8 +89,8 @@ export class AircraftRadarService extends EventEmitter {
       }
     } catch (err: any) {
       const message = err?.message || String(err);
-      console.warn("[aircraft-radar] live requested but unavailable, staying in demo:", message);
-      this.fallbackToDemo(message);
+      console.warn("[aircraft-radar] live requested but unavailable:", message);
+      this.handleCaptureFailure(message);
       this.startRetryLoop();
     }
   }
@@ -151,14 +151,14 @@ export class AircraftRadarService extends EventEmitter {
     this.receiver = new AdsbReceiver();
     this.receiver.on("message", (msg) => this.tracker.ingest(msg));
     this.receiver.on("error", (err) => {
-      console.warn("[aircraft-radar] receiver process error, falling back to demo:", err?.message || err);
-      this.fallbackToDemo(String(err?.message || err));
+      console.warn("[aircraft-radar] receiver process error:", err?.message || err);
+      this.handleCaptureFailure(String(err?.message || err));
       this.startRetryLoop();
     });
     this.receiver.on("exit", ({ code, signal }) => {
       if (this.mode === "live") {
-        console.warn(`[aircraft-radar] receiver exited unexpectedly (code=${code} signal=${signal}), falling back to demo`);
-        this.fallbackToDemo("hackrf_transfer/dump1090 terminó inesperadamente");
+        console.warn(`[aircraft-radar] receiver exited unexpectedly (code=${code} signal=${signal})`);
+        this.handleCaptureFailure("hackrf_transfer/dump1090 terminó inesperadamente");
         this.startRetryLoop();
       }
     });
@@ -189,6 +189,26 @@ export class AircraftRadarService extends EventEmitter {
       this.demo = new DemoGenerator(this.tracker);
       void this.demo.start();
     }
+  }
+
+  // A real-capture failure (no HackRF, dump1090 died, etc.) while the user
+  // has NOT explicitly asked for demo: previously this silently switched to
+  // synthetic aircraft, which reads as live data to someone who never chose
+  // demo. Only auto-fallback to demo when requestedMode is actually "demo"
+  // (the user's own toggle) — otherwise surface a clear "sin adaptador"
+  // error state and let the retry loop keep probing for real hardware.
+  private handleCaptureFailure(reason: string): void {
+    if (this.requestedMode === "demo") {
+      this.fallbackToDemo(reason);
+      return;
+    }
+    this.lastError = reason;
+    this.receiver?.stop();
+    this.receiver = null;
+    this.demo?.stop();
+    this.demo = null;
+    this.mode = "error";
+    this.tracker.reset();
   }
 
   getSnapshot(): AircraftRadarSnapshot {

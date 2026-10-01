@@ -18,6 +18,13 @@ let apLayer = null; // plain AP dots with position + click-info popup
 let trackPoints = []; // {lat, lon, ts} live session only
 let firstFixSeen = false;
 let followCar = true;
+
+// Toggling follow-mode also reflects on the "Centrar mapa" button (lit up
+// while actively following, same visual language as the start/stop button).
+function wdSetFollowCar(value) {
+  followCar = value;
+  el("wd-recenter")?.classList.toggle("active", value);
+}
 let lastStatus = null;
 // Track/session isolation: the map shows ONLY the live session (or one
 // explicitly opened from the drawer). Loading the page cold must NOT draw
@@ -93,9 +100,10 @@ function initMap() {
   // Handshake dots sit on their own layer (global "todas las capturas" view).
   hsLayer = L.layerGroup().addTo(map);
   apLayer = L.layerGroup().addTo(map);
-  // Stop following when the user pans; a control button re-centers.
+  // Stop following when the user pans; the "Centrar mapa" button re-arms it
+  // (see wdSetFollowCar / #wd-recenter in initControls).
   map.on("dragstart", () => {
-    followCar = false;
+    wdSetFollowCar(false);
   });
   map.on("zoomend", () => {
     if (followCar && posMarker) map.panTo(posMarker.getLatLng(), { animate: true });
@@ -482,7 +490,7 @@ async function refreshHandshakeDots() {
             iconSize: [10, 10],
             iconAnchor: [5, 5],
           }),
-          title: `🏴 ${n.ssid}`,
+          title: `🏴‍☠️ ${n.ssid}`,
         }).on("click", (ev) => {
           L.DomEvent.stopPropagation(ev);
           pickDotAt(ev.latlng ?? [n.lat, n.lon], info);
@@ -531,7 +539,7 @@ function pickDotAt(latlng, clicked) {
   if (!body) return;
   body.innerHTML = nearby
     .map((d, i) => `<button class="wd-pick-row" data-idx="${i}">
-      ${d.handshake ? "🏴" : "•"}
+      ${d.handshake ? "🏴‍☠️" : "•"}
       <span class="wd-pick-ssid">${escapeHtml(d.ssid)}</span>
       <span class="wd-pick-meta mono">${escapeHtml(d.bssid || "")}</span>
     </button>`)
@@ -561,8 +569,8 @@ function showDotInfoModal(n) {
     "wd-apm-hs",
     n.handshake
       ? n.cracked
-        ? `🏴🏴 ${n.password || "crackeada"}`
-        : "🏴 Handshake capturado"
+        ? `🏴‍☠️🏴‍☠️ ${n.password || "crackeada"}`
+        : "🏴‍☠️ Handshake capturado"
       : "Sin handshake aún",
   );
   setText(
@@ -735,16 +743,16 @@ function renderApList(st) {
   const recent = st.recent || [];
   setText("wd-count-total", String(st.stats?.aps ?? recent.length));
   setText("wd-count-hs", String(st.stats?.newHandshakes ?? 0));
-  // Badge per attack state. 🏴 = handshake captured (pirate flag — booty),
-  // ⚡ = being attacked right now, ✋ HS = covered by another AP of the SSID,
+  // Badge per attack state. 🏴‍☠️ = handshake captured (pirate flag — booty),
+  // ⚡ = being attacked right now, 🤝 HS = covered by another AP of the SSID,
   // ✕ = attempts exhausted. ⚡ button = manual attack NOW.
   const attackingNow = Boolean(st.currentAttack);
   list.innerHTML = recent
     .map((ap) => {
       const badge = ap.handshakeHere
-        ? '<span class="wd-map-badge hs">🏴</span>'
+        ? '<span class="wd-map-badge hs">🏴‍☠️</span>'
         : ap.handshakeKnown
-          ? '<span class="wd-map-badge hs" title="cubierto por otro AP del mismo SSID">✋</span>'
+          ? '<span class="wd-map-badge hs" title="cubierto por otro AP del mismo SSID">🤝</span>'
           : ap.status === "attacking"
             ? '<span class="wd-map-badge attack" title="atacando ahora">⚡</span>'
             : ap.status === "attack-scheduled"
@@ -876,7 +884,7 @@ function showApModal(ap) {
   setText("wd-apm-packets", String(ap.packets ?? 0));
   setText(
     "wd-apm-hs",
-    ap.handshakeHere ? "🏴 Handshake capturado" : ap.handshakeKnown ? "✋ Cubierto (otro AP del SSID)" : "Sin handshake aún",
+    ap.handshakeHere ? "🏴‍☠️ Handshake capturado" : ap.handshakeKnown ? "🤝 Cubierto (otro AP del SSID)" : "Sin handshake aún",
   );
   setText(
     "wd-apm-attempts",
@@ -904,7 +912,7 @@ async function refreshSessions() {
         const date = new Date(s.started_at).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" });
         return `<li class="wd-map-session-row" data-id="${escapeHtml(s.id)}">
           <div class="wd-map-session-id">${escapeHtml(s.id.replace("drive-", ""))}</div>
-          <div class="wd-map-session-meta">${fmtDistance(s.distance_m)} · ${s.networks} redes · ${s.handshakes} ✋ · ${s.points} pts</div>
+          <div class="wd-map-session-meta">${fmtDistance(s.distance_m)} · ${s.networks} redes · ${s.handshakes} 🤝 · ${s.points} pts</div>
           <div class="wd-map-session-meta">${escapeHtml(date)}</div>
         </li>`;
       })
@@ -992,7 +1000,7 @@ async function openSession(id) {
           .map((n) => {
             let hsCell = "—";
             if (n.handshake) {
-              hsCell = n.cracked ? `🏴🏴 ${escapeHtml(n.password || "")}` : `🏴 ${escapeHtml(n.last_method || n.hs_method || "capturado")}`;
+              hsCell = n.cracked ? `🏴‍☠️🏴‍☠️ ${escapeHtml(n.password || "")}` : `🏴‍☠️ ${escapeHtml(n.last_method || n.hs_method || "capturado")}`;
             } else if (n.security === "OPEN") {
               hsCell = "abierta";
             } else if (n.attempts > 0) {
@@ -1080,6 +1088,16 @@ el("wd-drawer-max")?.addEventListener("click", () => {
 // ---- Controls ----
 
 function initControls() {
+  // "Centrar mapa": re-arms follow-mode after a manual pan/zoom, and jumps
+  // back to the car's current position right away (instead of waiting for
+  // the next poll tick to catch up) — then keeps following as it drives,
+  // same as the very first fix, until the user pans away again.
+  el("wd-recenter")?.addEventListener("click", () => {
+    wdSetFollowCar(true);
+    if (map && posMarker) map.setView(posMarker.getLatLng(), Math.max(map.getZoom(), FIX_ZOOM), { animate: true });
+  });
+  wdSetFollowCar(followCar); // paint the button's initial state (follows by default)
+
   el("wd-toggle")?.addEventListener("click", async () => {
     const btn = el("wd-toggle");
     btn.disabled = true;
@@ -1100,6 +1118,7 @@ function initControls() {
         void refreshHandshakeDots();
         drawTrack();
         firstFixSeen = false;
+        wdSetFollowCar(true); // fresh session next time starts following again
       }
     } catch {
       showError("No se pudo cambiar el modo wardrive");

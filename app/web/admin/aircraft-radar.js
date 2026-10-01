@@ -229,6 +229,14 @@ function distanceLabel(aircraft) {
 function renderList(snapshot) {
   listEl.querySelectorAll(".ar-card").forEach((el) => el.remove());
   emptyEl.classList.toggle("hidden", snapshot.aircraft.length > 0);
+  // No HackRF and the user hasn't explicitly asked for DEMO — don't just
+  // say "buscando aeronaves" (reads as "still looking"), say why there's
+  // nothing to find and how to fix it.
+  const noAdapter = snapshot.aircraft.length === 0 && !snapshot.demo && Boolean(snapshot.error);
+  emptyEl.classList.toggle("ar-no-adapter", noAdapter);
+  emptyEl.textContent = noAdapter
+    ? "🔌 No hay HackRF conectado — enchufalo o activá DEMO arriba"
+    : "Buscando aeronaves…";
   for (const aircraft of snapshot.aircraft) {
     const card = document.createElement("div");
     card.className = "ar-card" + (aircraft.icao === selectedIcao ? " selected" : "");
@@ -486,12 +494,12 @@ function applySnapshot(snapshot) {
   latestSnapshot = snapshot;
   setTxt("ar-count", String(snapshot.aircraft.length));
   setTxt("ar-mpm", String(snapshot.messagesPerMinute));
-  setTxt("ar-hardware", snapshot.demo ? "DEMO" : (snapshot.hardware || "—"));
-  // In DEMO mode because the real capture failed — show exactly why on
-  // hover (e.g. "PortaPack en modo menú, no modo USB") instead of leaving
-  // the operator to go dig through chatbot.log to find out.
+  setTxt("ar-hardware", snapshot.demo ? "DEMO" : (snapshot.hardware || (snapshot.error ? "SIN ADAPTADOR" : "—")));
+  // Show exactly why on hover — either DEMO running because real capture
+  // failed, or no hardware at all (e.g. "No hay HackRF conectado por USB")
+  // — instead of leaving the operator to go dig through chatbot.log.
   const hardwareEl = document.getElementById("ar-hardware");
-  if (hardwareEl) hardwareEl.title = snapshot.demo && snapshot.error ? snapshot.error : "";
+  if (hardwareEl) hardwareEl.title = snapshot.error || "";
   renderList(snapshot);
   render();
   updateAircraftMarkers(snapshot.aircraft);

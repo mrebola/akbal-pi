@@ -342,3 +342,39 @@ export async function checkHomeNetwork(): Promise<void> {
 export function getHomeNetworkSsid(): string | null {
   return homeNetwork?.ssid ?? null;
 }
+
+// ─── Always-on auto-reconnect watchdog ─────────────────────────────────────
+// Independent of the wardrive-scoped one above (which only runs during a
+// drive session): this one runs for the lifetime of the process, started
+// once from index.ts. Remembers whichever SSID wlan0 was last seen
+// connected to and, every 5 minutes while disconnected, reconnects to it
+// IF it's currently visible in a scan — never to a different saved
+// network, and it never touches an active connection (even one the user
+// switched to manually in the meantime).
+const AUTO_RECONNECT_INTERVAL_MS = 5 * 60_000;
+let lastKnownSsid: string | null = null;
+let autoReconnectTimer: ReturnType<typeof setInterval> | null = null;
+
+async function autoReconnectTick(): Promise<void> {
+  try {
+    const st = await getWifiStatus();
+    if (st.connected && st.ssid) {
+      lastKnownSsid = st.ssid;
+      return;
+    }
+    if (!lastKnownSsid) return; // never seen connected since boot — nothing to remember
+    const nearby = await scanWifiNetworks();
+    if (!nearby.some((n) => n.ssid === lastKnownSsid)) return;
+    console.warn(`[wifi] auto-reconnect: "${lastKnownSsid}" visible de nuevo, reconectando...`);
+    const res = await connectToWifi(lastKnownSsid);
+    if (res.ok) console.log(`[wifi] auto-reconnect: reconectado a ${lastKnownSsid}`);
+  } catch (err: any) {
+    console.warn("[wifi] auto-reconnect tick falló:", err?.message || err);
+  }
+}
+
+export function startAutoReconnectWatchdog(): void {
+  if (autoReconnectTimer) return;
+  void autoReconnectTick();
+  autoReconnectTimer = setInterval(() => void autoReconnectTick(), AUTO_RECONNECT_INTERVAL_MS);
+}

@@ -12,12 +12,20 @@ import { getDriveWardriveService } from "./wardrive/service";
 import { startWardriveDisplayMirror as startDriveMirror } from "./core/chat-flow/wardrive-mode";
 import { startAircraftRadarService, stopAircraftRadarService } from "./services/adsb/service";
 import { startGnssService, stopGnssService } from "./services/gnss/service";
+import { startAutoReconnectWatchdog } from "./utils/wifi";
 
 dotenv.config();
 
 startBatteryStatus();
 startWifiStatus();
 startVpnStatus();
+
+// Auto-reconnect: if wlan0 drops, try the last-connected SSID again every 5
+// minutes, but only while it's actually visible in a scan — see
+// utils/wifi.ts's "Always-on auto-reconnect watchdog". Runs for the whole
+// process lifetime (unlike the wardrive-scoped home-network watchdog in the
+// same file, which only arms during a drive session).
+startAutoReconnectWatchdog();
 
 // Shared between the physical device's "WiFi Radar" menu screen
 // (chat-flow/wifi-radar-mode.ts) and the web WIFIRADAR page — started
@@ -30,11 +38,13 @@ startWifiRadarService();
 registerShutdownHook(() => stopWifiRadarService());
 
 // Aircraft Radar (HackRF One + dump1090, RX-only ADS-B — docs/aircraft-radar.md).
-// Same unconditional-start + auto-fallback-to-demo shape as WIFIRADAR above:
-// no HackRF plugged in just means detectHackRf() fails and the service runs
-// its DemoGenerator instead, so the physical menu screen and the web page
-// both still work without the hardware. ADSB_ENABLED lets it be turned off
-// entirely for anyone who doesn't want the extra sweep timer / SQLite file.
+// Unconditional start, same as WIFIRADAR above — but unlike it, no HackRF
+// plugged in does NOT auto-fall back to DemoGenerator anymore: it surfaces a
+// clear "sin adaptador" state instead (demo only runs if explicitly toggled
+// — see AircraftRadarService.handleCaptureFailure in services/adsb/service.ts),
+// so the physical menu screen and the web page both still work, honestly,
+// without the hardware. ADSB_ENABLED lets it be turned off entirely for
+// anyone who doesn't want the extra sweep timer / SQLite file.
 if ((process.env.ADSB_ENABLED || "true").toLowerCase() !== "false") {
   startAircraftRadarService();
   registerShutdownHook(() => stopAircraftRadarService());

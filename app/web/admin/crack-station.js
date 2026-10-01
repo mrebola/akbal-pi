@@ -69,15 +69,18 @@ function wdFormatDateTime(ms) {
   }
 }
 
-// Compact "30/09" for the table cell (day/month only, no year/time) — the
-// full date+time lives in the cell's title tooltip via wdFormatDateTime().
+// Compact "09/AGO/26" for the table cell (día/MES-abreviado/año) — fixed
+// Spanish format regardless of browser locale, matching the rest of the
+// device's UI copy. Full date+time lives in the cell's title tooltip via
+// wdFormatDateTime().
+const WD_MESES_ES = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
 function wdFormatDateShort(ms) {
   if (typeof ms !== "number") return "—";
-  try {
-    return new Date(ms).toLocaleDateString(undefined, { day: "2-digit", month: "2-digit" });
-  } catch {
-    return new Date(ms).toLocaleDateString();
-  }
+  const d = new Date(ms);
+  const day = String(d.getDate()).padStart(2, "0");
+  const mon = WD_MESES_ES[d.getMonth()];
+  const yr = String(d.getFullYear()).slice(-2);
+  return `${day}/${mon}/${yr}`;
 }
 
 // ---- Header (same /api/status pipeline as wardrive.js/gps.js) ----
@@ -251,10 +254,10 @@ function wdRenderCrackStation() {
   body.innerHTML = items
     .map((it) => {
       const capPath = capOf(it);
-      // While THIS handshake's own dict attack is running, it gets a live
-      // 0-100% bar in its own "%" column; the attack buttons make way for
-      // a short status note (there's nothing to click — only one dict
-      // crack runs at a time anyway).
+      // While THIS handshake's own dict attack is running (or just finished),
+      // it gets a clear status badge in its own "Estado" column — no %, see
+      // wdRowStatusHtml(). The attack buttons make way for a short status
+      // note (there's nothing to click — only one dict crack runs at a time).
       const runningHere = wdDictSync?.running && wdDictBssid === it.bssid;
       let actionsHtml;
       if (it.password) {
@@ -271,7 +274,7 @@ function wdRenderCrackStation() {
              data-cap="${escapeHtml(capPath)}" title="Fuerza bruta con máscara (p.ej. @@@@+MAC)">máscara…</button>`,
         ].join("");
       }
-      const progressHtml = runningHere ? wdRowInlineProgressHtml() : "—";
+      const statusHtml = runningHere || (wdDictBssid === it.bssid && wdDictSync?.result) ? wdRowStatusHtml() : "—";
       // GPS: just the pin — full coordinates + SSID live in the tooltip,
       // same "abbreviate + title" treatment as the date column.
       const gps = it.lat != null && it.lon != null
@@ -288,7 +291,7 @@ function wdRenderCrackStation() {
         <td>${gps}</td>
         <td>${it.hasHandshake ? '<span class="wd-verify-badge ok">✓ .cap</span>' : "—"}</td>
         <td>${it.password ? `<span class="wd-verify-badge ok" style="max-width:180px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(it.password)}</span>` : "—"}</td>
-        <td class="wd-row-progress-cell">${progressHtml}</td>
+        <td class="wd-row-status-cell">${statusHtml}</td>
         <td><div class="wd-action-group">${actionsHtml}</div></td>
         <td><button class="wd-crack-files-btn" data-session="${escapeHtml(it.sessionId)}" data-ssid="${escapeHtml(it.ssid || "")}" data-bssid="${it.bssid}" data-source="${it.source}">${escapeHtml(t("crackstation.files_btn", "Ver archivos"))}</button></td>
       </tr>`;
@@ -563,63 +566,51 @@ el("wd-crack-body")?.addEventListener("click", async (ev) => {
     wdOpenCrackMap(parseFloat(gpsBtn.dataset.lat), parseFloat(gpsBtn.dataset.lon), gpsBtn.dataset.ssid, gpsBtn.dataset.bssid);
     return;
   }
-  const progressBtn = ev.target.closest(".wd-row-progress");
-  if (progressBtn) wdOpenDictDetail();
+  const statusBtn = ev.target.closest(".wd-row-status");
+  if (statusBtn) wdOpenDictDetail();
 });
 
 el("wd-crack-refresh")?.addEventListener("click", () => void wdTickCrackStation());
 
-// ---- Dictionary attack (rockyou/weakpass) progress ----
-// aircrack-ng itself has to run server-side (it needs the .cap bytes and
-// does real crypto), so the server is the only source of truth for
-// {tried, total, fps} — but that number comes from OUR OWN count of what
-// was fed into aircrack's stdin (see DictCrack in crack.ts), never from
-// parsing aircrack's stdout, which doesn't stream reliably when aircrack
-// isn't talking to a real terminal. Polling that every few hundred ms
-// would still cost CPU the Pi doesn't have to spare, so: sync the real
-// numbers from the server every few seconds, then EXTRAPOLATE the
-// percentage in the browser every 250ms using the last known rate
-// (tried + fps × elapsed) — the bar looks smooth and responsive while
-// almost all of that work happens here, not on the server.
+// ---- Dictionary attack (rockyou/weakpass) status ----
+// The numeric % progress was never actually useful to the user ("el
+// progreso nunca ha servido") — so the table and the detail modal now only
+// ever show a CLEAR state: en proceso / encontrada / sin match. No %, no
+// "claves probadas". A successful crack pops a celebration modal (see
+// wdMaybeCelebrateSuccess below).
 let wdDictBssid = null;
 let wdDictSync = null; // { tried, total, fps, running, result, wordlist, syncedAtMs }
 let wdDictPollTimer = null; // server sync, only while a crack is running
-let wdDictAnimTimer = null; // local interpolation, cheap DOM update
+let wdDictDetailTimer = null; // ticks the detail modal's elapsed time while open+running
 let wdDictRunningPrev = false; // detects start/stop transitions (see wdSyncDictStatus)
 
-function wdDictEstimatedTried() {
-  if (!wdDictSync) return 0;
-  if (!wdDictSync.running) return wdDictSync.tried;
-  const elapsedSec = (performance.now() - wdDictSync.syncedAtMs) / 1000;
-  const total = wdDictSync.total || Infinity;
-  return Math.min(total, wdDictSync.tried + wdDictSync.fps * elapsedSec);
+// ---- Inline per-row status — the exact handshake being cracked (or that
+// just finished) shows a status badge in the "Estado" column. Click it for
+// the detail modal (see wdOpenDictDetail below). ----
+
+function wdRowStatusHtml() {
+  if (wdDictSync?.running) {
+    return `<button class="wd-row-status running" title="Ver detalle">⏳ ${escapeHtml(t("crackstation.status_running", "En proceso"))}</button>`;
+  }
+  if (wdDictSync?.result) {
+    return wdDictSync.result.matched
+      ? `<button class="wd-row-status ok" title="Ver detalle">🏴‍☠️ ${escapeHtml(t("crackstation.status_found", "Encontrada"))}</button>`
+      : `<button class="wd-row-status fail" title="Ver detalle">✗ ${escapeHtml(t("crackstation.status_notfound", "Sin match"))}</button>`;
+  }
+  return "—";
 }
 
-// ---- Inline per-row progress — the exact handshake being cracked shows
-// its own 0-100% bar in a dedicated "%" column: JUST the percentage, no
-// "claves probadas" text. Updated every 250ms from local extrapolation.
-// Click it for the detail modal (see wdOpenDictDetail below). ----
-
-function wdRowInlineProgressHtml() {
-  const total = wdDictSync.total || 0;
-  const tried = wdDictEstimatedTried();
-  const pct = total > 0 ? Math.min(100, (tried / total) * 100) : 0;
-  return `<button class="wd-row-progress" title="Ver detalle">
-    <div class="wd-row-progress-bar"><div class="wd-row-progress-fill" style="width:${pct.toFixed(1)}%"></div></div>
-    <span class="wd-row-progress-pct">${total > 0 ? `${pct.toFixed(0)}%` : "…"}</span>
-  </button>`;
-}
-
-function wdRenderRowDictProgress() {
-  if (!wdDictSync?.running || !wdDictBssid) return;
+function wdRenderRowStatus() {
+  if (!wdDictBssid) return;
   const row = document.querySelector(`#wd-crack-body tr[data-bssid="${CSS.escape(wdDictBssid)}"]`);
-  const cell = row?.querySelector(".wd-row-progress-cell");
-  if (cell) cell.innerHTML = wdRowInlineProgressHtml();
+  const cell = row?.querySelector(".wd-row-status-cell");
+  if (cell) cell.innerHTML = wdRowStatusHtml();
 }
 
-// ---- Dictionary attack detail modal — opened by clicking the row's %
-// bar. The only place the numeric detail (tried/total/fps/result) shows;
-// the table itself never displays more than the bare percentage. ----
+// ---- Dictionary attack detail modal — opened by clicking the row's status
+// badge. Same clear-state principle as the table: a big banner, no %. The
+// tried/total/speed line is kept as small supplementary info since it's
+// accurate now, but never the headline. ----
 
 function wdRenderDictDetail() {
   const modal = el("wd-dict-detail-modal");
@@ -632,30 +623,23 @@ function wdRenderDictDetail() {
     body.innerHTML = '<p class="muted">No hay ningún ataque de diccionario en curso.</p>';
     return;
   }
-  const total = wdDictSync.total || 0;
-  const tried = wdDictEstimatedTried();
-  const pct = total > 0 ? Math.min(100, (tried / total) * 100) : 0;
   const ssid = wdCrackCache.find((i) => i.bssid === wdDictBssid)?.ssid || wdDictBssid || "";
   const wordlistLabel = wdDictSync.wordlist === "weakpass" ? "weakpass" : "rockyou";
   if (title) title.textContent = `dictionary attack (${wordlistLabel}) · ${ssid}`;
-  const resultMsg = wdDictSync.result
-    ? wdDictSync.result.matched
-      ? `<span class="wd-verify-badge ok">✓ ENCONTRADA — ${escapeHtml(wdDictSync.result.output?.match(/KEY FOUND!\s*\[\s*(.*?)\s*\]/)?.[1] || "")}</span>`
-      : wdDictSync.result.verdict === "handshake_wrong_password"
-        ? '<span class="wd-verify-badge wrong">Diccionario agotado — sin match</span>'
-        : `<span class="wd-verify-badge err">${escapeHtml(wdDictSync.result.output || "cancelado")}</span>`
-    : "";
-  // Total isn't known until wordlistLineCount() finishes counting the
-  // wordlist in the background (instant for rockyou, can take minutes the
-  // first time for weakpass's multi-GB .gz, cached after) — until then
-  // there's a "tried" count but no meaningful percentage.
+  const banner = wdDictSync.running
+    ? `<div class="wd-verify-badge none" style="font-size:14px; padding:8px 14px;">⏳ ${escapeHtml(t("crackstation.status_running", "En proceso"))}…</div>`
+    : wdDictSync.result?.matched
+      ? `<div class="wd-verify-badge ok" style="font-size:14px; padding:8px 14px;">🏴‍☠️ ${escapeHtml(t("crackstation.success_title", "¡CONTRASEÑA ENCONTRADA!"))} — ${escapeHtml(wdDictSync.result.output?.match(/KEY FOUND!\s*\[\s*(.*?)\s*\]/)?.[1] || "")}</div>`
+      : wdDictSync.result?.verdict === "handshake_wrong_password"
+        ? `<div class="wd-verify-badge wrong" style="font-size:14px; padding:8px 14px;">✗ ${escapeHtml(t("crackstation.status_notfound", "Sin match"))} — diccionario agotado</div>`
+        : `<div class="wd-verify-badge err" style="font-size:14px; padding:8px 14px;">${escapeHtml(wdDictSync.result?.output || "cancelado")}</div>`;
+  const total = wdDictSync.total || 0;
   const metaLine = total > 0
-    ? `${Math.round(tried).toLocaleString()} / ${total.toLocaleString()} claves · ${(wdDictSync.fps || 0).toFixed(0)} pass/s`
-    : `${Math.round(tried).toLocaleString()} claves probadas · contando el diccionario para saber el total...`;
+    ? `${Math.round(wdDictSync.tried).toLocaleString()} / ${total.toLocaleString()} claves · ${(wdDictSync.fps || 0).toFixed(0)} pass/s`
+    : `${Math.round(wdDictSync.tried).toLocaleString()} claves probadas`;
   body.innerHTML = `
-    <div class="wd-dict-bar"><div class="wd-dict-bar-fill" style="width:${pct.toFixed(1)}%"></div></div>
-    <div class="wd-dict-meta muted" style="margin-top:8px;">${metaLine}</div>
-    <div class="wd-dict-result" style="margin-top:8px;">${resultMsg}</div>
+    ${banner}
+    <div class="muted" style="margin-top:10px; font-size:11px;">${metaLine}</div>
     <div style="margin-top:14px;">
       ${wdDictSync.running
         ? `<button class="wd-dict-stop wd-danger">${escapeHtml(t("crackstation.dict_cancel", "Cancelar"))}</button>`
@@ -688,11 +672,76 @@ el("wd-dict-detail-body")?.addEventListener("click", async (ev) => {
   void wdSyncDictStatus();
 });
 
+// ---- Success celebration — confetti + pirate flag modal, same pattern as
+// Wifi Audit's handshake-captured celebration but self-contained here
+// (standalone page, no app.js). Fires once per completed crack. ----
+
+function wdCrackConfettiOnce() {
+  const canvas = el("wd-crack-success-canvas");
+  if (!canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width || 400;
+  canvas.height = rect.height || 260;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const colors = ["#34d351", "#fb923c", "#f5f5f5", "#60a5fa"];
+  const pieces = Array.from({ length: 120 }, () => ({
+    x: Math.random() * canvas.width,
+    y: -20 - Math.random() * canvas.height * 0.5,
+    w: 6 + Math.random() * 6,
+    h: 8 + Math.random() * 8,
+    vy: 2.2 + Math.random() * 2.6,
+    vx: -1.4 + Math.random() * 2.8,
+    rot: Math.random() * Math.PI,
+    vr: (Math.random() - 0.5) * 0.24,
+    color: colors[Math.floor(Math.random() * colors.length)],
+  }));
+  const start = Date.now();
+  const DURATION = 4200;
+  (function frame() {
+    const tt = Date.now() - start;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (tt > DURATION) return;
+    for (const p of pieces) {
+      p.y += p.vy;
+      p.x += p.vx + Math.sin((tt + p.h) / 260) * 0.7;
+      p.rot += p.vr;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.globalAlpha = tt > DURATION - 800 ? Math.max(0, (DURATION - tt) / 800) : 1;
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h / 2);
+      ctx.fillStyle = "#1f2937";
+      ctx.fillRect(-p.w / 2, 0, p.w, p.h / 2);
+      ctx.restore();
+    }
+    requestAnimationFrame(frame);
+  })();
+}
+
+function wdCelebrateCrackSuccess(bssid, wordlist, password) {
+  const modal = el("wd-crack-success-modal");
+  if (!modal) return;
+  const ssid = wdCrackCache.find((i) => i.bssid === bssid)?.ssid || bssid || "";
+  el("wd-crack-success-ssid").textContent = ssid;
+  el("wd-crack-success-wordlist").textContent = `Diccionario: ${wordlist === "weakpass" ? "weakpass" : "rockyou"}`;
+  el("wd-crack-success-password").textContent = password || "—";
+  modal.classList.remove("hidden");
+  wdCrackConfettiOnce();
+}
+
+el("wd-crack-success-close")?.addEventListener("click", () => {
+  el("wd-crack-success-modal")?.classList.add("hidden");
+});
+
 async function wdSyncDictStatus() {
   try {
     const res = await fetch("/api/wardrive/dict/status");
     if (!res.ok) return;
     const data = await res.json();
+    const prevBssid = wdDictBssid;
+    const wasRunning = Boolean(wdDictSync?.running);
     if (!data?.state) {
       wdDictSync = null;
     } else {
@@ -708,16 +757,21 @@ async function wdSyncDictStatus() {
       };
     }
     // A start/stop transition means the affected row's Ataques cell needs
-    // to switch between buttons and the progress bar — a full table
+    // to switch between buttons and the status badge — a full table
     // re-render (cheap, it's a short list) is the simplest correct way to
     // restore the right buttons (or the ✓ password badge) once a crack
     // finishes, without hand-tracking every possible outcome here.
     const runningNow = Boolean(wdDictSync?.running);
     if (wdDictRunningPrev !== runningNow) {
       wdDictRunningPrev = runningNow;
+      if (!runningNow && wasRunning && wdDictSync?.result?.matched) {
+        const bssidDone = prevBssid || wdDictBssid;
+        const password = wdDictSync.result.output?.match(/KEY FOUND!\s*\[\s*(.*?)\s*\]/)?.[1] || "";
+        wdCelebrateCrackSuccess(bssidDone, wdDictSync.wordlist, password);
+      }
       wdRenderCrackStation();
     }
-    wdRenderRowDictProgress();
+    wdRenderRowStatus();
     wdRenderDictDetail(); // no-op while the modal is closed
     if (!wdDictSync?.running && wdDictPollTimer) {
       clearInterval(wdDictPollTimer);
@@ -735,13 +789,10 @@ function wdWatchDict() {
       if (!document.hidden) void wdSyncDictStatus();
     }, 4000);
   }
-  if (!wdDictAnimTimer) {
-    wdDictAnimTimer = setInterval(() => {
-      if (!document.hidden) {
-        wdRenderRowDictProgress();
-        wdRenderDictDetail(); // no-op while the modal is closed
-      }
-    }, 250);
+  if (!wdDictDetailTimer) {
+    wdDictDetailTimer = setInterval(() => {
+      if (!document.hidden) wdRenderDictDetail(); // no-op while the modal is closed
+    }, 1000);
   }
 }
 

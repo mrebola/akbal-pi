@@ -64,21 +64,72 @@ async function rearmWifiAdapter(): Promise<void> {
   }
 }
 
-// USB serial devices: dropping the kernel driver frees the tty; udev
-// re-binds it when the interface comes back. Best-effort only.
+// USB serial devices: dropping the kernel driver frees the tty.
+//
+// This used to assume udev (or this same function, called with "bind") would
+// bring the interface back — it doesn't, and that was a real bug: unbinding
+// REMOVES the interface from cdc_acm's own driver directory (that's what
+// "unbound" means), so re-reading that same directory to figure out what to
+// bind finds nothing — there's nothing left there to iterate. In practice
+// this meant switching DEMO → LIVE silently never rebound the GPS: the mode
+// flipped, the log said "cdc_acm bind done", but zero interfaces were ever
+// touched, so /dev/ttyACM* stayed gone until someone rebound it by hand.
+//
+// Fix: "bind" doesn't trust what it itself (or any other unbind, from a
+// previous process, a crash mid-switch, anything) left behind in memory —
+// it scans every USB interface on the system for ones that are (a) CDC-ACM
+// compatible by class (Communications 0x02 or CDC Data 0x0A, what cdc_acm
+// actually claims) and (b) currently unbound (no driver symlink), and binds
+// exactly those. That's self-healing regardless of *why* something ended up
+// unbound, including across a service restart that happened mid-DEMO.
+const CDC_ACM_INTERFACE_CLASSES = new Set(["02", "0a"]);
+const USB_DEVICES_DIR = "/sys/bus/usb/devices";
+const USB_IFACE_RE = /^\d+-\d+(\.\d+)*:\d+\.\d+$/;
+
+function listUnboundCdcAcmInterfaces(): string[] {
+  if (!fs.existsSync(USB_DEVICES_DIR)) return [];
+  const out: string[] = [];
+  for (const entry of fs.readdirSync(USB_DEVICES_DIR)) {
+    if (!USB_IFACE_RE.test(entry)) continue;
+    const ifaceDir = `${USB_DEVICES_DIR}/${entry}`;
+    if (fs.existsSync(`${ifaceDir}/driver`)) continue; // already bound (to cdc_acm or anything else)
+    let cls = "";
+    try {
+      cls = fs.readFileSync(`${ifaceDir}/bInterfaceClass`, "utf8").trim().toLowerCase();
+    } catch {
+      continue;
+    }
+    if (CDC_ACM_INTERFACE_CLASSES.has(cls)) out.push(entry);
+  }
+  return out;
+}
+
 async function usbAuthRebind(action: "unbind" | "bind"): Promise<void> {
   try {
     const dir = "/sys/bus/usb/drivers/cdc_acm";
     if (!fs.existsSync(dir)) return;
-    for (const entry of fs.readdirSync(dir)) {
-      if (!/^\d+-\d+(\.\d+)*:\d+\.\d+$/.test(entry)) continue; // interface dirs
+    const targets = action === "unbind"
+      ? fs.readdirSync(dir).filter((e) => USB_IFACE_RE.test(e))
+      : listUnboundCdcAcmInterfaces();
+    for (const entry of targets) {
       await execFileAsync("sudo", ["-n", "sh", "-c", `echo ${entry} > /sys/bus/usb/drivers/cdc_acm/${action}`])
-        .catch(() => {});
+        .catch((err: any) => console.warn(`[platform] cdc_acm ${action} failed for ${entry}:`, err?.message || err));
     }
-    console.log(`[platform] cdc_acm ${action} done`);
-  } catch {
-    // never fatal
+    console.log(`[platform] cdc_acm ${action}: ${targets.length ? targets.join(", ") : "nothing to do"}`);
+  } catch (err: any) {
+    console.warn(`[platform] cdc_acm ${action} scan failed:`, err?.message || err);
   }
+}
+
+// Startup self-heal: if the process starts (or restarts) while some
+// CDC-ACM device was left unbound from a previous DEMO session — including
+// one that never made it back to LIVE because of the bug above — this
+// brings it back without needing an explicit mode toggle. Matches the
+// existing "a reboot always starts live" assumption (see
+// reconcilePlatformMode below) by actually making that true for the
+// hardware, not just the in-memory currentMode flag.
+export async function healUsbSerialDevices(): Promise<void> {
+  await usbAuthRebind("bind");
 }
 
 export async function setPlatformMode(mode: PlatformMode): Promise<{ ok: boolean; mode: PlatformMode; error?: string }> {

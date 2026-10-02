@@ -13,12 +13,24 @@ import { startWardriveDisplayMirror as startDriveMirror } from "./core/chat-flow
 import { startAircraftRadarService, stopAircraftRadarService } from "./services/adsb/service";
 import { startGnssService, stopGnssService } from "./services/gnss/service";
 import { startAutoReconnectWatchdog } from "./utils/wifi";
+import { healUsbSerialDevices } from "./utils/platform-mode";
 
 dotenv.config();
 
 startBatteryStatus();
 startWifiStatus();
 startVpnStatus();
+
+// Self-heal the GPS/other CDC-ACM USB serial devices on every boot/restart:
+// a previous process could have left one unbound (DEMO mode releases the
+// GPS tty — see platform-mode.ts) without rebinding it, e.g. if it crashed
+// or got restarted mid-DEMO, or (fixed, but defense in depth) the DEMO→LIVE
+// rebind step itself failed to find it. Matches the "a reboot always starts
+// live" assumption the rest of platform-mode.ts already makes for the
+// in-memory mode flag — this makes it true for the hardware too.
+void healUsbSerialDevices();
+
+startAutoReconnectWatchdog();
 
 // Auto-reconnect: if wlan0 drops, try the last-connected SSID again every 5
 // minutes, but only while it's actually visible in a scan — see

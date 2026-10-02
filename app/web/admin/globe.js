@@ -391,9 +391,17 @@ async function main() {
 
   function satWorldPos(s) {
     if (!userLat && userLat !== 0) return null;
-    // az: 0°=N, 90°=E (clockwise from north). el: 0°=horizon, 90°=zenith.
-    const az = s.azimuth >= 0 ? s.azimuth : 0;
-    const el = s.elevation >= 0 ? s.elevation : 0;
+    // No az/el fix yet (common for satellites the receiver only just picked
+    // up via GSV SNR before it resolves their position) — same "elevation
+    // < 0 = unknown" convention the 2D sky plot uses (gps.js's
+    // renderSatDots), which skips these instead of guessing. This used to
+    // default both to 0°, which placed every such satellite on the exact
+    // same point (due north, on the horizon) — e.g. "9 visible, 3 in fix"
+    // rendered as what looked like a single dot, since most of those 9
+    // piled up together instead of being skipped.
+    if (s.elevation == null || s.elevation < 0 || s.azimuth == null) return null;
+    const az = s.azimuth;
+    const el = s.elevation;
     // Local ENU frame at the user's ground point:
     const ground = latLonToVec3(userLat, userLon, EARTH_R);
     const up = ground.clone().normalize();
@@ -416,9 +424,9 @@ async function main() {
     const seen = new Set();
     for (const s of sats) {
       const prn = String(s.prn);
-      seen.add(prn);
       const pos = satWorldPos(s);
-      if (!pos) continue;
+      if (!pos) continue; // no valid az/el — don't mark as seen either, so the cleanup pass below removes any stale mesh from a satellite that lost its fix
+      seen.add(prn);
       let entry = satMeshes.get(prn);
       if (!entry) {
         const group = new THREE.Group();

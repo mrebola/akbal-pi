@@ -107,6 +107,15 @@
         <div class="apm-row"><span data-i18n="gnss.azimuth">Azimut</span><span id="gsm-azim">—</span></div>
         <div class="apm-row"><span data-i18n="gnss.ground_pos">Posición sobre la Tierra</span><span id="gsm-ground">—</span></div>
         <div class="apm-row"><span data-i18n="gnss.distance">Distancia al usuario</span><span id="gsm-dist">—</span></div>
+        <!-- Rich metadata from CelesTrak's SATCAT (services/gnss/, docs/gnss.md)
+             — a much slower-refreshing cache than the orbital elements above,
+             since launch/ownership facts barely ever change. -->
+        <div class="apm-row"><span data-i18n="gnss.owner">Operador / país</span><span id="gsm-owner">—</span></div>
+        <div class="apm-row"><span data-i18n="gnss.launch">Lanzamiento</span><span id="gsm-launch">—</span></div>
+        <div class="apm-row"><span data-i18n="gnss.object_type">Tipo de objeto</span><span id="gsm-objtype">—</span></div>
+        <div class="apm-row"><span data-i18n="gnss.ops_status">Estado (catálogo)</span><span id="gsm-opsstatus">—</span></div>
+        <div class="apm-row"><span data-i18n="gnss.orbit_stats">Órbita (periodo/incl./apog.-perig.)</span><span id="gsm-orbitstats">—</span></div>
+        <div class="apm-row"><span data-i18n="gnss.trajectory">Trayectoria</span><span id="gsm-trajectory">—</span></div>
       </div>
       <div class="apm-hint" data-i18n="gnss.hint">Arrastrá para girar el globo · scroll para zoom · clic en otro satélite para cambiar la ficha.</div>
     </div>

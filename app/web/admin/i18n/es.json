@@ -347,6 +347,12 @@
     "azimuth": "Azimut",
     "ground_pos": "Posición sobre la Tierra",
     "distance": "Distancia al usuario",
+    "owner": "Operador / país",
+    "launch": "Lanzamiento",
+    "object_type": "Tipo de objeto",
+    "ops_status": "Estado (catálogo)",
+    "orbit_stats": "Órbita (periodo/incl./apog.-perig.)",
+    "trajectory": "Trayectoria",
     "hint": "Arrastrá para girar el globo · scroll para zoom · clic en otro satélite para cambiar la ficha."
   },
   "wifiradar": {

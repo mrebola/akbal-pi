@@ -347,6 +347,12 @@
     "azimuth": "Azimuth",
     "ground_pos": "Position over Earth",
     "distance": "Distance to you",
+    "owner": "Operator / country",
+    "launch": "Launch",
+    "object_type": "Object type",
+    "ops_status": "Status (catalog)",
+    "orbit_stats": "Orbit (period/incl./perigee-apogee)",
+    "trajectory": "Trajectory",
     "hint": "Drag to rotate the globe · scroll to zoom · click another satellite to switch the card."
   },
   "wifiradar": {

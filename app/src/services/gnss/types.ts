@@ -21,14 +21,37 @@ export type GnssSatelliteMetadata = {
 };
 
 // Orbital elements, as published by CelesTrak (OMM/JSON — see celestrak.ts).
-// Stored as opaque JSON since we only ever display it, never propagate the
-// orbit ourselves (az/el/SNR for "now" already come from the local adapter).
+// Stored as opaque JSON; the backend never propagates it (az/el/SNR for
+// "now" always comes from the local adapter) — the frontend may use the raw
+// OMM to draw a ground-track trajectory for visualization (globe.js, via
+// vendor/satellite.es.js/SGP4), which is display-only and never feeds back
+// into where the live satellite dot is placed.
 export type GnssOrbitalRecord = {
   noradId: number;
   ommJson: string; // raw OMM object, JSON-encoded
   epoch: string | null; // OMM EPOCH field (orbit reference time)
   fetchedAt: number; // epoch ms, when we pulled this from CelesTrak
   source: "celestrak";
+};
+
+// SATCAT record, as published by CelesTrak (celestrak.org/satcat/ — see
+// celestrak.ts fetchSatcatRecord). Separate from GnssOrbitalRecord/OMM:
+// launch/ownership facts barely ever change, so refreshing them follows a
+// much longer cadence than the orbital elements (service.ts).
+export type GnssSatcatRecord = {
+  noradId: number;
+  ownerCode: string | null; // e.g. "US", "CIS", "PRC", "ESA" — see OWNER_NAMES (globe.js)
+  objectType: string | null; // "PAY" | "R/B" | "DEB" | "UNK"
+  opsStatusCode: string | null; // "+" operational, "-" nonoperational, "P" partial, "B" backup, ...
+  launchDate: string | null; // ISO date (yyyy-mm-dd)
+  launchSite: string | null; // CelesTrak site code
+  decayDate: string | null;
+  periodMin: number | null;
+  inclinationDeg: number | null;
+  apogeeKm: number | null;
+  perigeeKm: number | null;
+  rcsM2: number | null;
+  fetchedAt: number;
 };
 
 // One historical sky-plot reading, written on every GPS status poll so the
@@ -61,7 +84,9 @@ export type GnssSatelliteView = {
     epoch: string | null;
     fetchedAt: number;
     ageMs: number;
+    omm: unknown; // raw OMM — see GnssOrbitalRecord's comment on frontend-only use
   } | null;
+  satcat: GnssSatcatRecord | null;
 };
 
 export type GnssSnapshot = {

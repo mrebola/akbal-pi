@@ -77,7 +77,11 @@ async function refreshGnssMeta() {
     const data = await res.json();
     const map = new Map();
     for (const s of data.satellites || []) {
-      map.set(`${s.constellation}:${s.prn}`, { name: s.metadata?.name || null, orbital: s.orbital || null });
+      map.set(`${s.constellation}:${s.prn}`, {
+        name: s.metadata?.name || null,
+        orbital: s.orbital || null,
+        satcat: s.satcat || null,
+      });
     }
     gnssMetaByKey = map;
   } catch {
@@ -93,7 +97,9 @@ async function refreshGnssMeta() {
 function enrichWithGnssMeta(satellites) {
   return (satellites || []).map((s) => {
     const meta = gnssMetaByKey.get(`${s.constellation || "UNKNOWN"}:${s.prn}`);
-    return meta ? { ...s, gnssName: meta.name, gnssOrbital: meta.orbital } : s;
+    return meta
+      ? { ...s, gnssName: meta.name, gnssOrbital: meta.orbital, gnssSatcat: meta.satcat }
+      : s;
   });
 }
 

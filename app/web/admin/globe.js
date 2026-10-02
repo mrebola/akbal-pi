@@ -15,6 +15,12 @@ else console.warn("[globe] importmap missing — three.js unavailable");
 async function main() {
   const THREE = await import("three");
   const { OrbitControls } = await import("./vendor/OrbitControls.js");
+  // SGP4/SDP4 propagation (vendor/satellite.es.js, MIT) — used only to draw
+  // a ground-track trajectory for the selected satellite, from the OMM
+  // elements CelesTrak already provides (services/gnss/, docs/gnss.md).
+  // Display-only: the live satellite dot's position always comes from the
+  // receiver's own az/el (satWorldPos below), never from this propagation.
+  const satellite = await import("./vendor/satellite.es.js");
 
   // ─── Scene ────────────────────────────────────────────────────────────────
   const canvas = document.getElementById("gps-globe");
@@ -391,6 +397,36 @@ async function main() {
     UNKNOWN: "GNSS",
   };
 
+  // SATCAT lookups (services/gnss/, docs/gnss.md — CelesTrak's satellite
+  // catalog, celestrak.org/satcat/). Only the operators that actually fly
+  // GNSS constellations are worth naming; anything else falls back to the
+  // raw code so we never invent a name CelesTrak didn't give us.
+  const OWNER_NAMES = {
+    US: "Estados Unidos (US Space Force)",
+    CIS: "Comunidad de Estados Independientes (ex-URSS)",
+    PRC: "República Popular China",
+    ESA: "Agencia Espacial Europea (ESA)",
+    IND: "India",
+    JPN: "Japón",
+  };
+  const LAUNCH_SITE_NAMES = {
+    AFETR: "Cabo Cañaveral, EE. UU.",
+    AFWTR: "Vandenberg, EE. UU.",
+    TYMSC: "Baikonur, Kazajistán",
+    PKMTR: "Plesetsk, Rusia",
+    XICLF: "Xichang, China",
+    JSC: "Jiuquan, China",
+    TAICLF: "Taiyuan, China",
+    FRGUI: "Kourou, Guayana Francesa",
+  };
+  const OBJECT_TYPE_LABEL = { PAY: "Carga útil", "R/B": "Cuerpo de cohete", DEB: "Escombro", UNK: "Desconocido" };
+  const OPS_STATUS_LABEL = {
+    "+": "Operacional",
+    "-": "No operacional",
+    P: "Parcialmente operacional",
+    B: "Respaldo / standby",
+  };
+
   function satLabel(s) {
     // Prefer the backend's own constellation field (utils/gps.ts, derived
     // from the NMEA talker prefix) — falls back to the old PRN-prefix guess
@@ -530,6 +566,68 @@ async function main() {
     }
   });
 
+  // ─── Orbit trajectory (selected satellite only) ────────────────────────────
+  // Ground track for one orbital period, propagated client-side from the
+  // cached OMM via SGP4 (vendor/satellite.es.js) — display-only, see the
+  // import comment above. Drawn at the same fixed altitude the live dots
+  // use (SAT_ALT_SCALE) rather than the propagated height: GNSS MEO orbits
+  // are near-circular, the real altitude barely varies, and matching the
+  // dot's own radius keeps the trail visually attached to it instead of
+  // floating at a slightly different distance from the globe.
+  const TRAJECTORY_POINTS = 90;
+  let trajectoryLine = null;
+
+  function buildTrajectoryPoints(omm) {
+    const satrec = satellite.json2satrec(omm);
+    if (satrec.error) return null;
+    const meanMotion = Number(omm.MEAN_MOTION); // revs/day
+    if (!Number.isFinite(meanMotion) || meanMotion <= 0) return null;
+    const periodMs = (1440 / meanMotion) * 60_000;
+    const now = Date.now();
+    const pts = [];
+    for (let i = 0; i <= TRAJECTORY_POINTS; i++) {
+      const t = new Date(now + (i / TRAJECTORY_POINTS) * periodMs);
+      const pv = satellite.propagate(satrec, t);
+      if (!pv || !pv.position) continue;
+      const gmst = satellite.gstime(t);
+      const geo = satellite.eciToGeodetic(pv.position, gmst);
+      const lat = satellite.degreesLat(geo.latitude);
+      const lon = satellite.degreesLong(geo.longitude);
+      pts.push(latLonToVec3(lat, lon, EARTH_R * SAT_ALT_SCALE));
+    }
+    return pts.length >= 2 ? pts : null;
+  }
+
+  function showOrbitTrajectory(s) {
+    hideOrbitTrajectory();
+    const omm = s.gnssOrbital?.omm;
+    if (!omm) return;
+    let pts;
+    try {
+      pts = buildTrajectoryPoints(omm);
+    } catch (err) {
+      console.warn("[globe] orbit trajectory failed", err);
+      return;
+    }
+    if (!pts) return;
+    const geo = new THREE.BufferGeometry().setFromPoints(pts);
+    const mat = new THREE.LineBasicMaterial({
+      color: satColor(s),
+      transparent: true,
+      opacity: 0.55,
+    });
+    trajectoryLine = new THREE.Line(geo, mat);
+    scene.add(trajectoryLine);
+  }
+
+  function hideOrbitTrajectory() {
+    if (!trajectoryLine) return;
+    scene.remove(trajectoryLine);
+    trajectoryLine.geometry.dispose();
+    trajectoryLine.material.dispose();
+    trajectoryLine = null;
+  }
+
   function selectSatellite(prn) {
     selectedPrn = prn;
     const entry = satMeshes.get(prn);
@@ -577,11 +675,40 @@ async function main() {
         ? `${s.elevation}° el · ${s.azimuth}° az desde tu posición`
         : "—";
     document.getElementById("gsm-dist").textContent = "≈ 20,200 km (órbita MEO de GNSS)";
+
+    // Rich metadata from CelesTrak's SATCAT (services/gnss/, docs/gnss.md)
+    // — absent until the NORAD id is known AND the (much slower, 30-day
+    // cadence) SATCAT fetch has completed, so all of this gracefully
+    // falls back to "—" same as gsm-name above.
+    const sc = s.gnssSatcat;
+    document.getElementById("gsm-owner").textContent = sc?.ownerCode
+      ? OWNER_NAMES[sc.ownerCode] || sc.ownerCode
+      : "—";
+    document.getElementById("gsm-launch").textContent = sc?.launchDate
+      ? `${sc.launchDate}${sc.launchSite ? ` · ${LAUNCH_SITE_NAMES[sc.launchSite] || sc.launchSite}` : ""}`
+      : "—";
+    document.getElementById("gsm-objtype").textContent = sc?.objectType
+      ? OBJECT_TYPE_LABEL[sc.objectType] || sc.objectType
+      : "—";
+    document.getElementById("gsm-opsstatus").textContent = sc?.opsStatusCode
+      ? OPS_STATUS_LABEL[sc.opsStatusCode] || sc.opsStatusCode
+      : "—";
+    document.getElementById("gsm-orbitstats").textContent =
+      sc?.periodMin != null
+        ? `${sc.periodMin.toFixed(1)} min · incl. ${sc.inclinationDeg}° · ${sc.perigeeKm}–${sc.apogeeKm} km`
+        : "—";
+
+    showOrbitTrajectory(s);
+    document.getElementById("gsm-trajectory").textContent = trajectoryLine
+      ? "trazada sobre el globo (una órbita completa)"
+      : "no disponible — sin datos orbitales cacheados todavía";
+
     modal.classList.remove("hidden");
   }
 
   function closeSatModal() {
     selectedPrn = null;
+    hideOrbitTrajectory();
     modal?.classList.add("hidden");
   }
 

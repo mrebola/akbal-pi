@@ -1,7 +1,7 @@
 import path from "path";
 import Database from "better-sqlite3";
 import { dataDir } from "../../utils/dir";
-import { GnssConstellationCode, GnssOrbitalRecord, GnssSatelliteMetadata } from "./types";
+import { GnssConstellationCode, GnssOrbitalRecord, GnssSatcatRecord, GnssSatelliteMetadata } from "./types";
 
 // One SQLite file for GNSS (same pattern as services/adsb/history.ts and
 // wardrive/drive-db.ts). Three tables, deliberately split:
@@ -31,6 +31,12 @@ db.exec(`
     epoch TEXT,
     fetched_at INTEGER NOT NULL,
     source TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS gnss_satcat_data (
+    norad_id INTEGER PRIMARY KEY,
+    record_json TEXT NOT NULL,
+    fetched_at INTEGER NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS gnss_observations (
@@ -155,6 +161,40 @@ export function upsertOrbitalData(record: GnssOrbitalRecord): void {
 
 export function isOrbitalStale(noradId: number, maxAgeMs: number): boolean {
   const record = getOrbitalData(noradId);
+  if (!record) return true;
+  return Date.now() - record.fetchedAt > maxAgeMs;
+}
+
+// ─── SATCAT data (ownership/launch facts — refreshed far less often) ──────
+
+const getSatcatStmt = db.prepare(`SELECT * FROM gnss_satcat_data WHERE norad_id = ?`);
+
+export function getSatcatData(noradId: number): GnssSatcatRecord | null {
+  const row = getSatcatStmt.get(noradId) as
+    | { norad_id: number; record_json: string; fetched_at: number }
+    | undefined;
+  if (!row) return null;
+  return JSON.parse(row.record_json) as GnssSatcatRecord;
+}
+
+const upsertSatcatStmt = db.prepare(`
+  INSERT INTO gnss_satcat_data (norad_id, record_json, fetched_at)
+  VALUES (@noradId, @recordJson, @fetchedAt)
+  ON CONFLICT(norad_id) DO UPDATE SET
+    record_json = @recordJson,
+    fetched_at = @fetchedAt
+`);
+
+export function upsertSatcatData(record: GnssSatcatRecord): void {
+  upsertSatcatStmt.run({
+    noradId: record.noradId,
+    recordJson: JSON.stringify(record),
+    fetchedAt: record.fetchedAt,
+  });
+}
+
+export function isSatcatStale(noradId: number, maxAgeMs: number): boolean {
+  const record = getSatcatData(noradId);
   if (!record) return true;
   return Date.now() - record.fetchedAt > maxAgeMs;
 }

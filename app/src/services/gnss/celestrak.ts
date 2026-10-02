@@ -1,5 +1,5 @@
 import { proxyFetch } from "../../cloud-api/proxy-fetch";
-import { GnssConstellationCode } from "./types";
+import { GnssConstellationCode, GnssSatcatRecord } from "./types";
 
 // CelesTrak GP (General Perturbations) API — public, no key required.
 // FORMAT=json returns OMM (Orbit Mean-Elements Message) objects, one per
@@ -78,6 +78,60 @@ export async function fetchConstellationGroup(
     // Covers abort (timeout), network errors, and JSON parse errors alike —
     // all of them mean "no fresh data this time", never a crash.
     console.warn(`[gnss/celestrak] ${group}: ${(err as Error).message}`);
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// CelesTrak's satellite catalog (ownership, launch date/site, orbit class —
+// docs: https://celestrak.org/satcat/satcat-format.php). One record per
+// NORAD id, queried individually (no bulk-by-constellation endpoint like
+// GP), so service.ts rate-limits how many of these it fires per refresh.
+const SATCAT_BASE = "https://celestrak.org/satcat/records.php";
+
+function numOrNull(v: unknown): number | null {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function strOrNull(v: unknown): string | null {
+  const s = typeof v === "string" ? v.trim() : "";
+  return s ? s : null;
+}
+
+// Never throws — same "no internet / CelesTrak down just means no fresh
+// data" contract as fetchConstellationGroup.
+export async function fetchSatcatRecord(noradId: number): Promise<GnssSatcatRecord | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const url = `${SATCAT_BASE}?CATNR=${encodeURIComponent(String(noradId))}&FORMAT=JSON`;
+    const res = await proxyFetch(url, { signal: controller.signal });
+    if (!res.ok) {
+      console.warn(`[gnss/celestrak] satcat ${noradId}: HTTP ${res.status}`);
+      return null;
+    }
+    const body = (await res.json()) as Array<Record<string, unknown>>;
+    const row = Array.isArray(body) ? body[0] : null;
+    if (!row) return null;
+    return {
+      noradId,
+      ownerCode: strOrNull(row.OWNER),
+      objectType: strOrNull(row.OBJECT_TYPE),
+      opsStatusCode: strOrNull(row.OPS_STATUS_CODE),
+      launchDate: strOrNull(row.LAUNCH_DATE),
+      launchSite: strOrNull(row.LAUNCH_SITE),
+      decayDate: strOrNull(row.DECAY_DATE),
+      periodMin: numOrNull(row.PERIOD),
+      inclinationDeg: numOrNull(row.INCLINATION),
+      apogeeKm: numOrNull(row.APOGEE),
+      perigeeKm: numOrNull(row.PERIGEE),
+      rcsM2: numOrNull(row.RCS),
+      fetchedAt: Date.now(),
+    };
+  } catch (err) {
+    console.warn(`[gnss/celestrak] satcat ${noradId}: ${(err as Error).message}`);
     return null;
   } finally {
     clearTimeout(timeout);

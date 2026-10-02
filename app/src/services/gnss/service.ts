@@ -1,16 +1,19 @@
 import { EventEmitter } from "events";
 import { getGpsStatus } from "../../utils/gps";
-import { fetchConstellationGroup } from "./celestrak";
+import { fetchConstellationGroup, fetchSatcatRecord } from "./celestrak";
 import {
   getOrbitalData,
+  getSatcatData,
   getSatelliteMetadata,
   getUnresolvedPrns,
   isOrbitalStale,
+  isSatcatStale,
   pruneOldObservations,
   recordObservation,
   setSatelliteIdentity,
   touchSatelliteSeen,
   upsertOrbitalData,
+  upsertSatcatData,
 } from "./db";
 import { GnssConstellationCode, GnssSatelliteView, GnssSnapshot } from "./types";
 
@@ -37,12 +40,22 @@ const REFRESH_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const REFRESH_RETRY_MS = 5 * 60 * 1000;
 const OBSERVATION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const PRUNE_INTERVAL_MS = 6 * 60 * 60 * 1000;
+// SATCAT facts (owner, launch date/site) are effectively permanent once a
+// satellite is in service — nowhere near the orbital elements' churn, so
+// this refreshes on a much longer cadence (catches a rare status/decay
+// update without re-querying CelesTrak for something that almost never
+// changes).
+const SATCAT_REFRESH_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+// SATCAT has no bulk-by-constellation endpoint (unlike GP) — one HTTP call
+// per satellite, so cap how many a single sweep's refresh pass fires.
+const SATCAT_MAX_PER_SWEEP = 3;
 
 class GnssService extends EventEmitter {
   private sweepTimer: ReturnType<typeof setInterval> | null = null;
   private pruneTimer: ReturnType<typeof setInterval> | null = null;
   private started = false;
   private refreshInFlight = new Set<GnssConstellationCode>();
+  private satcatInFlight = new Set<number>();
   private lastRefreshAttemptByConstellation = new Map<GnssConstellationCode, number>();
   private lastSnapshot: GnssSnapshot = {
     present: false,
@@ -98,6 +111,7 @@ class GnssService extends EventEmitter {
 
       const meta = getSatelliteMetadata(constellation, sat.prn);
       const orbital = meta?.noradId ? getOrbitalData(meta.noradId) : null;
+      const satcat = meta?.noradId ? getSatcatData(meta.noradId) : null;
 
       return {
         constellation,
@@ -108,8 +122,14 @@ class GnssService extends EventEmitter {
         used: sat.used,
         metadata: meta ? { noradId: meta.noradId, name: meta.name } : null,
         orbital: orbital
-          ? { epoch: orbital.epoch, fetchedAt: orbital.fetchedAt, ageMs: now - orbital.fetchedAt }
+          ? {
+              epoch: orbital.epoch,
+              fetchedAt: orbital.fetchedAt,
+              ageMs: now - orbital.fetchedAt,
+              omm: JSON.parse(orbital.ommJson),
+            }
           : null,
+        satcat,
       };
     });
 
@@ -127,6 +147,28 @@ class GnssService extends EventEmitter {
     for (const constellation of seenConstellations) {
       if (constellation === "UNKNOWN") continue;
       void this.maybeRefresh(constellation);
+    }
+    this.maybeRefreshSatcat(satellites);
+  }
+
+  // SATCAT: one HTTP call per NORAD id (no bulk endpoint), so this only
+  // fires for satellites actually in view right now, capped per sweep, and
+  // skips anything already in flight or fetched within SATCAT_REFRESH_MAX_AGE_MS.
+  private maybeRefreshSatcat(satellites: GnssSatelliteView[]): void {
+    let fired = 0;
+    for (const sat of satellites) {
+      if (fired >= SATCAT_MAX_PER_SWEEP) return;
+      const noradId = sat.metadata?.noradId;
+      if (!noradId || this.satcatInFlight.has(noradId)) continue;
+      if (!isSatcatStale(noradId, SATCAT_REFRESH_MAX_AGE_MS)) continue;
+
+      fired++;
+      this.satcatInFlight.add(noradId);
+      void fetchSatcatRecord(noradId)
+        .then((record) => {
+          if (record) upsertSatcatData(record);
+        })
+        .finally(() => this.satcatInFlight.delete(noradId));
     }
   }
 

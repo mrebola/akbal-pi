@@ -13,9 +13,14 @@ html, body { height: 100%; background: var(--bg, #0b0d0f); }
 /* Same reasoning as the modal fix below: Leaflet's panes aren't contained
    in their own stacking context, so anything meant to float above the map
    (the header, and the sys-popover dropdown nested inside it) needs a
-   z-index past Leaflet's own max (~700) — same convention gps.css uses
-   for #gps-header. */
-header.topbar { z-index: 1000; }
+   z-index past Leaflet's own max — same convention gps.css uses for
+   #gps-header. Leaflet's highest layer is .leaflet-top/.leaflet-bottom
+   (the zoom control) at z-index 1000, NOT its panes (max 700): z-index 1000
+   here just ties it, and a tie is resolved by DOM order — the map comes
+   after the header in the HTML, so it was winning and painting its zoom
+   buttons over an open nav dropdown (bug: "+/-" overlapping the Wi-Fi
+   menu). 1001 actually beats it. */
+header.topbar { z-index: 1001; }
 
 .ar-toolbar {
   display: flex;
@@ -405,8 +410,11 @@ header.topbar { z-index: 1000; }
    ~700 and nothing between #ar-map and the document root establishes a
    new stacking context, so the shared .apm z-index:30 loses to them —
    same fix gps.css already applies to its own HUD overlays (z-index:900
-   there) for the identical reason. */
-#ar-detail-modal { z-index: 1000; }
+   there) for the identical reason. 1001, not 1000: Leaflet's zoom control
+   (.leaflet-top/.leaflet-bottom) is already at 1000, and tying it risks
+   losing to DOM order instead of reliably winning — see header.topbar
+   above for the bug this exact tie caused. */
+#ar-detail-modal { z-index: 1001; }
 
 .ar-detail-card { width: min(420px, calc(100vw - 32px)); }
 

@@ -48,10 +48,14 @@
   border-color: rgba(255, 255, 255, 0.15);
 }
 
-/* Header sits above the map */
+/* Header (and its nav dropdowns) sits above the map. Leaflet's highest
+   layer — .leaflet-top/.leaflet-bottom, the zoom control — is z-index
+   1000; matching it here is a tie, and a tie resolves by DOM order, which
+   favors the map (it comes after the header in the HTML). 1001 actually
+   wins — see aircraft-radar.css's header.topbar for the same fix. */
 #gps-header {
   position: relative;
-  z-index: 1000;
+  z-index: 1001;
   background: rgba(11, 16, 32, 0.92);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }

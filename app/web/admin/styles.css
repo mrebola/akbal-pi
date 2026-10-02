@@ -716,7 +716,15 @@ button.secondary {
 
 .wd-mode-banner {
   display: flex;
-  align-items: center;
+  /* flex-start, not center: .wd-banner-text's height varies (title only vs.
+     title + status + error msg) — centering against that made the controls
+     "dance" up and down depending on how much was showing at the moment.
+     Pinning to the top keeps them level with the title every time. The
+     dongle picker used to live inside .wd-banner-text (stacked below the
+     title/status, in its own smaller font) which is why it never lined up
+     with Entrar/Salir — it's now a peer of the buttons in
+     .wd-banner-controls instead, so both align the same way. */
+  align-items: flex-start;
   gap: 12px;
   padding: 12px 14px;
   background: var(--bg-raised);
@@ -724,6 +732,8 @@ button.secondary {
   border-radius: 10px;
   margin-bottom: 12px;
 }
+
+.wd-banner-controls { display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-top: 1px; }
 
 .wd-banner-text { flex: 1; min-width: 0; }
 
@@ -756,12 +766,15 @@ button.secondary {
 .wd-banner-status.wd-no-adapter::before { content: "🔌"; font-size: 13px; }
 
 /* ---- Dongle picker (Wifi Audit banner) ---- */
-.wd-dongle { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 11px; }
+.wd-dongle { display: flex; align-items: center; gap: 8px; font-size: 11px; }
 .wd-dongle .k { color: var(--text-secondary); font-family: ui-monospace, monospace; font-size: 10.5px; white-space: nowrap; }
 .wd-dongle select {
-  flex: 1; min-width: 0; padding: 5px 8px; border-radius: 7px;
+  min-width: 0; padding: 9px 10px; border-radius: 7px;
   border: 1px solid var(--border); background: var(--bg); color: var(--text-primary);
-  font-family: ui-monospace, monospace; font-size: 11px; cursor: pointer;
+  font-family: ui-monospace, monospace; font-size: 12.5px; cursor: pointer;
+  /* Close to the buttons' own height (10px/16px padding, 14px font) so it
+     lines up with Entrar/Salir instead of reading as a smaller, separate
+     control — see .wd-banner-controls. */
 }
 .wd-dongle select:disabled { opacity: 0.5; cursor: not-allowed; }
 .wd-dongle-msg { font-size: 10.5px; color: var(--danger); font-family: ui-monospace, monospace; min-height: 14px; margin-top: 2px; }
@@ -1838,6 +1851,36 @@ button.secondary {
   background: transparent;
   border-style: dashed;
 }
+/* ---- IA: instalar modelo (Settings) ---- */
+.cfg-hint { font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin: 0 0 10px; }
+.cfg-chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.cfg-chip {
+  background: var(--bg);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  cursor: pointer;
+}
+.cfg-chip:hover { color: var(--text-primary); border-color: var(--text-secondary); }
+.cfg-chip.active { color: var(--accent); border-color: var(--accent-dim); background: var(--accent-dim); }
+.cfg-warning {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  background: rgba(255, 209, 102, 0.1);
+  border: 1px solid rgba(255, 209, 102, 0.35);
+  color: var(--warning);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 10px;
+}
+.cfg-warning::before { content: "⚠"; flex: none; }
+.cfg-pull-progress { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
 .cfg-item-left { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .cfg-item-actions { display: flex; align-items: center; gap: 6px; position: relative; }
 .cfg-menu-btn {

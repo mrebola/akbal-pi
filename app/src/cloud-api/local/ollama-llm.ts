@@ -224,6 +224,103 @@ export const listOllamaModelsWithSize = async (): Promise<
 export const listOllamaModels = async (): Promise<string[]> =>
   (await listOllamaModelsWithSize()).map((m) => m.name);
 
+// ─── Install / remove models (web admin Settings > IA) ─────────────────────
+// Ollama's own HTTP API, not the `ollama` CLI — /api/pull streams NDJSON
+// progress (completed/total bytes) as the download runs, which this turns
+// into a single pollable state object (same pattern as DictCrack in
+// wifi-audit/crack.ts: one job at a time, GET .../status to poll, no
+// WebSocket needed). /api/delete removes an installed model outright.
+export type PullState = {
+  tag: string;
+  status: string; // Ollama's own status line ("pulling manifest", "verifying sha256 digest", ...)
+  completed: number;
+  total: number; // 0 until Ollama reports a real size for the current layer
+  done: boolean;
+  error: string | null;
+};
+
+let pullState: PullState | null = null;
+let pullAbort: AbortController | null = null;
+
+export const getPullState = (): PullState | null => pullState;
+
+export const cancelPull = (): void => {
+  pullAbort?.abort();
+};
+
+// Fire-and-forget: starts the pull and returns immediately once Ollama
+// accepts the request; the caller polls getPullState() for progress. Only
+// one pull at a time — same reasoning as the Pi's single dict-crack-at-a-
+// time rule, it's the only thing hammering disk/network either way.
+export const startPullModel = (tag: string): { ok: boolean; error?: string } => {
+  if (pullState && !pullState.done) return { ok: false, error: `Ya se está instalando ${pullState.tag}` };
+  pullAbort = new AbortController();
+  pullState = { tag, status: "iniciando...", completed: 0, total: 0, done: false, error: null };
+  void (async () => {
+    try {
+      const response = await axios.post(
+        `${ollamaEndpoint}/api/pull`,
+        { name: tag, stream: true },
+        { responseType: "stream", signal: pullAbort!.signal },
+      );
+      let buffer = "";
+      await new Promise<void>((resolve, reject) => {
+        response.data.on("data", (chunk: Buffer) => {
+          buffer += chunk.toString("utf8");
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const evt = JSON.parse(line);
+              if (pullState) {
+                pullState.status = evt.status || pullState.status;
+                if (typeof evt.completed === "number") pullState.completed = evt.completed;
+                if (typeof evt.total === "number") pullState.total = evt.total;
+              }
+              if (evt.error) throw new Error(evt.error);
+            } catch (parseErr: any) {
+              if (parseErr?.message && !(parseErr instanceof SyntaxError)) reject(parseErr);
+            }
+          }
+        });
+        response.data.on("end", () => resolve());
+        response.data.on("error", (err: any) => reject(err));
+      });
+      if (pullState) {
+        pullState.done = true;
+        pullState.status = "listo";
+      }
+      console.log(`[Ollama] Pulled model: ${tag}`);
+    } catch (err: any) {
+      if (pullState) {
+        pullState.done = true;
+        pullState.error = axios.isCancel?.(err) || err?.name === "CanceledError"
+          ? "cancelado"
+          : err?.message || String(err);
+      }
+      console.warn(`[Ollama] Pull failed for ${tag}:`, err?.message || err);
+    }
+  })();
+  return { ok: true };
+};
+
+// Dismiss a finished pull (success, error, or cancel) so the UI widget
+// clears — same "clear" pattern as Crack Station's dict-crack status.
+export const clearPullState = (): void => {
+  pullState = null;
+  pullAbort = null;
+};
+
+export const deleteOllamaModel = async (tag: string): Promise<{ ok: boolean; error?: string }> => {
+  try {
+    await axios.delete(`${ollamaEndpoint}/api/delete`, { data: { name: tag } });
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.response?.data?.error || err?.message || String(err) };
+  }
+};
+
 // "131072" -> "128K" — short label for the model-select carousel (see
 // model-select-mode.ts). Ollama reports context length in raw tokens; the
 // K-rounded form is what fits the small screen and matches how model specs

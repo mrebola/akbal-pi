@@ -40,9 +40,14 @@ type AdsbdbCallsignResponse = {
     | string;
 };
 
-async function fetchFromAdsbdb(callsign: string): Promise<RouteInfo> {
+// `definitive` distinguishes a genuine "adsbdb has no route for this
+// callsign" (404, or a response missing origin/destination) — worth caching
+// for the full TTL — from a transient failure (offline/timeout/rate-limited/
+// bad JSON), which must NOT be cached long-term: see aircraft-database.ts's
+// fetchFromAdsbdb for the same distinction and why it matters.
+async function fetchFromAdsbdb(callsign: string): Promise<{ route: RouteInfo; definitive: boolean }> {
   const now = Date.now();
-  if (now < backoffUntil) return ROUTE_UNKNOWN;
+  if (now < backoffUntil) return { route: ROUTE_UNKNOWN, definitive: false };
   const gap = now - lastRequestAt;
   if (gap < MIN_REQUEST_INTERVAL_MS) {
     await new Promise((r) => setTimeout(r, MIN_REQUEST_INTERVAL_MS - gap));
@@ -53,25 +58,28 @@ async function fetchFromAdsbdb(callsign: string): Promise<RouteInfo> {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
-    if (res.status === 404) return ROUTE_UNKNOWN;
+    if (res.status === 404) return { route: ROUTE_UNKNOWN, definitive: true };
     if (!res.ok) {
       backoffUntil = Date.now() + 10_000;
-      return ROUTE_UNKNOWN;
+      return { route: ROUTE_UNKNOWN, definitive: false };
     }
     const body = (await res.json()) as AdsbdbCallsignResponse;
-    if (typeof body.response === "string") return ROUTE_UNKNOWN;
+    if (typeof body.response === "string") return { route: ROUTE_UNKNOWN, definitive: true };
     const { flightroute } = body.response;
-    if (!flightroute.origin || !flightroute.destination) return ROUTE_UNKNOWN;
+    if (!flightroute.origin || !flightroute.destination) return { route: ROUTE_UNKNOWN, definitive: true };
     return {
-      flightNumber: flightroute.callsign_iata?.trim() || flightroute.callsign_icao?.trim() || null,
-      origin: flightroute.origin.iata_code?.trim() || flightroute.origin.icao_code?.trim() || null,
-      destination: flightroute.destination.iata_code?.trim() || flightroute.destination.icao_code?.trim() || null,
-      originName: flightroute.origin.name?.trim() || null,
-      destinationName: flightroute.destination.name?.trim() || null,
+      route: {
+        flightNumber: flightroute.callsign_iata?.trim() || flightroute.callsign_icao?.trim() || null,
+        origin: flightroute.origin.iata_code?.trim() || flightroute.origin.icao_code?.trim() || null,
+        destination: flightroute.destination.iata_code?.trim() || flightroute.destination.icao_code?.trim() || null,
+        originName: flightroute.origin.name?.trim() || null,
+        destinationName: flightroute.destination.name?.trim() || null,
+      },
+      definitive: true,
     };
   } catch {
     backoffUntil = Date.now() + 10_000;
-    return ROUTE_UNKNOWN;
+    return { route: ROUTE_UNKNOWN, definitive: false };
   }
 }
 
@@ -94,8 +102,8 @@ export async function resolveRoute(callsign: string): Promise<RouteInfo> {
   const existing = inflight.get(key);
   if (existing) return existing;
   const job = (async () => {
-    const route = await fetchFromAdsbdb(key);
-    cacheRoute(key, route);
+    const { route, definitive } = await fetchFromAdsbdb(key);
+    if (definitive) cacheRoute(key, route);
     return route;
   })().finally(() => inflight.delete(key));
   inflight.set(key, job);

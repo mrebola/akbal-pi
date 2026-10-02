@@ -154,7 +154,7 @@ async function main() {
         vec3 nightColor = vec3(NIGHT_AMBIENT) * (0.6 + 0.4 * dayColor.g);
         // Twilight: a short warm band exactly at the terminator (sunset hue),
         // fading out fast — not a wide brown smear.
-        float twilight = smoothstep(0.25, 0.0, abs(sunAmount)) * smoothstep(-0.35, 0.05, sunAmount);
+        float twilight = (1.0 - smoothstep(0.0, 0.25, abs(sunAmount))) * smoothstep(-0.35, 0.05, sunAmount);
         vec3 twilightTint = vec3(0.85, 0.38, 0.10) * twilight * 0.28;
 
         // Compose: night base + city lights, then day lit by N·L over it.
@@ -260,6 +260,16 @@ async function main() {
   // earth from looking flooded with light. Direction stays the REAL solar
   // direction; only the distance is artistic (sun is NOT to scale).
   const SUN_DIST_UNITS = 95;
+  // The static (0, 6, 22) default camera framing had no idea where the real
+  // sun actually was, so on load it was a coin-flip between a nicely lit
+  // globe and one staring straight at the fully dark night side — which is
+  // almost certainly what "se ve oscuro y raro" was describing. Once the
+  // real sun direction is known (first updateSunPosition call), re-aim the
+  // initial camera ~40° off the sub-solar point so the day/night terminator
+  // is always in frame instead of a flat, featureless fully-lit or fully-
+  // dark disc.
+  let initialCameraFramed = false;
+  const INITIAL_CAMERA_DIST = camera.position.length();
   function updateSunPosition() {
     const d = new Date();
     const dir = solarDirectionEquatorial(d);
@@ -277,6 +287,13 @@ async function main() {
     sunTarget.position.set(0, 0, 0);
     // The visible sun (shader sphere + corona) sits at the same point:
     sunGroup.position.copy(pos);
+    if (!initialCameraFramed) {
+      initialCameraFramed = true;
+      const offsetAxis = new THREE.Vector3(0.3, 1, 0.15).normalize();
+      const camDir = unit.clone().applyAxisAngle(offsetAxis, (40 * Math.PI) / 180);
+      camera.position.copy(camDir.multiplyScalar(INITIAL_CAMERA_DIST));
+      camera.lookAt(0, 0, 0);
+    }
     return pos;
   }
 
@@ -622,11 +639,22 @@ async function main() {
       en.mesh.material.opacity = 0.7 + 0.3 * amp * Math.sin(t * 2 + en.group.position.y);
     }
     // Sun: real position (refreshed every 60s — it barely moves) + effects.
+    // sunRepositionAt only advances on success: a transient failure (e.g. a
+    // dropped frame during texture upload) retries next frame instead of
+    // leaving the terminator stuck at the default direction for 60s.
     if (!sunRepositionAt || now - sunRepositionAt > 60_000) {
-      sunRepositionAt = now;
-      updateSunPosition();
+      try {
+        updateSunPosition();
+        sunRepositionAt = now;
+      } catch (err) {
+        console.warn("[globe] updateSunPosition failed, retrying next frame", err);
+      }
     }
-    sunFx.update(camera, delta);
+    try {
+      sunFx.update(camera, delta);
+    } catch (err) {
+      console.warn("[globe] sunFx.update failed", err);
+    }
     controls.update();
     renderer.render(scene, camera);
   }

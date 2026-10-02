@@ -139,6 +139,13 @@ export class AircraftTracker {
       if (now - aircraft.lastSeen > AIRCRAFT_PRUNE_MS) {
         this.aircraft.delete(icao);
         this.lastHistoryWriteAt.delete(icao);
+        // Otherwise an aircraft that reappears after being pruned gets a
+        // brand-new Aircraft object (getOrCreate) but requestIdentity/
+        // requestRoute silently no-op forever, since this icao is still
+        // marked "already requested" — registration/operator/route never
+        // get populated again for the rest of the process's uptime.
+        this.identityRequested.delete(icao);
+        this.routeRequestedFor.delete(icao);
       }
     }
   }

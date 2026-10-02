@@ -43,9 +43,15 @@ type AdsbdbAircraftResponse = {
     | string;
 };
 
-async function fetchFromAdsbdb(icao: string): Promise<AircraftIdentity> {
+// `definitive` distinguishes a genuine "adsbdb has no record for this
+// ICAO" (404, or a parseable-but-empty response) — worth caching for the
+// full TTL — from a transient failure (offline/timeout/rate-limited/bad
+// JSON), which must NOT be cached long-term: caching that would freeze a
+// resolvable aircraft as permanently "desconocido" for the whole TTL just
+// because one request hit a network blip.
+async function fetchFromAdsbdb(icao: string): Promise<{ identity: AircraftIdentity; definitive: boolean }> {
   const now = Date.now();
-  if (now < backoffUntil) return UNRESOLVED;
+  if (now < backoffUntil) return { identity: UNRESOLVED, definitive: false };
   const gap = now - lastRequestAt;
   if (gap < MIN_REQUEST_INTERVAL_MS) {
     await new Promise((r) => setTimeout(r, MIN_REQUEST_INTERVAL_MS - gap));
@@ -56,26 +62,29 @@ async function fetchFromAdsbdb(icao: string): Promise<AircraftIdentity> {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
-    if (res.status === 404) return UNRESOLVED;
+    if (res.status === 404) return { identity: UNRESOLVED, definitive: true };
     if (!res.ok) {
       backoffUntil = Date.now() + 10_000;
-      return UNRESOLVED;
+      return { identity: UNRESOLVED, definitive: false };
     }
     const body = (await res.json()) as AdsbdbAircraftResponse;
-    if (typeof body.response === "string") return UNRESOLVED;
+    if (typeof body.response === "string") return { identity: UNRESOLVED, definitive: true };
     const { aircraft } = body.response;
     return {
-      registration: aircraft.registration?.trim() || null,
-      manufacturer: aircraft.manufacturer?.trim() || null,
-      model: aircraft.type?.trim() || null,
-      operator: aircraft.registered_owner?.trim() || null,
-      resolved: true,
+      identity: {
+        registration: aircraft.registration?.trim() || null,
+        manufacturer: aircraft.manufacturer?.trim() || null,
+        model: aircraft.type?.trim() || null,
+        operator: aircraft.registered_owner?.trim() || null,
+        resolved: true,
+      },
+      definitive: true,
     };
   } catch {
     // offline / timeout / bad JSON — back off briefly, stay silent. Never
     // invent identity fields: caller gets UNRESOLVED, not a guess.
     backoffUntil = Date.now() + 10_000;
-    return UNRESOLVED;
+    return { identity: UNRESOLVED, definitive: false };
   }
 }
 
@@ -99,13 +108,15 @@ export async function resolveAircraftIdentity(icao: string): Promise<AircraftIde
   const existing = inflight.get(key);
   if (existing) return existing;
   const job = (async () => {
-    const identity = await fetchFromAdsbdb(key);
-    cacheAircraftLookup(key, {
-      registration: identity.registration,
-      manufacturer: identity.manufacturer,
-      model: identity.model,
-      operator: identity.operator,
-    });
+    const { identity, definitive } = await fetchFromAdsbdb(key);
+    if (definitive) {
+      cacheAircraftLookup(key, {
+        registration: identity.registration,
+        manufacturer: identity.manufacturer,
+        model: identity.model,
+        operator: identity.operator,
+      });
+    }
     return identity;
   })().finally(() => inflight.delete(key));
   inflight.set(key, job);

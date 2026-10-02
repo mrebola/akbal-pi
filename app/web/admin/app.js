@@ -557,6 +557,11 @@ function activateTab(tabName) {
   if (tabName === "settings") void refreshSettings();
   if (tabName === "music") startMusicUI();
   else stopMusicPolling();
+  // LIVE/DEMO (the contextual toolbar's only control on this page) is
+  // about WiFi Radar/Wifi Audit's data source — meaningless on Jukebox, a
+  // plain audio player with nothing "demo" about it. Hide the whole
+  // toolbar row only there; every other tab keeps it.
+  document.getElementById("page-toolbar")?.classList.toggle("hidden", tabName === "music");
 }
 
 for (const btn of document.querySelectorAll(".tab-btn")) {
@@ -1226,7 +1231,10 @@ if (cfgNav) {
     }
     if (key === "wifi") void refreshWifi();
     else if (key === "audio") void loadAudioOutputs();
-    else if (key === "ia") void loadIaModels();
+    else if (key === "ia") {
+      void loadIaModels();
+      void loadIaModelList();
+    }
     else if (key === "almacenamiento") {
       void loadSettingsUsbVolumes();
       ensureSettingsFileManager();
@@ -1283,6 +1291,195 @@ iaModelSelect?.addEventListener("change", async () => {
     addMessage("system", `Error cambiando el modelo: ${err.message}`);
   }
 });
+
+// ---- IA: modelos instalados (borrar) + instalar uno nuevo ----
+// Ollama no tiene una API pública de "catálogo" para buscar modelos — el
+// usuario escribe el tag tal como lo usaría `ollama pull <tag>`; los chips
+// son solo atajos a tags conocidos y chicos. El tamaño real de descarga no
+// se sabe hasta que Ollama lo reporta en el stream de progreso, así que la
+// advertencia de tamaño ANTES de instalar se basa en el conteo de
+// parámetros que casi todos los tags de Ollama llevan en el nombre
+// ("3b", "7b", "1.5b"...), no en bytes reales.
+const iaTr = (key, fallback, vars) => (window.AkbalI18n ? window.AkbalI18n.t(key, vars) : null) || fallback;
+
+function parseModelSizeB(tag) {
+  const m = /(\d+(?:\.\d+)?)\s*b\b/i.exec(tag || "");
+  return m ? parseFloat(m[1]) : null;
+}
+
+function checkModelSizeWarning(tag) {
+  const box = document.getElementById("ia-install-warning");
+  if (!box) return;
+  const b = parseModelSizeB(tag);
+  if (b == null || b <= 8) {
+    box.classList.add("hidden");
+    box.textContent = "";
+    return;
+  }
+  box.classList.remove("hidden");
+  box.textContent = iaTr(
+    "settings.ia.warn_too_big",
+    "{b}B es más grande de lo recomendado para esta Pi — lo ideal es 3B–4B, hasta 8B funciona pero más lento. Puede tardar mucho, ocupar mucha RAM/disco, o no entrar en memoria.",
+    { b },
+  );
+}
+
+async function loadIaModelList() {
+  const list = document.getElementById("ia-model-list");
+  const diskFree = document.getElementById("ia-disk-free");
+  if (!list) return;
+  try {
+    const [modelsRes, statusRes] = await Promise.all([fetch("/api/models"), fetch("/api/status")]);
+    const models = await modelsRes.json();
+    const status = await statusRes.json();
+    if (diskFree && status.system?.disk) {
+      const free = status.system.disk.totalBytes - status.system.disk.usedBytes;
+      diskFree.textContent = iaTr("settings.ia.disk_free", "{free} libres", { free: formatBytes(free) });
+    }
+    if (!Array.isArray(models) || models.length === 0) {
+      list.innerHTML = `<li class="cfg-empty">${escapeHtml(iaTr("settings.ia.none_installed", "No hay modelos instalados."))}</li>`;
+      return;
+    }
+    list.innerHTML = models
+      .map((m) => {
+        const isActive = m.name === status.model;
+        return `<li data-tag="${escapeHtml(m.name)}">
+          <div class="cfg-item-left">
+            <span class="cfg-item-name mono">${escapeHtml(m.name)}${isActive ? ` · <span class="cfg-badge ok">${escapeHtml(iaTr("settings.ia.active_badge", "activo"))}</span>` : ""}</span>
+            <span class="cfg-item-meta">${formatBytes(m.size)}</span>
+          </div>
+          <div class="cfg-item-actions">
+            <button type="button" class="cfg-btn ia-delete-btn" data-tag="${escapeHtml(m.name)}" ${isActive ? "disabled" : ""} title="${isActive ? escapeHtml(iaTr("settings.ia.cant_delete_active", "Cambiá de modelo antes de borrar este")) : ""}">${escapeHtml(iaTr("settings.ia.delete_btn", "Borrar"))}</button>
+          </div>
+        </li>`;
+      })
+      .join("");
+  } catch {
+    list.innerHTML = `<li class="cfg-empty">${escapeHtml(iaTr("settings.ia.load_failed", "No se pudo cargar la lista."))}</li>`;
+  }
+}
+
+document.getElementById("ia-model-list")?.addEventListener("click", async (ev) => {
+  const btn = ev.target.closest(".ia-delete-btn");
+  if (!btn || btn.disabled) return;
+  const tag = btn.dataset.tag;
+  if (!window.confirm(iaTr("settings.ia.confirm_delete", "¿Borrar el modelo {tag}? Esto libera espacio en disco pero hay que volver a descargarlo si se necesita después.", { tag }))) return;
+  btn.disabled = true;
+  try {
+    const res = await fetch("/api/models/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tag }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      toast(data.error || iaTr("settings.ia.delete_failed", "No se pudo borrar el modelo"), "error");
+      btn.disabled = false;
+      return;
+    }
+    toast(iaTr("settings.ia.deleted", "Modelo {tag} borrado", { tag }), "success");
+    void loadIaModelList();
+  } catch {
+    toast(iaTr("settings.ia.delete_failed", "No se pudo borrar el modelo"), "error");
+    btn.disabled = false;
+  }
+});
+
+const iaInstallTagInput = document.getElementById("ia-install-tag");
+iaInstallTagInput?.addEventListener("input", () => checkModelSizeWarning(iaInstallTagInput.value));
+
+document.getElementById("ia-suggested-models")?.addEventListener("click", (ev) => {
+  const chip = ev.target.closest(".cfg-chip");
+  if (!chip) return;
+  for (const c of document.querySelectorAll("#ia-suggested-models .cfg-chip")) c.classList.toggle("active", c === chip);
+  if (iaInstallTagInput) {
+    iaInstallTagInput.value = chip.dataset.tag;
+    checkModelSizeWarning(chip.dataset.tag);
+  }
+});
+
+let iaPullPollTimer = null;
+
+function renderPullProgress(state) {
+  const box = document.getElementById("ia-pull-progress");
+  const installBtn = document.getElementById("ia-install-btn");
+  if (!box) return;
+  if (!state) {
+    box.classList.add("hidden");
+    if (installBtn) installBtn.disabled = false;
+    return;
+  }
+  box.classList.remove("hidden");
+  if (installBtn) installBtn.disabled = !state.done;
+  document.getElementById("ia-pull-tag").textContent = state.tag;
+  const pct = state.total > 0 ? Math.min(100, (state.completed / state.total) * 100) : 0;
+  document.getElementById("ia-pull-bar").style.width = `${pct.toFixed(1)}%`;
+  document.getElementById("ia-pull-pct").textContent = state.total > 0 ? `${pct.toFixed(0)}% · ${formatBytes(state.completed)} / ${formatBytes(state.total)}` : "";
+  const statusEl = document.getElementById("ia-pull-status");
+  const cancelBtn = document.getElementById("ia-pull-cancel");
+  const clearBtn = document.getElementById("ia-pull-clear");
+  if (state.error) {
+    statusEl.textContent = state.error === "cancelado" ? iaTr("settings.ia.pull_cancelled", "Cancelado") : iaTr("settings.ia.pull_error", "Error: {err}", { err: state.error });
+    cancelBtn.classList.add("hidden");
+    clearBtn.classList.remove("hidden");
+  } else if (state.done) {
+    statusEl.textContent = iaTr("settings.ia.pull_done", "✓ {tag} instalado", { tag: state.tag });
+    cancelBtn.classList.add("hidden");
+    clearBtn.classList.remove("hidden");
+    void loadIaModelList();
+    void loadIaModels();
+  } else {
+    statusEl.textContent = state.status;
+    cancelBtn.classList.remove("hidden");
+    clearBtn.classList.add("hidden");
+  }
+}
+
+async function pollPullStatus() {
+  try {
+    const res = await fetch("/api/models/pull/status");
+    const data = await res.json();
+    renderPullProgress(data.state);
+    if (!data.state || data.state.done) {
+      if (iaPullPollTimer) {
+        clearInterval(iaPullPollTimer);
+        iaPullPollTimer = null;
+      }
+    }
+  } catch { /* non-fatal */ }
+}
+
+document.getElementById("ia-install-btn")?.addEventListener("click", async () => {
+  const tag = (iaInstallTagInput?.value || "").trim();
+  if (!tag) return;
+  const res = await fetch("/api/models/pull/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tag }),
+  });
+  const data = await res.json();
+  if (!data.ok) {
+    toast(data.error || iaTr("settings.ia.pull_start_failed", "No se pudo iniciar la instalación"), "error");
+    return;
+  }
+  void pollPullStatus();
+  if (!iaPullPollTimer) iaPullPollTimer = setInterval(pollPullStatus, 1500);
+});
+
+document.getElementById("ia-pull-cancel")?.addEventListener("click", async () => {
+  await fetch("/api/models/pull/cancel", { method: "POST" });
+  void pollPullStatus();
+});
+
+document.getElementById("ia-pull-clear")?.addEventListener("click", async () => {
+  await fetch("/api/models/pull/clear", { method: "POST" });
+  renderPullProgress(null);
+});
+
+// Pick up an in-flight pull after a page reload (same idea as Crack
+// Station's dict-crack recovery) and refresh the installed list whenever
+// the IA sub-tab opens.
+void pollPullStatus();
 
 // ---- Respaldo (config en la microSD, nunca en el repo) ----
 const backupCreateBtn = document.getElementById("backup-create-btn");
@@ -1443,6 +1640,7 @@ async function refreshSettings() {
     loadSettingsUsbVolumes(),
     loadAudioOutputs(),
     loadIaModels(),
+    loadIaModelList(),
     loadBackups(),
     loadAp(),
   ]);
@@ -2372,9 +2570,24 @@ async function wdLoadSessions() {
     if (!list) return;
     const sessions = data.sessions || [];
     wdSessionsCache = sessions;
+    // wdOpenSessionFiles() parents #wd-session-files INSIDE this list (right
+    // after the clicked row, so it reads as "inline under that session") —
+    // but it's polled every 4s (wdStartSessionsTimer) and the rebuilds below
+    // (list.innerHTML = ...) used to silently destroy it whenever it was
+    // open, which looked like "the panel closes itself and won't reopen"
+    // (the node was gone from the document, not just hidden). Detach it
+    // first; re-attach after rebuilding if that same session row still
+    // exists (same two synchronous DOM ops, no repaint happens in between —
+    // no visible flicker).
+    const filesBlock = document.getElementById("wd-session-files");
+    const reopenId = filesBlock && filesBlock.parentElement === list && !filesBlock.classList.contains("hidden")
+      ? wdOpenSessionId
+      : null;
+    if (filesBlock && filesBlock.parentElement === list) document.body.appendChild(filesBlock);
     if (sessions.length === 0) {
       list.innerHTML = '<div class="muted">Sin sesiones aún. Cada auditoría con handshake crea una carpeta con fecha.</div>';
       wdSessionsDeleteAllBtn.classList.add("hidden");
+      filesBlock?.classList.add("hidden");
       return;
     }
     list.innerHTML = sessions
@@ -2409,6 +2622,16 @@ async function wdLoadSessions() {
       })
       .join("");
     wdSessionsDeleteAllBtn.classList.toggle("hidden", sessions.length === 0);
+    if (reopenId && filesBlock) {
+      const row = list.querySelector(`.wd-session-row[data-id="${CSS.escape(reopenId)}"]`);
+      if (row) {
+        list.insertBefore(filesBlock, row.nextSibling);
+      } else {
+        // That session is gone now (deleted elsewhere) — nothing to reopen it under.
+        filesBlock.classList.add("hidden");
+        wdOpenSessionId = null;
+      }
+    }
   } catch { /* non-fatal */ }
 }
 
@@ -2500,6 +2723,13 @@ async function wdOpenSessionFiles(id, clickedRow = null) {
   const filesTitle = document.getElementById("wd-session-files-title");
   const filesBody = document.getElementById("wd-session-files-body");
   if (!filesBlock || !filesTitle || !filesBody) return;
+  // Clicking the SAME session's "Ver archivos" again closes it (toggle) —
+  // wdOpenSessionId used to be tracked but never actually read anywhere.
+  if (wdOpenSessionId === id && !filesBlock.classList.contains("hidden")) {
+    filesBlock.classList.add("hidden");
+    wdOpenSessionId = null;
+    return;
+  }
   try {
     const res = await fetch(`/api/wardrive/files?path=${encodeURIComponent(id)}`);
     if (!res.ok) return;
@@ -2520,8 +2750,14 @@ async function wdOpenSessionFiles(id, clickedRow = null) {
       .join("");
     // Place the files block right under the clicked session row (not pinned
     // to the bottom of the list) and collapse the previously opened one.
+    // Always re-resolve the row AFTER the await instead of trusting
+    // clickedRow: wdLoadSessions() polls every 4s and rebuilds
+    // #wd-sessions-list's innerHTML, which can detach clickedRow while this
+    // fetch is in flight — insertBefore on a detached node is a silent
+    // no-op, which read as "switching to a different session's 'Ver
+    // archivos' does nothing, and the previously open one stays stuck".
     const list = document.getElementById("wd-sessions-list");
-    const row = clickedRow || document.querySelector(`.wd-session-row[data-id="${id}"]`);
+    const row = list?.querySelector(`.wd-session-row[data-id="${CSS.escape(id)}"]`) || clickedRow;
     if (list && row && row.parentElement === list) {
       list.insertBefore(filesBlock, row.nextSibling);
     }
@@ -2572,6 +2808,12 @@ document.getElementById("wd-sessions-list")?.addEventListener("click", async (ev
   const delBtn = ev.target.closest(".wd-session-del");
   const eyeBtn = ev.target.closest(".wd-session-eye");
   const hsBtn = ev.target.closest(".wd-session-hs");
+  const filesCloseBtn = ev.target.closest("#wd-session-files-close");
+  if (filesCloseBtn) {
+    document.getElementById("wd-session-files")?.classList.add("hidden");
+    wdOpenSessionId = null;
+    return;
+  }
   if (openBtn) {
     await wdOpenSessionFiles(openBtn.dataset.id, openBtn.closest(".wd-session-row"));
     return;

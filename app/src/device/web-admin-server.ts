@@ -36,6 +36,11 @@ import {
   ollamaEndpoint,
   switchModel,
   unloadModel,
+  startPullModel,
+  getPullState,
+  cancelPull,
+  clearPullState,
+  deleteOllamaModel,
 } from "../cloud-api/local/ollama-llm";
 import { isAgentMode, setDeviceMode } from "../config/device-mode";
 import {
@@ -837,6 +842,47 @@ export class WebAdminServer {
         ctx.status = 500;
         ctx.body = { ok: false, error: err?.message || String(err) };
       }
+    });
+
+    // Install a new model (Settings > IA). One pull at a time, polled via
+    // GET .../status — same shape as Crack Station's dict-crack status.
+    router.post("/api/models/pull/start", async (ctx) => {
+      const tag = (ctx.request.body as any)?.tag;
+      if (!tag || typeof tag !== "string") {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "tag requerido" };
+        return;
+      }
+      ctx.body = startPullModel(tag.trim());
+    });
+
+    router.get("/api/models/pull/status", (ctx) => {
+      ctx.body = { state: getPullState() };
+    });
+
+    router.post("/api/models/pull/cancel", (ctx) => {
+      cancelPull();
+      ctx.body = { ok: true };
+    });
+
+    router.post("/api/models/pull/clear", (ctx) => {
+      clearPullState();
+      ctx.body = { ok: true };
+    });
+
+    router.post("/api/models/delete", async (ctx) => {
+      const tag = (ctx.request.body as any)?.tag;
+      if (!tag || typeof tag !== "string") {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "tag requerido" };
+        return;
+      }
+      if (tag === getCurrentModel()) {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "No se puede borrar el modelo seleccionado — cambiá a otro primero" };
+        return;
+      }
+      ctx.body = await deleteOllamaModel(tag);
     });
 
     // Streams Ollama's own NDJSON chat response straight through — the

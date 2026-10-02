@@ -125,14 +125,16 @@
         <div class="wd-banner-text">
           <div class="wd-banner-title"><span data-i18n="wifiaudit.banner_title">MODO WIFI AUDIT</span> <span id="wd-iface" class="wd-iface"></span></div>
           <div id="wd-banner-status" class="wd-banner-status">—</div>
+          <div id="wd-dongle-msg" class="wd-dongle-msg"></div>
+        </div>
+        <div class="wd-banner-controls">
           <label class="wd-dongle" title="Adaptador USB a usar — se sugiere el más compatible con modo monitor. Solo cambiable fuera de modo Wifi Audit.">
             <span class="k">Dongle</span>
             <select id="wd-dongle-select"><option value="">auto</option></select>
           </label>
-          <div id="wd-dongle-msg" class="wd-dongle-msg"></div>
+          <button id="wd-exit-btn" class="secondary hidden" data-i18n="wifiaudit.exit_btn">Salir</button>
+          <button id="wd-enter-btn" class="hidden" data-i18n="wifiaudit.enter_btn">Entrar</button>
         </div>
-        <button id="wd-exit-btn" class="secondary hidden" data-i18n="wifiaudit.exit_btn">Salir</button>
-        <button id="wd-enter-btn" class="hidden" data-i18n="wifiaudit.enter_btn">Entrar</button>
       </div>
 
       <div id="wd-error" class="error"></div>
@@ -222,7 +224,10 @@
             <div class="muted">—</div>
           </div>
           <div id="wd-session-files" class="wd-sessions-files hidden">
-            <div class="wd-session-title" id="wd-session-files-title" style="font-size:12px; margin-top:10px;"></div>
+            <div class="wd-session-title" style="font-size:12px; margin-top:10px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+              <span id="wd-session-files-title"></span>
+              <button type="button" id="wd-session-files-close" class="secondary" style="font-size:11px; padding:3px 10px;" data-i18n="crackstation.files_close">Cerrar</button>
+            </div>
             <!-- Mismo wrapper de scroll horizontal que la tabla principal
                  (wd-list-wrap más arriba) — antes no lo tenía, y en 320px
                  con nombres de archivo largos el contenido (incluidas las
@@ -555,6 +560,51 @@
             </label>
             <div class="cfg-actions">
               <button type="button" id="unload-model-btn" class="cfg-btn" title="Liberar el modelo de la memoria de la Pi" data-i18n="settings.ia.unload_btn" data-i18n-title="settings.ia.unload_title">Descargar de memoria</button>
+            </div>
+          </div>
+
+          <!-- Modelos instalados: tamaño + borrar. El modelo activo (arriba)
+               no se puede borrar sin cambiar antes — el backend lo rechaza,
+               ver /api/models/delete. -->
+          <div class="cfg-card">
+            <div class="cfg-card-head">
+              <span class="cfg-card-title" data-i18n="settings.ia.installed_title">Modelos instalados</span>
+              <span id="ia-disk-free" class="cfg-meta"></span>
+            </div>
+            <ul id="ia-model-list" class="cfg-list"></ul>
+          </div>
+
+          <!-- Instalar modelo nuevo: ideal 3-4B, se advierte (no bloquea)
+               arriba de 8B — ver parseModelSizeB()/checkModelSizeWarning()
+               en app.js. El tamaño real de descarga no se conoce hasta que
+               Ollama lo reporta (ver progreso abajo), así que esta tarjeta
+               sólo advierte por CONTEO DE PARÁMETROS (el "3b"/"7b" del tag). -->
+          <div class="cfg-card">
+            <div class="cfg-card-head"><span class="cfg-card-title" data-i18n="settings.ia.install_title">Instalar modelo nuevo</span></div>
+            <p class="cfg-hint" data-i18n="settings.ia.install_hint">Ideal: 3B–4B de parámetros. Hasta 8B funciona pero más lento — arriba de eso no se recomienda en esta Pi.</p>
+            <div class="cfg-chip-row" id="ia-suggested-models">
+              <button type="button" class="cfg-chip" data-tag="llama3.2:3b">llama3.2:3b</button>
+              <button type="button" class="cfg-chip" data-tag="llama3.2:1b">llama3.2:1b</button>
+              <button type="button" class="cfg-chip" data-tag="gemma2:2b">gemma2:2b</button>
+              <button type="button" class="cfg-chip" data-tag="qwen2.5:3b">qwen2.5:3b</button>
+              <button type="button" class="cfg-chip" data-tag="phi3.5:3.8b">phi3.5:3.8b</button>
+            </div>
+            <label class="cfg-field">
+              <span class="cfg-key" data-i18n="settings.ia.install_tag_label">Nombre del modelo (tag de Ollama)</span>
+              <input type="text" id="ia-install-tag" autocomplete="off" placeholder="ej. llama3.2:3b" />
+            </label>
+            <div id="ia-install-warning" class="cfg-warning hidden"></div>
+            <div class="cfg-actions">
+              <button type="button" id="ia-install-btn" class="cfg-btn cfg-btn-accent" data-i18n="settings.ia.install_btn">Instalar</button>
+            </div>
+            <div id="ia-pull-progress" class="cfg-pull-progress hidden">
+              <div class="cfg-row"><span id="ia-pull-tag" class="cfg-key mono"></span><span id="ia-pull-pct" class="cfg-val"></span></div>
+              <div class="cfg-progress"><div id="ia-pull-bar" class="cfg-progress-fill"></div></div>
+              <div id="ia-pull-status" class="cfg-meta"></div>
+              <div class="cfg-actions">
+                <button type="button" id="ia-pull-cancel" class="cfg-btn" data-i18n="settings.ia.pull_cancel">Cancelar</button>
+                <button type="button" id="ia-pull-clear" class="cfg-btn hidden" data-i18n="settings.ia.pull_clear">Cerrar</button>
+              </div>
             </div>
           </div>
         </div>

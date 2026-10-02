@@ -21,6 +21,7 @@ export const ROUTE_UNKNOWN: RouteInfo = {
   destination: null,
   originName: null,
   destinationName: null,
+  airlineName: null,
 };
 
 function onlineLookupEnabled(): boolean {
@@ -33,6 +34,7 @@ type AdsbdbCallsignResponse = {
         flightroute: {
           callsign_iata?: string;
           callsign_icao?: string;
+          airline?: { name?: string };
           origin?: { icao_code?: string; iata_code?: string; name?: string };
           destination?: { icao_code?: string; iata_code?: string; name?: string };
         };
@@ -74,6 +76,7 @@ async function fetchFromAdsbdb(callsign: string): Promise<{ route: RouteInfo; de
         destination: flightroute.destination.iata_code?.trim() || flightroute.destination.icao_code?.trim() || null,
         originName: flightroute.origin.name?.trim() || null,
         destinationName: flightroute.destination.name?.trim() || null,
+        airlineName: flightroute.airline?.name?.trim() || null,
       },
       definitive: true,
     };
@@ -95,6 +98,7 @@ export async function resolveRoute(callsign: string): Promise<RouteInfo> {
       destination: cached.destination,
       originName: cached.origin_name,
       destinationName: cached.destination_name,
+      airlineName: cached.airline_name,
     };
   }
   if (!onlineLookupEnabled()) return ROUTE_UNKNOWN;

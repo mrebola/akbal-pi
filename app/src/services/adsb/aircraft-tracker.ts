@@ -56,6 +56,7 @@ export class AircraftTracker {
       aircraft.flightNumber = route.flightNumber;
       aircraft.origin = route.origin;
       aircraft.destination = route.destination;
+      aircraft.airline = route.airlineName;
     });
   }
 
@@ -69,6 +70,7 @@ export class AircraftTracker {
         manufacturer: null,
         model: null,
         operator: null,
+        airline: null,
         flightNumber: null,
         origin: null,
         destination: null,

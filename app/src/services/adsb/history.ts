@@ -47,6 +47,18 @@ db.exec(`
   );
 `);
 
+// Schema evolution: operating airline name, from the same adsbdb.com
+// callsign response route_lookup_cache already stores — additive-only
+// (same pattern as wardrive/drive-db.ts), safe on a device with an existing
+// cache from before this field existed.
+{
+  const cols = db.prepare(`PRAGMA table_info(route_lookup_cache)`).all() as { name: string }[];
+  if (cols.length > 0 && !cols.some((c) => c.name === "airline_name")) {
+    db.exec(`ALTER TABLE route_lookup_cache ADD COLUMN airline_name TEXT`);
+    console.log("[aircraft-radar] history migrated: route_lookup_cache.airline_name");
+  }
+}
+
 const insertSeenStmt = db.prepare(`
   INSERT INTO aircraft_seen (timestamp, icao, callsign, registration, lat, lon, altitude, speed, heading)
   VALUES (@timestamp, @icao, @callsign, @registration, @lat, @lon, @altitude, @speed, @heading)
@@ -136,19 +148,21 @@ export type RouteLookupCacheRow = {
   destination: string | null;
   origin_name: string | null;
   destination_name: string | null;
+  airline_name: string | null;
   resolved_at: number;
 };
 
 const getRouteStmt = db.prepare(`SELECT * FROM route_lookup_cache WHERE callsign = ?`);
 const upsertRouteStmt = db.prepare(`
-  INSERT INTO route_lookup_cache (callsign, flight_number, origin, destination, origin_name, destination_name, resolved_at)
-  VALUES (@callsign, @flightNumber, @origin, @destination, @originName, @destinationName, @resolvedAt)
+  INSERT INTO route_lookup_cache (callsign, flight_number, origin, destination, origin_name, destination_name, airline_name, resolved_at)
+  VALUES (@callsign, @flightNumber, @origin, @destination, @originName, @destinationName, @airlineName, @resolvedAt)
   ON CONFLICT(callsign) DO UPDATE SET
     flight_number = excluded.flight_number,
     origin = excluded.origin,
     destination = excluded.destination,
     origin_name = excluded.origin_name,
     destination_name = excluded.destination_name,
+    airline_name = excluded.airline_name,
     resolved_at = excluded.resolved_at
 `);
 
@@ -164,6 +178,7 @@ export function cacheRoute(
     destination: string | null;
     originName: string | null;
     destinationName: string | null;
+    airlineName: string | null;
   },
 ): void {
   upsertRouteStmt.run({ callsign: callsign.trim().toUpperCase(), resolvedAt: Date.now(), ...data });

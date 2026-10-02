@@ -321,7 +321,11 @@ function openDetail(aircraft) {
     <div class="apm-grid">
       <div class="apm-row"><span>${tr("aircraft.detail_registration", "Matrícula")}</span><span>${aircraft.registration || "—"}</span></div>
       <div class="apm-row"><span>${tr("aircraft.detail_callsign", "Indicativo")}</span><span>${aircraft.callsign || "—"}</span></div>
-      <div class="apm-row"><span>${tr("aircraft.detail_airline", "Aerolínea")}</span><span>${aircraft.operator || "—"}</span></div>
+      <!-- aircraft.airline: operating airline for THIS flight, from the
+           callsign (adsbdb.com's route lookup) — prefer it over
+           aircraft.operator (registered owner of the airframe, which can
+           differ on a leased/chartered aircraft) when both are known. -->
+      <div class="apm-row"><span>${tr("aircraft.detail_airline", "Aerolínea")}</span><span>${aircraft.airline || aircraft.operator || "—"}</span></div>
       <div class="apm-row"><span>${tr("aircraft.detail_aircraft", "Aeronave")}</span><span>${aircraft.manufacturer ? `${aircraft.manufacturer} ${aircraft.model || ""}`.trim() : (aircraft.model || "—")}</span></div>
       <div class="apm-row"><span>${tr("aircraft.detail_from", "Origen")}</span><span>${aircraft.origin || "—"}</span></div>
       <div class="apm-row"><span>${tr("aircraft.detail_to", "Destino")}</span><span>${aircraft.destination || "—"}</span></div>

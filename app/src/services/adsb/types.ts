@@ -30,6 +30,11 @@ export type RouteInfo = {
   destination: string | null;
   originName: string | null;
   destinationName: string | null;
+  // Operating airline for THIS flight, derived from the callsign (adsbdb's
+  // airline codes table) — not to be confused with Aircraft.operator
+  // (aircraft-database.ts's registered_owner), which is who owns the
+  // airframe and can differ from who's flying it today (lease, charter).
+  airlineName: string | null;
 };
 
 export type AircraftIdentity = {
@@ -49,6 +54,7 @@ export type Aircraft = {
   manufacturer: string | null;
   model: string | null;
   operator: string | null;
+  airline: string | null; // operating airline for the current flight — see RouteInfo.airlineName
   flightNumber: string | null;
   origin: string | null;
   destination: string | null;

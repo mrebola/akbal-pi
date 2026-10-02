@@ -21,7 +21,12 @@ function describe(aircraft: Aircraft): string {
   const identity = [aircraft.registration, aircraft.manufacturer, aircraft.model]
     .filter(Boolean)
     .join(" ");
-  const operator = aircraft.operator ? ` de ${aircraft.operator}` : "";
+  // Prefer the operating airline (from the callsign route lookup) over the
+  // airframe's registered owner — they can differ on a leased/chartered
+  // aircraft, and the airline is what a spoken answer actually means by
+  // "¿de qué aerolínea es?".
+  const operatorName = aircraft.airline || aircraft.operator;
+  const operator = operatorName ? ` de ${operatorName}` : "";
   const route =
     aircraft.origin && aircraft.destination ? `${aircraft.origin} → ${aircraft.destination}` : "ruta desconocida";
   const distance =
@@ -36,7 +41,7 @@ function describe(aircraft: Aircraft): string {
 function matchesQuery(aircraft: Aircraft, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return false;
-  return [aircraft.icao, aircraft.callsign, aircraft.registration, aircraft.operator, aircraft.model]
+  return [aircraft.icao, aircraft.callsign, aircraft.registration, aircraft.airline, aircraft.operator, aircraft.model]
     .filter((v): v is string => Boolean(v))
     .some((v) => v.toLowerCase().includes(q));
 }

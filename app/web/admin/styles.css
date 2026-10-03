@@ -3227,6 +3227,30 @@ a.wd-bell-item-link:hover .wd-bell-item-ssid { color: var(--accent); }
 /* ---- Chat: chip de modelo + empty state ---- */
 .chat-model-chip { display: inline-flex; align-items: center; gap: 6px; }
 .chat-model-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 6px rgba(80,255,120,0.5); }
+.chat-layout { display: flex; gap: 12px; flex: 1; min-height: 0; }
+.chat-main { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.chat-sidebar { width: 220px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+.chat-new-btn { width: 100%; }
+.chat-section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); margin: 8px 0 4px; }
+.chat-row { position: relative; display: flex; align-items: center; border-radius: 6px; }
+.chat-row.active { background: rgba(80,255,120,0.08); }
+.chat-row-main { flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: 6px; color: inherit; cursor: pointer; }
+.chat-row-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-row-sub { display: block; font-size: 11px; color: var(--text-secondary); }
+.chat-row-model { font-family: monospace; }
+.chat-row-menu { background: none; border: 0; color: var(--text-secondary); cursor: pointer; padding: 4px 6px; }
+.chat-menu { position: absolute; right: 0; top: 100%; z-index: 20; display: flex; flex-direction: column; min-width: 140px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 6px; }
+.chat-menu button { background: none; border: 0; text-align: left; padding: 8px 10px; color: inherit; cursor: pointer; }
+.chat-menu button.danger { color: var(--danger); }
+.chat-list-empty { font-size: 12px; color: var(--text-secondary); }
+.chat-confirm { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.chat-confirm[hidden] { display: none; }
+.chat-confirm-box { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 8px; padding: 16px; max-width: 360px; }
+.chat-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+@media (max-width: 720px) {
+  .chat-layout { flex-direction: column; }
+  .chat-sidebar { width: 100%; max-height: 40vh; }
+}
 #tab-chat .chat-toolbar { justify-content: flex-start; }
 #tab-chat select { max-width: 260px; }
 .chat-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; flex: 1; gap: 6px; color: var(--text-secondary); }

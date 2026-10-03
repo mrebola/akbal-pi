@@ -28,19 +28,27 @@
 
   <main>
     <section id="tab-chat" class="tab-panel active">
-      <div class="chat-toolbar">
-        <span class="chat-model-chip"><span class="chat-model-dot"></span><label for="model-select" data-i18n="chat.model_label">Modelo</label></span>
-        <select id="model-select"></select>
+      <div class="chat-layout">
+        <aside class="chat-sidebar" aria-label="Chats">
+          <button type="button" id="chat-new" class="chat-new-btn">+ Nuevo chat</button>
+          <div id="chat-list" class="chat-list"></div>
+        </aside>
+        <div class="chat-main">
+        <div class="chat-toolbar">
+          <span class="chat-model-chip"><span class="chat-model-dot"></span><label for="model-select" data-i18n="chat.model_label">Modelo</label></span>
+          <select id="model-select"></select>
+        </div>
+        <div id="chat-empty" class="chat-empty">
+          <div class="chat-empty-title" data-i18n="chat.greeting">Hola amo, ¿en qué te puedo ayudar hoy?</div>
+        </div>
+        <div id="chat-log" class="chat-log"></div>
+        <form id="chat-form" class="chat-form">
+          <textarea id="chat-input" placeholder="Escribí un mensaje..." data-i18n-placeholder="chat.placeholder" rows="1"></textarea>
+          <button type="submit" id="chat-send" data-i18n="chat.send">Enviar</button>
+          <button type="button" id="chat-cancel" class="secondary hidden" data-i18n="chat.cancel">Cancelar</button>
+        </form>
+        </div>
       </div>
-      <div id="chat-empty" class="chat-empty">
-        <div class="chat-empty-title" data-i18n="chat.greeting">Hola amo, ¿en qué te puedo ayudar hoy?</div>
-      </div>
-      <div id="chat-log" class="chat-log"></div>
-      <form id="chat-form" class="chat-form">
-        <textarea id="chat-input" placeholder="Escribí un mensaje..." data-i18n-placeholder="chat.placeholder" rows="1"></textarea>
-        <button type="submit" id="chat-send" data-i18n="chat.send">Enviar</button>
-        <button type="button" id="chat-cancel" class="secondary hidden" data-i18n="chat.cancel">Cancelar</button>
-      </form>
     </section>
 
     <section id="tab-music" class="tab-panel">
@@ -765,9 +773,20 @@
     </div>
   </div>
 
+  <div id="chat-confirm-dialog" class="chat-confirm" hidden role="dialog" aria-modal="true">
+    <div class="chat-confirm-box">
+      <p class="chat-confirm-title"></p>
+      <p class="cfg-hint chat-confirm-body"></p>
+      <div class="chat-confirm-actions">
+        <button type="button" class="secondary" id="chat-confirm-cancel">Cancelar</button>
+        <button type="button" class="danger" id="chat-confirm-ok">Continuar</button>
+      </div>
+    </div>
+  </div>
   <script src="i18n.js"></script>
   <script src="topbar.js"></script>
   <script src="wd-notify.js"></script>
+  <script src="chat-history.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

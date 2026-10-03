@@ -849,12 +849,46 @@ chatCancel.addEventListener("click", () => {
 
 chatForm.addEventListener("submit", (e) => {
   e.preventDefault();
-  const text = chatInput.value.trim();
+  let text = chatInput.value.trim();
   if (!text || sending) return;
   chatInput.value = "";
   chatInput.style.height = "auto";
+  // Chat commands are answered by the server directly, never by the LLM.
+  // "/ask" is the one prefix that still goes to the LLM, without the prefix.
+  if (/^\/ask(\s|$)/i.test(text)) {
+    text = text.replace(/^\/ask\s*/i, "");
+    if (!text) return;
+    void sendMessage(text);
+    return;
+  }
+  if (text.startsWith("/")) {
+    void runCommand(text);
+    return;
+  }
   void sendMessage(text);
 });
+
+// Runs a chat command through the server and shows its fixed-text answer as an
+// assistant turn. The command and its answer are saved to the active chat there.
+async function runCommand(text) {
+  addMessage("user", text);
+  try {
+    const res = await fetch("/api/commands/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chatId: activeChatId, text }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    activeChatId = data.chatId;
+    ChatHistory.setActive(activeChatId);
+    addMessage("assistant", data.reply);
+  } catch (err) {
+    addMessage("system", `(error: ${err.message})`);
+  } finally {
+    ChatHistory.refresh();
+  }
+}
 
 chatInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {

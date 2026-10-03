@@ -8,6 +8,7 @@ import {
   updateLastMessageTime,
 } from "../../config/llm-config";
 import { llmTools, llmFuncMap } from "../../config/llm-tools";
+import { exclusive } from "../../memory/exclusive";
 import dotenv from "dotenv";
 import {
   Message,
@@ -151,7 +152,9 @@ const warmUpModel = (model: string): Promise<void> =>
 
 if (llmServer.trim().toLowerCase() === "ollama") {
   // initialize request to ollama server with empty prompt, to load the model into memory
-  warmUpModel(currentOllamaModel).catch(() => {});
+  // Goes through the same queue as the memory arbiter: a web turn that unloads
+  // everything right after boot must not be undone by this load landing late.
+  exclusive(() => warmUpModel(currentOllamaModel)).catch(() => {});
 }
 
 // Exposed for the voice-command flow (see chat-flow/voice-commands.ts and
@@ -174,7 +177,7 @@ export const switchModel = async (model: string): Promise<void> => {
     ollamaContextWindowCache = undefined;
     persistEnvVar("OLLAMA_MODEL", model);
   }
-  await warmUpModel(model);
+  await exclusive(() => warmUpModel(model));
 };
 
 // Unloads every model Ollama currently has resident, not just

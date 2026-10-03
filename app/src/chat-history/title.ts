@@ -8,3 +8,15 @@ export const fallbackTitle = (text: string): string => {
   if (words.length === 0) return "Chat nuevo";
   return words.join(" ").slice(0, MAX_CHARS);
 };
+
+// A model title that only repeats the question is no title: the sidebar would
+// show the same text the user just typed. Returns null so the caller falls back.
+const norm = (text: string): string =>
+  text.toLowerCase().replace(/[¿?¡!.,;:"'«»]/g, "").replace(/\s+/g, " ").trim();
+
+export const titleFromModelOutput = (raw: string, question: string): string | null => {
+  const cleaned = raw.replace(/["'«»]/g, "").replace(/[.\s]+$/, "").trim();
+  if (!cleaned) return null;
+  if (norm(cleaned) === norm(question)) return null;
+  return cleaned;
+};

@@ -1,3 +1,4 @@
+import { titleFromModelOutput } from "./title";
 import axios from "axios";
 import { ollamaEndpoint, unloadModel } from "../cloud-api/local/ollama-llm";
 
@@ -93,8 +94,7 @@ export const generateTitleFromQuestion = async (
       { timeout: timeoutMs },
     );
     const raw: string = response.data?.message?.content || "";
-    const cleaned = raw.replace(/["'«»]/g, "").replace(/[.\s]+$/, "").trim();
-    return cleaned || null;
+    return titleFromModelOutput(raw, question);
   } catch (err: any) {
     console.warn(`[ChatHistory] title from question failed: ${err?.message || err}`);
     return null;

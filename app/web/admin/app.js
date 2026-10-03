@@ -781,6 +781,7 @@ async function openChat(id) {
 
 ChatHistory.onOpen = openChat;
 ChatHistory.onNew = newChat;
+ChatHistory.onAllDeleted = () => resetChatView();
 ChatHistory.onDeleted = (id) => {
   if (id === activeChatId) resetChatView();
 };

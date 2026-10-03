@@ -50,6 +50,11 @@ export const registerChatHistoryRoutes = (router: Router): void => {
     ctx.body = updated;
   });
 
+  // Every saved chat. The page asks for confirmation before calling this.
+  router.post("/api/chats/delete-all", (ctx) => {
+    ctx.body = { deleted: chatStore.deleteAll() };
+  });
+
   router.delete("/api/chats/:id", (ctx) => {
     if (!chatStore.delete(ctx.params.id)) {
       ctx.status = 404;

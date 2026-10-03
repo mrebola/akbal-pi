@@ -93,6 +93,20 @@ export class ChatStore {
     return true;
   }
 
+  // Removes every chat file. Only names that are valid chat ids are touched,
+  // so an unrelated JSON file in the same folder survives.
+  deleteAll(): number {
+    let removed = 0;
+    for (const file of fs.readdirSync(this.dir)) {
+      if (!file.endsWith(".json")) continue;
+      const id = file.slice(0, -".json".length);
+      if (!this.isValidId(id)) continue;
+      fs.unlinkSync(this.filePath(id));
+      removed++;
+    }
+    return removed;
+  }
+
   private filePath(id: string): string {
     return path.join(this.dir, `${id}.json`);
   }

@@ -144,6 +144,20 @@
     await refresh();
   }
 
+  // Deletes every saved chat after one confirmation that names the count.
+  async function clearAll() {
+    if (metas.length === 0) return;
+    const ok = await ChatHistory.confirm({
+      title: `¿Borrar los ${metas.length} chats?`,
+      body: "Se borran todos los chats guardados del disco. No se puede recuperar.",
+      ok: "Borrar todos",
+    });
+    if (!ok) return;
+    await api("/api/chats/delete-all", { method: "POST" });
+    if (ChatHistory.onAllDeleted) ChatHistory.onAllDeleted();
+    await refresh();
+  }
+
   function jsonPatch(body) {
     return {
       method: "PATCH",
@@ -192,6 +206,7 @@
     },
     init() {
       newBtn.addEventListener("click", () => ChatHistory.onNew && ChatHistory.onNew());
+      document.getElementById("chat-clear-all").addEventListener("click", clearAll);
       refresh();
     },
   };

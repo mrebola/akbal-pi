@@ -89,3 +89,21 @@ test("update changes title, pinned and model, and returns null for unknown ids",
   assert.equal(updated?.titleEdited, true);
   assert.equal(store.update("00000000-0000-4000-8000-000000000000", { pinned: true }), null);
 });
+
+test("deleteAll removes every chat file and reports how many it removed", () => {
+  const dir = newDir();
+  const store = new ChatStore(dir);
+  store.createWithMessage("m", "user", "uno");
+  store.createWithMessage("m", "user", "dos");
+  assert.equal(store.deleteAll(), 2);
+  assert.equal(store.list().length, 0);
+});
+
+test("deleteAll leaves files that are not chats alone", () => {
+  const dir = newDir();
+  const store = new ChatStore(dir);
+  store.createWithMessage("m", "user", "uno");
+  fs.writeFileSync(path.join(dir, "notas.json"), "{}");
+  assert.equal(store.deleteAll(), 1);
+  assert.equal(fs.existsSync(path.join(dir, "notas.json")), true);
+});

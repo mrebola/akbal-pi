@@ -3231,6 +3231,7 @@ a.wd-bell-item-link:hover .wd-bell-item-ssid { color: var(--accent); }
 .chat-main { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .chat-sidebar { width: 220px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
 .chat-new-btn { width: 100%; }
+.chat-clear-all-btn { width: 100%; margin-top: 6px; font-size: 12px; }
 .chat-section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); margin: 8px 0 4px; }
 .chat-row { position: relative; display: flex; align-items: center; border-radius: 6px; }
 .chat-row.active { background: rgba(80,255,120,0.08); }

@@ -29,3 +29,7 @@ export const applyDecision = async (
     if (model) await deps.warm(model, -1);
   }
 };
+
+// Hands memory back to the device: nothing stays resident, so the voice model
+// loads alone the next time the device needs it.
+export const releaseToDevice = (deps: Deps = ollamaDeps): Promise<void> => deps.unloadAll();

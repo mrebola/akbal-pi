@@ -54,6 +54,8 @@ import { fallbackTitle } from "../chat-history/title";
 import { generateTitle, getContextWindow } from "../chat-history/ollama";
 import type { StoredChat } from "../chat-history/types";
 import { needsAutoTitle, settleExchange } from "../chat-history/settle";
+import { applyDecision } from "../memory/model-memory";
+import { memoryArbiter, webIdle, cancelHooks } from "../memory/shared";
 import { enableRAG } from "../cloud-api/knowledge";
 import { getSystemPromptWithKnowledge } from "../core/Knowledge";
 import { listSoulEditableFiles, writeSoulEditableFile, triggerKnowledgeReindex } from "../config/soul-files";
@@ -1087,6 +1089,22 @@ export class WebAdminServer {
         messages.splice(0, messages.length, ...(trimmed as AdminChatMessage[]));
       }
 
+      // The web chat takes the one resident model before generating. A voice
+      // reply still running is cancelled first, so two models never sit in RAM.
+      const memoryDecision = memoryArbiter.requestWeb();
+      if (memoryDecision.cancel === "device") cancelHooks.cancelDeviceReply();
+      webIdle.cancel();
+      try {
+        await applyDecision(memoryDecision, { device: getCurrentModel(), web: model });
+      } catch (err: any) {
+        // Same rollback as a failed upstream call: the user turn does not stay orphaned.
+        if (chat && isNewChat) chatStore.delete(chat.id);
+        else if (chat) chatStore.removeLastUserMessage(chat.id);
+        ctx.status = 503;
+        ctx.body = { error: `no se pudo preparar el modelo: ${err?.message || err}` };
+        return;
+      }
+
       const abortController = new AbortController();
       // axios' `signal` only cancels a request while it's still being
       // established — once responseType:"stream" resolves, the response
@@ -1136,6 +1154,8 @@ export class WebAdminServer {
       // One place decides what a finished, cancelled or failed exchange leaves
       // on disk and whether it gets a title (see chat-history/settle.ts).
       const finishChat = async (aborted: boolean): Promise<void> => {
+        // Every web turn ends here, chat or not: the idle clock restarts now.
+        webIdle.touch();
         if (!chat) return;
         settleExchange(chatStore, chat.id, { assistantText, isNewChat });
         if (!streaming || !needsAutoTitle(chatStore.get(chat.id))) return;

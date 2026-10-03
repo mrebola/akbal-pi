@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applyDecision } from "./model-memory";
+import { applyDecision, releaseToDevice } from "./model-memory";
 
 const fake = () => {
   const calls: string[] = [];
@@ -33,4 +33,10 @@ test("a no-op decision touches nothing", async () => {
   const f = fake();
   await applyDecision({ cancel: null, unloadAll: false, loadModel: null }, { device: "voz", web: "chat" }, f.deps);
   assert.deepEqual(f.calls, []);
+});
+
+test("releaseToDevice unloads everything and loads nothing", async () => {
+  const f = fake();
+  await releaseToDevice(f.deps);
+  assert.deepEqual(f.calls, ["unloadAll"]);
 });

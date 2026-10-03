@@ -12,7 +12,7 @@ import { generateConnectQr } from "../../utils/network-info";
 const IDLE_TIMEOUT_MS = 25000;
 const CONFIRM_HOLD_MS = 900;
 const HOLD_TICK_MS = 60;
-export const BOOK_URL = "https://cypher404.com/book";
+export const BOOK_URL = "https://cypher404.com/book/";
 
 // Condensed from the web admin's Acerca de page (app/web/admin/about.html,
 // i18n keys about.*) — that page has the complete text. Kept short per

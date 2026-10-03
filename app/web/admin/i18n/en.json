@@ -549,6 +549,6 @@
     "closing_body": "Akbal Pi is meant for learning by doing, sharing knowledge, and experimenting with new ideas.",
     "invite_body": "If this kind of exploration interests you, you can join in, try it out, modify it, and propose new features in the repository:",
     "open_note": "The repository is public and Akbal Pi is an open project.",
-    "qr_hint": "Discover the Cypher404 universe and buy the book at cypher404.com/book."
+    "qr_hint": "Discover the Cypher404 universe and buy the book at <a href=\"https://cypher404.com/book/\" target=\"_blank\" rel=\"noopener\">cypher404.com/book</a>."
   }
 }

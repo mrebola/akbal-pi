@@ -452,7 +452,7 @@ con estos modos, cada uno con su propio control:
 | **WiFi Radar** | Versión de pantalla del radar WiFi (detalle abajo): discos con puntos por red cercana, texto inferior rotando nombre + dBm. **Mantener** para salir. |
 | **Radar de Aviones** | Versión de pantalla del Aircraft Radar (detalle abajo): disco con un punto por aeronave, ubicado por su rumbo/distancia GPS reales. **Mantener** para salir. |
 | **Wardrive** | Arranca/detiene una sesión de captura mientras se conduce (mismo servicio que la página web `/wardrive` — arrancar acá y seguirla desde el celular funciona igual que al revés). **Mantener** inicia la sesión (o la termina si ya está corriendo); **click** refresca contadores en pantalla (tiempo, distancia, redes, handshakes). |
-| **Acerca de** | Versión condensada de Cypher404: El Manifiesto, el libro del que nace Akbal — **click** pasa de página, última página es un QR para comprar el libro ([cypher404.com/book](https://cypher404.com/book)). **Mantener** sale. |
+| **Acerca de** | Por qué existe Akbal Pi y de dónde nace el nombre (Cypher404: El Manifiesto) — **click** pasa de página, última página es un QR para comprar el libro ([cypher404.com/book](https://cypher404.com/book/)). **Mantener** sale. |
 
 El menú se cierra solo tras **60 segundos** sin tocar el botón.
 

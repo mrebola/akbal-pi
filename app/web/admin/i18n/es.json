@@ -473,6 +473,8 @@
     "compare_rounds": "Rondas",
     "compare_success": "Éxitos",
     "compare_blind_hour": "Ciego/hora",
+    "compare_collapse_title": "Expandir/colapsar tarjeta",
+    "hud_collapse_title": "Expandir/colapsar tarjeta",
     "panel_tab_live": "REDES EN VIVO",
     "panel_tab_sessions": "SESIONES",
     "panel_collapse_title": "Colapsar panel",

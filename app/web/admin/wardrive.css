@@ -44,6 +44,44 @@
   font-family: ui-monospace, monospace;
 }
 
+/* ---- Collapsible HUD cards (.wd-hud, .wd-radio-compare): title row +
+   toggle, same idea as .wd-panel-collapse but reusable across cards. ---- */
+.wd-hud-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.wd-hud-head .wd-hud-title { margin-bottom: 0; }
+
+.wd-hud-collapse-btn {
+  flex: none;
+  padding: 2px 8px;
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.wd-hud-collapse-btn:hover { color: #e8eefc; border-color: rgba(255, 255, 255, 0.3); }
+
+/* Collapsed WARDRIVE card: hide everything except the start/stop button
+   and the compact summary line; show that summary only while collapsed
+   (expanded already has the full stats grid, no need to repeat it). */
+.wd-hud-mini {
+  display: none;
+  gap: 10px;
+  font-size: 11px;
+  color: rgba(232, 238, 252, 0.8);
+  margin-top: 8px;
+  font-family: ui-monospace, monospace;
+}
+.wd-hud.collapsed .wd-hud-mini { display: flex; }
+.wd-hud.collapsed .wd-hud-collapsible { display: none; }
+
 /* Big start/stop button — glove-friendly while driving */
 .wd-start {
   width: 100%;
@@ -271,7 +309,10 @@
 
 .wd-panel.collapsed .wd-panel-body { display: none; }
 .wd-panel.collapsed { width: auto; }
-.wd-panel.collapsed .wd-panel-tab { display: none; }
+/* Was display:none on BOTH tabs, leaving just a bare "▴" button with no
+   label — collapsed pill read as a stray arrow, not "tap to see networks".
+   Keep the active tab's own label so the pill still says what it is. */
+.wd-panel.collapsed .wd-panel-tab:not(.active) { display: none; }
 
 .wd-panel-body { overflow-y: auto; }
 
@@ -675,6 +716,21 @@
      variación de 1-2px — scrollbar, redondeo — lo hacía posible al no
      tener margen de seguridad, a diferencia de .wd-panel arriba). */
   .wd-activity { min-width: 0; width: calc(100vw - 28px); }
+
+  /* .wd-radio-compare's desktop spot (bottom-right, 8px from the edge)
+     sits right under .wd-activity (bottom-center, nearly full width here)
+     and under .wd-panel (moved to bottom:150px above) — all three used to
+     stack on top of each other. .wd-panel vacates the top-right corner on
+     mobile (it moves down here), so dock this card there instead: clear
+     of both the ticker and the panel, and it's collapsed by default anyway
+     (see wardrive.js) so it's just a small pill most of the time. */
+  .wd-radio-compare {
+    top: calc(var(--header-height, 64px) + 12px);
+    right: 14px;
+    bottom: auto;
+    left: auto;
+    max-width: calc(100vw - 28px);
+  }
 }
 /* AP row highlight while being attacked */
 .wd-ap-row.attacking {
@@ -889,6 +945,11 @@
   min-width: 280px;
   z-index: 500;
 }
+
+.wd-radio-compare.collapsed { min-width: 0; padding: 8px 10px; }
+.wd-radio-compare.collapsed .wd-hud-head { margin-bottom: 0; }
+.wd-radio-compare.collapsed .wd-compare-table { display: none; }
+.wd-radio-compare.collapsed .wd-hud-title { white-space: nowrap; }
 
 /* Overlapping-dots picker rows */
 .wd-pick-row {

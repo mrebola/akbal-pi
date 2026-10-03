@@ -67,6 +67,7 @@ document.addEventListener("akbal:locale-changed", updateHeaderHeight);
 initMap();
 initHeader();
 initPanel();
+initCollapsibleHuds();
 initControls();
 initDonglePicker();
 void refresh();
@@ -155,6 +156,13 @@ function render(st) {
   setText("wd-hs", `${s.handshakes ?? 0} (+${s.newHandshakes ?? 0})`);
   setText("wd-ch", st.channel ? `CH ${st.channel}` : "—");
   setText("wd-iface", st.iface ? st.iface.toUpperCase() : st.running ? "DEMO" : "—");
+
+  // Compact summary shown only while the HUD card is collapsed (same
+  // numbers as the grid above, so collapsing it doesn't hide what's
+  // actually happening right now).
+  setText("wd-mini-aps", String(s.aps ?? "—"));
+  setText("wd-mini-hs", String(s.handshakes ?? 0));
+  setText("wd-mini-time", st.session ? fmtDuration(st.session.durationSec) : "—");
 
   // Activity ticker: always-visible strip at the bottom center of the map
   renderActivityTicker(st);
@@ -603,6 +611,48 @@ function initPanel() {
     if (map) setTimeout(() => map.invalidateSize(), 60);
   });
   void refreshSessions();
+}
+
+// ---- Collapsible HUD cards (.wd-hud, .wd-radio-compare) ----
+// The floating cards used to always show in full, fighting each other and
+// the map for space on a phone (user report: "se encinan mucho las cosas").
+// Only .wd-activity (bottom-center "what's happening now" ticker) and the
+// start/stop button always stay visible — everything else defaults to a
+// compact pill on narrow screens and expands on tap, same pattern as the
+// pre-existing .wd-panel-collapse.
+const WD_MOBILE_BREAKPOINT = 640;
+
+function initCollapsibleHuds() {
+  const isMobile = () => window.innerWidth <= WD_MOBILE_BREAKPOINT;
+
+  const hud = el("wd-hud");
+  const hudBtn = el("wd-hud-collapse");
+  hudBtn?.addEventListener("click", () => {
+    hud.classList.toggle("collapsed");
+    hudBtn.textContent = hud.classList.contains("collapsed") ? "▴" : "▾";
+  });
+
+  const compare = el("wd-radio-compare");
+  const compareBtn = el("wd-radio-compare-collapse");
+  compareBtn?.addEventListener("click", () => {
+    compare.classList.toggle("collapsed");
+    compareBtn.textContent = compare.classList.contains("collapsed") ? "▸" : "▾";
+  });
+
+  // Defaults: WARDRIVE card and the networks panel start collapsed only on
+  // phone-width screens (desktop/tablet had no "too cluttered" complaint —
+  // leave that layout alone). The radio-compare table is secondary
+  // diagnostic data either way, so it starts collapsed everywhere; it
+  // already ships with the "collapsed" class in the HTML for that reason,
+  // nothing to do here beyond keeping its button glyph in sync.
+  if (isMobile()) {
+    hud.classList.add("collapsed");
+    if (hudBtn) hudBtn.textContent = "▴";
+    const panel = el("wd-panel");
+    panel?.classList.add("collapsed");
+    const panelBtn = el("wd-panel-collapse");
+    if (panelBtn) panelBtn.textContent = "▴";
+  }
 }
 
 // ---- Dongle picker ----

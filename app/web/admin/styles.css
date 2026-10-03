@@ -877,6 +877,20 @@ button.secondary {
   white-space: nowrap;
 }
 
+/* File-listing tables (session files in Wifi Audit, Crack Station's
+   "Archivos" modal): first column is a filename with no spaces
+   (e.g. "0019be80fa3d-deauth.pcapng"), which the nowrap default above
+   can't break — on a phone it was eating most of the available width,
+   pushing Ver/Bajar/🗑 off the edge of their scroll container with no
+   visible scrollbar hint, reading as cut off rather than scrollable.
+   Letting just this column wrap frees that space back up. */
+#wd-session-files .wd-table td:first-child,
+#wd-crack-files-modal .wd-table td:first-child {
+  white-space: normal;
+  word-break: break-word;
+  min-width: 140px;
+}
+
 /* Row hover: makes it obvious which values belong to which row when
    scanning the table. */
 .wd-table tbody tr { transition: background 0.12s ease; }
@@ -3208,6 +3222,17 @@ a.wd-bell-item-link:hover .wd-bell-item-ssid { color: var(--accent); }
   font-size: 12px;
   min-width: 40px;
   min-height: 40px;
+}
+
+@media (max-width: 720px) {
+  /* .apm-card scrolls internally (overflow-y:auto, the satellite detail
+     card has ~14 rows — taller than the screen). .apm-close was
+     position:absolute *relative to that same scrolling card*, so it
+     scrolled away with the content the moment you scrolled down to read
+     the lower rows — the only way to close/go back then was scrolling
+     back up first, which isn't obvious. Pin it to the screen corner
+     instead so it's reachable no matter how far the card is scrolled. */
+  .apm-close { position: fixed; top: 12px; right: 12px; }
 }
 
 .apm-close:hover { color: var(--accent); border-color: var(--accent); }

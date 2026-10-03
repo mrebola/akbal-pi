@@ -473,6 +473,8 @@
     "compare_rounds": "Rounds",
     "compare_success": "Successes",
     "compare_blind_hour": "Blind/hour",
+    "compare_collapse_title": "Expand/collapse card",
+    "hud_collapse_title": "Expand/collapse card",
     "panel_tab_live": "LIVE NETWORKS",
     "panel_tab_sessions": "SESSIONS",
     "panel_collapse_title": "Collapse panel",

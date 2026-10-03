@@ -107,6 +107,7 @@ Puntos que un agente nuevo necesita saber antes de tocar esto:
 
 ## Convenciones
 
+- **Diagrama de arquitectura:** `docs/arquitectura.md` es el mapa de piezas. Si un cambio agrega, quita o cambia un módulo o un flujo entre piezas, actualiza el diagrama en el mismo commit: el nodo nuevo lleva su enlace al archivo fuente.
 - **TypeScript**: ES2020, CommonJS, strict. Imports relativos dentro de `src/`.
   Archivos kebab-case, clases PascalCase. Comentarios en inglés, UI/strings de
   usuario en español.

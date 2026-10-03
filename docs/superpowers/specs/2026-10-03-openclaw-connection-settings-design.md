@@ -6,7 +6,7 @@ Documentación de operación: [`docs/openclaw-connection.md`](../../openclaw-con
 
 ## Objetivo
 
-Que en `http://akbal-pi.border-bonito.ts.net:8090/#settings` se pueda
+Que en `http://<host-de-la-pi>:8090/#settings` se pueda
 configurar y administrar la conexión con un agente OpenClaw, sin editar
 `.env` a mano ni reiniciar el servicio. Si no hay agente conectado, la
 pestaña ofrece la configuración inicial paso a paso.

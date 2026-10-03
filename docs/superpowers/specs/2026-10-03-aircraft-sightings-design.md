@@ -5,7 +5,7 @@ Estado: aprobado para implementación
 
 ## Objetivo
 
-Que en `http://akbal-pi.border-bonito.ts.net:8090/aircraft-radar` se vean los
+Que en `http://<host-de-la-pi>:8090/aircraft-radar` se vean los
 últimos aviones capturados en las últimas 24 horas, de los aviones que Akbal
 detectó dentro de una misma zona alrededor de su posición GPS. Pasan pocos
 aviones, así que cada captura se guarda con fecha y hora, y la lista se puede

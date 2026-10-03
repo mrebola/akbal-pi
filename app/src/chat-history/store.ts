@@ -68,6 +68,17 @@ export class ChatStore {
     return chat;
   }
 
+  // Records clips on the assistant turn at `index`. A user turn is refused.
+  setAudioAt(id: string, index: number, audio: string[]): StoredChat | null {
+    const chat = this.get(id);
+    if (!chat) return null;
+    const message = chat.messages[index];
+    if (message?.role !== "assistant") return null;
+    message.audio = audio;
+    this.writeFile(chat);
+    return chat;
+  }
+
   // Marks the last assistant turn as a voice reply and records its clips.
   setLastAssistantAudio(id: string, audio: string[]): StoredChat | null {
     const chat = this.get(id);

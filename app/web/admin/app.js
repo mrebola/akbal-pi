@@ -652,6 +652,35 @@ audioOutputSelect.addEventListener("change", async () => {
   }
 });
 
+// The speaker button under a written reply: makes the reply's clips on demand
+// (once, then reused by the server) and shows the players under the text.
+function addSpeakButton(replyEl, chatId, index) {
+  if (replyEl.querySelector(".speak-btn")) return;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "speak-btn secondary";
+  btn.textContent = "🔊 Escuchar";
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    btn.textContent = "Generando audio…";
+    try {
+      const res = await fetch(`/api/chats/${encodeURIComponent(chatId)}/messages/${index}/audio`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      appendAudioPlayers(replyEl, data.files);
+      btn.remove();
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = "🔊 Escuchar";
+      const note = document.createElement("div");
+      note.className = "voice-error";
+      note.textContent = `No se pudo generar el audio: ${err.message}`;
+      replyEl.append(note);
+    }
+  });
+  replyEl.append(btn);
+}
+
 // One player per spoken chunk, under the reply. Shown together with the text,
 // so the room can read what it hears (see the voice-reply notes in the spec).
 function appendAudioPlayers(replyEl, files) {
@@ -709,6 +738,7 @@ async function sendMessage(text) {
   resetToolChips();
   let fullText = "";
   let hasStartedTalking = false;
+  let replyRef = null;
   try {
     const res = await fetch("/api/chat", {
       method: "POST",
@@ -759,6 +789,9 @@ async function sendMessage(text) {
           if (chunk.admin_links) {
             addLinkRow(chunk.admin_links);
           }
+          if (chunk.message_index) {
+            replyRef = chunk.message_index;
+          }
           if (chunk.audio) {
             appendAudioPlayers(assistantEl, chunk.audio.files);
           }
@@ -783,6 +816,9 @@ async function sendMessage(text) {
   } finally {
     thinkingEl.remove();
     assistantEl.classList.remove("hidden");
+    if (replyRef && fullText && !assistantEl.querySelector("audio")) {
+      addSpeakButton(assistantEl, replyRef.chatId, replyRef.index);
+    }
     activeController = null;
     setSendingUi(false);
     setAvatarTalking(false);
@@ -829,10 +865,14 @@ async function openChat(id) {
   chatLog.innerHTML = "";
   document.getElementById("chat-empty").classList.add("hidden");
   setComposerEnabled(true);
-  for (const m of chat.messages) {
+  for (const [i, m] of chat.messages.entries()) {
     const el = addMessage(m.role === "assistant" ? "assistant" : "user", m.content);
     if (m.role === "assistant") el.innerHTML = renderMarkdown(m.content);
-    if (m.role === "assistant" && m.audio && m.audio.length) appendAudioPlayers(el, m.audio);
+    if (m.role === "assistant" && m.audio && m.audio.length) {
+      appendAudioPlayers(el, m.audio);
+    } else if (m.role === "assistant") {
+      addSpeakButton(el, chat.id, i);
+    }
   }
   ChatHistory.setActive(chat.id);
   await ensureModelFor(chat);

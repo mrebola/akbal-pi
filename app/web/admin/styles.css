@@ -3975,3 +3975,6 @@ a.wd-bell-item-link:hover .wd-bell-item-ssid { color: var(--accent); }
 .voice-players { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .voice-players audio { width: 100%; max-width: 360px; }
 .voice-error { margin-top: 6px; font-size: 12px; color: var(--warning); }
+
+/* Speaker button under a written reply: makes its voice clip on demand. */
+.speak-btn { margin-top: 8px; font-size: 12px; padding: 4px 10px; }

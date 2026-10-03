@@ -1282,6 +1282,11 @@ export class WebAdminServer {
           writeFrame({ audio_error: "No se pudo generar el audio con la voz de Akbal." });
         }
       }
+      // The page needs the reply's index for its speaker button.
+      if (chat && streaming && assistantText) {
+        const idx = (chatStore.get(chat.id)?.messages.length ?? 1) - 1;
+        writeFrame({ message_index: { chatId: chat.id, index: idx } });
+      }
       if (streaming) ctx.res.end();
     });
 

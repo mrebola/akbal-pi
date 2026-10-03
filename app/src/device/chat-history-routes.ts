@@ -1,7 +1,8 @@
 import path from "path";
 import * as fs from "fs";
 import { isSafeClipName } from "../voice/audio-names";
-import { clipPath, removeClipsForChat } from "../voice/piper-clips";
+import { clipPath, removeClipsForChat, saveClips } from "../voice/piper-clips";
+import { toSpeechChunks } from "../voice/speech-chunks";
 import Router from "@koa/router";
 import { ChatStore } from "../chat-history/store";
 import { loadChatModel, loadStats } from "../chat-history/ollama";
@@ -51,6 +52,36 @@ export const registerChatHistoryRoutes = (router: Router): void => {
       return;
     }
     ctx.body = updated;
+  });
+
+  // The speaker button: clips for one assistant reply, made once and reused.
+  router.post("/api/chats/:id/messages/:index/audio", async (ctx) => {
+    const chat = chatStore.get(ctx.params.id);
+    const index = Number(ctx.params.index);
+    const message = chat && Number.isInteger(index) ? chat.messages[index] : undefined;
+    if (!chat || !message || message.role !== "assistant") {
+      ctx.status = 404;
+      ctx.body = { error: "respuesta no encontrada" };
+      return;
+    }
+    if (message.audio && message.audio.length) {
+      ctx.body = { files: message.audio };
+      return;
+    }
+    const chunks = toSpeechChunks(message.content);
+    if (chunks.length === 0) {
+      ctx.status = 400;
+      ctx.body = { error: "no hay texto que leer" };
+      return;
+    }
+    try {
+      const files = await saveClips(chat.id, index, chunks);
+      chatStore.setAudioAt(chat.id, index, files);
+      ctx.body = { files };
+    } catch (err: any) {
+      ctx.status = 502;
+      ctx.body = { error: `no se pudo generar el audio: ${err?.message || err}` };
+    }
   });
 
   // A voice clip. Only names built by clipFileName() are served.

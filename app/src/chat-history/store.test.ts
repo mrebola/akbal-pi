@@ -125,3 +125,20 @@ test("setLastAssistantAudio does nothing when the last turn is not the assistant
   const chat = store.createWithMessage("m", "user", "hola");
   assert.equal(store.setLastAssistantAudio(chat.id, ["x.wav"])?.messages[0].audio, undefined);
 });
+
+test("setAudioAt records clips on the assistant turn at that index only", () => {
+  const dir = newDir();
+  const store = new ChatStore(dir);
+  const chat = store.createWithMessage("m", "user", "hola");
+  store.appendMessage(chat.id, "assistant", "Hola");
+  const updated = store.setAudioAt(chat.id, 1, ["a-1-0.wav"]);
+  assert.deepEqual(updated?.messages[1].audio, ["a-1-0.wav"]);
+  assert.equal(updated?.messages[0].audio, undefined);
+});
+
+test("setAudioAt refuses a user turn", () => {
+  const dir = newDir();
+  const store = new ChatStore(dir);
+  const chat = store.createWithMessage("m", "user", "hola");
+  assert.equal(store.setAudioAt(chat.id, 0, ["x.wav"]), null);
+});

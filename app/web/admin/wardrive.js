@@ -1088,12 +1088,21 @@ async function openSession(id) {
               <td>${escapeHtml(n.security)}</td>
               <td>${hsCell}</td>
               <td>${n.attempts || "—"}</td>
-              <td><button class="wd-vista-btn" data-lat="${n.lat ?? ""}" data-lon="${n.lon ?? ""}">Ver</button></td>
+              <td>${
+                Number.isFinite(n.lat) && Number.isFinite(n.lon)
+                  ? `<button class="wd-vista-btn" data-lat="${n.lat}" data-lon="${n.lon}">Ver</button>`
+                  // No GPS fix was recorded for this network (e.g. captured in
+                  // Wifi Audit mode, or before the first fix of the drive) —
+                  // was still a live, same-looking button with nothing to
+                  // center the map on, so clicking it silently did nothing.
+                  // Disabled + a reason beats a dead click.
+                  : `<button class="wd-vista-btn" disabled title="Sin posición GPS registrada para esta red">Ver</button>`
+              }</td>
             </tr>`;
           })
           .join("")
       : '<tr><td colspan="8" class="muted">Sin redes registradas en esta sesión.</td></tr>';
-    for (const btn of body.querySelectorAll(".wd-vista-btn")) {
+    for (const btn of body.querySelectorAll(".wd-vista-btn:not(:disabled)")) {
       btn.addEventListener("click", () => {
         const lat = parseFloat(btn.dataset.lat);
         const lon = parseFloat(btn.dataset.lon);
@@ -1179,19 +1188,23 @@ function initControls() {
       const res = await fetch(path, { method: "POST" });
       const data = await res.json();
       if (!data.ok && data.error) showError(data.error);
-      // Reset the live view when stopping: the map goes clean (the ended
-      // session stays browsable from the sessions drawer only).
-      if (running) {
-        trackPoints = [];
-        liveLastPoint = null;
-        dotsSessionFilter = null;
-        headingMarker?.remove();
-        headingMarker = null;
-        void refreshHandshakeDots();
-        drawTrack();
-        firstFixSeen = false;
-        wdSetFollowCar(true); // fresh session next time starts following again
-      }
+      // Reset the live view on BOTH ends of the toggle — was gated on
+      // `running` (stop only): starting a fresh session left
+      // dotsSessionFilter/trackPoints pointing at whatever session the
+      // user had last opened from the drawer/Sesiones tab, so the map kept
+      // showing that old route+dots with the new session now quietly
+      // running underneath it instead of starting clean. Stopping still
+      // wants the same clean-map reset as before (the just-ended session
+      // stays browsable from the drawer only).
+      trackPoints = [];
+      liveLastPoint = null;
+      dotsSessionFilter = null;
+      headingMarker?.remove();
+      headingMarker = null;
+      void refreshHandshakeDots();
+      drawTrack();
+      firstFixSeen = false;
+      wdSetFollowCar(true); // fresh session (either direction) starts following again
     } catch {
       showError("No se pudo cambiar el modo wardrive");
     }

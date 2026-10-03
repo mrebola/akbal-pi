@@ -86,6 +86,11 @@ Son mínimos y se listan para el plan:
    exponerla. Hoy no existe.
 2. `im-bridge.ts`: método `stop()` para desconectar sin reiniciar el servicio.
    Hoy el bridge solo se crea, nunca se apaga.
+2b. Rotar el token o cambiar el puerto recrea el bridge: `stop()` y luego un
+   bridge nuevo. Hoy el token se lee solo en el constructor
+   (`im-bridge.ts:57`), y `ChatFlow.ensureAgentBridge()` no crea otro bridge si
+   ya existe (`ChatFlow.ts:165`). Sin esto, el token nuevo no surte efecto
+   hasta reiniciar el servicio.
 3. `ChatFlow.ts`: `ensureAgentBridge()` debe poder arrancar el bridge sin
    cambiar el modo, para la prueba de conexión.
 4. Endpoints nuevos en `web-admin-server.ts` (o en un archivo propio como
@@ -114,10 +119,11 @@ Son mínimos y se listan para el plan:
 
 ## Seguridad
 
-- El bridge es HTTP, sin TLS. Hoy escucha en todas las interfaces. La
-  protección es el token, y el acceso de red pasa por la LAN o la Tailnet.
-  Antes de publicar esta sección, hay que decidir si el bridge se limita a
-  la interfaz de la Tailnet o de la LAN, o si se documenta el riesgo.
+- El bridge es HTTP, sin TLS, y escucha en todas las interfaces, como hoy.
+  **Decisión:** se mantiene así. El token es la única protección. Esto
+  expone el bridge a cualquier red a la que la Pi esté conectada, y queda
+  como riesgo aceptado. Si cambia el contexto de red (por ejemplo, la Pi
+  pasa a una red pública), hay que revisar esta decisión.
 - El token nunca se devuelve completo después de generarlo.
 - El token no se escribe en logs. Se revisa con el checklist anti-secretos de
   `AGENTS.md` antes de cualquier commit.
@@ -142,7 +148,8 @@ El repo no tiene tests automatizados de esta parte. La validación es:
 
 ## Riesgos
 
-- **Bridge expuesto en la red.** Ver Seguridad. Es el riesgo principal.
+- **Bridge expuesto en la red.** Ver Seguridad. Riesgo aceptado: escucha en
+  todas las interfaces, y el token es la única protección.
 - **Estado "conectado" aproximado.** Depende del long-poll de OpenClaw. Si
   OpenClaw reintenta con pausas largas, la UI puede decir "desconectado"
   cuando no lo está. La ventana de 60 s se ajusta con la práctica.

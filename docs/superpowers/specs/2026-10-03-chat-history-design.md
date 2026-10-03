@@ -1,7 +1,7 @@
 # Historial de chats persistente — chat web del admin
 
 Fecha: 2026-10-03
-Estado: aprobado para implementación (pendiente de plan)
+Estado: aprobado. Plan del historial: `docs/superpowers/plans/2026-10-03-chat-history.md`. Bocina y respuesta por voz: plan aparte, después del historial.
 
 ## Objetivo
 
@@ -31,11 +31,12 @@ de la pantalla LCD.
 
 | Tema | Decisión |
 |---|---|
-| Almacenamiento | Un archivo JSON por chat en `data/chat_history/` |
+| Almacenamiento | Un archivo JSON por chat en `data/chat_history/web/` (subcarpeta propia, para no mezclarse con los archivos de Gemini, Volcengine y MiniMax) |
+| Creación | El chat se crea con el primer mensaje. No hay `POST /api/chats`, así no quedan chats vacíos en disco |
 | Contexto que ve el modelo | Ventana fija con los turnos más recientes que quepan en el límite de contexto |
-| Cambio de modelo al reabrir | Se descarga el modelo actual y se carga el del chat, con aviso de tiempo |
+| Cambio de modelo al reabrir | Se descarga todo lo residente y se carga solo el modelo del chat, con aviso de tiempo y diálogo propio. No toca el modelo de voz |
 | Modelo no instalado | El chat queda en solo lectura hasta reinstalarlo o elegir otro |
-| Título | Generado por el modelo del chat después de la primera respuesta |
+| Título | Generado por el modelo del chat antes de cerrar el stream, con límite de 15 s |
 | Título de respaldo | Primeras palabras del primer mensaje del usuario |
 | Organización en la lista | Sección "Fijados" arriba, luego "Recientes" de más nuevo a más viejo |
 | Borrar | Confirmación en la UI con el título del chat; el backend borra solo cuando recibe la petición |
@@ -45,7 +46,7 @@ de la pantalla LCD.
 
 ## Modelo de datos
 
-Archivo `data/chat_history/<id>.json`:
+Archivo `data/chat_history/web/<id>.json`:
 
 ```json
 {
@@ -58,14 +59,14 @@ Archivo `data/chat_history/<id>.json`:
   "messages": [
     { "role": "user", "content": "…" },
     { "role": "assistant", "content": "…" },
-    { "role": "assistant", "content": "…", "voice": true, "audio": "k3j2a9…-3.wav" }
+    { "role": "assistant", "content": "…", "voice": true, "audio": ["k3j2a9…-3-0.wav", "k3j2a9…-3-1.wav"] }
   ]
 }
 ```
 
 - `voice` y `audio` son opcionales en los mensajes del asistente.
-  `voice: true` marca una respuesta que se pidió por voz. `audio` es el
-  nombre del WAV generado, si ya existe.
+  `voice: true` marca una respuesta que se pidió por voz. `audio` es la lista
+  de nombres de WAV, uno por párrafo, si ya existen.
 
 - `id`: generado con `crypto.randomUUID()`.
 - `updatedAt`: se actualiza al guardar una respuesta. Determina el orden
@@ -90,8 +91,12 @@ Archivo `data/chat_history/<id>.json`:
 
 - Cada chat guarda el modelo con el que se creó.
 - Al abrir un chat cuyo modelo no es el residente, la UI muestra el aviso
-  con el tiempo estimado y, al confirmar, el backend descarga el modelo
-  actual y carga el del chat (reutiliza `/api/models/select`).
+  con el tiempo estimado (la última carga medida, si existe) en un diálogo
+  propio, igual que el de borrado. Al confirmar, el backend descarga todo lo
+  residente y precarga el modelo del chat con `keep_alive: -1`. No usa
+  `/api/models/select`, porque ese endpoint cambiaría también el modelo de
+  voz. Efecto: el modelo de voz se descarga y se recarga la próxima vez que
+  se use.
 - Si el modelo del chat no está instalado, `POST /api/chat` responde con
   un error claro, la UI deja el chat en solo lectura y ofrece elegir otro
   modelo. Elegir otro modelo cambia el campo `model` del chat.
@@ -100,11 +105,13 @@ Archivo `data/chat_history/<id>.json`:
 
 ## Título
 
-- Después de la primera respuesta, el servidor pide al modelo del chat un
-  título corto (máximo unas 6 palabras). Ese modelo ya está residente, así
-  que no hay carga extra.
-- Si la generación falla o pasa de un tiempo límite, el título queda como
-  las primeras palabras del primer mensaje del usuario.
+- Después de la primera respuesta, y antes de cerrar el stream, el servidor
+  pide al modelo del chat un título corto (máximo unas 6 palabras). Ese modelo
+  ya está residente, así que no hay carga extra.
+- El título llega a la UI en un frame `chat_title` dentro del mismo stream. La
+  UI no necesita hacer polling.
+- Si la generación falla o pasa de 15 s, el título queda como las primeras
+  palabras del primer mensaje del usuario.
 - El título se puede renombrar en cualquier momento. Una vez renombrado,
   ya no se regenera.
 
@@ -116,14 +123,19 @@ un campo opcional `chatId`.
 | Método | Ruta | Uso |
 |---|---|---|
 | `GET` | `/api/chats` | Lista: id, título, modelo, `pinned`, `updatedAt` |
-| `POST` | `/api/chats` | Crea un chat vacío con `model` |
 | `GET` | `/api/chats/:id` | Chat completo con mensajes |
 | `PATCH` | `/api/chats/:id` | Cambia `title`, `pinned` o `model` |
-| `DELETE` | `/api/chats/:id` | Borra el archivo |
-| `POST` | `/api/chat` | Igual que hoy, más `chatId` opcional: si viene, guarda la conversación |
+| `POST` | `/api/chat-models/load` | Descarga lo residente y precarga el modelo del chat |
+| `DELETE` | `/api/chats/:id` | Borra el archivo y sus WAV |
+| `POST` | `/api/chat` | Recibe `{ chatId, message, model }`. Con `chatId: null` crea el chat. El servidor devuelve el id en el primer frame del stream |
 
 - Un chat nuevo no se escribe en disco hasta que llega el primer mensaje.
-  Así no se acumulan chats vacíos.
+  Así no se acumulan chats vacíos. No hay `POST /api/chats`.
+- Para un chat existente, el servidor usa el modelo guardado y descarta el
+  `model` que llegue en la petición. Cambiar de modelo es explícito: `PATCH`
+  y luego `POST /api/chat-models/load`.
+- Si llega `messages` sin `chatId`, se mantiene el camino anterior, sin
+  persistencia, para quien use la API directa.
 - Al terminar de responder, el servidor guarda el mensaje del usuario y la
   respuesta completa. Si el cliente corta a mitad (botón Cancelar), se
   guarda la respuesta parcial, igual que hoy se conserva en el historial.
@@ -146,6 +158,8 @@ un campo opcional `chatId`.
 
 ## Bocina y respuestas por voz
 
+Estas funciones van en un plan aparte, después del historial base.
+
 **Bocina por respuesta.** Cada respuesta del asistente tiene un botón de
 bocina. Al presionarlo, el servidor sintetiza el texto con la voz de Akbal
 (la misma voz configurada para el chat por voz; ver
@@ -156,9 +170,10 @@ bocina. Al presionarlo, el servidor sintetiza el texto con la voz de Akbal
   mensaje guarda su nombre en `audio`. Presionar la bocina otra vez
   reproduce el archivo existente, sin volver a sintetizar.
 - La síntesis reutiliza el paso de generación de los proveedores de TTS
-  (piper), pero no reproduce en el altavoz de la Pi. Hoy los proveedores
-  reproducen en el dispositivo al terminar; para el chat web hay que
-  separar la generación del archivo de la reproducción.
+  (piper). Decisión: los proveedores se separan en dos pasos, generar el
+  archivo y reproducirlo. El chat web usa solo el primero; la voz del
+  dispositivo sigue reproduciendo como hoy. Hoy los proveedores reproducen
+  al terminar, así que el cambio toca `piper-tts.ts` y `piper-http-tts.ts`.
 - Mientras se sintetiza, el botón muestra un estado de carga. Si falla,
   muestra el error en el mensaje.
 
@@ -174,6 +189,10 @@ respuesta se muestra solo como audio reproducible, sin texto visible.
 - El servidor sintetiza el audio antes de cerrar el stream y envía un frame
   `{ audio: { file, chatId, index } }`. La UI pone el reproductor como
   contenido del mensaje.
+- Respuestas largas: se sintetizan por párrafos, un WAV por párrafo, y el
+  reproductor los toca en secuencia. No hay límite de longitud; ninguna
+  respuesta se corta. El mensaje guarda la lista de WAV en `audio`, en vez de
+  un solo nombre.
 - El modo aplica solo a esa respuesta. El siguiente mensaje vuelve a ser
   texto, salvo que el usuario vuelva a pedir voz.
 - La bocina de la respuesta por voz también existe, para reproducirla de
@@ -183,7 +202,7 @@ respuesta se muestra solo como audio reproducible, sin texto visible.
 
 | Método | Ruta | Uso |
 |---|---|---|
-| `POST` | `/api/chats/:id/messages/:index/audio` | Sintetiza la respuesta `index` si no existe el WAV y devuelve `{ file }` |
+| `POST` | `/api/chats/:id/messages/:index/audio` | Sintetiza la respuesta `index` por párrafos si no existen los WAV y devuelve `{ files }` |
 | `GET` | `/api/chat-audio/:file` | Sirve el WAV. Solo acepta nombres de la carpeta de audio |
 
 - `:file` se valida con una expresión regular antes de tocar el disco.
@@ -225,8 +244,8 @@ El repo no tiene tests automatizados. La validación es:
 - **Estimación de tokens.** Por caracteres puede recortar de más o de
   menos. Se ajusta con una constante si hace falta.
 - **Síntesis lenta en la Pi.** Una respuesta larga por voz puede tardar
-  mucho en sintetizarse. Hace falta definir un límite de longitud o
-  sintetizar por párrafos; queda abierto para el plan.
-- **Reproducción en la Pi.** Los proveedores de TTS hoy reproducen en el
-  altavoz. Si no se separa la generación del archivo, el chat web haría
-  sonar la Pi cada vez que se pide audio.
+  mucho en sintetizarse. Por párrafos, el primer audio llega antes, pero el
+  total sigue siendo lento. Hay que medirlo en la Pi.
+- **Reproducción en la Pi.** Resuelto con la separación de los proveedores de
+  TTS (ver Bocina). Si esa separación no se hace, el chat web haría sonar la
+  Pi cada vez que se pide audio.

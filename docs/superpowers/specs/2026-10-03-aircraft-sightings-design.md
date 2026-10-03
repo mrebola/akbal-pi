@@ -1,7 +1,7 @@
 # Avistamientos de aeronaves en la zona GPS, con historial de 24 h — Aircraft Radar
 
 Fecha: 2026-10-03
-Estado: borrador, pendiente de revisión (falta un valor: el radio de la zona, ver "Por definir")
+Estado: aprobado para implementación
 
 ## Objetivo
 
@@ -34,11 +34,14 @@ cambia), así que cada fila guarda si estaba en la zona cuando se grabó. La
 lista de 24 h no se recalcula contra la posición actual: si Akbal se mueve,
 los aviones capturados en la zona anterior siguen en la lista como estaban.
 
+**Radio de 10 km**, configurable con `ADSB_SIGHTING_RADIUS_KM`.
+
+**Origen de la posición de Akbal:** el fix GPS real si lo hay. Si no, `ADSB_HOME_LAT/LON`
+como respaldo. Si no hay ninguno, no hay zona.
+
 ## Por definir
 
-- **Valor del radio.** Propuesta: 10 km, configurable con
-  `ADSB_SIGHTING_RADIUS_KM`. Hay que confirmarlo con un valor real antes de
-  implementar.
+Nada. Todas las preguntas están respondidas.
 
 ## Decisiones
 
@@ -89,8 +92,9 @@ consultas nuevas. Se agrega una columna:
 
 Migración aditiva, igual que `history.ts` (`ALTER TABLE` si la columna no
 existe). Las filas anteriores a la migración quedan con `near = 0` y no entran
-en la lista de zona: no hay posición de Akbal registrada para ellas. Se
-borran en la primera pasada de retención.
+en la lista de zona, porque no hay posición de Akbal registrada para ellas.
+Salen de la vista cuando cumplen 24 h y la retención las borra entonces; el
+borrado no cambia por la migración.
 
 ## API
 
@@ -142,8 +146,8 @@ El repo no tiene tests automatizados del módulo ADS-B. La validación es:
 - **Crecimiento actual sin límite.** Hoy `aircraft_seen` no se poda. La
   primera ejecución del borrado puede tardar si ya hay muchas filas; hay
   que medirlo en la Pi.
-- **Radio sin confirmar.** 10 km es una propuesta. Un radio grande llena la
-  lista de aviones lejanos; uno chico deja casi vacía la lista.
+- **Radio de 10 km.** Es una decisión, no un dato medido. Si la lista queda
+  vacía o llena de aviones lejanos, se ajusta con `ADSB_SIGHTING_RADIUS_KM`.
 - **Posición GPS con ruido.** Un avión cerca del borde puede alternar entre
   "en la zona" y "fuera" entre capturas. Por ahora no hay histéresis.
 - **Pérdida de datos por reinicio.** Las capturas de las últimas 24 h sobreviven

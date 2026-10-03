@@ -1194,6 +1194,49 @@ En `chat-history.js`, al final de `init()`, conectar los botones del diálogo:
       });
 ```
 
+- [ ] **Step 3b: Confirmación genérica (para cambio de modelo)**
+
+Decisión del spec: el cambio de modelo usa el mismo diálogo propio que el
+borrado, no `confirm()` nativo. Este helper sirve para ambos casos.
+
+Agregar en `index.html`, junto al diálogo de borrado:
+
+```html
+  <div id="chat-confirm-dialog" class="chat-confirm" hidden role="dialog" aria-modal="true">
+    <div class="chat-confirm-box">
+      <p class="chat-confirm-title"></p>
+      <p class="cfg-hint chat-confirm-body"></p>
+      <div class="chat-confirm-actions">
+        <button type="button" class="secondary" id="chat-confirm-cancel">Cancelar</button>
+        <button type="button" id="chat-confirm-ok">Continuar</button>
+      </div>
+    </div>
+  </div>
+```
+
+Agregar en `chat-history.js`, dentro del objeto `window.ChatHistory`:
+
+```js
+    // Resolves true only when the user presses the OK button.
+    confirm({ title, body, ok = "Continuar" }) {
+      const dialog = document.getElementById("chat-confirm-dialog");
+      dialog.querySelector(".chat-confirm-title").textContent = title;
+      dialog.querySelector(".chat-confirm-body").textContent = body;
+      document.getElementById("chat-confirm-ok").textContent = ok;
+      dialog.hidden = false;
+      return new Promise((resolve) => {
+        const finish = (value) => {
+          dialog.hidden = true;
+          document.getElementById("chat-confirm-ok").onclick = null;
+          document.getElementById("chat-confirm-cancel").onclick = null;
+          resolve(value);
+        };
+        document.getElementById("chat-confirm-ok").onclick = () => finish(true);
+        document.getElementById("chat-confirm-cancel").onclick = () => finish(false);
+      });
+    },
+```
+
 - [ ] **Step 4: Estilos**
 
 Agregar al final del bloque de chat en `styles.css` (después de `.chat-model-dot`):
@@ -1321,7 +1364,12 @@ async function ensureModelFor(chat) {
   const stats = await fetch("/api/chat-models/stats").then((r) => r.json()).catch(() => ({}));
   const last = stats[chat.model];
   const hint = last ? `La última carga tardó unos ${Math.round(last / 1000)} s.` : "La primera carga puede tardar bastante en la Pi.";
-  if (!window.confirm(`Este chat usa ${chat.model}. Se descargará el modelo actual y se cargará ese. ${hint} ¿Continuar?`)) {
+  const ok = await ChatHistory.confirm({
+    title: `Cambiar a ${chat.model}`,
+    body: `Este chat usa ${chat.model}. Se descargará el modelo actual y se cargará ese. ${hint}`,
+    ok: "Cambiar modelo",
+  });
+  if (!ok) {
     addMessage("system", `Sigue activo ${modelSelect.value}. Para usar ${chat.model} en este chat, abrilo de nuevo y confirmá.`);
     return;
   }
@@ -1347,7 +1395,7 @@ async function loadChatModelWithUi(chat) {
 }
 ```
 
-**Nota:** los `window.confirm` aquí sí son diálogos nativos, a diferencia del borrado. Si se prefiere consistencia, reemplazar por el mismo `<dialog>` de Task 7 con un botón de confirmación. Es decisión de UI que conviene revisar en la revisión del plan.
+**Nota:** la confirmación usa `ChatHistory.confirm()` de Task 7 (Step 3b), el mismo estilo que el borrado. Ya no hay `window.confirm`.
 
 - [ ] **Step 3: Selector de modelo**
 
@@ -1361,7 +1409,12 @@ modelSelect.addEventListener("change", async () => {
     return;
   }
   const newModel = modelSelect.value;
-  if (!confirm(`Cambiar el modelo de este chat a ${newModel}? Se descargará el actual y se cargará ese.`)) {
+  const ok = await ChatHistory.confirm({
+    title: `Cambiar a ${newModel}`,
+    body: "Se descargará el modelo actual y se cargará ese. Este chat usará el nuevo modelo desde ahora.",
+    ok: "Cambiar modelo",
+  });
+  if (!ok) {
     // Put the select back to the chat's model.
     const chat = await fetch(`/api/chats/${activeChatId}`).then((r) => r.json());
     modelSelect.value = chat.model;

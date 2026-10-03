@@ -32,3 +32,8 @@ test("gps: no fix is said plainly, and missing data is not shown as coordinates"
 test("generic: a tool's own text is passed through unchanged", () => {
   assert.equal(formatGeneric("3 access point(s)."), "3 access point(s).");
 });
+
+test("aircraft: the plural of avión is aviones", () => {
+  const row = { icao: "X", callsign: null, registration: null, timestamp: 0, altitude: null, speed: null };
+  assert.match(formatAircraft([row, row]), /^✈ 2 aviones en la zona/);
+});

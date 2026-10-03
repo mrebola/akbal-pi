@@ -30,7 +30,7 @@ const seenAt = (ms: number): string =>
 
 export const formatAircraft = (rows: AircraftRow[]): string => {
   if (rows.length === 0) return "Sin aviones en la zona en las últimas 24 h.";
-  const head = `✈ ${rows.length} avión${rows.length === 1 ? "" : "es"} en la zona (24 h)`;
+  const head = `✈ ${rows.length} ${rows.length === 1 ? "avión" : "aviones"} en la zona (24 h)`;
   const lines = rows.map((r) => {
     const name = r.callsign?.trim() || r.registration || r.icao;
     const alt = r.altitude != null ? `${r.altitude} ft` : "— ft";

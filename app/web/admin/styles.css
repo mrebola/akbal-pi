@@ -3154,7 +3154,14 @@ a.wd-bell-item-link:hover .wd-bell-item-ssid { color: var(--accent); }
 .apm {
   position: fixed;
   inset: 0;
-  z-index: 30;
+  /* Was z-index:30 — below the fixed HUD overlays this modal opens on top
+     of (gps-address/gps-hud/gps-sat-panel in gps.css, similar panels in
+     wardrive.css/wifiradar.css, all z-index 890-950), so on GPS/Globo 3D,
+     Wardrive and WiFi Radar the modal's card rendered BEHIND those HUD
+     cards instead of over them — they visually overlapped/bled through
+     each other instead of the modal covering the screen. Match .wd-modal's
+     z-index:1000, this app's other "topmost" modal layer. */
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;

@@ -910,30 +910,63 @@ function strengthColor(strength) {
 // Always visible: what the engine is doing right now. One line per event,
 // newest first, same floating-card design as the rest of the HUD overlays.
 
-let tickerLastTs = 0;
+// Mirrors the RSSI gate in pickTarget() (src/wardrive/service.ts) closely
+// enough to be informative — not exact (skips the priority-SSID wider gate
+// and per-AP cooldown), just "how many of what's in the air could plausibly
+// get attacked next" for the idle ticker below. Pure client-side filter
+// over st.recent, which is already part of every 1Hz status poll — no
+// extra request, no backend work, negligible even on the Pi's browser-side
+// consumer (a phone), let alone the Pi itself.
+const CANDIDATE_RSSI_GATE_DBM = -75;
+function countAttackCandidates(recent) {
+  if (!Array.isArray(recent)) return 0;
+  let n = 0;
+  for (const ap of recent) {
+    if (ap.status === "open" || ap.status === "captured" || ap.status === "exhausted") continue;
+    if ((ap.bestRssi ?? -999) < CANDIDATE_RSSI_GATE_DBM) continue;
+    n++;
+  }
+  return n;
+}
+
 function renderActivityTicker(st) {
   const box = document.getElementById("wd-activity");
   if (!box) return;
   const act = st?.activity || [];
-  // Bug: with no activity yet, act[0]?.ts and the not-yet-set box._akbalTs
-  // are BOTH undefined, so undefined === undefined short-circuited this on
-  // the very first call and the box never got its "Escaneando redes…"
-  // fallback — it just stayed empty (its bare server-rendered <div>),
-  // reading as a broken/empty bar rather than idle status. childElementCount
-  // forces at least one real render even when the ts "hasn't changed".
   const ts = act[0]?.ts || 0;
-  if (box._akbalTs === ts && box.childElementCount > 0) return; // nothing new, skip reflow
+  // Skip-reflow only when there's a real activity list to key on by ts —
+  // the idle line below carries LIVE counts (APs in the air, candidates)
+  // that change every poll even with zero activity entries, so idle must
+  // always re-render or it'd freeze on whatever it first showed.
+  // (Previous bug: undefined === undefined on the very first call, before
+  // box ever had content, skipped rendering the fallback entirely — fixed
+  // by the childElementCount check.)
+  if (act.length > 0 && box._akbalTs === ts && box.childElementCount > 0) return; // nothing new, skip reflow
   box._akbalTs = ts;
   box.classList.toggle("has-activity", act.length > 0);
-  box.innerHTML = act.length
-    ? act
-        .slice(0, 4)
-        .map(
-          (a) =>
-            `<div class="wd-activity-line ${escapeHtml(a.kind)}">${escapeHtml(a.text)}<span class="wd-activity-ts">${new Date(a.ts).toLocaleTimeString("es-MX")}</span></div>`,
-        )
-        .join("")
-    : '<div class="wd-activity-line idle">Escaneando redes…</div>';
+  if (act.length) {
+    box.innerHTML = act
+      .slice(0, 4)
+      .map(
+        (a) =>
+          `<div class="wd-activity-line ${escapeHtml(a.kind)}">${escapeHtml(a.text)}<span class="wd-activity-ts">${new Date(a.ts).toLocaleTimeString("es-MX")}</span></div>`,
+      )
+      .join("");
+    return;
+  }
+  // Idle: "Escaneando redes…" alone gave no sense of progress — 71 APs
+  // seen and counting, but zero attacks yet, LOOKED stuck even when it
+  // wasn't. Same info already sitting in the HUD grid (aps/unique), just
+  // surfaced where it's actually glanced at: the always-visible ticker.
+  const aps = st?.stats?.aps ?? 0;
+  const candidates = countAttackCandidates(st?.recent);
+  const meta =
+    aps === 0
+      ? ""
+      : candidates > 0
+        ? `${aps} en el aire · ${candidates} candidato${candidates === 1 ? "" : "s"}`
+        : `${aps} en el aire · ninguna atacable aún`;
+  box.innerHTML = `<div class="wd-activity-line idle">Escaneando redes…${meta ? `<span class="wd-activity-ts">${meta}</span>` : ""}</div>`;
 }
 
 function escapeHtml(text) {

@@ -536,11 +536,19 @@
     "status_error": "Error"
   },
   "about": {
-    "kicker": "Akbal was born from a book",
+    "kicker": "Why Akbal Pi exists",
+    "intro": "Akbal Pi was created by César Gaytán, inspired by Akbal, a character from the book Cypher404: El Manifiesto.",
+    "author_bio": "César is CEO of Dactima.com and Galditi.com, and creator of HackWise, a cybersecurity channel and community.",
     "buy_btn": "Buy / read the book",
-    "project_title": "Why akbal-pi exists",
-    "project_p1": "This project is inspired by Akbal, a character from Cypher404: El Manifiesto. The goal is twofold: promote the book — hopefully you'll buy it and read it — and serve as a real self-study project: understanding how far knowledge, cybersecurity, and an unrestricted local AI can go running on real hardware.",
-    "project_p2": "Everything you see here — the WiFi radar, the lab audit tooling, wardriving, the aircraft radar, the AI that talks by voice and by text — is part of that study. If this kind of exploration interests you, you're invited to join in: the repo is public.",
-    "qr_hint": "Scan to open cypher404.com/book on your phone."
+    "objectives_title": "Two main goals",
+    "objective1": "The first is to bring part of the Cypher404 universe into the real world. Cypher404 is a transmedia project with several entry points, and Akbal Pi is one of them: a way to discover and explore that universe not only through fiction, but through real technology.",
+    "objective2": "The second goal is to experiment and learn. We want to explore how far a local AI can go running directly on a physical device, interacting with real hardware and combining Linux, radio, networking, sensors, and cybersecurity tools.",
+    "lab_title": "An open lab",
+    "lab_body": "Akbal Pi works as an open lab. The WiFi radar, wireless network audits, wardriving, signal analysis, aircraft tracking, sensors, and an AI that can interact by voice and text are all part of the same purpose: to understand, build, and experiment.",
+    "research_body": "We want to investigate what happens when a local AI isn't limited to answering questions, but can observe its surroundings, use tools, interpret information, and carry out tasks from a physical device.",
+    "closing_body": "Akbal Pi is meant for learning by doing, sharing knowledge, and experimenting with new ideas.",
+    "invite_body": "If this kind of exploration interests you, you can join in, try it out, modify it, and propose new features in the repository:",
+    "open_note": "The repository is public and Akbal Pi is an open project.",
+    "qr_hint": "Discover the Cypher404 universe and buy the book at cypher404.com/book."
   }
 }

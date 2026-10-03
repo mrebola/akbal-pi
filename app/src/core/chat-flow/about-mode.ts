@@ -14,17 +14,16 @@ const CONFIRM_HOLD_MS = 900;
 const HOLD_TICK_MS = 60;
 export const BOOK_URL = "https://cypher404.com/book";
 
-// Condensed from the full manifesto — see README.md's "Por qué Akbal" and
-// the web admin's Acerca de page (app/web/admin/about.html) for the
-// complete text. Kept short per page on purpose, same spirit as
-// help-mode.ts's cheat sheet vs. docs/voice-commands.md: this is a
-// teaser, not the full reference.
+// Condensed from the web admin's Acerca de page (app/web/admin/about.html,
+// i18n keys about.*) — that page has the complete text. Kept short per
+// page on purpose, same spirit as help-mode.ts's cheat sheet vs.
+// docs/voice-commands.md: this is a teaser, not the full reference.
 const PAGES: string[] = [
-  "Cypher404: El Manifiesto. Todo sistema puede ser hackeado.",
-  "Nexora es una ciudad donde el hacking, la IA, la vigilancia masiva y las corporaciones gobiernan cada aspecto de la vida.",
-  "Cuando Akbal empieza a manipular infraestructura, información y personas, Cypher, Namna y Aichi caen en una guerra invisible.",
-  "El verdadero peligro no es la tecnología... sino el error humano.",
-  "De César Gaytán, creador de Hackwise y director general en Dactima y Galditi.",
+  "Akbal Pi. Creado por César Gaytán, inspirado en Akbal, personaje de Cypher404: El Manifiesto.",
+  "César: director general de Dactima y Galditi, creador de HackWise (hackwise.mx).",
+  "Dos objetivos: traer el universo de Cypher404 al mundo real, y explorar hasta dónde llega una IA local en hardware real.",
+  "Akbal Pi es un laboratorio abierto: radar wifi, auditoría de redes, wardriving, radar de aviones, sensores, IA que opera el equipo.",
+  "El repo es público: github.com/mrebola/akbal-pi. Probalo, modificalo, propone funciones.",
 ];
 
 let pageIndex = 0;

@@ -2,7 +2,7 @@ import axios from "axios";
 import * as fs from "fs";
 import * as path from "path";
 import { chatHistoryDir } from "../utils/dir";
-import { clipFileName } from "./audio-names";
+import { clipFileName, clipsOfChat } from "./audio-names";
 
 // Akbal's own voice: the Piper HTTP server the device already runs. Clips are
 // generated here and saved, never played on the Pi's speaker.
@@ -21,6 +21,18 @@ export const synthesizeWav = async (text: string): Promise<Buffer> => {
     { responseType: "arraybuffer", timeout: 120_000 },
   );
   return Buffer.from(res.data);
+};
+
+// Deletes the voice clips of one chat. Called before the chat itself goes, so
+// a deleted chat leaves no audio behind.
+export const removeClipsForChat = (chatId: string): number => {
+  if (!fs.existsSync(audioDir)) return 0;
+  let removed = 0;
+  for (const name of clipsOfChat(fs.readdirSync(audioDir), chatId)) {
+    fs.unlinkSync(clipPath(name));
+    removed++;
+  }
+  return removed;
 };
 
 // One clip per chunk, in order. Returns the file names to store on the message.

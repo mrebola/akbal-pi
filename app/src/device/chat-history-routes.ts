@@ -1,7 +1,7 @@
 import path from "path";
 import * as fs from "fs";
 import { isSafeClipName } from "../voice/audio-names";
-import { clipPath } from "../voice/piper-clips";
+import { clipPath, removeClipsForChat } from "../voice/piper-clips";
 import Router from "@koa/router";
 import { ChatStore } from "../chat-history/store";
 import { loadChatModel, loadStats } from "../chat-history/ollama";
@@ -67,10 +67,12 @@ export const registerChatHistoryRoutes = (router: Router): void => {
 
   // Every saved chat. The page asks for confirmation before calling this.
   router.post("/api/chats/delete-all", (ctx) => {
+    for (const meta of chatStore.list()) removeClipsForChat(meta.id);
     ctx.body = { deleted: chatStore.deleteAll() };
   });
 
   router.delete("/api/chats/:id", (ctx) => {
+    removeClipsForChat(ctx.params.id);
     if (!chatStore.delete(ctx.params.id)) {
       ctx.status = 404;
       ctx.body = { error: "chat no encontrado" };

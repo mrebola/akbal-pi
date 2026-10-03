@@ -1008,3 +1008,10 @@
   border-bottom: 14px solid rgba(120, 255, 160, 0.95);
   filter: drop-shadow(0 0 4px rgba(122, 255, 160, 0.8));
 }
+
+/* Compartir: .akbal packages of this Pi's sessions and imported ones. */
+.wd-share-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); margin: 10px 0 6px; }
+.wd-share-check, .wd-share-upload { display: block; font-size: 12px; margin: 6px 0; }
+.wd-share-check input { margin-right: 6px; }
+.wd-share-upload input { margin-top: 4px; }
+#wd-pane-share .wd-session-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }

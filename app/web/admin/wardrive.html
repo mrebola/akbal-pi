@@ -131,6 +131,7 @@
     <div class="wd-panel-tabs">
       <button class="wd-panel-tab active" data-panetab="live" data-i18n="wardrive.panel_tab_live">REDES EN VIVO</button>
       <button class="wd-panel-tab" data-panetab="sessions" data-i18n="wardrive.panel_tab_sessions">SESIONES</button>
+      <button class="wd-panel-tab" data-panetab="share">COMPARTIR</button>
       <button class="wd-panel-collapse" id="wd-panel-collapse" title="Colapsar panel" data-i18n-title="wardrive.panel_collapse_title">▾</button>
     </div>
     <div class="wd-panel-body" id="wd-panel-body">
@@ -145,6 +146,20 @@
         <ul id="wd-session-list" class="wd-session-list">
           <li class="muted">—</li>
         </ul>
+      </div>
+      <div class="wd-pane" id="wd-pane-share">
+        <h3 class="wd-share-title">Mis sesiones</h3>
+        <label class="wd-share-check">
+          <input type="checkbox" id="wd-share-credentials" checked>
+          Incluir contraseñas y handshakes (quita la casilla para exportar sin ellas)
+        </label>
+        <ul id="wd-share-own" class="wd-session-list"><li class="muted">—</li></ul>
+        <h3 class="wd-share-title">Sesiones compartidas</h3>
+        <label class="wd-share-upload">
+          Cargar archivo .akbal
+          <input type="file" id="wd-share-file" accept=".akbal">
+        </label>
+        <ul id="wd-share-shared" class="wd-session-list"><li class="muted">—</li></ul>
       </div>
     </div>
   </div>

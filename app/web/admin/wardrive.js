@@ -608,7 +608,9 @@ function initPanel() {
       const pane = tab.dataset.panetab;
       el("wd-pane-live").classList.toggle("active", pane === "live");
       el("wd-pane-sessions").classList.toggle("active", pane === "sessions");
+      el("wd-pane-share").classList.toggle("active", pane === "share");
       if (pane === "sessions") void refreshSessions();
+      if (pane === "share") void refreshShare();
     });
   }
   el("wd-panel-collapse")?.addEventListener("click", () => {
@@ -1293,3 +1295,78 @@ function initHeader() {
     } catch { /* default live */ }
   })();
 }
+// ── Compartir: .akbal packages of this Pi's sessions and imported ones ──────
+async function refreshShare() {
+  const own = el("wd-share-own");
+  const shared = el("wd-share-shared");
+  try {
+    const res = await fetch("/api/wardrive/drive/sessions");
+    const data = await res.json();
+    own.innerHTML = "";
+    for (const s of data.sessions || []) {
+      const li = document.createElement("li");
+      const name = document.createElement("span");
+      name.textContent = `${s.id} · ${(s.distance_m / 1000).toFixed(1)} km · ${s.networks} redes`;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "secondary";
+      btn.textContent = "Descargar .akbal";
+      btn.addEventListener("click", () => downloadAkbal(s.id));
+      li.append(name, btn);
+      own.append(li);
+    }
+    if (!own.children.length) own.innerHTML = '<li class="muted">Sin sesiones todavía.</li>';
+  } catch {
+    own.innerHTML = '<li class="muted">No se pudieron cargar las sesiones.</li>';
+  }
+  try {
+    const res = await fetch("/api/wardrive/drive/shared");
+    const list = await res.json();
+    shared.innerHTML = "";
+    for (const s of list) {
+      const li = document.createElement("li");
+      const name = document.createElement("span");
+      const tag = s.credentials ? " · con credenciales" : "";
+      name.textContent = `${s.id} · desde ${s.origin} · ${(s.distanceM / 1000).toFixed(1)} km${tag}`;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "danger";
+      btn.textContent = "Borrar";
+      btn.addEventListener("click", () => deleteShared(s.id));
+      li.append(name, btn);
+      shared.append(li);
+    }
+    if (!shared.children.length) shared.innerHTML = '<li class="muted">Ninguna sesión compartida.</li>';
+  } catch {
+    shared.innerHTML = '<li class="muted">No se pudieron cargar las sesiones compartidas.</li>';
+  }
+}
+
+function downloadAkbal(id) {
+  const withCredentials = el("wd-share-credentials").checked ? "1" : "0";
+  window.location.href = `/api/wardrive/drive/sessions/${encodeURIComponent(id)}/export.akbal?credentials=${withCredentials}`;
+}
+
+async function deleteShared(id) {
+  if (!window.confirm(`¿Borrar la sesión compartida ${id}? No se puede recuperar.`)) return;
+  await fetch("/api/wardrive/drive/shared/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
+  });
+  await refreshShare();
+}
+
+el("wd-share-file")?.addEventListener("change", async (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const res = await fetch("/api/wardrive/drive/sessions/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/octet-stream" },
+    body: file,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) window.alert(`No se pudo cargar el archivo: ${data.error || res.status}`);
+  e.target.value = "";
+  await refreshShare();
+});

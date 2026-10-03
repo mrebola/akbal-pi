@@ -1,6 +1,7 @@
 import { MemoryArbiter } from "./memory-arbiter";
 import { IdleRelease } from "./idle-release";
 import { releaseToDevice } from "./model-memory";
+import { ollamaDeps } from "./ollama-deps";
 
 // One arbiter for the whole process: the web chat and the device voice must
 // see the same owner.
@@ -12,7 +13,7 @@ export const WEB_IDLE_MS = 5 * 60 * 1000;
 
 export const webIdle = new IdleRelease(WEB_IDLE_MS, () => {
   memoryArbiter.release("web");
-  releaseToDevice().catch((err) => console.error("[Memory] release failed:", err?.message || err));
+  releaseToDevice(ollamaDeps).catch((err) => console.error("[Memory] release failed:", err?.message || err));
 });
 
 // Set by the device flow: they cancel an in-flight generation of the other owner.

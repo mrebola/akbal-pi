@@ -54,7 +54,8 @@ import { fallbackTitle } from "../chat-history/title";
 import { generateTitle, generateTitleFromQuestion, getContextWindow } from "../chat-history/ollama";
 import type { StoredChat } from "../chat-history/types";
 import { needsAutoTitle, needsTitleBeforeReply, settleExchange } from "../chat-history/settle";
-import { applyDecision } from "../memory/model-memory";
+import { applyDecision, abandonWebClaim } from "../memory/model-memory";
+import { ollamaDeps } from "../memory/ollama-deps";
 import { memoryArbiter, webIdle, cancelHooks } from "../memory/shared";
 import { enableRAG } from "../cloud-api/knowledge";
 import { getSystemPromptWithKnowledge } from "../core/Knowledge";
@@ -1095,8 +1096,11 @@ export class WebAdminServer {
       if (memoryDecision.cancel === "device") cancelHooks.cancelDeviceReply();
       webIdle.cancel();
       try {
-        await applyDecision(memoryDecision, { device: getCurrentModel(), web: model });
+        await applyDecision(memoryDecision, { device: getCurrentModel(), web: model }, ollamaDeps);
       } catch (err: any) {
+        // A failed load must not leave the arbiter on "web" with nothing to release it.
+        webIdle.cancel();
+        await abandonWebClaim(memoryArbiter, ollamaDeps).catch(() => undefined);
         // Same rollback as a failed upstream call: the user turn does not stay orphaned.
         if (chat && isNewChat) chatStore.delete(chat.id);
         else if (chat) chatStore.removeLastUserMessage(chat.id);

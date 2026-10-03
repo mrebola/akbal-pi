@@ -1,4 +1,5 @@
 import { applyDecision } from "./model-memory";
+import { ollamaDeps } from "./ollama-deps";
 import { memoryArbiter, cancelHooks } from "./shared";
 import { cancelActiveVoiceGeneration, getCurrentModel } from "../cloud-api/local/ollama-llm";
 
@@ -11,5 +12,5 @@ cancelHooks.cancelDeviceReply = cancelActiveVoiceGeneration;
 export const takeMemoryForDevice = async (): Promise<void> => {
   const decision = memoryArbiter.preemptDevice();
   if (decision.cancel === "web") cancelHooks.cancelWebReply();
-  await applyDecision(decision, { device: getCurrentModel(), web: null });
+  await applyDecision(decision, { device: getCurrentModel(), web: null }, ollamaDeps);
 };

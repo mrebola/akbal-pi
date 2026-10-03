@@ -740,11 +740,13 @@ function activateTab(tabName) {
   if (tabName === "settings") void refreshSettings();
   if (tabName === "music") startMusicUI();
   else stopMusicPolling();
-  // LIVE/DEMO (the contextual toolbar's only control on this page) is
-  // about WiFi Radar/Wifi Audit's data source — meaningless on Jukebox, a
-  // plain audio player with nothing "demo" about it. Hide the whole
-  // toolbar row only there; every other tab keeps it.
-  document.getElementById("page-toolbar")?.classList.toggle("hidden", tabName === "music");
+  // LIVE/DEMO is about WiFi Radar/Wifi Audit's data source — meaningless on
+  // Jukebox (a plain audio player) and on Chat (text + voice with the local
+  // model, no synthetic data source). Hide the whole toolbar row only on
+  // those tabs; every other tab keeps it.
+  document
+    .getElementById("page-toolbar")
+    ?.classList.toggle("hidden", tabName === "music" || tabName === "chat");
 }
 
 for (const btn of document.querySelectorAll(".tab-btn")) {

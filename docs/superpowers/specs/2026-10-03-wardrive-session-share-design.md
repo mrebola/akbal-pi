@@ -24,21 +24,18 @@ poder cargarse en otra instancia de Akbal Pi para verla.
   completa ni son reimportables.
 - En la Pi hay 21 sesiones, 6.392 puntos de ruta, 9.260 redes vistas y 247 handshakes.
 
-## Por decidir
+## Credenciales y handshakes (decidido)
 
-**Credenciales y handshakes.** Una sesión incluye contraseñas descifradas y archivos de
-handshake de redes de terceros. Compartirlas da acceso a esas redes. Eso solo es
-aceptable para la red de laboratorio autorizada (`docs/lab-wireless.md`) o para redes
-con permiso explícito.
+Una sesión puede incluir contraseñas descifradas y archivos de handshake de redes de
+terceros. Compartirlos da acceso a esas redes.
 
-Propuesta por defecto:
-- El `.akbal` **no incluye** contraseñas ni archivos de handshake. Sí incluye su
-  existencia (BSSID, SSID, fecha, método), para que el colaborador sepa qué se capturó.
-- Una opción separada, desactivada por defecto, "incluir credenciales y capturas",
-  pide confirmación escribiendo el nombre de la sesión. El archivo queda marcado como
-  `contiene_credenciales: true` en el manifiesto.
-
-Hay que confirmar esta propuesta antes de implementar.
+- **Por defecto el `.akbal` incluye contraseñas y handshakes.**
+- Antes de exportar, la UI muestra una casilla "Incluir contraseñas y handshakes",
+  marcada por defecto. Desmarcarla exporta sin ellas.
+- Sin credenciales, el archivo conserva la existencia de cada captura (BSSID, SSID,
+  fecha, método), para que el colaborador sepa qué se capturó.
+- El manifiesto declara `contiene_credenciales: true|false`, y la carga muestra ese
+  dato antes de importar.
 
 ## Formato `.akbal`
 
@@ -64,8 +61,8 @@ captures/              solo si la opción de credenciales está activa: .cap y .
 
 - En Wardriving, cada sesión tiene un botón "Descargar .akbal".
 - `GET /api/wardrive/drive/sessions/:id/export.akbal?credentials=0|1`
-- Con `credentials=1` el servidor exige la confirmación en la UI (nombre de la sesión).
-  Sin ella, responde 400. El valor por defecto es `0`.
+- `credentials=1` es el valor por defecto: incluye contraseñas y handshakes. La casilla
+  de la UI manda `credentials=0` para exportar sin ellas.
 - La generación ocurre en el servidor, en una carpeta temporal del sistema de datos, y
   se borra al terminar la descarga.
 
@@ -100,7 +97,7 @@ captures/              solo si la opción de credenciales está activa: .cap y .
 
 | Método | Ruta | Uso |
 |---|---|---|
-| `GET` | `/api/wardrive/drive/sessions/:id/export.akbal` | Descarga la sesión. `credentials=1` solo con confirmación |
+| `GET` | `/api/wardrive/drive/sessions/:id/export.akbal` | Descarga la sesión. `credentials=1` por defecto; `0` la exporta sin contraseñas ni handshakes |
 | `POST` | `/api/wardrive/drive/sessions/import` | Carga un `.akbal` como sesión compartida |
 | `GET` | `/api/wardrive/drive/shared` | Lista las sesiones compartidas importadas |
 | `POST` | `/api/wardrive/drive/shared/delete` | Borra una sesión compartida importada |
@@ -112,7 +109,7 @@ El repo no tiene tests del módulo de wardriving. La validación es:
 1. Pruebas unitarias con `node:test` del exportador y del validador de carga, sobre
    una base temporal:
    - el zip contiene todos los archivos del manifiesto, con sha256 correcto
-   - sin `credentials=1`, no hay contraseñas ni archivos de handshake en el zip
+   - con `credentials=0`, no hay contraseñas ni archivos de handshake en el zip; con `credentials=1` sí
    - una carga con un archivo alterado se rechaza
    - una carga con rutas `../` se rechaza
    - una carga de un id ya existente responde conflicto y no escribe
@@ -122,8 +119,9 @@ El repo no tiene tests del módulo de wardriving. La validación es:
 
 ## Riesgos
 
-- **Credenciales.** Si el valor por defecto cambia sin revisión, se pueden compartir
-  accesos a redes ajenas. Por eso el valor por defecto es "sin credenciales".
+- **Credenciales por defecto.** El archivo que sale por defecto contiene accesos a redes
+  ajenas si no se desmarca la casilla. La UI debe dejarlo visible antes de descargar, y
+  el colaborador debe saber que el archivo los trae.
 - **Tamaño.** Una sesión larga con anillo de paquetes puede pesar cientos de MB. Hay que
   medirlo en la Pi antes de fijar el límite de 200 MB.
 - **Formato.** Un cambio de versión del formato debe seguir leyendo los archivos viejos,

@@ -1013,5 +1013,8 @@
 .wd-share-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); margin: 10px 0 6px; }
 .wd-share-check, .wd-share-upload { display: block; font-size: 12px; margin: 6px 0; }
 .wd-share-check input { margin-right: 6px; }
-.wd-share-upload input { margin-top: 4px; }
+.wd-share-upload { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 10px; }
+.wd-share-upload input[type="file"] { width: 100%; max-width: 100%; min-width: 0; font-size: 12px; }
+#wd-share-own, #wd-share-shared { margin-bottom: 8px; }
+#wd-pane-share .muted { font-size: 12px; }
 #wd-pane-share .wd-session-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }

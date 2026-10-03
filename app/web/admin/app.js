@@ -4287,6 +4287,10 @@ if (initialTab === "wifi") {
   activateTab("wifi-audit");
 } else if (initialTab) {
   activateTab(initialTab);
+} else {
+  // Root URL opens the chat tab by default, and the LIVE/DEMO source toggle
+  // does not apply there: hide it the same way activateTab() does.
+  document.getElementById("page-toolbar")?.classList.add("hidden");
 }
 
 // ================= Visor de archivos (imágenes / texto / PDF) =================

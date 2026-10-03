@@ -41,6 +41,7 @@ import {
   cancelPull,
   clearPullState,
   deleteOllamaModel,
+  WEB_ADMIN_DEFAULT_MODEL,
 } from "../cloud-api/local/ollama-llm";
 import { runAdminChatToolLoop, AdminChatMessage } from "../cloud-api/local/admin-chat-tool-loop";
 import { llmFuncMap } from "../config/llm-tools";
@@ -393,6 +394,11 @@ export class WebAdminServer {
       ]);
       ctx.body = {
         model: getCurrentModel(),
+        // The Chat tab's model <select> defaults to this instead of
+        // `model` above (voice's resident model) — see WEB_ADMIN_DEFAULT_MODEL
+        // in cloud-api/local/ollama-llm.ts for why they're intentionally
+        // different.
+        webDefaultModel: WEB_ADMIN_DEFAULT_MODEL,
         modelLoaded,
         deviceMode: isAgentMode() ? "agent" : "local",
         audioOutput: getAudioOutputTarget(),
@@ -995,7 +1001,10 @@ export class WebAdminServer {
     router.post("/api/chat", async (ctx) => {
       const body = ctx.request.body as any;
       const messages: AdminChatMessage[] = Array.isArray(body?.messages) ? body.messages : [];
-      const model = typeof body?.model === "string" && body.model ? body.model : getCurrentModel();
+      // Falls back to the web chat's own default (NOT getCurrentModel(),
+      // voice's resident model) — app.js's modelSelect always sends an
+      // explicit model nowadays, so this only matters for a direct API call.
+      const model = typeof body?.model === "string" && body.model ? body.model : WEB_ADMIN_DEFAULT_MODEL;
       if (messages.length === 0) {
         ctx.status = 400;
         ctx.body = { error: "messages requerido" };

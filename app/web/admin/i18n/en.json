@@ -274,6 +274,7 @@
       "none_installed": "No models installed.",
       "load_failed": "Couldn't load the list.",
       "active_badge": "active",
+      "web_default_badge": "web default",
       "cant_delete_active": "Switch models before deleting this one",
       "delete_btn": "Delete",
       "confirm_delete": "Delete model {tag}? This frees up disk space but you'll need to re-download it if you need it again.",

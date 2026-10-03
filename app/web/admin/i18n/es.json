@@ -274,6 +274,7 @@
       "none_installed": "No hay modelos instalados.",
       "load_failed": "No se pudo cargar la lista.",
       "active_badge": "activo",
+      "web_default_badge": "default web",
       "cant_delete_active": "Cambiá de modelo antes de borrar este",
       "delete_btn": "Borrar",
       "confirm_delete": "¿Borrar el modelo {tag}? Esto libera espacio en disco pero hay que volver a descargarlo si se necesita después.",

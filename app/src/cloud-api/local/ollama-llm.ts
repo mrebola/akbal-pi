@@ -46,6 +46,18 @@ export const DEFAULT_OLLAMA_MODEL = "llama3.2:3b";
 // Mutable so voice commands (see chat-flow/voice-commands.ts) can switch the
 // active model at runtime without restarting the process.
 let currentOllamaModel = process.env.OLLAMA_MODEL || DEFAULT_OLLAMA_MODEL;
+// The web admin CHAT TAB's own default model — deliberately independent of
+// currentOllamaModel/DEFAULT_OLLAMA_MODEL above. Benchmarked
+// (docs/llm-model-selection.md) as the fastest model that's still sharp
+// enough for this kind of chat, so it's the right default there even
+// though voice defaults to something else (llama3.2:3b, picked for
+// broader general knowledge, not raw speed). The web chat's model
+// <select> (device/web-admin-server.ts's /api/status → app.js) reads this
+// instead of currentOllamaModel, and picking a different model from that
+// dropdown never calls switchModel() — it only changes what that one web
+// conversation sends per-request, never touches voice's resident model.
+export const WEB_ADMIN_DEFAULT_MODEL =
+  process.env.WEB_ADMIN_DEFAULT_MODEL || "huihui_ai/qwen3.5-abliterated:2B";
 const ollamaEnableTools = process.env.OLLAMA_ENABLE_TOOLS === "true";
 const ollamaMaxToolRounds = Math.max(
   0,

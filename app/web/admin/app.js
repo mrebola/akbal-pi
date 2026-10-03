@@ -337,6 +337,33 @@ unloadModelBtn.addEventListener("click", async () => {
   }
 });
 
+// Benchmark de velocidad (respuesta completa, caliente) + nota de uso de
+// los modelos probados — ver docs/llm-model-selection.md para la
+// metodología completa. Puramente informativo: un modelo instalado que no
+// esté en esta tabla simplemente no muestra tag, no es un error.
+const MODEL_BENCHMARK_TAGS = {
+  "qwen3:1.7b": { time: "5.6s" },
+  "huihui_ai/qwen3.5-abliterated:2B": { time: "6.1s", note: "default web · rápido e inteligente, ideal para hacking" },
+  "huihui_ai/qwen3-abliterated:1.7b-v2": { time: "7.2s", note: "ideal para hacking" },
+  "deepseek-r1:1.5b": { time: "9.7s" },
+  "qwen3.5:2B": { time: "11.0s" },
+  "llama3.2:3b": { time: "20.3s", note: "default voz · conocimiento general" },
+  "hf.co/Unrestricted/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive:Q4_K_M": { time: "21.1s", note: "lento pero el más inteligente" },
+};
+
+function modelBenchmarkLabel(name) {
+  const info = MODEL_BENCHMARK_TAGS[name];
+  if (!info) return "";
+  return info.note ? `${info.time} · ${info.note}` : info.time;
+}
+
+// The Chat tab's own model picker — deliberately independent of Settings >
+// IA's (which is the real voice/resident-model switch, see
+// WEB_ADMIN_DEFAULT_MODEL in cloud-api/local/ollama-llm.ts for why). This
+// one defaults to status.webDefaultModel, not status.model, and changing
+// it never calls /api/models/select — it only changes what THIS web
+// conversation sends per request (sendMessage() below), never touches
+// voice's active model.
 async function loadModels() {
   try {
     const res = await fetch("/api/models");
@@ -347,35 +374,22 @@ async function loadModels() {
     for (const m of models) {
       const opt = document.createElement("option");
       opt.value = m.name;
-      opt.textContent = m.name;
-      if (m.name === status.model) opt.selected = true;
+      const tag = modelBenchmarkLabel(m.name);
+      opt.textContent = tag ? `${m.name} — ${tag}` : m.name;
+      if (m.name === status.webDefaultModel) opt.selected = true;
       modelSelect.appendChild(opt);
     }
+    if (!modelSelect.value && status.model) modelSelect.value = status.model;
   } catch {
     addMessage("system", "No se pudieron cargar los modelos.");
   }
 }
 
-modelSelect.addEventListener("change", async () => {
-  const tag = modelSelect.value;
-  addMessage("system", `Cambiando a ${tag}...`);
-  try {
-    const res = await fetch("/api/models/select", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tag }),
-    });
-    const data = await res.json();
-    if (data.ok) {
-      addMessage("system", `Modelo activo: ${data.model}`);
-      history = [];
-      void loadStatus();
-    } else {
-      addMessage("system", `No se pudo cambiar de modelo: ${data.error || ""}`);
-    }
-  } catch (err) {
-    addMessage("system", `Error cambiando de modelo: ${err.message}`);
-  }
+modelSelect.addEventListener("change", () => {
+  // Local only — ver el comentario de loadModels() arriba sobre por qué
+  // esto no toca /api/models/select ni el modelo de voz.
+  history = [];
+  addMessage("system", `Chat ahora con ${modelSelect.value}`);
 });
 
 // Populate the speaker dropdown + the paired-speakers list (with a "delete"
@@ -1531,7 +1545,8 @@ async function loadIaModels() {
     for (const m of models) {
       const opt = document.createElement("option");
       opt.value = m.name;
-      opt.textContent = m.name;
+      const tag = modelBenchmarkLabel(m.name);
+      opt.textContent = tag ? `${m.name} — ${tag}` : m.name;
       if (m.name === status.model) opt.selected = true;
       iaModelSelect.appendChild(opt);
     }
@@ -1550,9 +1565,10 @@ iaModelSelect?.addEventListener("change", async () => {
     });
     const data = await res.json();
     if (data.ok) {
-      addMessage("system", `Modelo activo: ${data.model}`);
-      history = [];
-      if (modelSelect) modelSelect.value = data.model;
+      // Esto cambia el modelo de VOZ (el resident model) — a propósito no
+      // toca modelSelect/history del Chat tab, que tiene su propio modelo
+      // independiente (ver loadModels() más arriba).
+      addMessage("system", `Modelo de voz activo: ${data.model}`);
       void loadStatus();
     } else {
       addMessage("system", `No se pudo cambiar el modelo: ${data.error || ""}`);
@@ -1613,10 +1629,16 @@ async function loadIaModelList() {
     list.innerHTML = models
       .map((m) => {
         const isActive = m.name === status.model;
+        const isWebDefault = m.name === status.webDefaultModel;
+        const benchmark = modelBenchmarkLabel(m.name);
+        const badges = [
+          isActive ? `<span class="cfg-badge ok">${escapeHtml(iaTr("settings.ia.active_badge", "activo"))}</span>` : "",
+          isWebDefault ? `<span class="cfg-badge">${escapeHtml(iaTr("settings.ia.web_default_badge", "default web"))}</span>` : "",
+        ].filter(Boolean).join(" · ");
         return `<li data-tag="${escapeHtml(m.name)}">
           <div class="cfg-item-left">
-            <span class="cfg-item-name mono">${escapeHtml(m.name)}${isActive ? ` · <span class="cfg-badge ok">${escapeHtml(iaTr("settings.ia.active_badge", "activo"))}</span>` : ""}</span>
-            <span class="cfg-item-meta">${formatBytes(m.size)}</span>
+            <span class="cfg-item-name mono">${escapeHtml(m.name)}${badges ? ` · ${badges}` : ""}</span>
+            <span class="cfg-item-meta">${formatBytes(m.size)}${benchmark ? ` · ${escapeHtml(benchmark)}` : ""}</span>
           </div>
           <div class="cfg-item-actions">
             <button type="button" class="cfg-btn ia-delete-btn" data-tag="${escapeHtml(m.name)}" ${isActive ? "disabled" : ""} title="${isActive ? escapeHtml(iaTr("settings.ia.cant_delete_active", "Cambiá de modelo antes de borrar este")) : ""}">${escapeHtml(iaTr("settings.ia.delete_btn", "Borrar"))}</button>

@@ -1,6 +1,6 @@
-// Logical keys the web controls and the keyboard both produce. Codes are the
-// ones doomkeys.h defines in DoomGeneric (checked against the pinned commit
-// in fetch-doom-engine.sh).
+// Logical keys the web controls and the keyboard both produce. Codes are
+// values from doomkeys.h of ozkl/doomgeneric. The commit is pinned in
+// fetch-doom-engine.sh (Task 4).
 export const DOOM_KEYS = [
   "forward", "back", "left", "right", "strafeLeft", "strafeRight",
   "fire", "use", "run", "menu",
@@ -47,5 +47,5 @@ const BROWSER_TO_KEY: Record<string, DoomKey> = {
 };
 
 export function browserKeyToDoomKey(code: string): DoomKey | null {
-  return BROWSER_TO_KEY[code] ?? null;
+  return Object.prototype.hasOwnProperty.call(BROWSER_TO_KEY, code) ? BROWSER_TO_KEY[code] : null;
 }

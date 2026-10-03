@@ -29,3 +29,8 @@ test("digits 1-7 select weapons, anything else is unmapped", () => {
   assert.equal(browserKeyToDoomKey("Digit8"), null);
   assert.equal(browserKeyToDoomKey("KeyZ"), null);
 });
+
+test("prototype pollution: constructor and toString return null, not Object methods", () => {
+  assert.equal(browserKeyToDoomKey("constructor"), null);
+  assert.equal(browserKeyToDoomKey("toString"), null);
+});

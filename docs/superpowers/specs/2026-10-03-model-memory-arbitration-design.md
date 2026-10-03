@@ -1,7 +1,7 @@
 # Arbitraje de memoria: voz del dispositivo vs chat web
 
 Fecha: 2026-10-03
-Estado: borrador, pendiente de aprobación. Ningún código de esta sección está implementado.
+Estado: Implementado y desplegado. Liberación por inactividad probada en la Pi. Pendiente: pulsación de 3 s con el botón físico.
 
 ## Problema
 

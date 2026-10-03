@@ -1,7 +1,7 @@
 # Avistamientos de aeronaves en la zona GPS, con historial de 24 h — Aircraft Radar
 
 Fecha: 2026-10-03
-Estado: aprobado para implementación
+Estado: Implementado y desplegado (zona de 24 h, tarjetas con capturas, retención). Pendiente: distancia por captura, que hoy no se guarda.
 
 ## Objetivo
 

@@ -1,7 +1,7 @@
 # Compartir sesiones de wardriving en archivos `.akbal`
 
 Fecha: 2026-10-03
-Estado: borrador. Hay una decisión abierta sobre credenciales y handshakes (ver "Por decidir").
+Estado: Pendiente de implementar. Decisiones tomadas: incluye contraseñas y handshakes por defecto, con casilla para quitarlos. Submenú 'Compartir' en Wardriving, por confirmar.
 
 ## Objetivo
 

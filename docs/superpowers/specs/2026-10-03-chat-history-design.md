@@ -1,7 +1,7 @@
 # Historial de chats persistente — chat web del admin
 
 Fecha: 2026-10-03
-Estado: aprobado. Plan del historial: `docs/superpowers/plans/2026-10-03-chat-history.md`. Bocina y respuesta por voz: plan aparte, después del historial.
+Estado: Implementado y desplegado (historial, fijar, renombrar, borrar uno o todos, modelo por chat, título). Pendiente: bocina y respuesta por voz (sección 'Bocina y respuestas por voz').
 
 ## Objetivo
 

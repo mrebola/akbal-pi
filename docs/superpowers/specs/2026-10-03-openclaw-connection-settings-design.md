@@ -1,7 +1,7 @@
 # Conexión con OpenClaw desde Ajustes — configuración inicial y administración
 
 Fecha: 2026-10-03
-Estado: borrador, pendiente de revisión
+Estado: Pendiente de implementar. Hoy solo existe la guía manual en docs/openclaw-connection.md.
 Documentación de operación: [`docs/openclaw-connection.md`](../../openclaw-connection.md)
 
 ## Objetivo

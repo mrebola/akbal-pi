@@ -694,11 +694,6 @@
   dependencies:
     "@jridgewell/trace-mapping" "0.3.9"
 
-"@ffprobe-installer/linux-arm64@5.2.0":
-  version "5.2.0"
-  resolved "https://registry.npmjs.org/@ffprobe-installer/linux-arm64/-/linux-arm64-5.2.0.tgz"
-  integrity sha512-X1VvWtlLs6ScP73biVLuHD5ohKJKsMTa0vafCESOen4mOoNeLAYbxOVxDWAdFz9cpZgRiloFj5QD6nDj8E28yQ==
-
 "@ffprobe-installer/ffprobe@^2.1.1":
   version "2.1.2"
   resolved "https://registry.npmjs.org/@ffprobe-installer/ffprobe/-/ffprobe-2.1.2.tgz"
@@ -712,6 +707,11 @@
     "@ffprobe-installer/linux-x64" "5.2.0"
     "@ffprobe-installer/win32-ia32" "5.1.0"
     "@ffprobe-installer/win32-x64" "5.1.0"
+
+"@ffprobe-installer/linux-arm64@5.2.0":
+  version "5.2.0"
+  resolved "https://registry.npmjs.org/@ffprobe-installer/linux-arm64/-/linux-arm64-5.2.0.tgz"
+  integrity sha512-X1VvWtlLs6ScP73biVLuHD5ohKJKsMTa0vafCESOen4mOoNeLAYbxOVxDWAdFz9cpZgRiloFj5QD6nDj8E28yQ==
 
 "@google-cloud/text-to-speech@^6.3.1":
   version "6.4.0"

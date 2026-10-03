@@ -22,3 +22,6 @@ venv/
 
 # OS
 .DS_Store
+
+# Scripts personales de diagnóstico con datos locales (no se publican)
+app/check-sessions.mjs

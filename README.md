@@ -1,13 +1,60 @@
 # akbal-pi
 
-**Akbal** es un asistente de IA local que corre sobre una Raspberry Pi 5, sin depender de servicios en la nube para su funcionamiento principal.
+**Akbal** es una plataforma de IA 100% local sobre Raspberry Pi 5, enfocada en
+ciberseguridad: conversa por voz y por texto, y además **entiende y opera el
+propio equipo** — radar WiFi 3D, un laboratorio de auditoría WiFi (handshakes,
+diccionario/máscara, allowlist), captura en movimiento (wardrive), radar de
+aeronaves por ADS-B, y metadata GNSS — todo desde un admin web en tu LAN o
+Tailnet, sin depender de servicios en la nube para funcionar.
 
-El proyecto toma como base el repositorio [PiSugar/whisplay-ai-chatbot](https://github.com/PiSugar/whisplay-ai-chatbot), adaptándolo y extendiéndolo sobre el hardware descrito abajo.
+Empezó como un fork de trabajo de
+[PiSugar/whisplay-ai-chatbot](https://github.com/PiSugar/whisplay-ai-chatbot)
+(que sigue usándose como base del chat por voz/LCD/plugins), pero ya es algo
+mucho más grande y específico: un proyecto de autoaprendizaje sobre hasta
+dónde puede llegar una IA local **sin bloqueos artificiales** combinada con
+ciberseguridad real, operando sobre hardware físico — no una demo ni un
+producto terminado.
+
+## De dónde viene el nombre: Cypher404 — El Manifiesto
+
+<p align="center">
+  <img src="app/web/admin/img/cypher404-portada.jpg" alt="Portada de Cypher404: El Manifiesto" width="220" />
+</p>
+
+> **TODO SISTEMA PUEDE SER HACKEADO.**
+>
+> Nexora es una ciudad donde el hacking, la inteligencia artificial, la
+> vigilancia masiva y las corporaciones tecnológicas gobiernan cada aspecto
+> de la vida.
+>
+> Cuando **Akbal** comienza a manipular infraestructura, información y
+> personas, Cypher, Namna y Aichi serán arrastrados a una guerra invisible
+> donde el verdadero peligro no es la tecnología…
+>
+> sino el error humano.
+>
+> — De **César Gaytán**, creador de Hackwise y Director General en Dactima y
+> Galditi. Autor también de este repositorio.
+
+Este asistente toma su nombre e inspiración de Akbal, personaje de
+**Cypher404: El Manifiesto**. Este proyecto existe para promover el libro —
+**consíguelo y léelo en [cypher404.com/book](https://cypher404.com/book/)** —
+y para servir de ejercicio práctico de estudio: entender, con código real
+corriendo en hardware real, hasta dónde llega el cruce entre IA local sin
+restricciones y ciberseguridad. Está pensado como inspiración abierta — si
+te interesa este tipo de exploración, el repo es público y las
+contribuciones son bienvenidas.
+
+La misma reseña (con portada + QR para comprar el libro) está disponible
+dentro del propio dispositivo: pantalla física (menú rápido → **Acerca de**)
+y web admin (pestaña **Acerca de**, `/about`).
 
 ## Índice
 
 | | Sección | Contenido |
 |---|---|---|
+| **El proyecto** | | |
+| — | [De dónde viene el nombre](#de-dónde-viene-el-nombre-cypher404--el-manifiesto) | Cypher404: El Manifiesto, por qué existe este repo |
 | **Instalación y referencia** | | |
 | — | [Hardware](#hardware) | Componentes y enlaces de compra |
 | — | [Sistema operativo](#sistema-operativo) | Qué OS corre el dispositivo |
@@ -18,11 +65,11 @@ El proyecto toma como base el repositorio [PiSugar/whisplay-ai-chatbot](https://
 | **Uso del dispositivo** | | |
 | — | [Conversación por voz](#conversación-por-voz-uso-principal) | El flujo principal: botón → hablar → respuesta |
 | — | [Comandos de voz](#comandos-de-voz-instantáneos-no-gastan-turno) | Atajos instantáneos ("ayuda", volumen, modelo...) |
-| — | [Menú rápido](#menú-rápido-click-corto-en-reposo) | Los 12 modos de la app física y sus gestos |
+| — | [Menú rápido](#menú-rápido-click-corto-en-reposo) | Los 13 modos de la app física y sus gestos |
 | — | [WiFi Radar en pantalla](#wifi-radar-pantalla) | Radar de redes en la LCD física |
 | — | [Aircraft Radar en pantalla](#aircraft-radar-pantalla) | Radar de aeronaves (ADS-B) en la LCD física |
 | **Sitio web** (`http://<ip>:8090`) | | |
-| — | [Chat](#chat) | Chat escrito con el LLM local |
+| — | [Chat](#chat) | Chat escrito con el LLM local — entiende y opera el equipo (tool-calling), responde con enlaces a cada sección y renderiza markdown |
 | — | [WiFi](#wifi-pestaña-sub-pestañas-conexión-redes) | Conexión, redes, punto de acceso |
 | — | [WIFIRADAR 3D](#wifiradar-wifiradar-link-radar-wi-fi) | Radar 3D con toggle REAL/DEMO |
 | — | [Aircraft Radar](#aircraft-radar-aircraft-radar-link-radar-de-aviones) | Tráfico aéreo (ADS-B) vía HackRF One |
@@ -31,13 +78,12 @@ El proyecto toma como base el repositorio [PiSugar/whisplay-ai-chatbot](https://
 | — | [GPS](#gps-página-gps) | Posición en vivo + satélites (GNSS, cacheado y offline-first) |
 | — | [OST](#ost-pestaña-ost) | Jukebox de música |
 | — | [Dispositivos](#dispositivos-pestaña-usb) | USB, montaje, adaptadores WiFi |
-| — | [Ajustes](#ajustes) | Volumen, bocina Bluetooth, respaldos |
+| — | [Ajustes](#ajustes) | Volumen, bocina Bluetooth, respaldos, identidad de Akbal (Soul) |
+| — | [Acerca de](#acerca-de-about) | Cypher404: El Manifiesto, portada + QR para comprar el libro |
 | — | [API HTTP](#api-http-para-integraciones) | Endpoints para integraciones |
 | — | [Idioma (ES/EN)](#idioma-esen) | Selector siempre visible en el topbar |
-| **Docs por archivo** | | |
-| — | [`docs/`](docs/) | Bitácora de instalación, fixes y decisiones (índice en [`docs/SETUP.md`](docs/SETUP.md)) |
-| — | [`docs/deploy.md`](docs/deploy.md) | Deploy/actualización por `git clone` + `whisplay update` |
-| — | [`app/AGENTS.md`](app/AGENTS.md) | Arquitectura interna de la app (para agentes/mantenedores) |
+| **Documentación completa** (`docs/`) | | |
+| — | [Índice de `docs/`](#documentación-docs) | Las 21 guías: features, fixes de hardware/software, decisiones de diseño |
 
 ## Hardware
 
@@ -71,6 +117,8 @@ Raspberry Pi OS 64-bit, basado en Debian Trixie.
 | GPS + GNSS | Mapa mundial con la posición en vivo del dongle GPS USB: marcador, precisión, sky plot de satélites (en fix / visibles / necesarios) — [`docs/gps.md`](docs/gps.md). Cada satélite se enriquece con metadata cacheada en SQLite + datos orbitales de CelesTrak (nombre, catálogo NORAD): offline-first, nunca bloquea la UI si falla Internet — [`docs/gnss.md`](docs/gnss.md) |
 | Aircraft Radar | Aeronaves cercanas por ADS-B (1090MHz, decodificado con `readsb`) con un HackRF One en modo RX-only: mapa real en modo oscuro con cada avión moviéndose por su posición real, o radar circular por distancia/rumbo (vía el GPS del Pi); identidad (matrícula/modelo/aerolínea) y ruta resueltas por caché local + adsbdb.com, historial en SQLite y caída a demo si no hay HackRF conectado ([`docs/aircraft-radar.md`](docs/aircraft-radar.md)) |
 | Idioma (i18n) | Selector ES/EN siempre visible en el topbar de la web admin: detecta el idioma del navegador en la primera visita, la selección manual persiste y tiene prioridad — [`docs/i18n.md`](docs/i18n.md) |
+| Identidad de Akbal (Soul) | Personalidad/system-prompt y lo que Akbal sabe de sí mismo en archivos de texto editables (`app/soul/akbal.md`, `app/knowledge/akbal-*.md`), con su propia pestaña en Ajustes → Soul para editarlos desde el navegador — se aplica sin reiniciar el servicio. |
+| Chat con tool-calling | El chat web no solo conversa: puede consultar el estado real de WiFi Radar, Wifi Audit, Wardrive, Aircraft Radar y GNSS, y responde con enlaces directos a la sección correspondiente — registro propio en `app/src/config/admin-tools/`, separado del de voz por performance en el Pi. |
 
 Detalle completo del setup en [`docs/SETUP.md`](docs/SETUP.md).
 
@@ -254,19 +302,64 @@ PiSugar).
 
 ## Estructura del repo
 
-- [`app/`](app/) — código de la aplicación que corre en la Pi (fork de trabajo de
-  `whisplay-ai-chatbot`, con nuestros fixes aplicados). Se despliega clonando
-  este repo entero en el dispositivo (ver [`docs/deploy.md`](docs/deploy.md))
+- [`app/`](app/) — código de la aplicación que corre en la Pi. Nació como fork
+  de trabajo de `whisplay-ai-chatbot` (todavía su base para voz/LCD/plugins)
+  y creció muy por encima de eso: WiFi Radar, Wifi Audit, Wardrive, Aircraft
+  Radar, GNSS, el admin web con chat de tool-calling, e identidad editable
+  (Soul) son enteramente de este proyecto, no del fork original. Se despliega
+  clonando este repo entero en el dispositivo (ver [`docs/deploy.md`](docs/deploy.md))
   y corriendo todo desde `app/` — `whisplay update` sabe que el repo real
   está un nivel arriba de `app/`, no confundirlo con la instalación
   original de PiSugar (esa sí espera clonarse directo en la raíz).
   No incluye `.env` (usar `app/.env.template` o `setup/akbal.env.example` como base),
   `node_modules`, `dist` ni datos de runtime — todo eso se genera/instala en el
   propio dispositivo.
-- [`docs/`](docs/) — bitácora de instalación y fixes encontrados en el camino.
+- [`docs/`](docs/) — bitácora de instalación, features y fixes encontrados en
+  el camino. Índice completo en la sección [Documentación](#documentación-docs)
+  más abajo.
 - [`setup/`](setup/) — patches aplicados, `.env` de referencia (sin secretos), y
   los videos originales del personaje en
   [`setup/display-source-videos/`](setup/display-source-videos/).
+
+## Documentación (`docs/`)
+
+Cada feature y cada bug de hardware/software encontrado en el camino tiene su
+propio doc. Agrupado por tipo:
+
+**Features (qué hace cada cosa, cómo está construida):**
+
+| Doc | Contenido |
+|---|---|
+| [`web-ui.md`](docs/web-ui.md) | La interfaz web completa: chat, wifi, USB, WIFIRADAR |
+| [`wifiradar.md`](docs/wifiradar.md) | WIFIRADAR — visualización 3D del espacio WiFi |
+| [`wifi-audit.md`](docs/wifi-audit.md) | Wifi Audit — captura de handshakes para laboratorio/tesis |
+| [`wardrive.md`](docs/wardrive.md) | Wardrive — captura mientras se conduce |
+| [`lab-wireless.md`](docs/lab-wireless.md) | El AP de laboratorio dedicado (`akbal_lab`) — la red autorizada para Wifi Audit |
+| [`aircraft-radar.md`](docs/aircraft-radar.md) | Aircraft Radar — ADS-B con HackRF One |
+| [`gps.md`](docs/gps.md) | GPS — posición del dispositivo en un mapa mundial |
+| [`gnss.md`](docs/gnss.md) | GNSS — metadata de satélites offline-first (CelesTrak) |
+| [`voice-commands.md`](docs/voice-commands.md) | Comandos de voz (volumen, modelo, modo, ayuda) |
+| [`agent-mode.md`](docs/agent-mode.md) | Modo agente (OpenClaw) vs modo local |
+| [`wifi.md`](docs/wifi.md) | Menú "WiFi directo" y administrador desde la web |
+| [`i18n.md`](docs/i18n.md) | Traducciones del admin web (ES/EN) |
+| [`display-ui.md`](docs/display-ui.md) | Interfaz de pantalla minimalista (íconos + video + texto) |
+| [`deploy.md`](docs/deploy.md) | Deploy/actualización por `git clone` + `whisplay update` |
+
+**Setup, fixes y decisiones de diseño (bitácora, con fecha y causa raíz):**
+
+| Doc | Contenido |
+|---|---|
+| [`SETUP.md`](docs/SETUP.md) | Registro completo de cómo se dejó corriendo la primera versión |
+| [`whisplay-audio-fix.md`](docs/whisplay-audio-fix.md) | Fix: la tarjeta de sonido del Whisplay HAT no se registraba |
+| [`piper-tts-silent-fix.md`](docs/piper-tts-silent-fix.md) | Fix: transcribía y respondía, pero no se escuchaba nada |
+| [`recording-hang-fix.md`](docs/recording-hang-fix.md) | Fix: grabación que se quedaba colgada bloqueando el micrófono |
+| [`llm-model-selection.md`](docs/llm-model-selection.md) | Por qué se eligió cada modelo LLM local, con benchmarks |
+| [`piper-voice-selection.md`](docs/piper-voice-selection.md) | Selección de voz de Piper (verificación real, no por el nombre) |
+| [`performance-tuning.md`](docs/performance-tuning.md) | Optimización de velocidad (ASR/LLM/TTS) |
+
+Para agentes de IA trabajando en el código: [`app/AGENTS.md`](app/AGENTS.md)
+(arquitectura interna de `app/`) y el [`AGENTS.md`](AGENTS.md) de la raíz
+(qué es este repo, checklist anti-secretos).
 
 ## Estado
 
@@ -359,6 +452,7 @@ con estos modos, cada uno con su propio control:
 | **WiFi Radar** | Versión de pantalla del radar WiFi (detalle abajo): discos con puntos por red cercana, texto inferior rotando nombre + dBm. **Mantener** para salir. |
 | **Radar de Aviones** | Versión de pantalla del Aircraft Radar (detalle abajo): disco con un punto por aeronave, ubicado por su rumbo/distancia GPS reales. **Mantener** para salir. |
 | **Wardrive** | Arranca/detiene una sesión de captura mientras se conduce (mismo servicio que la página web `/wardrive` — arrancar acá y seguirla desde el celular funciona igual que al revés). **Mantener** inicia la sesión (o la termina si ya está corriendo); **click** refresca contadores en pantalla (tiempo, distancia, redes, handshakes). |
+| **Acerca de** | Versión condensada de Cypher404: El Manifiesto, el libro del que nace Akbal — **click** pasa de página, última página es un QR para comprar el libro ([cypher404.com/book](https://cypher404.com/book)). **Mantener** sale. |
 
 El menú se cierra solo tras **60 segundos** sin tocar el botón.
 
@@ -549,10 +643,23 @@ radar/wardrive para decidir si pueden operar).
     sonido nunca se pierda en silencio.
   - El micrófono siempre es el del HAT: el BT es solo de salida.
 - **Wi-Fi**: conexión, redes guardadas, AP — mismo backend que la pestaña WiFi.
+- **IA**: modelo de Ollama activo, instalar/borrar modelos, RAM usada.
+- **Soul**: edita la identidad de Akbal — su personalidad (`soul/akbal.md`,
+  usada en cada respuesta, voz y chat web) y lo que sabe de sí mismo
+  (`knowledge/akbal-*.md`, alimenta el RAG). Se aplica sin reiniciar el
+  servicio; guardar un archivo de conocimiento reindexa el RAG solo.
 - **Respaldos**: crear/descargar/restaurar/eliminar snapshots de configuración.
 - **Almacenamiento**: navegación de discos montados con subida/descarga/borrado.
 - **Sistema** (ícono ◉ arriba a la derecha, en cualquier pestaña): CPU, RAM,
   disco y wifi en vivo, y logout.
+
+### Acerca de (`/about`)
+
+Cypher404: El Manifiesto — portada, sinopsis, de dónde viene el nombre
+Akbal y por qué existe este proyecto, con un QR y un botón directo para
+comprar/leer el libro en [cypher404.com/book](https://cypher404.com/book/).
+Misma reseña que la pantalla física del dispositivo (menú rápido → Acerca
+de), con el texto completo en vez de la versión condensada.
 
 ### API HTTP (para integraciones)
 

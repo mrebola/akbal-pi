@@ -1,20 +1,51 @@
-# Whisplay AI Chatbot - Agent Documentation
+# akbal-pi (app/) — Agent Documentation
 
-> **Note:** This file is intended for AI coding agents. Please keep it updated when making architectural changes.
+> **Note:** This file is intended for AI coding agents working inside `app/`.
+> Please keep it updated when making architectural changes. For the project
+> as a whole — why it exists, the *Cypher404: El Manifiesto* book it's named
+> after, and the full docs index — see the root
+> [`AGENTS.md`](../AGENTS.md) and [`README.md`](../README.md).
 
 ## Project Overview
 
-Whisplay AI Chatbot is a pocket-sized AI chatbot device built for Raspberry Pi Zero 2W / Pi 5. It features voice interaction (press button, speak, get spoken responses), an LCD display with emoji/status visualization, RGB LED indicators, and extensible AI backend support.
+**akbal-pi** is a 100% local AI platform for a Raspberry Pi 5, focused on
+cybersecurity: voice (press button, speak, get a spoken reply) and a web
+text chat, both backed by the same local LLM — but unlike a typical voice
+assistant, this one also **understands and operates the device itself**.
+`app/` (this directory) is the Node.js + Python application that runs on
+the Pi. It's built on top of a forked `whisplay-ai-chatbot` base (still
+its foundation for the voice/LCD/plugin plumbing) but has grown well past
+it: WiFi Radar, Wifi Audit, Wardrive, Aircraft Radar, GNSS, the admin
+web's tool-calling chat, and Akbal's editable identity are all specific to
+this project, not the upstream fork.
 
 **Key Capabilities:**
-- Multi-provider ASR (Automatic Speech Recognition): Tencent, Volcengine, OpenAI, Gemini, Whisper, Vosk, local models
-- Multi-provider LLM: OpenAI, Gemini, Claude, Ollama, Qwen, Volcengine Doubao, and more
-- Multi-provider TTS: Google, Volcengine, Piper, espeak-ng, local models
-- Image generation and vision understanding
-- RAG (Retrieval-Augmented Generation) with Qdrant vector database
-- Wake word detection for hands-free operation
-- Plugin system for third-party extensions
-- Web-based display simulation for development
+- Voice interaction (press button, speak, get spoken responses) and a web
+  text chat — both hit the same local LLM (Ollama), and the web chat can
+  call tools against the device's own live state (`config/admin-tools/`)
+  and reply with deep links to the section it checked
+- **WiFi Radar** (`wifiradar/`): passive 3D visualization of nearby access
+  points/devices, real hardware or demo data
+- **Wifi Audit** (`wifi-audit/`): lab handshake capture + dictionary/mask
+  cracking, gated by an explicit BSSID allowlist — never network-wide,
+  see `docs/lab-wireless.md`
+- **Wardrive** (`wardrive/`): continuous capture while driving, GPS track,
+  optional opportunistic deauth (off by default)
+- **Aircraft Radar** (`services/adsb/`): nearby ADS-B traffic via a
+  HackRF One
+- **GNSS** (`services/gnss/`): offline-first satellite metadata
+  (CelesTrak)
+- Akbal's identity is editable, not hardcoded: a "soul file"
+  (persona/system-prompt) plus self-knowledge for RAG — see "Akbal's
+  identity and self-knowledge" further down
+- Multi-provider ASR (Tencent, Volcengine, OpenAI, Gemini, Whisper, Vosk,
+  local) / LLM (OpenAI, Gemini, Claude, Ollama, Qwen, Doubao, and more) /
+  TTS (Google, Volcengine, Piper, espeak-ng, local) — inherited from the
+  whisplay-ai-chatbot base; this deployment actually runs Ollama +
+  faster-whisper + Piper, all local
+- Image generation and vision understanding, RAG (Qdrant), wake word
+  detection, plugin system for third-party extensions, web-based display
+  simulation for development
 
 ## Technology Stack
 
@@ -117,9 +148,11 @@ whisplay-ai-chatbot/
 │   │   ├── loader.ts             # External plugin loader
 │   │   └── builtin*.ts           # Built-in provider plugins
 │   ├── config/                   # Configuration modules
-│   │   ├── llm-config.ts         # LLM configuration
-│   │   ├── llm-tools.ts          # Tool definitions
-│   │   └── custom-tools/         # Custom tool templates
+│   │   ├── llm-config.ts         # LLM configuration (incl. the soul-file-backed system prompt)
+│   │   ├── llm-tools.ts          # Tool definitions for the VOICE flow
+│   │   ├── custom-tools/         # Custom tool templates
+│   │   ├── soul-files.ts         # Backs Settings > Soul — allowlisted soul/knowledge file read+write
+│   │   └── admin-tools/          # Tool definitions for the WEB CHAT (separate registry — see below)
 │   ├── utils/                    # Utility functions (incl. wifi.ts — nmcli wrapper, docs/wifi.md,
 │   │                             #   gps.ts — USB GPS dongle NMEA reader, docs/gps.md)
 │   └── type/                     # Global TypeScript types
@@ -137,7 +170,11 @@ whisplay-ai-chatbot/
 │   ├── whisplay-display/         # Mirrors the physical screen for dev (WHISPLAY_WEB_ENABLED)
 │   └── admin/                    # LAN chat + wifi admin UI (web-admin-server.ts, docs/web-ui.md)
 │       ├── i18n.js               # Translation engine (ES/EN), shared by every admin page (docs/i18n.md)
-│       └── i18n/                 # es.json / en.json dictionaries
+│       ├── i18n/                 # es.json / en.json dictionaries
+│       ├── about.html            # "Acerca de" page — Cypher404: El Manifiesto, buy-the-book QR
+│       └── img/                  # cypher404-portada.jpg, cypher404-book-qr.png (served as static files)
+├── soul/                         # Akbal's persona (soul.md) — see "identity" section below
+├── knowledge/                    # Self-knowledge for RAG (akbal-*.md) — see "identity" section below
 ├── cli/                          # Bash CLI implementation
 │   ├── commands.sh               # Main command dispatcher
 │   ├── plugin.sh                 # Plugin management
@@ -223,6 +260,31 @@ bash index_knowledge.sh
 # or via CLI
 whisplay index-knowledge
 ```
+
+### Akbal's identity and self-knowledge (soul file + knowledge/)
+- **`soul/akbal.md`** is the editable persona/system-prompt source of
+  truth (`config/llm-config.ts` reads it via `utils/dir.ts`'s
+  `soulFilePath`, override with `SOUL_FILE` in `.env`). Keep it short — it
+  is sent in full on every turn, voice and web chat alike. HTML comments
+  in it are stripped before use, so editing notes can live at the top of
+  the file without costing tokens.
+- **`knowledge/akbal-identidad.md`** / **`akbal-capacidades.md`** are
+  self-knowledge for RAG (read-only grounding, not sent every turn —
+  retrieved only when relevant via `core/Knowledge.ts`). Update them when
+  a section's actual capabilities change; re-run `whisplay index-knowledge`
+  (only re-embeds files whose content hash changed) afterward.
+- **`knowledge/akbal-bitacora.md`** is a curated changelog in plain
+  language ("qué hizo Akbal"), not a 1:1 mirror of `git log` — add a dated
+  entry when something worth Akbal being able to talk about ships. Keep
+  dates real (from `git log --date=short`, not guessed). This is
+  deliberately manual/curated rather than an automatic self-journal: an
+  LLM-summarized log of its own actions risks folding in a wrong summary
+  as if it were a verified fact about itself.
+- RAG is wired into both the voice flow (`core/chat-flow/states.ts`) and
+  the web admin chat (`device/web-admin-server.ts`'s `/api/chat`) — both
+  call `getSystemPromptWithKnowledge()`. It's a no-op when `enableRAG`
+  (`cloud-api/knowledge.ts`) is false, which it is unless RAG's env vars
+  are configured.
 
 ## Code Style and Conventions
 
@@ -461,9 +523,16 @@ bash upgrade-env.sh
 5. Document in `.env.template`
 
 ### Adding a New Tool for LLM
+For the **voice** flow (every conversation, so keep this list short — see
+the performance note in `cloud-api/local/ollama-llm.ts`):
 1. Define tool schema in `src/config/llm-tools.ts`
 2. Implement handler function
 3. Or create `llm-tools` plugin for third-party tools
+
+For the **web admin chat only** (its own registry, doesn't add weight to
+voice turns): add an `AdminToolDescriptor` in a `src/config/admin-tools/*.ts`
+sibling file (see `aircraft-radar-tools.ts` there for the pattern) and
+register it in `admin-tools/registry.ts`.
 
 ### Web Search
 The chatbot supports web search functionality via multiple providers:
@@ -519,7 +588,12 @@ Set `CLEAN_DATA_FOLDER_ON_START=true` in `.env` to clear recordings on startup.
 
 ## Resources
 
-- **Project Wiki**: https://github.com/PiSugar/whisplay-ai-chatbot/wiki
-- **Hardware Docs**: https://docs.pisugar.com/
-- **Discord**: https://discord.gg/NMpCMP8RS8
+- **This project's docs**: [`../README.md`](../README.md) (full picture,
+  usage guide) and [`../docs/`](../docs/) (one file per feature/fix)
+- **The book this project is named after**: *Cypher404: El Manifiesto*,
+  by César Gaytán — https://cypher404.com/book/
+- **Upstream base (fork origin)**:
+  - Project Wiki: https://github.com/PiSugar/whisplay-ai-chatbot/wiki
+  - Hardware Docs: https://docs.pisugar.com/
+  - Discord: https://discord.gg/NMpCMP8RS8
 - **License**: GPL-3.0

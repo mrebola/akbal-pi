@@ -5,11 +5,23 @@
 
 ## Qué es este repo
 
-**akbal-pi** es un asistente de IA 100% local sobre Raspberry Pi 5: voz
-(presionar botón → hablar → respuesta hablada), pantalla LCD con personaje
-animado, wifi, batería PiSugar, y un admin web en la LAN. Fork de trabajo de
+**akbal-pi** es una plataforma de IA 100% local sobre Raspberry Pi 5,
+enfocada en ciberseguridad: voz (presionar botón → hablar → respuesta
+hablada) y chat de texto con tool-calling real sobre el propio equipo,
+pantalla LCD con personaje animado, batería PiSugar, y un admin web en la
+LAN/Tailnet desde donde se opera todo — WiFi Radar 3D, un laboratorio de
+auditoría WiFi (handshakes, allowlist, ataques dirigidos), wardrive
+(captura en movimiento + GPS), radar de aeronaves por ADS-B, y metadata
+GNSS.
+
+Nació como fork de trabajo de
 [`PiSugar/whisplay-ai-chatbot`](https://github.com/PiSugar/whisplay-ai-chatbot)
-con fixes propios.
+(todavía su base para el chat por voz/LCD/plugins), pero ya es mucho más
+que eso: un proyecto de autoaprendizaje sobre hasta dónde llega una IA local
+sin bloqueos artificiales combinada con ciberseguridad real. El nombre
+viene de Akbal, personaje de *Cypher404: El Manifiesto* (libro de César
+Gaytán, autor también de este repo) — panorama completo, por qué existe el
+proyecto y dónde conseguir el libro en [`README.md`](README.md).
 
 **⚠️ REPO PÚBLICO EN GITHUB**: nunca commitear secretos, IPs reales de la LAN,
 usuarios/hosts reales, contraseñas de wifi, ni logs con datos personales. Ver
@@ -29,9 +41,12 @@ akbal-pi/
 │   │   ├── wifi-audit/    # Captura de handshakes de laboratorio (allowlist, ataques dirigidos)
 │   │   ├── wardrive/      # Captura mientras se conduce (mapa + GPS + deauth oportunista)
 │   │   ├── services/      # adsb/ (Aircraft Radar) y gnss/ (metadata de satélites GNSS)
+│   │   ├── config/        # Tools del LLM: admin-tools/ (chat web) vs llm-tools.ts (voz)
 │   │   └── utils/         # wifi (nmcli), usb, system-stats, volume
 │   ├── python/            # Interfaz de hardware (GPIO/SPI/LCD, socket 12345)
 │   ├── web/               # Frontends estáticos sin build: admin/ (+ i18n/) y whisplay-display/
+│   ├── soul/              # Identidad editable de Akbal (soul.md) — ver app/AGENTS.md
+│   ├── knowledge/         # Self-knowledge para el RAG (akbal-*.md) — ver app/AGENTS.md
 │   ├── cli/               # CLI bash (bin/whisplay)
 │   └── dist/              # Compilado (no commitear)
 ├── docs/                  # Bitácora: SETUP.md, fixes de hardware, decisiones

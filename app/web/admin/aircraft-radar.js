@@ -133,64 +133,11 @@ function distanceLabel(aircraft) {
   return "—";
 }
 
-function renderList(snapshot) {
-  // Only the live cards are redrawn here. The zone cards (24 h) share the
-  // ar-card look but belong to aircraft-zone.js, so they are left alone.
+function renderList() {
+  // The left column is the 24-hour zone list (aircraft-zone.js). Live aircraft
+  // stay on the map and radar only, so the column reads newest to oldest.
   listEl.querySelectorAll(".ar-card:not(.ar-zone-card)").forEach((el) => el.remove());
-  emptyEl.classList.toggle("hidden", snapshot.aircraft.length > 0);
-  // No HackRF and the user hasn't explicitly asked for DEMO — don't just
-  // say "buscando aeronaves" (reads as "still looking"), say why there's
-  // nothing to find and how to fix it.
-  const noAdapter = snapshot.aircraft.length === 0 && !snapshot.demo && Boolean(snapshot.error);
-  emptyEl.classList.toggle("ar-no-adapter", noAdapter);
-  emptyEl.textContent = noAdapter
-    ? `🔌 ${tr("aircraft.no_hackrf", "No hay HackRF conectado — enchufalo o activá DEMO arriba")}`
-    : tr("aircraft.searching", "Buscando aeronaves…");
-  for (const aircraft of snapshot.aircraft) {
-    const card = document.createElement("div");
-    card.className = "ar-card" + (aircraft.icao === selectedIcao ? " selected" : "");
-    card.dataset.icao = aircraft.icao;
-    card.innerHTML = `
-      <div class="ar-card-top">
-        <span class="ar-flight">${displayName(aircraft)}</span>
-        <span class="ar-reg">${aircraft.registration || aircraft.icao}</span>
-      </div>
-      <div class="ar-model">${aircraft.manufacturer ? `${aircraft.manufacturer} ${aircraft.model || ""}`.trim() : (aircraft.model || tr("aircraft.unknown_model", "Modelo desconocido"))}</div>
-      <div class="ar-route">${routeLabel(aircraft)}</div>
-      <div class="ar-card-metrics">
-        <span>${fmt(aircraft.altitudeFt, " ft")}</span>
-        <span>${fmt(aircraft.speedKt, " kt")}</span>
-        <span class="${aircraft.distanceKm === null ? "" : "warn"}">${distanceLabel(aircraft)}</span>
-        <span>${aircraft.bearingDeg === null ? "" : `${bearingCompass(aircraft.bearingDeg)} ${Math.round(aircraft.bearingDeg)}°`}</span>
-      </div>
-      ${aircraft.latitude !== null && aircraft.longitude !== null
-        ? `<button type="button" class="ar-card-note-btn" title="${tr("aircraft.view_info_of", "Ver info de {name}", { name: displayName(aircraft) })}">📝</button>`
-        : ""}
-    `;
-    // List click only centers the map on this aircraft — it no longer also
-    // opens the detail card (that's now specifically a map-marker/tooltip
-    // action, see updateAircraftMarkers). Still highlights the card/radar
-    // dot so the click has *some* visible effect even for an aircraft with
-    // no position yet (centerMapOn is a no-op without lat/lon).
-    card.addEventListener("click", () => {
-      selectedIcao = aircraft.icao;
-      renderList(latestSnapshot);
-      render();
-      centerMapOn(aircraft);
-    });
-    // Note icon: only present once the aircraft has a position (it's the
-    // same "shows up on the map" aircraft the user asked for) — opens the
-    // detail modal directly from the list, without stealing the card's own
-    // click (which only centers the map, see above).
-    const noteBtn = card.querySelector(".ar-card-note-btn");
-    if (noteBtn) {
-      noteBtn.addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        openDetail(aircraft);
-      });
-    }
-    listEl.appendChild(card);
-  }
+  emptyEl.classList.add("hidden");
 }
 
 const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];

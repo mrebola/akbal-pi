@@ -134,7 +134,9 @@ function distanceLabel(aircraft) {
 }
 
 function renderList(snapshot) {
-  listEl.querySelectorAll(".ar-card").forEach((el) => el.remove());
+  // Only the live cards are redrawn here. The zone cards (24 h) share the
+  // ar-card look but belong to aircraft-zone.js, so they are left alone.
+  listEl.querySelectorAll(".ar-card:not(.ar-zone-card)").forEach((el) => el.remove());
   emptyEl.classList.toggle("hidden", snapshot.aircraft.length > 0);
   // No HackRF and the user hasn't explicitly asked for DEMO — don't just
   // say "buscando aeronaves" (reads as "still looking"), say why there's

@@ -400,17 +400,28 @@ modelSelect.addEventListener("change", async () => {
     ok: "Cambiar modelo",
   });
   if (!ok) {
-    // Put the select back to the chat's own model.
-    const chat = await fetch(`/api/chats/${activeChatId}`).then((r) => r.json());
-    modelSelect.value = chat.model;
+    await revertModelSelect();
     return;
   }
-  await fetch(`/api/chats/${activeChatId}`, {
+  // Load first: if it fails the chat must keep its old model on disk.
+  const loaded = await loadChatModelWithUi({ model: newModel });
+  if (!loaded) {
+    await revertModelSelect();
+    setComposerEnabled(false);
+    return;
+  }
+  const saved = await fetch(`/api/chats/${activeChatId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model: newModel }),
   });
-  await loadChatModelWithUi({ model: newModel });
+  if (!saved.ok) {
+    addMessage("system", "Se cargó el modelo, pero no se pudo guardar en el chat. Vuelve a elegirlo.");
+    await revertModelSelect();
+    setComposerEnabled(false);
+    return;
+  }
+  setComposerEnabled(true);
   ChatHistory.refresh();
 });
 
@@ -722,10 +733,24 @@ async function sendMessage(text) {
   }
 }
 
+function setComposerEnabled(enabled) {
+  chatInput.disabled = !enabled;
+  chatSend.disabled = !enabled;
+}
+
+// Puts the select back on the active chat's own model after a cancelled or
+// failed change.
+async function revertModelSelect() {
+  if (!activeChatId) return;
+  const chat = await fetch(`/api/chats/${activeChatId}`).then((r) => r.json());
+  modelSelect.value = chat.model;
+}
+
 function resetChatView() {
   activeChatId = null;
   chatLog.innerHTML = "";
   document.getElementById("chat-empty").classList.remove("hidden");
+  setComposerEnabled(true);
   ChatHistory.setActive(null);
 }
 
@@ -745,6 +770,7 @@ async function openChat(id) {
   activeChatId = chat.id;
   chatLog.innerHTML = "";
   document.getElementById("chat-empty").classList.add("hidden");
+  setComposerEnabled(true);
   for (const m of chat.messages) {
     const el = addMessage(m.role === "assistant" ? "assistant" : "user", m.content);
     if (m.role === "assistant") el.innerHTML = renderMarkdown(m.content);
@@ -761,14 +787,15 @@ ChatHistory.onDeleted = (id) => {
 
 // Opening a chat whose model is not the loaded one: warn with the last
 // measured load time, then unload-and-load only after the user confirms.
+// Until its model is loaded, the chat is read-only: sending would make
+// Ollama load the model on demand, next to whatever is already resident.
 async function ensureModelFor(chat) {
   if (modelSelect.value === chat.model) return;
   modelSelect.value = chat.model;
   const exists = [...modelSelect.options].some((o) => o.value === chat.model);
   if (!exists) {
     addMessage("system", `El modelo ${chat.model} ya no está instalado. El chat queda en solo lectura hasta reinstalarlo o elegir otro.`);
-    chatInput.disabled = true;
-    chatSend.disabled = true;
+    setComposerEnabled(false);
     return;
   }
   const stats = await fetch("/api/chat-models/stats").then((r) => r.json()).catch(() => ({}));
@@ -782,15 +809,18 @@ async function ensureModelFor(chat) {
     ok: "Cambiar modelo",
   });
   if (!ok) {
-    addMessage("system", `Sigue activo ${modelSelect.value}. Para usar ${chat.model} en este chat, abrilo de nuevo y confirmá.`);
+    setComposerEnabled(false);
+    addMessage("system", `Este chat usa ${chat.model}, que todavía no está cargado. Cámbialo o confirma para poder escribir en él.`);
     return;
   }
-  await loadChatModelWithUi(chat);
+  const loaded = await loadChatModelWithUi(chat);
+  setComposerEnabled(loaded);
 }
 
+// Resolves true only when the model is loaded and ready for this chat.
 async function loadChatModelWithUi(chat) {
   addMessage("system", `Cargando ${chat.model}…`);
-  chatInput.disabled = true;
+  setComposerEnabled(false);
   try {
     const res = await fetch("/api/chat-models/load", {
       method: "POST",
@@ -799,10 +829,10 @@ async function loadChatModelWithUi(chat) {
     });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
     addMessage("system", `Listo: ${chat.model}`);
+    return true;
   } catch (err) {
     addMessage("system", `No se pudo cargar ${chat.model}: ${err.message}`);
-  } finally {
-    chatInput.disabled = false;
+    return false;
   }
 }
 

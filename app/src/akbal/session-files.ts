@@ -5,7 +5,7 @@
 
 export interface SessionInput {
   drive: { id: string; startedAt: number; endedAt: number | null; distanceM: number; points: number; networks: number; handshakes: number };
-  track: { ts: number; lat: number; lon: number; speedKmh: number | null; heading: number | null; hdop: number | null }[];
+  track: { ts: number; lat: number; lon: number; speed_kmh: number | null; heading: number | null; hdop: number | null }[];
   networks: { ssid: string; bssid: string; security: string; channel: number | null; bestRssi: number | null; lat: number | null; lon: number | null; firstSeen: number }[];
   handshakes: { ssid: string; bssid: string; method: string; capturedAt: number; password: string | null; capFile: string; hashFile: string | null }[];
   capFiles: Record<string, Buffer>;

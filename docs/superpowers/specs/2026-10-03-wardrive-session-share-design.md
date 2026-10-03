@@ -1,7 +1,7 @@
 # Compartir sesiones de wardriving en archivos `.akbal`
 
 Fecha: 2026-10-03
-Estado: Terminado y desplegado. Exportar, importar, listar y borrar desde la pestaña Compartir de Wardriving. Pendiente de la spec: los puntos de ruta guardan lat, lon y tiempo (sin velocidad, rumbo ni HDOP), y las redes salen por sesión según la consulta existente.
+Estado: Terminado y desplegado. Exportar, importar, listar y borrar desde la pestaña Compartir de Wardriving. Los puntos de ruta incluyen velocidad, rumbo y HDOP.
 
 ## Objetivo
 

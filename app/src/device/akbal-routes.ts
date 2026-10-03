@@ -47,7 +47,7 @@ const sessionInput = (id: string, includeCredentials: boolean): SessionInput | n
       networks: row.networks,
       handshakes: row.handshakes,
     },
-    track: driveDb.trackPoints(id).map((p) => ({ ts: p.ts, lat: p.lat, lon: p.lon, speedKmh: null, heading: null, hdop: null })),
+    track: driveDb.trackPoints(id),
     networks: driveDb.sessionNetworks(id).map((n) => ({
       ssid: n.ssid,
       bssid: n.bssid,

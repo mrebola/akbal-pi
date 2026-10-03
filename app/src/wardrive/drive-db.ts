@@ -34,6 +34,17 @@ type NetworksSeenRow = {
   handshake_at: number | null;
 };
 
+// One breadcrumb point. speed/heading/hdop are null when the GPS had no value
+// for that fix (a fix without heading is common at low speed).
+export interface TrackPointRow {
+  ts: number;
+  lat: number;
+  lon: number;
+  speed_kmh: number | null;
+  heading: number | null;
+  hdop: number | null;
+}
+
 export class DriveDb {
   private db: Database.Database;
 
@@ -551,13 +562,13 @@ export class DriveDb {
     }
   }
 
-  trackPoints(sessionId: string, limit = 100_000): { ts: number; lat: number; lon: number }[] {
+  trackPoints(sessionId: string, limit = 100_000): TrackPointRow[] {
     try {
       return this.db
         .prepare(
-          `SELECT ts, lat, lon FROM track_points WHERE session_id = ? ORDER BY ts LIMIT ?`,
+          `SELECT ts, lat, lon, speed_kmh, heading, hdop FROM track_points WHERE session_id = ? ORDER BY ts LIMIT ?`,
         )
-        .all(sessionId, limit) as { ts: number; lat: number; lon: number }[];
+        .all(sessionId, limit) as TrackPointRow[];
     } catch {
       return [];
     }

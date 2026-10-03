@@ -792,7 +792,14 @@ ChatHistory.onDeleted = (id) => {
 async function ensureModelFor(chat) {
   if (modelSelect.value === chat.model) return;
   modelSelect.value = chat.model;
-  const exists = [...modelSelect.options].some((o) => o.value === chat.model);
+  // Check the server's list now, not the select: the select fills in
+  // asynchronously at boot and an empty select used to read as "not installed".
+  // If the list cannot be read, do not claim the model is missing.
+  const installed = await fetch("/api/models")
+    .then((r) => (r.ok ? r.json() : null))
+    .then((list) => (Array.isArray(list) ? list.map((m) => m.name) : null))
+    .catch(() => null);
+  const exists = installed === null ? true : installed.includes(chat.model);
   if (!exists) {
     addMessage("system", `El modelo ${chat.model} ya no está instalado. El chat queda en solo lectura hasta reinstalarlo o elegir otro.`);
     setComposerEnabled(false);

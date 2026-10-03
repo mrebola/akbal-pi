@@ -29,6 +29,7 @@ export type FlowName =
   | "wifi_radar"
   | "aircraft_radar"
   | "wardrive"
+  | "web_chat"
   | "about";
 
 export type FlowStateHandler = (ctx: ChatFlowContext) => void;

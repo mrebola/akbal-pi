@@ -18,6 +18,9 @@ import {
 import { FlowStateMachine } from "./chat-flow/stateMachine";
 import { flowStates } from "./chat-flow/states";
 import { ChatFlowContext, FlowName } from "./chat-flow/types";
+import { onWebChatModeChange } from "./chat-flow/web-chat-state";
+import { takeMemoryForDevice } from "../memory/device-takeover";
+import { memoryArbiter } from "../memory/shared";
 import { playWakeupChime } from "../device/audio";
 import { stopMusicPlayback, isMusicPlaying } from "../device/music-player";
 import type { Status } from "../device/display";
@@ -137,6 +140,22 @@ class ChatFlow implements ChatFlowContext {
     }
 
     this.transitionTo("sleep");
+
+    // Web-side toggle and the physical hold both flip the mode; this is the
+    // one place that moves the screen. Leaving also takes the model memory
+    // back for voice, the same as a 3 s hold on the web-busy card does.
+    onWebChatModeChange((on) => {
+      if (on) {
+        this.transitionTo("web_chat");
+        return;
+      }
+      if (this.currentFlowName === "web_chat") this.transitionTo("sleep");
+      if (memoryArbiter.owner() === "web") {
+        takeMemoryForDevice().catch((err: any) =>
+          console.error("[WebChatMode] memory hand-back failed:", err?.message || err)
+        );
+      }
+    });
 
     const wakeEnabled = (process.env.WAKE_WORD_ENABLED || "").toLowerCase();
     if (wakeEnabled === "true") {

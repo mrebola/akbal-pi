@@ -56,6 +56,8 @@
   },
   "chat": {
     "model_label": "Model",
+    "device_mode_on": "Chat mode on the Pi: on",
+    "device_mode_off": "Chat mode on the Pi: off",
     "greeting": "Hi there, how can I help you today?",
     "placeholder": "Type a message...",
     "send": "Send",

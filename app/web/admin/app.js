@@ -2221,6 +2221,50 @@ async function refreshSettings() {
 
 void loadStatus();
 void loadAudioOutputs();
+// "Modo chat en la Pi": the device screen freezes on the chat card while on.
+// The state lives on the server; this button only mirrors and flips it.
+const webChatModeBtn = document.getElementById("web-chat-mode-btn");
+const webChatModeTr = (key, fallback) =>
+  (window.AkbalI18n ? window.AkbalI18n.t(key) : null) || fallback;
+
+function renderWebChatMode(on) {
+  webChatModeBtn.setAttribute("aria-pressed", on ? "true" : "false");
+  webChatModeBtn.classList.toggle("is-on", on);
+  webChatModeBtn.textContent = on
+    ? webChatModeTr("chat.device_mode_on", "Modo chat en la Pi: activo")
+    : webChatModeTr("chat.device_mode_off", "Modo chat en la Pi: apagado");
+}
+
+async function loadWebChatMode() {
+  try {
+    const res = await fetch("/api/web-chat-mode");
+    const data = await res.json();
+    renderWebChatMode(!!data.on);
+  } catch (err) {
+    console.warn("[WebChatMode] no se pudo leer el estado:", err?.message || err);
+  }
+}
+
+webChatModeBtn.addEventListener("click", async () => {
+  const next = webChatModeBtn.getAttribute("aria-pressed") !== "true";
+  webChatModeBtn.disabled = true;
+  try {
+    const res = await fetch("/api/web-chat-mode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ on: next }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    renderWebChatMode(!!data.on);
+  } catch (err) {
+    console.error("[WebChatMode] no se pudo cambiar:", err?.message || err);
+  } finally {
+    webChatModeBtn.disabled = false;
+  }
+});
+
+void loadWebChatMode();
 void loadModels();
 ChatHistory.init();
 // Battery (and the rest of /api/status) refreshes on its own — no manual

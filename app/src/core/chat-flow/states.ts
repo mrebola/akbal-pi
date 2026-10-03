@@ -134,6 +134,13 @@ import {
   handleWardriveRelease,
   onWardriveExit,
 } from "./wardrive-mode";
+import {
+  enterWebChatMode,
+  handleWebChatPress,
+  handleWebChatRelease,
+  onWebChatExit,
+} from "./web-chat-mode";
+import { isWebChatModeOn, setWebChatMode } from "./web-chat-state";
 import { getDriveWardriveService } from "../../wardrive/service";
 import { isAgentMode, setDeviceMode } from "../../config/device-mode";
 import { setAudioOutputTarget } from "../../config/audio-output";
@@ -220,6 +227,12 @@ function waitForMemoryHold(ctx: ChatFlowContext): void {
 
 export const flowStates: Record<FlowName, FlowStateHandler> = {
   sleep: (ctx: ChatFlowContext) => {
+    // The web chat mode is sticky: any path that falls back to sleep (idle,
+    // a finished voice turn) goes straight back into the frozen card.
+    if (isWebChatModeOn()) {
+      ctx.transitionTo("web_chat");
+      return;
+    }
     resetCameraModeControl();
     onCameraModeExit(null);
     onButtonDoubleClick(null);
@@ -1387,5 +1400,14 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     onButtonPressed(() => handleWardrivePress());
     onButtonReleased(() => handleWardriveRelease());
     enterWardriveMode();
+  },
+  web_chat: (ctx: ChatFlowContext) => {
+    // Leaving is the only way out: the hold turns the mode off, and ChatFlow
+    // hands the screen back (and the model memory) on that change.
+    onWebChatExit(() => setWebChatMode(false));
+    onButtonDoubleClick(null);
+    onButtonPressed(() => handleWebChatPress());
+    onButtonReleased(() => handleWebChatRelease());
+    enterWebChatMode();
   },
 };

@@ -3254,6 +3254,9 @@ a.wd-bell-item-link:hover .wd-bell-item-ssid { color: var(--accent); }
 }
 #tab-chat .chat-toolbar { justify-content: flex-start; }
 #tab-chat select { max-width: 260px; }
+.web-chat-mode-btn { font-size: 13px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border, #2a2f3a); background: transparent; color: var(--text-secondary); cursor: pointer; }
+.web-chat-mode-btn.is-on { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 6px rgba(80,255,120,0.35); }
+.web-chat-mode-btn:disabled { opacity: 0.5; cursor: wait; }
 .chat-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; flex: 1; gap: 6px; color: var(--text-secondary); }
 .chat-empty.hidden { display: none; }
 .chat-empty-title { font-weight: 600; letter-spacing: 0.02em; font-size: 16px; color: var(--text-secondary); }

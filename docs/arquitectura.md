@@ -18,6 +18,7 @@ subgraph group_interaction["Interacción y dispositivo"]
   node_display["Pantalla Whisplay<br/>[display.ts]"]
   node_displayui["Vista de pantalla<br/>[app.js]"]
   node_memory["Arbitraje de memoria<br/>[memory-arbiter.ts]"]
+  node_webmode["Modo chat web en la Pi<br/>[web-chat-mode.ts]"]
 end
 
 subgraph group_ai["IA y conocimiento"]
@@ -88,6 +89,8 @@ node_wardrive -->|"captura redes"| node_radiohardware
 node_aircraft -->|"recibe ADS-B"| node_radiohardware
 node_aircraft -->|"usa posición"| node_gps
 node_admin -->|"controla música"| node_music
+node_admin -->|"activa modo chat"| node_webmode
+node_webmode -->|"congela pantalla"| node_display
 
 click node_button "https://github.com/mrebola/akbal-pi/blob/main/app/src/device/audio.ts"
 click node_flow "https://github.com/mrebola/akbal-pi/blob/main/app/src/core/ChatFlow.ts"
@@ -103,6 +106,7 @@ click node_speaker "https://github.com/mrebola/akbal-pi/blob/main/app/src/device
 click node_display "https://github.com/mrebola/akbal-pi/blob/main/app/src/device/display.ts"
 click node_displayui "https://github.com/mrebola/akbal-pi/blob/main/app/web/whisplay-display/app.js"
 click node_admin "https://github.com/mrebola/akbal-pi/blob/main/app/web/admin/app.js"
+click node_webmode "https://github.com/mrebola/akbal-pi/blob/main/app/src/core/chat-flow/web-chat-mode.ts"
 click node_webserver "https://github.com/mrebola/akbal-pi/blob/main/app/src/device/web-admin-server.ts"
 click node_wifi "https://github.com/mrebola/akbal-pi/blob/main/app/src/utils/wifi.ts"
 click node_storage "https://github.com/mrebola/akbal-pi/blob/main/app/src/utils/storage.ts"
@@ -122,7 +126,7 @@ classDef toneMint fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d
 classDef toneRose fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px,color:#881337
 classDef toneIndigo fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px,color:#312e81
 classDef toneTeal fill:#ccfbf1,stroke:#0f766e,stroke-width:1.5px,color:#134e4a
-class node_button,node_flow,node_modes,node_speaker,node_display,node_displayui,node_memory toneBlue
+class node_button,node_flow,node_modes,node_speaker,node_display,node_displayui,node_memory,node_webmode toneBlue
 class node_speech,node_llm,node_plugins,node_knowledge,node_tts,node_clips toneAmber
 class node_admin,node_webserver,node_wifi,node_storage,node_chats,node_commands toneMint
 class node_radar,node_wardrive,node_audit,node_aircraft toneRose
@@ -133,6 +137,9 @@ class node_gps,node_music,node_person,node_externalai,node_radiohardware toneInd
 
 - **Memoria:** un solo modelo residente a la vez. Antes de generar, el chat web
   y la voz piden la memoria al arbitraje (`memory-arbiter.ts`).
+- **Modo chat web:** con el interruptor de `/#chat` activo, la pantalla de la Pi
+  queda congelada y el botón no abre menús. Se sale manteniendo el botón
+  (`web-chat-mode.ts`); el estado vive en `web-chat-state.ts`.
 - **Comandos del chat:** responden desde los datos del sistema, sin pasar por el
   LLM. Solo `/ask` llega al modelo (`registry-core.ts`).
 - **Voz de las respuestas:** los audios se generan con Piper y se guardan junto al

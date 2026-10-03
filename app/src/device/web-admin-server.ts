@@ -65,6 +65,7 @@ import { firstQuestion, needsAutoTitle, needsTitleBeforeReply, settleExchange } 
 import { applyDecision, abandonWebClaim } from "../memory/model-memory";
 import { ollamaDeps } from "../memory/ollama-deps";
 import { memoryArbiter, webIdle, cancelHooks } from "../memory/shared";
+import { isWebChatModeOn, setWebChatMode } from "../core/chat-flow/web-chat-state";
 import { enableRAG } from "../cloud-api/knowledge";
 import { getSystemPromptWithKnowledge } from "../core/Knowledge";
 import { listSoulEditableFiles, writeSoulEditableFile, triggerKnowledgeReindex } from "../config/soul-files";
@@ -1482,6 +1483,22 @@ export class WebAdminServer {
 
     router.post("/api/wardrive/exit", async (ctx) => {
       ctx.body = await wardrive.exit();
+    });
+
+    // "Modo chat web": the physical screen freezes on a card and the web chat
+    // keeps the device until it is turned off here or by a hold on the button.
+    router.get("/api/web-chat-mode", (ctx) => {
+      ctx.body = { on: isWebChatModeOn() };
+    });
+
+    router.post("/api/web-chat-mode", (ctx) => {
+      const { on } = (ctx.request.body as any) || {};
+      if (typeof on !== "boolean") {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "on debe ser true o false" };
+        return;
+      }
+      ctx.body = { on: setWebChatMode(on) };
     });
 
     // Dongle selection for Wifi Audit — same picker pattern as wardrive's

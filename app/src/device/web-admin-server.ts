@@ -48,7 +48,11 @@ import { llmFuncMap } from "../config/llm-tools";
 import { adminTools, adminFuncMap, adminToolMeta } from "../config/admin-tools/registry";
 import { linkForSection, AdminSectionId } from "../config/admin-tools/ui-links";
 import { getBasePersonaPrompt } from "../config/llm-config";
-import { registerChatHistoryRoutes } from "./chat-history-routes";
+import { chatStore, registerChatHistoryRoutes } from "./chat-history-routes";
+import { trimToWindow } from "../chat-history/context";
+import { fallbackTitle } from "../chat-history/title";
+import { generateTitle, getContextWindow } from "../chat-history/ollama";
+import type { StoredChat } from "../chat-history/types";
 import { enableRAG } from "../cloud-api/knowledge";
 import { getSystemPromptWithKnowledge } from "../core/Knowledge";
 import { listSoulEditableFiles, writeSoulEditableFile, triggerKnowledgeReindex } from "../config/soul-files";
@@ -1003,11 +1007,39 @@ export class WebAdminServer {
     const chatThinkingEnabled = process.env.ENABLE_THINKING === "true";
     router.post("/api/chat", async (ctx) => {
       const body = ctx.request.body as any;
-      const messages: AdminChatMessage[] = Array.isArray(body?.messages) ? body.messages : [];
       // Falls back to the web chat's own default (NOT getCurrentModel(),
-      // voice's resident model) — app.js's modelSelect always sends an
-      // explicit model nowadays, so this only matters for a direct API call.
-      const model = typeof body?.model === "string" && body.model ? body.model : WEB_ADMIN_DEFAULT_MODEL;
+      // voice's resident model). Only the legacy messages[] path uses it:
+      // for a stored chat the chat's own model wins, so a stale <select>
+      // cannot switch models mid-conversation.
+      const requestedModel = typeof body?.model === "string" && body.model ? body.model : WEB_ADMIN_DEFAULT_MODEL;
+      const persisted = typeof body?.message === "string";
+      const chatIdInput: string | null = typeof body?.chatId === "string" ? body.chatId : null;
+      const newMessage: string = persisted ? body.message.trim() : "";
+      const isNewChat = persisted && chatIdInput === null;
+      let chat: StoredChat | null = null;
+
+      if (persisted) {
+        if (!newMessage) {
+          ctx.status = 400;
+          ctx.body = { error: "message requerido" };
+          return;
+        }
+        // The user turn hits disk before generation starts, so a reload
+        // during a long reply still shows what was asked.
+        chat = isNewChat
+          ? chatStore.createWithMessage(requestedModel, "user", newMessage)
+          : chatStore.appendMessage(chatIdInput!, "user", newMessage);
+        if (!chat) {
+          ctx.status = 404;
+          ctx.body = { error: "chat no encontrado" };
+          return;
+        }
+      }
+
+      const model = chat ? chat.model : requestedModel;
+      const messages: AdminChatMessage[] = chat
+        ? chat.messages.map((m) => ({ role: m.role, content: m.content }))
+        : Array.isArray(body?.messages) ? body.messages : [];
       if (messages.length === 0) {
         ctx.status = 400;
         ctx.body = { error: "messages requerido" };
@@ -1044,6 +1076,16 @@ export class WebAdminServer {
           console.error("[AdminChat] RAG lookup failed:", err?.message || err);
         }
       }
+      if (chat) {
+        // Budget = model window minus room for the reply. Falls back to a
+        // conservative 4096 when Ollama does not report a window. Messages on
+        // disk stay complete; only what the model sees is trimmed.
+        const windowTokens = (await getContextWindow(model).catch(() => undefined)) ?? 4096;
+        const replyReserve = Math.min(MAX_PREDICT_TOKENS, Math.floor(windowTokens / 4));
+        const trimmed = trimToWindow(messages as any, windowTokens - replyReserve);
+        messages.splice(0, messages.length, ...(trimmed as AdminChatMessage[]));
+      }
+
       const abortController = new AbortController();
       // axios' `signal` only cancels a request while it's still being
       // established — once responseType:"stream" resolves, the response
@@ -1089,6 +1131,11 @@ export class WebAdminServer {
         if (!ctx.res.writableEnded) ctx.res.write(`${JSON.stringify(obj)}\n`);
       };
       const touchedSections = new Set<AdminSectionId>();
+      let assistantText = "";
+      // Saves whatever reply text arrived, including a cancelled partial reply.
+      const persistAssistant = (): void => {
+        if (chat && assistantText) chatStore.appendMessage(chat.id, "assistant", assistantText);
+      };
       try {
         await runAdminChatToolLoop({
           model,
@@ -1108,7 +1155,10 @@ export class WebAdminServer {
           numPredict: MAX_PREDICT_TOKENS,
           think: chatThinkingEnabled,
           signal: abortController.signal,
-          onContent: (text) => writeFrame({ message: { content: text } }),
+          onContent: (text) => {
+            assistantText += text;
+            writeFrame({ message: { content: text } });
+          },
           onToolStart: (name) => {
             const meta = adminToolMeta[name];
             writeFrame({ admin_tool_call: { name, title: meta?.title || name, status: "running" } });
@@ -1119,7 +1169,11 @@ export class WebAdminServer {
             writeFrame({ admin_tool_call: { name, title: meta?.title || name, status: "done" } });
           },
           onUpstream: (stream) => {
+            const wasStreaming = streaming;
             startStreaming();
+            if (!wasStreaming && chat && isNewChat) {
+              writeFrame({ chat: { id: chat.id, title: chat.title, model: chat.model } });
+            }
             upstream = stream;
           },
         });
@@ -1128,13 +1182,17 @@ export class WebAdminServer {
         }
       } catch (err: any) {
         if (axios.isCancel(err) || abortController.signal.aborted) {
-          // Client already gone — nothing to send a response to.
+          // Client already gone — nothing to send a response to, but the
+          // partial reply still belongs in the chat.
           cleanupListeners();
+          persistAssistant();
           if (streaming) ctx.res.end();
           return;
         }
         if (!streaming) {
           cleanupListeners();
+          if (chat && isNewChat) chatStore.delete(chat.id);
+          else if (chat) chatStore.removeLastUserMessage(chat.id);
           ctx.status = 502;
           ctx.body = { error: err?.message || String(err) };
           return;
@@ -1142,6 +1200,17 @@ export class WebAdminServer {
         console.error("[AdminChat] Error mid-stream:", err?.message || err);
       }
       cleanupListeners();
+      persistAssistant();
+      if (chat && streaming && !abortController.signal.aborted && assistantText) {
+        const stored = chatStore.get(chat.id);
+        // Only the first exchange gets an automatic title, and never after a rename.
+        if (stored && !stored.titleEdited && stored.messages.length === 2) {
+          const generated = await generateTitle(model, newMessage, assistantText);
+          const title = generated || fallbackTitle(newMessage);
+          chatStore.update(chat.id, { title });
+          writeFrame({ chat_title: { id: chat.id, title } });
+        }
+      }
       if (streaming) ctx.res.end();
     });
 

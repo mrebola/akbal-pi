@@ -4,7 +4,6 @@
 // The server is the source of truth; this only renders what it returns.
 
 const list = document.getElementById("ar-zone-list");
-const note = document.getElementById("ar-zone-note");
 const detail = document.getElementById("ar-zone-detail");
 const detailTitle = document.getElementById("ar-zone-detail-title");
 const sightingsBody = document.getElementById("ar-zone-sightings");
@@ -73,13 +72,9 @@ async function refresh() {
   try {
     const res = await fetch("/api/aircraft/zone");
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const rows = await res.json();
-    note.textContent = rows.length === 0
-      ? "Sin aviones en la zona en las últimas 24 h. Si Akbal no tiene posición GPS ni ADSB_HOME, no hay zona."
-      : `${rows.length} avión(es) en la zona. Hora local de la Pi.`;
-    renderRows(rows);
-  } catch {
-    note.textContent = "No se pudo cargar la lista de la zona.";
+    renderRows(await res.json());
+  } catch (err) {
+    console.warn("[aircraft-zone] refresh failed:", err);
   }
 }
 

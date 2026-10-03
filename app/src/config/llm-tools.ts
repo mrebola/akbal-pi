@@ -1,3 +1,5 @@
+import { adminTools } from "./admin-tools/registry";
+import { selectVoiceAdminTools } from "./voice-admin-tools";
 import { LLMTool, ToolReturnTag } from "../type";
 import { cloneDeep } from "lodash";
 import { transformToGeminiType } from "../utils";
@@ -54,7 +56,9 @@ addHarnessCommandTools(pluginTools);
 addAircraftRadarTools(pluginTools);
 
 // ── Exported aggregated tool lists ──────────────────────────
-export const llmTools: LLMTool[] = [...pluginTools];
+// Read-only admin tools reach the device voice too (see voice-admin-tools.ts).
+// Tool functions run on the server, so no model has to be loaded for them.
+export const llmTools: LLMTool[] = [...pluginTools, ...selectVoiceAdminTools(adminTools)];
 
 export const llmToolsForGemini: LLMTool[] =
   (process.env.LLM_SERVER || "").toLowerCase() === "gemini"

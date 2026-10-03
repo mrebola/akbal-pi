@@ -1,7 +1,7 @@
 # Compartir sesiones de wardriving en archivos `.akbal`
 
 Fecha: 2026-10-03
-Estado: Pendiente de implementar. Decisiones tomadas: incluye contraseñas y handshakes por defecto, con casilla para quitarlos. Submenú 'Compartir' en Wardriving, por confirmar.
+Estado: Terminado y desplegado. Exportar, importar, listar y borrar desde la pestaña Compartir de Wardriving. Pendiente de la spec: los puntos de ruta guardan lat, lon y tiempo (sin velocidad, rumbo ni HDOP), y las redes salen por sesión según la consulta existente.
 
 ## Objetivo
 

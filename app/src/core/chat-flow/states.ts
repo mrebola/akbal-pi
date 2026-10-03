@@ -17,6 +17,8 @@ import {
   getDynamicVoiceDetectLevel,
 } from "../../device/audio";
 import { chatWithLLMStream } from "../../cloud-api/server";
+import { memoryArbiter } from "../../memory/shared";
+import { takeMemoryForDevice } from "../../memory/device-takeover";
 import { summaryTextWithLLM } from "../../cloud-api/llm";
 import { getSystemPromptWithKnowledge } from "../Knowledge";
 import { enableRAG } from "../../cloud-api/knowledge";
@@ -186,6 +188,32 @@ function registerSpeakingButtonControls(
     stop();
     clearPendingCapturedImgForChat();
     display({ image_icon_visible: false });
+    ctx.transitionTo("sleep");
+  });
+}
+
+// Shown while the web chat owns the model. A press shorter than the hold goes
+// back to sleep; a full hold takes the memory and starts listening.
+const MEMORY_HOLD_MS = 3000;
+function waitForMemoryHold(ctx: ChatFlowContext): void {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  display({
+    status: "web en uso",
+    emoji: DEFAULT_EMOJI,
+    RGB: "#ff3030",
+    text: "Chat web en uso. Mantén 3 s para tomar el dispositivo.",
+    rag_icon_visible: false,
+  });
+  onButtonPressed(() => {
+    timer = setTimeout(() => {
+      timer = null;
+      onButtonReleased(noop);
+      void takeMemoryForDevice().then(() => ctx.transitionTo("listening"));
+    }, MEMORY_HOLD_MS);
+  });
+  onButtonReleased(() => {
+    if (timer) clearTimeout(timer);
+    timer = null;
     ctx.transitionTo("sleep");
   });
 }
@@ -507,6 +535,12 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     if (!isButtonDown()) {
       console.log("[listening] Button already released, returning to sleep");
       ctx.transitionTo("sleep");
+      return;
+    }
+    // The web chat holds the one resident model: a short press must not start
+    // a second model next to it. Only a 3 s hold takes the memory back.
+    if (memoryArbiter.owner() === "web") {
+      waitForMemoryHold(ctx);
       return;
     }
     const { result, stop } = recordAudioManually(ctx.currentRecordFilePath);

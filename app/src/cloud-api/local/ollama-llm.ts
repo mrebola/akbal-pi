@@ -472,6 +472,15 @@ const answerFromAvailableToolResults = async ({
   }
 };
 
+let activeVoiceCancel: (() => void) | null = null;
+
+// Stops the voice reply in progress, if any, and tells its caller it ended.
+export const cancelActiveVoiceGeneration = (): void => {
+  const cancel = activeVoiceCancel;
+  activeVoiceCancel = null;
+  cancel?.();
+};
+
 const chatWithLLMStreamInternal = async (
   inputMessages: Message[] = [],
   partialCallback: (partialAnswer: string) => void,
@@ -560,6 +569,16 @@ const chatWithLLMStreamInternal = async (
         responseType: "stream",
       },
     );
+
+    // A web chat that takes the one resident model stops this reply through
+    // here (see memory/shared.ts). Cleared when the stream closes either way.
+    activeVoiceCancel = () => {
+      response.data.destroy();
+      endCallback();
+    };
+    response.data.once("close", () => {
+      activeVoiceCancel = null;
+    });
 
     response.data.on("data", (chunk: Buffer) => {
       const data = chunk.toString();

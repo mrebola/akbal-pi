@@ -1151,6 +1151,11 @@ export class WebAdminServer {
       };
       const touchedSections = new Set<AdminSectionId>();
       let assistantText = "";
+      // The device can take the one resident model mid-reply (see memory/device-takeover.ts).
+      cancelHooks.cancelWebReply = () => {
+        abortController.abort();
+        upstream?.destroy();
+      };
       // One place decides what a finished, cancelled or failed exchange leaves
       // on disk and whether it gets a title (see chat-history/settle.ts).
       const finishChat = async (aborted: boolean): Promise<void> => {

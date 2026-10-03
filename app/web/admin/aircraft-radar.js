@@ -133,11 +133,12 @@ function distanceLabel(aircraft) {
   return "—";
 }
 
-function renderList() {
-  // The left column is the 24-hour zone list (aircraft-zone.js). Live aircraft
-  // stay on the map and radar only, so the column reads newest to oldest.
+function renderList(snapshot) {
+  // The left column is one list (aircraft-zone.js): live aircraft and the
+  // 24-hour zone captures, ordered by last seen. Live cards drawn here are gone.
   listEl.querySelectorAll(".ar-card:not(.ar-zone-card)").forEach((el) => el.remove());
   emptyEl.classList.add("hidden");
+  window.AircraftZone?.setLive(snapshot?.aircraft || []);
 }
 
 const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];

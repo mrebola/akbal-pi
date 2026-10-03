@@ -40,6 +40,9 @@ def main():
     width, height = SIZE[mode]
     board = WhisplayBoard()
     try:
+        # The renderer turns the backlight on at boot (chatbot-ui.py); without
+        # it the panel draws but stays dark.
+        board.set_backlight(100)
         board._send_command(0x36, DIRECTION[mode])
 
         img = Image.new("RGB", (width, height), (0, 0, 0))

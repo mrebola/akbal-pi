@@ -265,6 +265,19 @@ function fmt(n, digits = 5) {
   return Number.isFinite(n) ? n.toFixed(digits) : "—";
 }
 
+
+// The fix time comes from the GPS in UTC. Akbal is in Mexico, so the panel
+// shows Mexico's clock (America/Mexico_City), not UTC.
+function formatMexicoTime(fixTime) {
+  if (!fixTime) return "—";
+  // The fix is "HH:MM:SSZ" with no date: take today's UTC date for it.
+  const m = /^(\d{2}):(\d{2}):(\d{2})Z$/.exec(fixTime);
+  if (!m) return fixTime;
+  const now = new Date();
+  const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), +m[1], +m[2], +m[3]));
+  return `${date.toLocaleTimeString("es-MX", { timeZone: "America/Mexico_City", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })} (México)`;
+}
+
 function render(gps) {
   const errEl = document.getElementById("gps-error");
   const fixMsg = document.getElementById("gps-fix-msg");
@@ -316,7 +329,7 @@ function render(gps) {
     setText("gps-speed", gps.speedKmh != null ? `${gps.speedKmh.toFixed(1)} km/h` : "—");
     setText("gps-heading", gps.headingDeg != null ? `${Math.round(gps.headingDeg)}°` : "—");
     setText("gps-hdop", gps.hdop != null ? gps.hdop.toFixed(1) : "—");
-    setText("gps-time", gps.fixTime || "—");
+    setText("gps-time", formatMexicoTime(gps.fixTime));
     updateMarker(gps.latitude, gps.longitude, gps.hdop);
     // Reverse-geocoded address: the backend caches it per position (~40m
     // radius) and refreshes when the fix moves, so this stays current.

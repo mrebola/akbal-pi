@@ -652,9 +652,35 @@ audioOutputSelect.addEventListener("change", async () => {
   }
 });
 
+// Akbal's avatar in a pulsing circle plus "Estoy pensando…" while the model has
+// not produced its first token. Removed as soon as text arrives. The pulse and
+// the dots are CSS, and turn off with prefers-reduced-motion.
+function showThinking(parent) {
+  const wrap = document.createElement("div");
+  wrap.className = "thinking";
+  const avatar = document.createElement("span");
+  avatar.className = "thinking-avatar";
+  const img = document.createElement("img");
+  img.src = "/avatar/standing.gif";
+  img.alt = "";
+  avatar.append(img);
+  const label = document.createElement("span");
+  label.className = "thinking-text";
+  label.textContent = "Estoy pensando";
+  const dots = document.createElement("span");
+  dots.className = "thinking-dots";
+  dots.setAttribute("aria-hidden", "true");
+  dots.textContent = "...";
+  label.append(dots);
+  wrap.append(avatar, label);
+  parent.append(wrap);
+  return wrap;
+}
+
 async function sendMessage(text) {
   addMessage("user", text);
   const assistantEl = addMessage("assistant", "");
+  const thinkingEl = showThinking(assistantEl);
   // AbortController wired to the Cancelar button (below) and to the
   // fetch's `signal` — aborting closes the connection to the server, which
   // closes its connection to Ollama and stops the generation.
@@ -699,6 +725,7 @@ async function sendMessage(text) {
           if (chunk.message?.content) {
             if (!hasStartedTalking) {
               hasStartedTalking = true;
+              thinkingEl.remove();
               setAvatarTalking(true);
             }
             fullText += chunk.message.content;
@@ -725,6 +752,7 @@ async function sendMessage(text) {
       assistantEl.classList.add("system");
     }
   } finally {
+    thinkingEl.remove();
     activeController = null;
     setSendingUi(false);
     setAvatarTalking(false);

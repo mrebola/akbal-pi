@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildCommandRegistry, findCommand, READ_ONLY_ALIASES } from "./registry-core";
+import { buildCommandRegistry, findCommand, READ_ONLY_ALIASES, READ_ONLY_DESCRIPTIONS } from "./registry-core";
 
 const fns = [
   { name: "getNearbyAircraft", description: "lista aviones" },
@@ -48,4 +48,15 @@ test("the shipped alias map covers the read-only functions", () => {
   assert.equal(READ_ONLY_ALIASES.getNearestAircraft, "avion-cercano");
   assert.equal(READ_ONLY_ALIASES.getAircraftDetails, "avion");
   assert.equal(READ_ONLY_ALIASES.getAircraftHistory, "historial-avion");
+});
+
+test("the command shows the Spanish description, not the English one the model uses", () => {
+  const reg = buildCommandRegistry([{ name: "getWifiRadarStatus", description: "Get a snapshot of Akbal's passive WiFi Radar" }]);
+  assert.equal(findCommand(reg, "wifi")?.description, READ_ONLY_DESCRIPTIONS.getWifiRadarStatus);
+  assert.doesNotMatch(READ_ONLY_DESCRIPTIONS.getWifiRadarStatus, /^Get /);
+});
+
+test("a function without a Spanish description keeps its own description", () => {
+  const reg = buildCommandRegistry([{ name: "unknownFn", description: "Some text" }]);
+  assert.equal(findCommand(reg, "unknown-fn")?.description, "Some text");
 });

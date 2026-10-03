@@ -1,4 +1,7 @@
 import path from "path";
+import * as fs from "fs";
+import { isSafeClipName } from "../voice/audio-names";
+import { clipPath } from "../voice/piper-clips";
 import Router from "@koa/router";
 import { ChatStore } from "../chat-history/store";
 import { loadChatModel, loadStats } from "../chat-history/ollama";
@@ -48,6 +51,18 @@ export const registerChatHistoryRoutes = (router: Router): void => {
       return;
     }
     ctx.body = updated;
+  });
+
+  // A voice clip. Only names built by clipFileName() are served.
+  router.get("/api/chat-audio/:file", (ctx) => {
+    const name = ctx.params.file;
+    if (!isSafeClipName(name) || !fs.existsSync(clipPath(name))) {
+      ctx.status = 404;
+      ctx.body = { error: "audio no encontrado" };
+      return;
+    }
+    ctx.type = "audio/wav";
+    ctx.body = fs.createReadStream(clipPath(name));
   });
 
   // Every saved chat. The page asks for confirmation before calling this.

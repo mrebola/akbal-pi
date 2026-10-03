@@ -3970,3 +3970,8 @@ a.wd-bell-item-link:hover .wd-bell-item-ssid { color: var(--accent); }
   .thinking-avatar, .thinking-dots i { animation: none; }
   .thinking-dots i { opacity: 0.7; }
 }
+
+/* Voice clips under a reply (demo mode: text and player together). */
+.voice-players { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.voice-players audio { width: 100%; max-width: 360px; }
+.voice-error { margin-top: 6px; font-size: 12px; color: var(--warning); }

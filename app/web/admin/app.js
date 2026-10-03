@@ -652,6 +652,22 @@ audioOutputSelect.addEventListener("change", async () => {
   }
 });
 
+// One player per spoken chunk, under the reply. Shown together with the text,
+// so the room can read what it hears (see the voice-reply notes in the spec).
+function appendAudioPlayers(replyEl, files) {
+  const box = document.createElement("div");
+  box.className = "voice-players";
+  for (const name of files) {
+    const player = document.createElement("audio");
+    player.controls = true;
+    player.preload = "none";
+    player.src = `/api/chat-audio/${encodeURIComponent(name)}`;
+    box.append(player);
+  }
+  replyEl.append(box);
+  return box;
+}
+
 // Akbal's avatar in a pulsing circle plus "Estoy pensando…" while the model has
 // not produced its first token. Removed as soon as text arrives. The pulse and
 // the dots are CSS, and turn off with prefers-reduced-motion.
@@ -743,6 +759,15 @@ async function sendMessage(text) {
           if (chunk.admin_links) {
             addLinkRow(chunk.admin_links);
           }
+          if (chunk.audio) {
+            appendAudioPlayers(assistantEl, chunk.audio.files);
+          }
+          if (chunk.audio_error) {
+            const note = document.createElement("div");
+            note.className = "voice-error";
+            note.textContent = chunk.audio_error;
+            assistantEl.append(note);
+          }
         } catch {
           // ignore a partial/malformed line
         }
@@ -807,6 +832,7 @@ async function openChat(id) {
   for (const m of chat.messages) {
     const el = addMessage(m.role === "assistant" ? "assistant" : "user", m.content);
     if (m.role === "assistant") el.innerHTML = renderMarkdown(m.content);
+    if (m.role === "assistant" && m.audio && m.audio.length) appendAudioPlayers(el, m.audio);
   }
   ChatHistory.setActive(chat.id);
   await ensureModelFor(chat);

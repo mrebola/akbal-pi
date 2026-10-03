@@ -50,6 +50,9 @@ import { adminTools, adminFuncMap, adminToolMeta } from "../config/admin-tools/r
 import { linkForSection, AdminSectionId } from "../config/admin-tools/ui-links";
 import { getBasePersonaPrompt } from "../config/llm-config";
 import { WEB_CHAT_TOOL_RULE } from "../config/web-chat-rules";
+import { wantsVoiceReply } from "../voice/voice-intent";
+import { toSpeechChunks } from "../voice/speech-chunks";
+import { saveClips } from "../voice/piper-clips";
 import { selectToolsForMessage } from "../config/admin-tools/route-tools";
 import { chatStore, registerChatHistoryRoutes } from "./chat-history-routes";
 import { registerChatCommandRoutes } from "./chat-commands-routes";
@@ -1265,6 +1268,20 @@ export class WebAdminServer {
       }
       cleanupListeners();
       await finishChat(abortController.signal.aborted);
+      // A reply asked for by voice: speak it with Akbal's voice, save the
+      // clips on the message and send their names to the page. A failure here
+      // keeps the written reply; the page shows the error instead of the player.
+      if (chat && streaming && !abortController.signal.aborted && assistantText && wantsVoiceReply(newMessage)) {
+        try {
+          const index = (chatStore.get(chat.id)?.messages.length ?? 1) - 1;
+          const names = await saveClips(chat.id, index, toSpeechChunks(assistantText));
+          chatStore.setLastAssistantAudio(chat.id, names);
+          writeFrame({ audio: { chatId: chat.id, files: names } });
+        } catch (err: any) {
+          console.error("[AdminChat] voice reply failed:", err?.message || err);
+          writeFrame({ audio_error: "No se pudo generar el audio con la voz de Akbal." });
+        }
+      }
       if (streaming) ctx.res.end();
     });
 

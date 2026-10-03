@@ -18,3 +18,11 @@ export const isInZone = (
   own: { lat: number; lon: number } | null,
   radiusKm: number,
 ): boolean => own !== null && haversineDistanceKm(own.lat, own.lon, lat, lon) <= radiusKm;
+
+// Distance from Akbal to a capture, in km, or null when Akbal's position is not
+// known. Stored with each capture so the list can show how far it was.
+export const distanceToOwnKm = (
+  lat: number,
+  lon: number,
+  own: { lat: number; lon: number } | null,
+): number | null => (own === null ? null : haversineDistanceKm(own.lat, own.lon, lat, lon));

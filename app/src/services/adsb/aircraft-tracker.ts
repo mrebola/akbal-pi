@@ -1,7 +1,7 @@
 import { Aircraft, AircraftRadarMode, AircraftRadarSnapshot, RawAdsbMessage } from "./types";
 import { haversineDistanceKm, initialBearingDeg } from "./geo";
 import { recordAircraftSeen } from "./history";
-import { isInZone, sightingRadiusKm } from "./zone";
+import { distanceToOwnKm, isInZone, sightingRadiusKm } from "./zone";
 import { resolveAircraftIdentity } from "./aircraft-database";
 import { resolveRoute } from "./flight-resolver";
 
@@ -132,7 +132,8 @@ export class AircraftTracker {
       if (msg.timestamp - lastWrite >= HISTORY_WRITE_INTERVAL_MS) {
         this.lastHistoryWriteAt.set(msg.icao, msg.timestamp);
         const near = isInZone(msg.latitude, msg.longitude, this.ownPosition, sightingRadiusKm());
-        recordAircraftSeen(aircraft, near);
+        const distanceKm = distanceToOwnKm(msg.latitude, msg.longitude, this.ownPosition);
+        recordAircraftSeen(aircraft, near, distanceKm);
       }
     }
   }

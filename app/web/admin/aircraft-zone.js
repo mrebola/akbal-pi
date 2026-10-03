@@ -56,7 +56,7 @@ function buildCard(row, live) {
     table.className = "ar-zone-table";
     const head = document.createElement("thead");
     const headRow = document.createElement("tr");
-    for (const title of ["Fecha y hora", "Altitud (ft)", "Velocidad (kt)"]) {
+    for (const title of ["Fecha y hora", "Altitud (ft)", "Velocidad (kt)", "Distancia (km)"]) {
       const th = document.createElement("th");
       th.textContent = title;
       headRow.append(th);
@@ -65,7 +65,8 @@ function buildCard(row, live) {
     const body = document.createElement("tbody");
     for (const s of row.sightings) {
       const tr = document.createElement("tr");
-      for (const value of [formatDateTime(s.timestamp), s.altitude ?? "—", s.speed ?? "—"]) {
+      const distance = s.distance_km != null ? s.distance_km.toFixed(1) : "—";
+      for (const value of [formatDateTime(s.timestamp), s.altitude ?? "—", s.speed ?? "—", distance]) {
         const td = document.createElement("td");
         td.textContent = String(value);
         tr.append(td);

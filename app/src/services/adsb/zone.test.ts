@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isInZone, sightingRadiusKm, SIGHTING_WINDOW_MS } from "./zone";
+import { distanceToOwnKm, isInZone, sightingRadiusKm, SIGHTING_WINDOW_MS } from "./zone";
 
 const home = { lat: 19.4326, lon: -99.1332 };
 
@@ -35,4 +35,10 @@ test("the radius defaults to 10 km and rejects bad values", () => {
 
 test("the sighting window is 24 hours", () => {
   assert.equal(SIGHTING_WINDOW_MS, 24 * 60 * 60 * 1000);
+});
+
+test("distance to Akbal is null without a known own position, and in km otherwise", () => {
+  assert.equal(distanceToOwnKm(19.4416, -99.1332, null), null);
+  const d = distanceToOwnKm(19.4416, -99.1332, home);
+  assert.ok(d !== null && d > 0.9 && d < 1.1, `about 1 km, got ${d}`);
 });

@@ -57,6 +57,11 @@ db.exec(`
     console.log("[aircraft-radar] history migrated: aircraft_seen.near");
   }
   db.exec(`CREATE INDEX IF NOT EXISTS idx_aircraft_seen_near ON aircraft_seen(near, timestamp)`);
+  // Distance from Akbal at capture time; null when Akbal had no known position.
+  if (cols.length > 0 && !cols.some((c) => c.name === "distance_km")) {
+    db.exec(`ALTER TABLE aircraft_seen ADD COLUMN distance_km REAL`);
+    console.log("[aircraft-radar] history migrated: aircraft_seen.distance_km");
+  }
 }
 
 // Schema evolution: operating airline name, from the same adsbdb.com
@@ -72,17 +77,18 @@ db.exec(`
 }
 
 const insertSeenStmt = db.prepare(`
-  INSERT INTO aircraft_seen (timestamp, icao, callsign, registration, lat, lon, altitude, speed, heading, near)
-  VALUES (@timestamp, @icao, @callsign, @registration, @lat, @lon, @altitude, @speed, @heading, @near)
+  INSERT INTO aircraft_seen (timestamp, icao, callsign, registration, lat, lon, altitude, speed, heading, near, distance_km)
+  VALUES (@timestamp, @icao, @callsign, @registration, @lat, @lon, @altitude, @speed, @heading, @near, @distance_km)
 `);
 
 // Called from aircraft-tracker.ts whenever a position update lands — not on
 // every raw ADS-B message (identification/velocity-only messages carry no
 // new position), so the table grows at roughly one row per aircraft per
 // position report instead of one per Mode-S frame.
-export function recordAircraftSeen(aircraft: Aircraft, near: boolean): void {
+export function recordAircraftSeen(aircraft: Aircraft, near: boolean, distanceKm: number | null): void {
   insertSeenStmt.run({
     near: near ? 1 : 0,
+    distance_km: distanceKm,
     timestamp: aircraft.lastSeen,
     icao: aircraft.icao,
     callsign: aircraft.callsign,
@@ -106,6 +112,8 @@ export type AircraftSeenRow = {
   altitude: number | null;
   speed: number | null;
   heading: number | null;
+  near: number;
+  distance_km: number | null;
 };
 
 // GET /api/aircraft/history and the agent's "¿qué aviones pasaron en los

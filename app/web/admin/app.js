@@ -655,7 +655,7 @@ audioOutputSelect.addEventListener("change", async () => {
 // Akbal's avatar in a pulsing circle plus "Estoy pensando…" while the model has
 // not produced its first token. Removed as soon as text arrives. The pulse and
 // the dots are CSS, and turn off with prefers-reduced-motion.
-function showThinking(parent) {
+function showThinking(replyEl) {
   const wrap = document.createElement("div");
   wrap.className = "thinking";
   const avatar = document.createElement("span");
@@ -667,19 +667,22 @@ function showThinking(parent) {
   const label = document.createElement("span");
   label.className = "thinking-text";
   label.textContent = "Estoy pensando";
+  // Three dots that fade in turn: no width animation, so the line box never grows.
   const dots = document.createElement("span");
   dots.className = "thinking-dots";
   dots.setAttribute("aria-hidden", "true");
-  dots.textContent = "...";
-  label.append(dots);
-  wrap.append(avatar, label);
-  parent.append(wrap);
+  for (let i = 0; i < 3; i++) dots.append(document.createElement("i"));
+  wrap.append(avatar, label, dots);
+  replyEl.before(wrap);
   return wrap;
 }
 
 async function sendMessage(text) {
   addMessage("user", text);
   const assistantEl = addMessage("assistant", "");
+  // The empty reply bubble stays hidden while Akbal thinks; the indicator
+  // takes its place and the bubble comes back with the first text.
+  assistantEl.classList.add("hidden");
   const thinkingEl = showThinking(assistantEl);
   // AbortController wired to the Cancelar button (below) and to the
   // fetch's `signal` — aborting closes the connection to the server, which
@@ -726,6 +729,7 @@ async function sendMessage(text) {
             if (!hasStartedTalking) {
               hasStartedTalking = true;
               thinkingEl.remove();
+              assistantEl.classList.remove("hidden");
               setAvatarTalking(true);
             }
             fullText += chunk.message.content;
@@ -753,6 +757,7 @@ async function sendMessage(text) {
     }
   } finally {
     thinkingEl.remove();
+    assistantEl.classList.remove("hidden");
     activeController = null;
     setSendingUi(false);
     setAvatarTalking(false);

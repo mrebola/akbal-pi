@@ -155,10 +155,14 @@
         </label>
         <ul id="wd-share-own" class="wd-session-list"><li class="muted">—</li></ul>
         <h3 class="wd-share-title">Sesiones compartidas</h3>
-        <label class="wd-share-upload">
-          Cargar archivo .akbal
-          <input type="file" id="wd-share-file" accept=".akbal">
-        </label>
+        <div class="wd-share-upload">
+          <span class="wd-share-label">Cargar archivo .akbal</span>
+          <div class="wd-share-pick">
+            <button type="button" id="wd-share-pick-btn" class="secondary">Elegir archivo</button>
+            <span id="wd-share-file-name" class="muted">Ningún archivo elegido</span>
+            <input type="file" id="wd-share-file" accept=".akbal" hidden>
+          </div>
+        </div>
         <ul id="wd-share-shared" class="wd-session-list"><li class="muted">—</li></ul>
       </div>
     </div>

@@ -1009,12 +1009,16 @@
   filter: drop-shadow(0 0 4px rgba(122, 255, 160, 0.8));
 }
 
-/* Compartir: .akbal packages of this Pi's sessions and imported ones. */
-.wd-share-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); margin: 10px 0 6px; }
-.wd-share-check, .wd-share-upload { display: block; font-size: 12px; margin: 6px 0; }
-.wd-share-check input { margin-right: 6px; }
-.wd-share-upload { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 10px; }
-.wd-share-upload input[type="file"] { width: 100%; max-width: 100%; min-width: 0; font-size: 12px; }
-#wd-share-own, #wd-share-shared { margin-bottom: 8px; }
-#wd-pane-share .muted { font-size: 12px; }
-#wd-pane-share .wd-session-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
+/* Compartir: .akbal packages of this Pi's sessions and imported ones. Same
+   buttons and type as the rest of the page; the native file control is hidden. */
+.wd-share-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); margin: 14px 0 8px; }
+.wd-share-label { display: block; font-size: 12px; color: var(--text-primary); margin-bottom: 6px; }
+.wd-share-check { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; line-height: 1.4; margin: 6px 0 10px; color: var(--text-secondary); }
+.wd-share-check input { margin-top: 2px; }
+.wd-share-upload { margin: 6px 0 12px; }
+.wd-share-pick { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.wd-share-pick .muted { font-size: 12px; color: var(--text-muted); }
+#wd-pane-share .wd-session-list { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+#wd-pane-share .wd-session-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; line-height: 1.35; }
+#wd-pane-share .wd-session-list li button { flex: 0 0 auto; font-size: 11px; padding: 5px 10px; white-space: nowrap; }
+#wd-pane-share .muted { font-size: 12px; color: var(--text-muted); }

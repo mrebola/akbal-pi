@@ -1357,9 +1357,12 @@ async function deleteShared(id) {
   await refreshShare();
 }
 
+el("wd-share-pick-btn")?.addEventListener("click", () => el("wd-share-file").click());
+
 el("wd-share-file")?.addEventListener("change", async (e) => {
   const file = e.target.files && e.target.files[0];
   if (!file) return;
+  el("wd-share-file-name").textContent = file.name;
   const res = await fetch("/api/wardrive/drive/sessions/import", {
     method: "POST",
     headers: { "Content-Type": "application/octet-stream" },

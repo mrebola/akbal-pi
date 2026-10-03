@@ -56,6 +56,7 @@ import { saveClips } from "../voice/piper-clips";
 import { selectToolsForMessage } from "../config/admin-tools/route-tools";
 import { chatStore, registerChatHistoryRoutes } from "./chat-history-routes";
 import { registerChatCommandRoutes } from "./chat-commands-routes";
+import { registerAkbalRoutes } from "./akbal-routes";
 import { trimToWindow } from "../chat-history/context";
 import { fallbackTitle } from "../chat-history/title";
 import { generateTitle, generateTitleFromQuestion, getContextWindow } from "../chat-history/ollama";
@@ -880,6 +881,7 @@ export class WebAdminServer {
 
     registerChatHistoryRoutes(router);
     registerChatCommandRoutes(router);
+    registerAkbalRoutes(router);
 
     router.get("/api/models", async (ctx) => {
       ctx.body = await listOllamaModelsWithSize();

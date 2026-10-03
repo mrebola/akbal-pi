@@ -395,6 +395,7 @@
           <button class="cfg-nav-btn" data-cfg="wifi" data-i18n="settings.nav_wifi">Wifi</button>
           <button class="cfg-nav-btn" data-cfg="audio" data-i18n="settings.nav_audio">Audio</button>
           <button class="cfg-nav-btn" data-cfg="ia" data-i18n="settings.nav_ia">IA</button>
+          <button class="cfg-nav-btn" data-cfg="soul" data-i18n="settings.nav_soul">Soul</button>
           <button class="cfg-nav-btn" data-cfg="almacenamiento" data-i18n="settings.nav_storage">Almacenamiento</button>
           <button class="cfg-nav-btn" data-cfg="dispositivos" data-i18n="settings.nav_devices">Dispositivos</button>
           <button class="cfg-nav-btn" data-cfg="sistema" data-i18n="settings.nav_system">Sistema</button>
@@ -605,6 +606,24 @@
                 <button type="button" id="ia-pull-cancel" class="cfg-btn" data-i18n="settings.ia.pull_cancel">Cancelar</button>
                 <button type="button" id="ia-pull-clear" class="cfg-btn hidden" data-i18n="settings.ia.pull_clear">Cerrar</button>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SOUL: edita la identidad de Akbal (personalidad + lo que sabe
+             de sí mismo) sin SSH — ver config/soul-files.ts. Las pestañas
+             de soul-file-tabs se generan en JS (loadSoulFiles en app.js),
+             no hay markup fijo por archivo. -->
+        <div class="cfg-panel" data-cfg-panel="soul">
+          <div class="cfg-card cfg-card-wide">
+            <div class="cfg-card-head"><span class="cfg-card-title" data-i18n="settings.soul.title">Identidad de Akbal</span></div>
+            <p class="cfg-hint" data-i18n="settings.soul.hint">Estos archivos definen quién es Akbal: su personalidad (se usa en cada respuesta, voz y chat web), qué sabe sobre sí mismo y su bitácora. Guardá para aplicar — no hace falta reiniciar el servicio. Cambiar de pestaña sin guardar descarta lo editado.</p>
+            <div class="cfg-chip-row" id="soul-file-tabs"></div>
+            <textarea id="soul-editor" class="soul-editor" rows="16" spellcheck="false"></textarea>
+            <div class="cfg-actions">
+              <button type="button" id="soul-save-btn" class="cfg-btn cfg-btn-accent" data-i18n="settings.soul.save_btn">Guardar</button>
+              <button type="button" id="soul-reindex-btn" class="cfg-btn hidden" data-i18n="settings.soul.reindex_btn">Reindexar conocimiento ahora</button>
+              <span id="soul-save-status" class="cfg-meta"></span>
             </div>
           </div>
         </div>

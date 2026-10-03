@@ -49,3 +49,13 @@ ensureDirExists(cameraFeedDir);
 
 export const knowledgeDir = path.join(__dirname, "../..", "knowledge");
 ensureDirExists(knowledgeDir);
+
+// The "soul file" — Akbal's editable persona/system-prompt source of
+// truth (see config/llm-config.ts). Same sibling-of-dist layout as
+// knowledgeDir above (app/soul/, not app/dist/soul/), so it survives a
+// rebuild and is easy to find/edit on the device. SOUL_FILE in .env can
+// point elsewhere entirely (e.g. a path outside the repo, for a fork that
+// doesn't want its persona in git).
+export const soulDir = path.join(__dirname, "../..", "soul");
+ensureDirExists(soulDir);
+export const soulFilePath = path.join(soulDir, "akbal.md");

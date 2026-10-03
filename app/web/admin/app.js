@@ -55,12 +55,118 @@ function setAvatarTalking(isTalking) {
 }
 
 
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// Minimal markdown → HTML for assistant chat bubbles — local models (and
+// the admin-tools results they summarize, see device/web-admin-server.ts)
+// reply with "### heading" / "**bold**" / lists / `code`, which used to
+// show up as raw asterisks and hashes. No external markdown library: this
+// device is offline-first (see AGENTS.md), so no CDN dependency, and the
+// text being rendered is still an LLM's own output — everything is HTML-
+// escaped FIRST, then only these specific patterns are ever turned back
+// into tags, so there's no way for a reply to inject arbitrary HTML.
+// Covers what local models actually produce (headings, bold/italic,
+// inline/fenced code, lists); anything else is left as plain paragraphs.
+function renderMarkdown(raw) {
+  const lines = escapeHtml(raw).split("\n");
+  const htmlParts = [];
+  let inCodeBlock = false;
+  let codeLines = [];
+  let listType = null; // "ul" | "ol" | null — the list currently being built
+  let listItems = [];
+
+  function flushList() {
+    if (listType) {
+      htmlParts.push(`<${listType}>${listItems.join("")}</${listType}>`);
+      listType = null;
+      listItems = [];
+    }
+  }
+
+  function inlineFormat(text) {
+    return text
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*([^*\n]+)\*/g, "<em>$1</em>")
+      .replace(/__([^_]+)__/g, "<strong>$1</strong>")
+      .replace(/_([^_\n]+)_/g, "<em>$1</em>");
+  }
+
+  for (const line of lines) {
+    if (line.startsWith("```")) {
+      if (inCodeBlock) {
+        htmlParts.push(`<pre><code>${codeLines.join("\n")}</code></pre>`);
+        codeLines = [];
+        inCodeBlock = false;
+      } else {
+        flushList();
+        inCodeBlock = true;
+      }
+      continue;
+    }
+    if (inCodeBlock) {
+      codeLines.push(line);
+      continue;
+    }
+    const heading = line.match(/^(#{1,4})\s+(.*)$/);
+    if (heading) {
+      flushList();
+      // Starts at h4: a model's "#" top heading would otherwise render
+      // bigger than the chat UI's own headings inside a small bubble.
+      const level = Math.min(6, heading[1].length + 3);
+      htmlParts.push(`<h${level}>${inlineFormat(heading[2])}</h${level}>`);
+      continue;
+    }
+    const ulItem = line.match(/^[-*]\s+(.*)$/);
+    const olItem = line.match(/^\d+\.\s+(.*)$/);
+    if (ulItem) {
+      if (listType !== "ul") {
+        flushList();
+        listType = "ul";
+      }
+      listItems.push(`<li>${inlineFormat(ulItem[1])}</li>`);
+      continue;
+    }
+    if (olItem) {
+      if (listType !== "ol") {
+        flushList();
+        listType = "ol";
+      }
+      listItems.push(`<li>${inlineFormat(olItem[1])}</li>`);
+      continue;
+    }
+    flushList();
+    if (line.trim() === "") {
+      htmlParts.push("<br>");
+    } else {
+      htmlParts.push(`<p>${inlineFormat(line)}</p>`);
+    }
+  }
+  flushList();
+  if (inCodeBlock) {
+    // Unterminated fence (still streaming) — show what's there so far
+    // rather than swallow it until the closing ``` arrives.
+    htmlParts.push(`<pre><code>${codeLines.join("\n")}</code></pre>`);
+  }
+  return htmlParts.join("");
+}
+
 function addMessage(role, text) {
   const empty = document.getElementById("chat-empty");
   if (empty) empty.classList.add("hidden");
   const el = document.createElement("div");
   el.className = `msg ${role}`;
-  el.textContent = text;
+  // Only the assistant's own text is ever markdown — user input and
+  // system notices stay as plain text (textContent), never interpreted.
+  if (role === "assistant") el.innerHTML = renderMarkdown(text);
+  else el.textContent = text;
   chatLog.appendChild(el);
   chatLog.scrollTop = chatLog.scrollHeight;
   // System notices (audio/wifi/bluetooth/backup/model/file actions) also surface
@@ -73,6 +179,60 @@ function addMessage(role, text) {
     toast(text, kind);
   }
   return el;
+}
+
+// Admin chat tool-calling UI — chips for "admin_tool_call" frames (one tool
+// running/done) and link buttons for "admin_links" (sections touched this
+// turn), both sent by device/web-admin-server.ts's /api/chat alongside the
+// normal `message.content` NDJSON lines. Kept as siblings of the assistant
+// `.msg` bubble in chat-log (flex column, so they stack right under it)
+// rather than nested inside it, so assistantEl.textContent assignments in
+// sendMessage() below never wipe them out.
+const toolChipsByCallName = new Map(); // tool name -> chip element, scoped to the in-flight turn
+
+function resetToolChips() {
+  toolChipsByCallName.clear();
+}
+
+function upsertToolChip(name, title, status) {
+  let row = document.getElementById("chat-tool-row");
+  if (!row) {
+    row = document.createElement("div");
+    row.id = "chat-tool-row";
+    row.className = "msg-tools";
+    chatLog.appendChild(row);
+  }
+  let chip = toolChipsByCallName.get(name);
+  if (!chip) {
+    chip = document.createElement("span");
+    toolChipsByCallName.set(name, chip);
+    row.appendChild(chip);
+  }
+  chip.className = `tool-chip ${status}`;
+  chip.textContent = title;
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+function finishToolRow() {
+  // Detach the id so the next turn starts a fresh row instead of appending
+  // to this one — the row itself stays in chat-log as part of the turn's
+  // history.
+  document.getElementById("chat-tool-row")?.removeAttribute("id");
+}
+
+function addLinkRow(links) {
+  if (!Array.isArray(links) || links.length === 0) return;
+  const row = document.createElement("div");
+  row.className = "msg-links";
+  for (const link of links) {
+    const a = document.createElement("a");
+    a.className = "msg-link-btn";
+    a.href = link.href;
+    a.textContent = `Ver en ${link.label}`;
+    row.appendChild(a);
+  }
+  chatLog.appendChild(row);
+  chatLog.scrollTop = chatLog.scrollHeight;
 }
 
 // The topbar's own model/wifi/battery/cpu/ram/disk display (the AKBAL OK
@@ -457,6 +617,7 @@ async function sendMessage(text) {
   const controller = new AbortController();
   activeController = controller;
   setSendingUi(true);
+  resetToolChips();
   let fullText = "";
   let hasStartedTalking = false;
   try {
@@ -490,8 +651,15 @@ async function sendMessage(text) {
               setAvatarTalking(true);
             }
             fullText += chunk.message.content;
-            assistantEl.textContent = fullText;
+            assistantEl.innerHTML = renderMarkdown(fullText);
             chatLog.scrollTop = chatLog.scrollHeight;
+          }
+          if (chunk.admin_tool_call) {
+            const { name, title, status } = chunk.admin_tool_call;
+            upsertToolChip(name, title, status);
+          }
+          if (chunk.admin_links) {
+            addLinkRow(chunk.admin_links);
           }
         } catch {
           // ignore a partial/malformed line
@@ -500,7 +668,7 @@ async function sendMessage(text) {
     }
   } catch (err) {
     if (err.name === "AbortError") {
-      assistantEl.textContent = fullText ? `${fullText}\n\n(cancelado)` : "(cancelado)";
+      assistantEl.innerHTML = renderMarkdown(fullText ? `${fullText}\n\n(cancelado)` : "(cancelado)");
     } else {
       assistantEl.textContent = `(error: ${err.message})`;
       assistantEl.classList.add("system");
@@ -509,6 +677,7 @@ async function sendMessage(text) {
     activeController = null;
     setSendingUi(false);
     setAvatarTalking(false);
+    finishToolRow();
   }
   if (fullText) {
     // Keep even a cancelled partial reply in history — a follow-up message
@@ -1239,10 +1408,111 @@ if (cfgNav) {
       void loadSettingsUsbVolumes();
       ensureSettingsFileManager();
     }
+    else if (key === "soul") void loadSoulFiles();
     else if (key === "dispositivos") void scanUsb();
     else if (key === "sistema") void loadBackups();
   });
 }
+
+// ---- Configuración > Soul: editar la identidad de Akbal (soul/akbal.md +
+// knowledge/akbal-*.md, ver config/soul-files.ts) desde el navegador ----
+const soulFileTabsEl = document.getElementById("soul-file-tabs");
+const soulEditorEl = document.getElementById("soul-editor");
+const soulSaveBtn = document.getElementById("soul-save-btn");
+const soulReindexBtn = document.getElementById("soul-reindex-btn");
+const soulSaveStatus = document.getElementById("soul-save-status");
+let soulFilesById = new Map(); // id -> {label, kind, content} — content here is "last saved/loaded", not necessarily what's in the textarea
+let soulActiveId = null;
+// soulTr defined further below with loadIaModels() (same tiny i18n-with-
+// fallback helper, reused here instead of redefining it) — both only run
+// from click/input handlers, well after the whole script has finished
+// evaluating top to bottom, so referencing it ahead of its own line is fine.
+
+async function loadSoulFiles() {
+  try {
+    const res = await apiFetch("/api/soul/files");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const files = await res.json();
+    soulFilesById = new Map(files.map((f) => [f.id, f]));
+    soulFileTabsEl.innerHTML = "";
+    for (const f of files) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "cfg-chip";
+      btn.dataset.soulId = f.id;
+      btn.textContent = f.label;
+      soulFileTabsEl.appendChild(btn);
+    }
+    const toSelect = soulActiveId && soulFilesById.has(soulActiveId) ? soulActiveId : files[0]?.id;
+    if (toSelect) selectSoulFile(toSelect);
+  } catch (err) {
+    soulSaveStatus.textContent = iaTr("settings.soul.load_failed", "No se pudieron cargar los archivos de identidad.");
+  }
+}
+
+function selectSoulFile(id) {
+  const file = soulFilesById.get(id);
+  if (!file) return;
+  soulActiveId = id;
+  for (const b of soulFileTabsEl.querySelectorAll(".cfg-chip")) b.classList.toggle("active", b.dataset.soulId === id);
+  soulEditorEl.value = file.content;
+  soulReindexBtn.classList.toggle("hidden", file.kind !== "knowledge");
+  soulSaveStatus.textContent = "";
+}
+
+soulFileTabsEl?.addEventListener("click", (e) => {
+  const btn = e.target.closest(".cfg-chip");
+  if (btn) selectSoulFile(btn.dataset.soulId);
+});
+
+soulSaveBtn?.addEventListener("click", async () => {
+  if (!soulActiveId) return;
+  soulSaveBtn.disabled = true;
+  soulSaveStatus.textContent = iaTr("settings.soul.saving", "Guardando…");
+  try {
+    const content = soulEditorEl.value;
+    const res = await apiFetch(`/api/soul/files/${soulActiveId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    const file = soulFilesById.get(soulActiveId);
+    if (file) file.content = content; // keep the in-memory cache in sync with what's now on disk
+    soulSaveStatus.textContent = data.reindexing
+      ? iaTr("settings.soul.saved_reindexing", "Guardado — reindexando conocimiento…")
+      : iaTr("settings.soul.saved", "Guardado");
+    toast(iaTr("settings.soul.saved", "Guardado"), "success");
+  } catch (err) {
+    soulSaveStatus.textContent = iaTr("settings.soul.save_failed", `Error guardando: ${err.message}`, { error: err.message });
+    toast(soulSaveStatus.textContent, "error");
+  } finally {
+    soulSaveBtn.disabled = false;
+  }
+});
+
+soulReindexBtn?.addEventListener("click", async () => {
+  soulReindexBtn.disabled = true;
+  try {
+    const res = await apiFetch("/api/soul/reindex", { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    const msg = data.ok
+      ? iaTr("settings.soul.reindex_started", "Reindexando conocimiento en segundo plano…")
+      : iaTr("settings.soul.reindex_disabled", "RAG está deshabilitado (ENABLE_RAG) — guardado, pero no se reindexa.");
+    toast(msg, data.ok ? "info" : "warn");
+  } catch (err) {
+    toast(iaTr("settings.soul.reindex_failed", `No se pudo reindexar: ${err.message}`, { error: err.message }), "error");
+  } finally {
+    soulReindexBtn.disabled = false;
+  }
+});
+
+soulEditorEl?.addEventListener("input", () => {
+  const unsavedHint = iaTr("settings.soul.unsaved_hint", "Cambios sin guardar");
+  if (soulSaveStatus.textContent && soulSaveStatus.textContent !== unsavedHint) return;
+  soulSaveStatus.textContent = unsavedHint;
+});
 
 const cfgStorageRefresh = document.getElementById("cfg-storage-refresh");
 cfgStorageRefresh?.addEventListener("click", () => {

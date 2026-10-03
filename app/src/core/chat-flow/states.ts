@@ -105,6 +105,13 @@ import {
   onNetworkInfoExit,
 } from "./network-info-mode";
 import {
+  enterAboutMode,
+  handleAboutDoubleClick,
+  handleAboutPress,
+  handleAboutRelease,
+  onAboutExit,
+} from "./about-mode";
+import {
   enterWifiRadarMode,
   handleWifiRadarDoubleClick,
   handleWifiRadarPress,
@@ -292,6 +299,10 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       }
       if (key === "wardrive") {
         ctx.transitionTo("wardrive");
+        return;
+      }
+      if (key === "about") {
+        ctx.transitionTo("about");
         return;
       }
       // "camera" falls through to here, but so would any future
@@ -1291,6 +1302,17 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     onButtonPressed(() => handleNetworkInfoPress());
     onButtonReleased(() => handleNetworkInfoRelease());
     enterNetworkInfoMode();
+  },
+  about: (ctx: ChatFlowContext) => {
+    onAboutExit(() => {
+      if (ctx.currentFlowName === "about") {
+        ctx.transitionTo("sleep");
+      }
+    });
+    onButtonDoubleClick(() => handleAboutDoubleClick());
+    onButtonPressed(() => handleAboutPress());
+    onButtonReleased(() => handleAboutRelease());
+    enterAboutMode();
   },
   wifi_radar: (ctx: ChatFlowContext) => {
     onWifiRadarExit(() => {

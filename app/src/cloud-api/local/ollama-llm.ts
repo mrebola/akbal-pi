@@ -4,7 +4,7 @@ import * as path from "path";
 import { isEmpty } from "lodash";
 import {
   shouldResetChatHistory,
-  systemPrompt,
+  getSystemPrompt,
   updateLastMessageTime,
 } from "../../config/llm-config";
 import { llmTools, llmFuncMap } from "../../config/llm-tools";
@@ -98,7 +98,7 @@ const chatHistoryFileName = `ollama_chat_history_${moment().format(
 const messages: OllamaMessage[] = [
   {
     role: "system",
-    content: systemPrompt,
+    content: getSystemPrompt(),
   },
 ];
 
@@ -109,7 +109,7 @@ const warmUpModel = (model: string): Promise<void> =>
       messages: [
         {
           role: "system",
-          content: systemPrompt,
+          content: getSystemPrompt(),
         },
         {
           // Some chat templates raise an error if there's no user turn at
@@ -335,7 +335,7 @@ const resetChatHistory = (): void => {
   messages.length = 0;
   messages.push({
     role: "system",
-    content: systemPrompt,
+    content: getSystemPrompt(),
   });
 };
 
@@ -470,6 +470,12 @@ const chatWithLLMStreamInternal = async (
 ): Promise<void> => {
   if (shouldResetChatHistory()) {
     resetChatHistory();
+  } else if (messages[0]?.role === "system") {
+    // Picks up a soul-file edit (Settings > Soul in the web admin, see
+    // config/soul-files.ts) even mid-conversation, not just on the next
+    // idle-timeout reset above — getSystemPrompt() re-reads the file on
+    // every call, no caching.
+    messages[0].content = getSystemPrompt();
   }
   updateLastMessageTime();
   messages.push(...(inputMessages as OllamaMessage[]));

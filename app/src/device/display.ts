@@ -71,6 +71,17 @@ export interface Status {
   help_ui_body: string;
   help_ui_page: number;
   help_ui_total: number;
+  // "Acerca de" overlay (chat-flow/about-mode.ts) — Cypher404: El
+  // Manifiesto, condensed and paged, same card/grammar as help_ui above
+  // but flowing wrapped paragraph text (about_ui_body is one plain string
+  // per page) instead of label/example pairs. Its final page switches to
+  // model_ui: "network" for the QR to buy the book, not another about_ui
+  // page.
+  about_ui: "" | "view";
+  about_ui_title: string;
+  about_ui_body: string;
+  about_ui_page: number;
+  about_ui_total: number;
   // Simplified WiFi radar screen (see chat-flow/wifi-radar-mode.ts) — a
   // dedicated screen type like model_ui/help_ui above rather than another
   // model_ui variant, since it needs a custom-drawn scene (rings, sweep,
@@ -160,6 +171,11 @@ export class WhisplayDisplay {
     help_ui_body: "",
     help_ui_page: 0,
     help_ui_total: 0,
+    about_ui: "",
+    about_ui_title: "",
+    about_ui_body: "",
+    about_ui_page: 0,
+    about_ui_total: 0,
     radar_ui: "",
     radar_ui_points: [],
     radar_ui_count: 0,
@@ -557,6 +573,11 @@ export class WhisplayDisplay {
       help_ui_body,
       help_ui_page,
       help_ui_total,
+      about_ui,
+      about_ui_title,
+      about_ui_body,
+      about_ui_page,
+      about_ui_total,
       radar_ui,
       radar_ui_points,
       radar_ui_count,
@@ -618,6 +639,11 @@ export class WhisplayDisplay {
     this.currentStatus.help_ui_body = help_ui_body;
     this.currentStatus.help_ui_page = help_ui_page;
     this.currentStatus.help_ui_total = help_ui_total;
+    this.currentStatus.about_ui = about_ui;
+    this.currentStatus.about_ui_title = about_ui_title;
+    this.currentStatus.about_ui_body = about_ui_body;
+    this.currentStatus.about_ui_page = about_ui_page;
+    this.currentStatus.about_ui_total = about_ui_total;
     this.currentStatus.radar_ui = radar_ui;
     this.currentStatus.radar_ui_points = radar_ui_points;
     this.currentStatus.radar_ui_count = radar_ui_count;

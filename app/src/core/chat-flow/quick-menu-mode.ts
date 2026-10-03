@@ -18,7 +18,8 @@ export type QuickMenuKey =
   | "wifiradar"
   | "aircraft_radar"
   | "wardrive"
-  | "jukebox";
+  | "jukebox"
+  | "about";
 
 type QuickMenuItem = { key: QuickMenuKey; label: string; description: string };
 
@@ -43,6 +44,7 @@ const BASE_ITEMS: QuickMenuItem[] = [
   { key: "wifiradar", label: "WiFi Radar", description: "Ver redes cercanas" },
   { key: "aircraft_radar", label: "Radar de Aviones", description: "Ver tráfico aéreo cercano" },
   { key: "wardrive", label: "Wardrive", description: "Captura en el auto + GPS" },
+  { key: "about", label: "Acerca de", description: "Cypher404: El Manifiesto" },
 ];
 
 const SHORT_PRESS_MAX_MS = 400;

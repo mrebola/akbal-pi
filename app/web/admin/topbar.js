@@ -21,7 +21,7 @@
 
   const header = document.getElementById("topbar");
   if (!header) return;
-  const page = header.dataset.page || ""; // "chat" (= index.html, the app shell) | "wardrive" | "wifiradar" | "gps" | "aircraft-radar" | "crack-station"
+  const page = header.dataset.page || ""; // "chat" (= index.html, the app shell) | "wardrive" | "wifiradar" | "gps" | "aircraft-radar" | "crack-station" | "about"
   const isShell = page === "chat";
 
   // ---- Nav structure — same destinations as the old flat 9-item list,
@@ -49,6 +49,7 @@
     },
     { kind: "panel", id: "music", labelKey: "topbar.tab_music", fallback: "Jukebox" },
     { kind: "panel", id: "settings", labelKey: "topbar.tab_settings", fallback: "Ajustes" },
+    { kind: "page", id: "about", href: "/about", labelKey: "topbar.tab_about", titleKey: "topbar.tab_about_title", fallback: "Acerca de" },
   ];
 
   const t = (key, fallback, vars) => (window.AkbalI18n ? window.AkbalI18n.t(key, vars) : null) || fallback;

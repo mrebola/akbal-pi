@@ -1,6 +1,12 @@
 node_modules
 data
-knowledge
+# User-provided RAG documents (private, not this project's content) are
+# ignored by default; Akbal's own curated self-knowledge (akbal-*.md, see
+# "Akbal's identity and self-knowledge" in AGENTS.md) is tracked on purpose
+# — the negation below only works because this ignores contents, not the
+# directory itself.
+knowledge/*
+!knowledge/akbal-*.md
 tts_temp
 /.env
 emoji_svg

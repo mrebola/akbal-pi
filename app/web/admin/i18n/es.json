@@ -18,6 +18,8 @@
     "tab_music": "Jukebox",
     "tab_usb": "Dispositivos",
     "tab_settings": "Ajustes",
+    "tab_about": "Acerca de",
+    "tab_about_title": "Cypher404: El Manifiesto",
     "platform_toggle_title": "Fuente de datos: LIVE usa los dongles reales · DEMO muestra datos sintéticos y libera el hardware",
     "live": "LIVE",
     "demo": "DEMO",
@@ -205,6 +207,7 @@
     "nav_wifi": "Wifi",
     "nav_audio": "Audio",
     "nav_ia": "IA",
+    "nav_soul": "Soul",
     "nav_storage": "Almacenamiento",
     "nav_devices": "Dispositivos",
     "nav_system": "Sistema",
@@ -287,6 +290,21 @@
       "pull_cancelled": "Cancelado",
       "pull_error": "Error: {err}",
       "pull_done": "✓ {tag} instalado"
+    },
+    "soul": {
+      "title": "Identidad de Akbal",
+      "hint": "Estos archivos definen quién es Akbal: su personalidad (se usa en cada respuesta, voz y chat web), qué sabe sobre sí mismo y su bitácora. Guardá para aplicar — no hace falta reiniciar el servicio. Cambiar de pestaña sin guardar descarta lo editado.",
+      "save_btn": "Guardar",
+      "saving": "Guardando…",
+      "saved": "Guardado",
+      "saved_reindexing": "Guardado — reindexando conocimiento…",
+      "save_failed": "Error guardando: {error}",
+      "load_failed": "No se pudieron cargar los archivos de identidad.",
+      "reindex_btn": "Reindexar conocimiento ahora",
+      "reindex_started": "Reindexando conocimiento en segundo plano…",
+      "reindex_disabled": "RAG está deshabilitado (ENABLE_RAG) — guardado, pero no se reindexa.",
+      "reindex_failed": "No se pudo reindexar: {error}",
+      "unsaved_hint": "Cambios sin guardar"
     },
     "storage": {
       "internal_title": "Disco interno",
@@ -515,5 +533,13 @@
     "status_found": "Encontrada",
     "status_nomatch": "Sin match",
     "status_error": "Error"
+  },
+  "about": {
+    "kicker": "Akbal nació de un libro",
+    "buy_btn": "Comprar / leer el libro",
+    "project_title": "Por qué existe akbal-pi",
+    "project_p1": "Este proyecto nace inspirado en Akbal, el personaje de Cypher404: El Manifiesto. El objetivo es doble: por un lado, promover el libro — ojalá lo compres y lo leas. Por el otro, servir como un proyecto real de autoaprendizaje y estudio: entender hasta dónde puede llegar el conocimiento, la ciberseguridad y una IA local sin bloqueos artificiales, operando sobre hardware real.",
+    "project_p2": "Todo lo que ves aquí — el radar de wifi, la auditoría de laboratorio, el wardrive, el radar de aviones, la IA que conversa por voz y por texto — es parte de ese estudio. Si te interesa este tipo de exploración, te invitamos a participar: el repo es público.",
+    "qr_hint": "Escaneá para abrir cypher404.com/book desde tu teléfono."
   }
 }

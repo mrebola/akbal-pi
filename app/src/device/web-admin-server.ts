@@ -42,6 +42,14 @@ import {
   clearPullState,
   deleteOllamaModel,
 } from "../cloud-api/local/ollama-llm";
+import { runAdminChatToolLoop, AdminChatMessage } from "../cloud-api/local/admin-chat-tool-loop";
+import { llmFuncMap } from "../config/llm-tools";
+import { adminTools, adminFuncMap, adminToolMeta } from "../config/admin-tools/registry";
+import { linkForSection, AdminSectionId } from "../config/admin-tools/ui-links";
+import { getBasePersonaPrompt } from "../config/llm-config";
+import { enableRAG } from "../cloud-api/knowledge";
+import { getSystemPromptWithKnowledge } from "../core/Knowledge";
+import { listSoulEditableFiles, writeSoulEditableFile, triggerKnowledgeReindex } from "../config/soul-files";
 import { isAgentMode, setDeviceMode } from "../config/device-mode";
 import {
   AudioOutputTarget,
@@ -313,6 +321,16 @@ export class WebAdminServer {
       ctx.set("Cache-Control", "no-store");
       ctx.type = "text/html";
       ctx.body = fs.createReadStream(path.resolve(__dirname, "../..", "web", "admin", "crack-station.html"));
+    });
+
+    // ACERCA DE — static page: Cypher404: El Manifiesto (the book Akbal is
+    // named after, see README.md) + why this project exists. No API calls,
+    // same mirror of the physical device's "Acerca de" quick-menu item
+    // (chat-flow/about-mode.ts).
+    router.get("/about", (ctx) => {
+      ctx.set("Cache-Control", "no-store");
+      ctx.type = "text/html";
+      ctx.body = fs.createReadStream(path.resolve(__dirname, "../..", "web", "admin", "about.html"));
     });
 
     router.get("/api/gps/status", async (ctx) => {
@@ -810,6 +828,34 @@ export class WebAdminServer {
       ctx.body = { ok: true };
     });
 
+    // ── SOUL (Settings > Soul tab) — edit Akbal's identity files from the
+    // browser: the persona/system-prompt file (soul/akbal.md) and the
+    // self-knowledge files that feed the RAG (knowledge/akbal-*.md). Fixed
+    // allowlist of ids in config/soul-files.ts — never an arbitrary path.
+    router.get("/api/soul/files", async (ctx) => {
+      ctx.body = listSoulEditableFiles();
+    });
+
+    router.post("/api/soul/files/:id", async (ctx) => {
+      const content = (ctx.request.body as any)?.content;
+      if (typeof content !== "string") {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "content requerido" };
+        return;
+      }
+      const result = writeSoulEditableFile(ctx.params.id, content);
+      ctx.status = result.ok ? 200 : 404;
+      ctx.body = result;
+    });
+
+    // Manual re-embed trigger (Settings > Soul's "Reindexar conocimiento
+    // ahora" button) — saving a knowledge file already triggers this on
+    // its own; this is for re-running it without editing anything (e.g.
+    // after turning ENABLE_RAG on for the first time).
+    router.post("/api/soul/reindex", async (ctx) => {
+      ctx.body = triggerKnowledgeReindex();
+    });
+
     router.get("/api/models", async (ctx) => {
       ctx.body = await listOllamaModelsWithSize();
     });
@@ -822,6 +868,18 @@ export class WebAdminServer {
         return;
       }
       try {
+        // Every model switchModel() has ever loaded stays resident
+        // "Forever" (keep_alive:-1, see ollama-llm.ts) — intentional so a
+        // flow that bounces between two models (e.g. modo agente's local
+        // fallback) doesn't pay a cold-load each time. But this endpoint
+        // is the one a human uses to try several models back-to-back from
+        // the dropdown, with no such fast-toggling need, and stacking 2-3
+        // of the bigger ones (2-4GB each) exhausted the Pi's RAM+swap
+        // hard enough to make even SSH stop responding (see
+        // docs/llm-model-selection.md, incident 2026-10-03). Unload
+        // everything else resident before loading the pick so this UI
+        // only ever holds one model in memory at a time.
+        await unloadModel();
         await switchModel(tag);
         ctx.body = { ok: true, model: getCurrentModel() };
       } catch (err: any) {
@@ -885,12 +943,29 @@ export class WebAdminServer {
       ctx.body = await deleteOllamaModel(tag);
     });
 
-    // Streams Ollama's own NDJSON chat response straight through — the
-    // frontend (web/admin/app.js) parses one JSON object per line as it
-    // arrives, same shape Ollama always returns.
+    // Streams Ollama's chat response as NDJSON (one JSON object per line,
+    // same shape Ollama itself uses for `message.content`) — the frontend
+    // (web/admin/app.js) already parses it that way. Unlike a straight
+    // passthrough, this goes through runAdminChatToolLoop() so the admin
+    // chat can call the admin-tools registry (docs/admin-chat-tools.md —
+    // read-only in Fase 1: wifiradar/aircraft-radar/gnss/wifi-audit/
+    // wardrive status + wifi scan) and report back which sections it
+    // touched. Two new NDJSON frame types ride alongside `message.content`,
+    // additive to the existing contract:
+    //   - {admin_tool_call:{name,title,status}} — a tool starting/finishing,
+    //     so the UI can show "Consultando Radar Wi-Fi…" while it runs.
+    //   - {admin_links:[{label,href}]} — sent once at the end, built from
+    //     which sections actually ran a tool this turn (never parsed out of
+    //     the model's own text — see admin-tools/ui-links.ts).
+    // The tool loop itself is intentionally NOT the same one ollama-llm.ts
+    // uses for the voice flow — that one owns a module-level history
+    // singleton shared with the physical device; this one is stateless
+    // per-request (see cloud-api/local/admin-chat-tool-loop.ts) so a web
+    // chat session can never race a voice conversation over the same array.
     //
-    // Two independent safety nets, after a real incident where a stuck
-    // model (huihui_ai/qwen3-abliterated:1.7b, already flagged in
+    // Two independent safety nets carried over from the old plain
+    // passthrough, after a real incident where a stuck model
+    // (huihui_ai/qwen3-abliterated:1.7b, already flagged in
     // docs/llm-model-selection.md for sometimes looping) ran the Pi's CPU
     // at ~70% for 45+ minutes with no way to stop it:
     //   1. num_predict caps how many tokens a single reply can ever
@@ -902,24 +977,71 @@ export class WebAdminServer {
     //      llama-server process actually stops instead of continuing to
     //      burn CPU on an orphaned response nobody's reading.
     const MAX_PREDICT_TOKENS = parseInt(process.env.WEB_ADMIN_CHAT_MAX_TOKENS || "2048", 10);
+    // Same reasoning as OLLAMA_MAX_TOOL_ROUNDS in ollama-llm.ts — bounds how
+    // many tool round-trips a single admin chat turn can take before the
+    // loop just stops, instead of possibly spinning forever on this
+    // hardware.
+    const WEB_ADMIN_CHAT_MAX_TOOL_ROUNDS = Math.max(
+      0,
+      parseInt(process.env.WEB_ADMIN_CHAT_MAX_TOOL_ROUNDS || "4", 10) || 0,
+    );
+    // Same switch as ollama-llm.ts's enableThinking (default off, see
+    // docs/llm-model-selection.md) — sin esto, un modelo "thinking" como
+    // los qwen3 gasta la mayoría de num_predict en razonamiento oculto
+    // (chunk.message.thinking, que web/admin/app.js ni siquiera lee) antes
+    // de llegar al texto visible, haciendo el chat visiblemente más lento
+    // sin ganancia perceptible.
+    const chatThinkingEnabled = process.env.ENABLE_THINKING === "true";
     router.post("/api/chat", async (ctx) => {
       const body = ctx.request.body as any;
-      const messages = Array.isArray(body?.messages) ? body.messages : [];
+      const messages: AdminChatMessage[] = Array.isArray(body?.messages) ? body.messages : [];
       const model = typeof body?.model === "string" && body.model ? body.model : getCurrentModel();
       if (messages.length === 0) {
         ctx.status = 400;
         ctx.body = { error: "messages requerido" };
         return;
       }
+      // app.js's `history` never carries a system message (see sendMessage()
+      // there) — unlike the voice flow, whose module-level `messages`
+      // singleton in ollama-llm.ts starts with one. Without this, the web
+      // chat model has no idea it's Akbal at all. Uses basePersonaPrompt
+      // (config/llm-config.ts, sourced from the soul file app/soul/akbal.md)
+      // rather than the voice flow's `systemPrompt`, which also bakes in
+      // "format for text-to-speech" — wrong constraint for a text UI.
+      if (!messages.some((m) => m.role === "system")) {
+        messages.unshift({ role: "system", content: getBasePersonaPrompt() });
+      }
+      // RAG, same knowledge base the voice flow already queries
+      // (core/Knowledge.ts) — grounds "¿qué es X?" / "¿qué hace Akbal?"
+      // questions in app/knowledge/*.md instead of the model improvising.
+      // Looked up against the latest user turn, inserted right before it so
+      // the model reads "relevant knowledge" then "user asks". Skipped
+      // entirely when RAG is disabled (default), and any failure here is
+      // non-fatal — chat still answers without it.
+      if (enableRAG) {
+        try {
+          const lastUserIndex = messages.map((m) => m.role).lastIndexOf("user");
+          const lastUserMessage = lastUserIndex >= 0 ? messages[lastUserIndex] : undefined;
+          if (lastUserMessage?.content) {
+            const knowledgePrompt = await getSystemPromptWithKnowledge(lastUserMessage.content);
+            if (knowledgePrompt && !messages.some((m) => m.role === "system" && m.content === knowledgePrompt)) {
+              messages.splice(lastUserIndex, 0, { role: "system", content: knowledgePrompt });
+            }
+          }
+        } catch (err: any) {
+          console.error("[AdminChat] RAG lookup failed:", err?.message || err);
+        }
+      }
       const abortController = new AbortController();
-      // axios' `signal` only cancels the request while it's still being
-      // established — once responseType:"stream" resolves, response.data
-      // is a live Node Readable already flowing, and aborting the signal
-      // at that point does *not* tear it down (confirmed the hard way: the
-      // llama-server process kept running well after the browser
+      // axios' `signal` only cancels a request while it's still being
+      // established — once responseType:"stream" resolves, the response
+      // body is a live Node Readable already flowing, and aborting the
+      // signal at that point does *not* tear it down (confirmed the hard
+      // way: the llama-server process kept running well after the browser
       // disconnected). Destroying the stream directly closes its
       // underlying socket to Ollama, which is what actually makes Ollama
-      // cancel the generation.
+      // cancel the generation. onUpstream below keeps this pointed at
+      // whichever round's stream is currently live.
       let upstream: Readable | null = null;
       const onClientGone = () => {
         abortController.abort();
@@ -939,33 +1061,76 @@ export class WebAdminServer {
       const cleanupListeners = (): void => {
         for (const [emitter, event] of emitters) emitter.off(event, onClientGone);
       };
-      try {
-        const response = await axios.post(
-          `${ollamaEndpoint}/api/chat`,
-          { model, messages, stream: true, options: { num_predict: MAX_PREDICT_TOKENS } },
-          { responseType: "stream", signal: abortController.signal },
-        );
-        upstream = response.data;
+      // Headers/stream only open once Ollama has actually accepted the
+      // first round's request (onUpstream fires) — if that very first
+      // connection fails outright (Ollama down, etc.) we can still answer
+      // with a normal 502 JSON body instead of an empty NDJSON stream,
+      // same as the old passthrough did.
+      let streaming = false;
+      const startStreaming = (): void => {
+        if (streaming) return;
+        streaming = true;
         ctx.respond = false;
         ctx.res.writeHead(200, { "Content-Type": "application/x-ndjson" });
-        response.data.pipe(ctx.res);
-        response.data.on("error", () => {
-          // An unhandled 'error' on a Readable stream crashes the process —
-          // Ollama closing the connection after we aborted it lands here,
-          // not in the outer catch, since piping already started.
-          cleanupListeners();
-          ctx.res.end();
+      };
+      const writeFrame = (obj: unknown): void => {
+        if (!ctx.res.writableEnded) ctx.res.write(`${JSON.stringify(obj)}\n`);
+      };
+      const touchedSections = new Set<AdminSectionId>();
+      try {
+        await runAdminChatToolLoop({
+          model,
+          messages,
+          // All admin-tools, not a per-section subset: unlike the voice
+          // flow (one shared conversation across every physical-menu
+          // mode), the chat only ever lives on the shell page (index.html)
+          // — there's no "current page" signal narrower than "the chat is
+          // open" to filter on. The Fase 1 catalog is small enough (wifi,
+          // wifiradar, aircraft radar, gnss, wifi-audit, wardrive status)
+          // that sending it in full is fine; registry.ts's
+          // adminToolsForSection() is kept ready for when Fase 2/3 grow
+          // the catalog enough to need trimming.
+          tools: adminTools,
+          funcMap: { ...llmFuncMap, ...adminFuncMap },
+          maxToolRounds: WEB_ADMIN_CHAT_MAX_TOOL_ROUNDS,
+          numPredict: MAX_PREDICT_TOKENS,
+          think: chatThinkingEnabled,
+          signal: abortController.signal,
+          onContent: (text) => writeFrame({ message: { content: text } }),
+          onToolStart: (name) => {
+            const meta = adminToolMeta[name];
+            writeFrame({ admin_tool_call: { name, title: meta?.title || name, status: "running" } });
+          },
+          onToolEnd: (name) => {
+            const meta = adminToolMeta[name];
+            if (meta) touchedSections.add(meta.sectionId);
+            writeFrame({ admin_tool_call: { name, title: meta?.title || name, status: "done" } });
+          },
+          onUpstream: (stream) => {
+            startStreaming();
+            upstream = stream;
+          },
         });
-        response.data.on("close", cleanupListeners);
+        if (touchedSections.size > 0) {
+          writeFrame({ admin_links: [...touchedSections].map((id) => linkForSection(id)) });
+        }
       } catch (err: any) {
-        cleanupListeners();
         if (axios.isCancel(err) || abortController.signal.aborted) {
           // Client already gone — nothing to send a response to.
+          cleanupListeners();
+          if (streaming) ctx.res.end();
           return;
         }
-        ctx.status = 502;
-        ctx.body = { error: err?.message || String(err) };
+        if (!streaming) {
+          cleanupListeners();
+          ctx.status = 502;
+          ctx.body = { error: err?.message || String(err) };
+          return;
+        }
+        console.error("[AdminChat] Error mid-stream:", err?.message || err);
       }
+      cleanupListeners();
+      if (streaming) ctx.res.end();
     });
 
     router.get("/api/wifi/status", async (ctx) => {

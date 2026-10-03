@@ -1,0 +1,141 @@
+/* Akbal · Acerca de — layout only; colors/tokens come from styles.css
+   (:root vars) so this follows the same light/dark theme as every other
+   page without redefining anything. */
+
+body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.about-page {
+  max-width: 920px;
+  width: 100%;
+  margin: 0 auto;
+  padding: calc(var(--topbar-height, 64px) + 20px) 16px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.about-hero {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.about-cover {
+  width: 180px;
+  height: auto;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  flex-shrink: 0;
+}
+
+.about-hero-text {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.about-kicker {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.about-title {
+  margin: 0;
+  font-size: 26px;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.about-title-sub {
+  color: var(--text-secondary);
+  font-weight: 400;
+  font-size: 0.7em;
+}
+
+.about-tagline {
+  margin: 4px 0 0;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+}
+
+.about-synopsis {
+  margin: 0;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.about-emphasis {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.about-author {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.about-buy-btn {
+  align-self: flex-start;
+  margin-top: 10px;
+  text-decoration: none;
+}
+
+.about-project h2 {
+  margin: 0 0 10px;
+  font-size: 18px;
+  color: var(--text-primary);
+}
+
+.about-project p {
+  margin: 0 0 10px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.about-links {
+  font-size: 13px;
+}
+
+.about-qr-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.about-qr {
+  width: 160px;
+  height: 160px;
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px;
+}
+
+.about-qr-section p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 640px) {
+  .about-hero {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .about-buy-btn {
+    align-self: center;
+  }
+}

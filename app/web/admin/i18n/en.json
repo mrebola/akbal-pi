@@ -18,6 +18,8 @@
     "tab_music": "Jukebox",
     "tab_usb": "Devices",
     "tab_settings": "Settings",
+    "tab_about": "About",
+    "tab_about_title": "Cypher404: The Manifesto",
     "platform_toggle_title": "Data source: LIVE uses the real dongles · DEMO shows synthetic data and releases the hardware",
     "live": "LIVE",
     "demo": "DEMO",
@@ -205,6 +207,7 @@
     "nav_wifi": "Wifi",
     "nav_audio": "Audio",
     "nav_ia": "AI",
+    "nav_soul": "Soul",
     "nav_storage": "Storage",
     "nav_devices": "Devices",
     "nav_system": "System",
@@ -287,6 +290,21 @@
       "pull_cancelled": "Cancelled",
       "pull_error": "Error: {err}",
       "pull_done": "✓ {tag} installed"
+    },
+    "soul": {
+      "title": "Akbal's identity",
+      "hint": "These files define who Akbal is: its personality (used on every reply, voice and web chat), what it knows about itself, and its changelog. Save to apply — no service restart needed. Switching files without saving discards your edits.",
+      "save_btn": "Save",
+      "saving": "Saving…",
+      "saved": "Saved",
+      "saved_reindexing": "Saved — reindexing knowledge…",
+      "save_failed": "Error saving: {error}",
+      "load_failed": "Couldn't load the identity files.",
+      "reindex_btn": "Reindex knowledge now",
+      "reindex_started": "Reindexing knowledge in the background…",
+      "reindex_disabled": "RAG is disabled (ENABLE_RAG) — saved, but not reindexed.",
+      "reindex_failed": "Couldn't reindex: {error}",
+      "unsaved_hint": "Unsaved changes"
     },
     "storage": {
       "internal_title": "Internal disk",
@@ -515,5 +533,13 @@
     "status_found": "Found",
     "status_nomatch": "No match",
     "status_error": "Error"
+  },
+  "about": {
+    "kicker": "Akbal was born from a book",
+    "buy_btn": "Buy / read the book",
+    "project_title": "Why akbal-pi exists",
+    "project_p1": "This project is inspired by Akbal, a character from Cypher404: El Manifiesto. The goal is twofold: promote the book — hopefully you'll buy it and read it — and serve as a real self-study project: understanding how far knowledge, cybersecurity, and an unrestricted local AI can go running on real hardware.",
+    "project_p2": "Everything you see here — the WiFi radar, the lab audit tooling, wardriving, the aircraft radar, the AI that talks by voice and by text — is part of that study. If this kind of exploration interests you, you're invited to join in: the repo is public.",
+    "qr_hint": "Scan to open cypher404.com/book on your phone."
   }
 }

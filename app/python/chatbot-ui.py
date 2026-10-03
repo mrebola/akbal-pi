@@ -139,6 +139,11 @@ current_help_ui = ""
 current_help_ui_body = ""
 current_help_ui_page = 0
 current_help_ui_total = 0
+current_about_ui = ""
+current_about_ui_title = ""
+current_about_ui_body = ""
+current_about_ui_page = 0
+current_about_ui_total = 0
 current_radar_ui = ""
 current_radar_ui_points = []
 current_radar_ui_count = 0
@@ -202,6 +207,10 @@ class RenderThread(threading.Thread):
         self.help_ui_example_font = ImageFont.truetype(self.font_path, 13)
         self.help_ui_hint_font = ImageFont.truetype(self.font_path, 12)
         self.help_ui_cache_key = None
+        # "Acerca de" (chat-flow/about-mode.ts) reuses the help screen's
+        # fonts (same sizing need: a title line + flowing body text + a
+        # page hint) instead of loading its own.
+        self.about_ui_cache_key = None
         self.top_bar_mode_font = ImageFont.truetype(self.font_path, 11)
         self.wardrive_ui_cache_key = None
         self.radar_ui_cache_key = None
@@ -251,6 +260,10 @@ class RenderThread(threading.Thread):
             return self.render_help_screen(apply_tool_placeholders(text))
         if self.help_ui_cache_key is not None:
             self.help_ui_cache_key = None
+        if current_about_ui:
+            return self.render_about_screen(apply_tool_placeholders(text))
+        if self.about_ui_cache_key is not None:
+            self.about_ui_cache_key = None
         if current_radar_ui:
             return self.render_radar_screen(apply_tool_placeholders(text))
         if self.radar_ui_cache_key is not None:
@@ -434,6 +447,68 @@ class RenderThread(threading.Thread):
                     y += label_line_height if is_label else example_line_height
                 if not is_label:
                     y += pair_gap
+
+            if total:
+                center_x = (VIDEO_WIDTH - SAFE_AREA_RIGHT_INSET) // 2
+                self._draw_centered(draw, f"{page} de {total}", self.help_ui_hint_font, VIDEO_HEIGHT - 20, center_x, TEXT_SECONDARY)
+
+            rgb565_data = ImageUtils.image_to_rgb565(frame, VIDEO_WIDTH, VIDEO_HEIGHT)
+            self.whisplay.draw_image(0, TOP_BAR_HEIGHT, VIDEO_WIDTH, VIDEO_HEIGHT, rgb565_data)
+
+        self.render_bottom_text(text)
+        return False  # event-driven: Node pushes a new frame on every change
+
+    def render_about_screen(self, text):
+        """"Acerca de" (chat-flow/about-mode.ts) — a condensed, paged
+        version of Cypher404: El Manifiesto, the book Akbal is named
+        after. Same click/hold/double-click grammar as render_help_screen
+        above (this screen's closest relative), but flowing wrapped
+        paragraph text instead of label/example pairs — about_ui_body is
+        one plain string per page, word-wrapped here with TextUtils
+        (character-based, same helper render_help_screen already uses
+        defensively) rather than pre-fit by hand, since manifesto prose
+        doesn't split into short fixed phrases the way voice commands do.
+        The final page (about-mode.ts switches to model_ui:"network"
+        instead of about_ui once it gets there) shows a QR code to buy
+        the book, not more text from this screen."""
+        self.render_top_bar()
+
+        title = current_about_ui_title or "ACERCA DE"
+        body = current_about_ui_body or ""
+        page = current_about_ui_page or 0
+        total = max(current_about_ui_total or 0, 0)
+        content_width = VIDEO_WIDTH - SAFE_AREA_RIGHT_INSET - 14
+
+        cache_key = (title, body, page, total)
+        if cache_key != self.about_ui_cache_key:
+            self.about_ui_cache_key = cache_key
+            frame = Image.new("RGBA", (VIDEO_WIDTH, VIDEO_HEIGHT), (0, 0, 0, 255))
+            draw = ImageDraw.Draw(frame)
+
+            draw.text((14, 8), title, font=self.help_ui_title_font, fill=TEXT_SECONDARY)
+
+            line_ascent, line_descent = self.help_ui_label_font.getmetrics()
+            line_height = line_ascent + line_descent + 4
+            top_y = 34
+            bottom_limit = VIDEO_HEIGHT - 30  # leaves room for the page hint below
+
+            wrapped = [
+                line for line in TextUtils.wrap_text(draw, body, self.help_ui_label_font, content_width)
+                if line != ""
+            ]
+            # Defensive cap, not an expected case: about-mode.ts's pages are
+            # curated short paragraphs that fit well within this, but a
+            # future edit running long should clip instead of drawing off
+            # the safe area or into the page-hint line.
+            max_lines = max(1, (bottom_limit - top_y) // line_height)
+            if len(wrapped) > max_lines:
+                print(f"[Render] about_ui body truncated: {len(wrapped)} lines, fits {max_lines}")
+                wrapped = wrapped[:max_lines]
+
+            y = top_y
+            for line in wrapped:
+                draw.text((14, y), line, font=self.help_ui_label_font, fill=TEXT_PRIMARY)
+                y += line_height
 
             if total:
                 center_x = (VIDEO_WIDTH - SAFE_AREA_RIGHT_INSET) // 2
@@ -916,6 +991,7 @@ def update_display_data(status=None, emoji=None, text=None,
                   model_ui=None, model_ui_title=None, model_ui_label=None, model_ui_description=None, model_ui_percent=None,
                   model_ui_index=None, model_ui_total=None, model_ui_active=None, model_ui_qr_path=None,
                   help_ui=None, help_ui_body=None, help_ui_page=None, help_ui_total=None,
+                  about_ui=None, about_ui_title=None, about_ui_body=None, about_ui_page=None, about_ui_total=None,
                   radar_ui=None, radar_ui_points=None, radar_ui_count=None, radar_ui_channel=None,
                   aircraft_radar_ui=None, aircraft_radar_ui_points=None, aircraft_radar_ui_count=None,
                   wardrive_ui=None, wardrive_label=None, wardrive_status_text=None,
@@ -936,6 +1012,7 @@ def update_display_data(status=None, emoji=None, text=None,
     global current_model_ui, current_model_ui_title, current_model_ui_label, current_model_ui_description, current_model_ui_percent
     global current_model_ui_index, current_model_ui_total, current_model_ui_active, current_model_ui_qr_path
     global current_help_ui, current_help_ui_body, current_help_ui_page, current_help_ui_total
+    global current_about_ui, current_about_ui_title, current_about_ui_body, current_about_ui_page, current_about_ui_total
     global current_radar_ui, current_radar_ui_points, current_radar_ui_count, current_radar_ui_channel
     global current_aircraft_radar_ui, current_aircraft_radar_ui_points, current_aircraft_radar_ui_count
     global current_wardrive_ui, current_wardrive_label, current_wardrive_status_text
@@ -1078,6 +1155,22 @@ def update_display_data(status=None, emoji=None, text=None,
             current_help_ui_total = int(help_ui_total)
         except (TypeError, ValueError):
             print(f"[Display] Invalid help_ui_total payload: {help_ui_total}")
+    if about_ui is not None:
+        current_about_ui = about_ui
+    if about_ui_title is not None:
+        current_about_ui_title = about_ui_title
+    if about_ui_body is not None:
+        current_about_ui_body = about_ui_body
+    if about_ui_page is not None:
+        try:
+            current_about_ui_page = int(about_ui_page)
+        except (TypeError, ValueError):
+            print(f"[Display] Invalid about_ui_page payload: {about_ui_page}")
+    if about_ui_total is not None:
+        try:
+            current_about_ui_total = int(about_ui_total)
+        except (TypeError, ValueError):
+            print(f"[Display] Invalid about_ui_total payload: {about_ui_total}")
     if radar_ui is not None:
         current_radar_ui = radar_ui
     if radar_ui_points is not None:

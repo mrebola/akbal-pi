@@ -276,6 +276,7 @@ async function main() {
   // dark disc.
   let initialCameraFramed = false;
   const INITIAL_CAMERA_DIST = camera.position.length();
+  let subsolarMarker = null;
   function updateSunPosition() {
     const d = new Date();
     const dir = solarDirectionEquatorial(d);
@@ -291,6 +292,17 @@ async function main() {
     atmosphere.material.uniforms.sunDirection.value.copy(unit);
     sun.position.copy(pos);
     sunTarget.position.set(0, 0, 0);
+    // Diagnostic marker: where the sun is directly overhead, on the surface.
+    // Compare it with the continents and the lit side to check the mapping.
+    const sub = latLonToVec3(decDeg, lonSub, EARTH_R * 1.02);
+    if (!subsolarMarker) {
+      subsolarMarker = new THREE.Mesh(
+        new THREE.SphereGeometry(0.22, 16, 12),
+        new THREE.MeshBasicMaterial({ color: 0xff3030 }),
+      );
+      scene.add(subsolarMarker);
+    }
+    subsolarMarker.position.copy(sub);
     // The visible sun (shader sphere + corona) sits at the same point:
     sunGroup.position.copy(pos);
     if (!initialCameraFramed) {

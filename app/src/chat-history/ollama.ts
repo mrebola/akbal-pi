@@ -67,3 +67,36 @@ export const generateTitle = async (
     return null;
   }
 };
+
+// Title from the first question alone, before any reply exists. Same model
+// and limits as generateTitle; the model is about to answer anyway.
+export const generateTitleFromQuestion = async (
+  model: string,
+  question: string,
+  timeoutMs = 15000,
+): Promise<string | null> => {
+  const prompt =
+    "Escribe un título de máximo 6 palabras, en español, para una conversación " +
+    "que empieza con esta pregunta. Sin comillas ni punto final. Responde solo con el título.\n\n" +
+    `Pregunta: ${question.slice(0, 500)}`;
+  try {
+    const response = await axios.post(
+      `${ollamaEndpoint}/api/chat`,
+      {
+        model,
+        messages: [{ role: "user", content: prompt }],
+        stream: false,
+        think: false,
+        options: { temperature: 0.3, num_predict: 24 },
+        keep_alive: -1,
+      },
+      { timeout: timeoutMs },
+    );
+    const raw: string = response.data?.message?.content || "";
+    const cleaned = raw.replace(/["'«»]/g, "").replace(/[.\s]+$/, "").trim();
+    return cleaned || null;
+  } catch (err: any) {
+    console.warn(`[ChatHistory] title from question failed: ${err?.message || err}`);
+    return null;
+  }
+};

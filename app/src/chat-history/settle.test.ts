@@ -4,7 +4,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { ChatStore } from "./store";
-import { needsAutoTitle, settleExchange } from "./settle";
+import { needsAutoTitle, needsTitleBeforeReply, settleExchange } from "./settle";
 
 const newStore = (): ChatStore => new ChatStore(fs.mkdtempSync(path.join(os.tmpdir(), "chat-settle-")));
 
@@ -52,4 +52,20 @@ test("needsAutoTitle is true only after the first exchange and never after a ren
   assert.equal(needsAutoTitle(null), false);
   store.appendMessage(chat.id, "user", "segunda");
   assert.equal(needsAutoTitle(store.get(chat.id)), false);
+});
+
+test("a brand-new chat gets its title before the reply, once", () => {
+  const store = newStore();
+  const chat = store.createWithMessage("m", "user", "¿qué es un ataque de BEC?");
+  assert.equal(needsTitleBeforeReply(chat), true);
+  const titled = store.update(chat.id, { title: "Ataque BEC" });
+  assert.equal(needsTitleBeforeReply(titled), false);
+});
+
+test("no automatic title is generated after the reply once a title was set before it", () => {
+  const store = newStore();
+  const chat = store.createWithMessage("m", "user", "pregunta");
+  store.update(chat.id, { title: "Título previo" });
+  const replied = store.appendMessage(chat.id, "assistant", "respuesta");
+  assert.equal(needsAutoTitle(replied), false);
 });

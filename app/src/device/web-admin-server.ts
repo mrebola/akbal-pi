@@ -51,9 +51,9 @@ import { getBasePersonaPrompt } from "../config/llm-config";
 import { chatStore, registerChatHistoryRoutes } from "./chat-history-routes";
 import { trimToWindow } from "../chat-history/context";
 import { fallbackTitle } from "../chat-history/title";
-import { generateTitle, getContextWindow } from "../chat-history/ollama";
+import { generateTitle, generateTitleFromQuestion, getContextWindow } from "../chat-history/ollama";
 import type { StoredChat } from "../chat-history/types";
-import { needsAutoTitle, settleExchange } from "../chat-history/settle";
+import { needsAutoTitle, needsTitleBeforeReply, settleExchange } from "../chat-history/settle";
 import { applyDecision } from "../memory/model-memory";
 import { memoryArbiter, webIdle, cancelHooks } from "../memory/shared";
 import { enableRAG } from "../cloud-api/knowledge";
@@ -1103,6 +1103,13 @@ export class WebAdminServer {
         ctx.status = 503;
         ctx.body = { error: `no se pudo preparar el modelo: ${err?.message || err}` };
         return;
+      }
+
+      // A new chat is titled from its first question before the reply starts,
+      // so the sidebar shows the title as soon as the stream opens.
+      if (chat && needsTitleBeforeReply(chat)) {
+        const titled = (await generateTitleFromQuestion(model, newMessage)) || fallbackTitle(newMessage);
+        chat = chatStore.update(chat.id, { title: titled }) ?? chat;
       }
 
       const abortController = new AbortController();

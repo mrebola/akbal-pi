@@ -20,6 +20,12 @@ export const settleExchange = (
   return store.get(chatId);
 };
 
-// Automatic titles are for the first exchange only, and never after a rename.
+// A brand-new chat gets its title from the first question, before the reply
+// starts. Only the first turn, and never after a rename.
+export const needsTitleBeforeReply = (chat: StoredChat | null): boolean =>
+  !!chat && !chat.titleEdited && chat.title === "Chat nuevo" && chat.messages.length === 1;
+
+// Automatic titles are for the first exchange only, and never after a rename or
+// a title already set before the reply.
 export const needsAutoTitle = (chat: StoredChat | null): boolean =>
-  !!chat && !chat.titleEdited && chat.messages.length === 2;
+  !!chat && !chat.titleEdited && chat.title === "Chat nuevo" && chat.messages.length === 2;

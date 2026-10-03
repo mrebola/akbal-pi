@@ -28,7 +28,8 @@ import {
   getAircraftRadarMode,
   getAircraftRadarRequestedMode,
 } from "../services/adsb/service";
-import { getRecentHistory, getHistoryForIcao } from "../services/adsb/history";
+import { getRecentHistory, getHistoryForIcao, getZoneRecent, getSightingsForIcao } from "../services/adsb/history";
+import { SIGHTING_WINDOW_MS } from "../services/adsb/zone";
 import {
   getCurrentModel,
   isModelLoaded,
@@ -1350,6 +1351,23 @@ export class WebAdminServer {
       const snapshot = getAircraftRadarSnapshot();
       const nearest = snapshot.aircraft.find((a) => a.distanceKm !== null) || snapshot.aircraft[0] || null;
       ctx.body = nearest;
+    });
+
+    // Aircraft captured inside the zone around Akbal in the last 24 h, newest
+    // first, one row per aircraft. Empty when there is no known own position.
+    router.get("/api/aircraft/zone", (ctx) => {
+      ctx.body = getZoneRecent(Date.now() - SIGHTING_WINDOW_MS);
+    });
+
+    // Zone captures of one aircraft in the last 24 h, newest first.
+    router.get("/api/aircraft/sightings", (ctx) => {
+      const icao = ctx.query.icao ? String(ctx.query.icao) : "";
+      if (!/^[0-9A-Fa-f]{6}$/.test(icao)) {
+        ctx.status = 400;
+        ctx.body = { error: "icao invalido" };
+        return;
+      }
+      ctx.body = getSightingsForIcao(icao, Date.now() - SIGHTING_WINDOW_MS);
     });
 
     router.get("/api/aircraft/history", (ctx) => {

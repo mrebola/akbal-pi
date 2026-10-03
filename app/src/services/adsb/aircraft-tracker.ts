@@ -1,6 +1,7 @@
 import { Aircraft, AircraftRadarMode, AircraftRadarSnapshot, RawAdsbMessage } from "./types";
 import { haversineDistanceKm, initialBearingDeg } from "./geo";
 import { recordAircraftSeen } from "./history";
+import { isInZone, sightingRadiusKm } from "./zone";
 import { resolveAircraftIdentity } from "./aircraft-database";
 import { resolveRoute } from "./flight-resolver";
 
@@ -21,6 +22,8 @@ export class AircraftTracker {
   private aircraft = new Map<string, Aircraft>(); // key: icao
   private messageTimestamps: number[] = [];
   private lastHistoryWriteAt = new Map<string, number>();
+  // Akbal's own position as last reported by GPS or ADSB_HOME (null = no zone).
+  private ownPosition: { lat: number; lon: number } | null = null;
   private identityRequested = new Set<string>(); // icao
   private routeRequestedFor = new Map<string, string>(); // icao -> callsign already resolved/in flight
 
@@ -128,7 +131,8 @@ export class AircraftTracker {
       const lastWrite = this.lastHistoryWriteAt.get(msg.icao) || 0;
       if (msg.timestamp - lastWrite >= HISTORY_WRITE_INTERVAL_MS) {
         this.lastHistoryWriteAt.set(msg.icao, msg.timestamp);
-        recordAircraftSeen(aircraft);
+        const near = isInZone(msg.latitude, msg.longitude, this.ownPosition, sightingRadiusKm());
+        recordAircraftSeen(aircraft, near);
       }
     }
   }
@@ -158,6 +162,8 @@ export class AircraftTracker {
   // ADS-B messages a few hundred ms apart. null lat/lon (no fix yet) clears
   // these back to null instead of leaving stale numbers on screen.
   updatePosition(gpsLat: number | null, gpsLon: number | null): void {
+    this.ownPosition =
+      gpsLat === null || gpsLon === null ? null : { lat: gpsLat, lon: gpsLon };
     for (const aircraft of this.aircraft.values()) {
       if (gpsLat === null || gpsLon === null || aircraft.latitude === null || aircraft.longitude === null) {
         aircraft.distanceKm = null;

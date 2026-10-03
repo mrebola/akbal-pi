@@ -4,6 +4,8 @@ import { AircraftTracker } from "./aircraft-tracker";
 import { DemoGenerator } from "./demo-mode";
 import { AircraftRadarMode, AircraftRadarSnapshot } from "./types";
 import { getGpsStatus } from "../../utils/gps";
+import { pruneSightingsOlderThan } from "./history";
+import { SIGHTING_WINDOW_MS } from "./zone";
 
 const SWEEP_INTERVAL_MS = 5_000;
 const RETRY_INTERVAL_MS = 15_000;
@@ -32,6 +34,7 @@ export class AircraftRadarService extends EventEmitter {
   private receiver: AdsbReceiver | null = null;
   private demo: DemoGenerator | null = null;
   private sweepTimer: ReturnType<typeof setInterval> | null = null;
+  private prunerTimer: ReturnType<typeof setInterval> | null = null;
   private mode: AircraftRadarMode = "starting";
   private hardware: string | null = null;
   private lastError: string | undefined;
@@ -47,6 +50,17 @@ export class AircraftRadarService extends EventEmitter {
       this.tracker.sweep();
       void this.refreshGpsPosition();
     }, SWEEP_INTERVAL_MS);
+    // Sightings older than the window are dropped at startup and hourly, so the
+    // table never grows past the window plus one hour.
+    const prune = (): void => {
+      try {
+        pruneSightingsOlderThan(Date.now() - SIGHTING_WINDOW_MS);
+      } catch (err: any) {
+        console.warn("[adsb] sightings prune failed:", err?.message || err);
+      }
+    };
+    prune();
+    this.prunerTimer = setInterval(prune, 60 * 60 * 1000);
 
     try {
       await this.tryRealCapture();

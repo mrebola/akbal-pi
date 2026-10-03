@@ -47,6 +47,18 @@ db.exec(`
   );
 `);
 
+// Schema evolution: "near" marks captures taken inside the sighting zone
+// around Akbal, at the moment they were recorded (see zone.ts). Rows older
+// than this migration have no recorded zone, so they default to 0.
+{
+  const cols = db.prepare(`PRAGMA table_info(aircraft_seen)`).all() as { name: string }[];
+  if (cols.length > 0 && !cols.some((c) => c.name === "near")) {
+    db.exec(`ALTER TABLE aircraft_seen ADD COLUMN near INTEGER NOT NULL DEFAULT 0`);
+    console.log("[aircraft-radar] history migrated: aircraft_seen.near");
+  }
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_aircraft_seen_near ON aircraft_seen(near, timestamp)`);
+}
+
 // Schema evolution: operating airline name, from the same adsbdb.com
 // callsign response route_lookup_cache already stores — additive-only
 // (same pattern as wardrive/drive-db.ts), safe on a device with an existing
@@ -60,16 +72,17 @@ db.exec(`
 }
 
 const insertSeenStmt = db.prepare(`
-  INSERT INTO aircraft_seen (timestamp, icao, callsign, registration, lat, lon, altitude, speed, heading)
-  VALUES (@timestamp, @icao, @callsign, @registration, @lat, @lon, @altitude, @speed, @heading)
+  INSERT INTO aircraft_seen (timestamp, icao, callsign, registration, lat, lon, altitude, speed, heading, near)
+  VALUES (@timestamp, @icao, @callsign, @registration, @lat, @lon, @altitude, @speed, @heading, @near)
 `);
 
 // Called from aircraft-tracker.ts whenever a position update lands — not on
 // every raw ADS-B message (identification/velocity-only messages carry no
 // new position), so the table grows at roughly one row per aircraft per
 // position report instead of one per Mode-S frame.
-export function recordAircraftSeen(aircraft: Aircraft): void {
+export function recordAircraftSeen(aircraft: Aircraft, near: boolean): void {
   insertSeenStmt.run({
+    near: near ? 1 : 0,
     timestamp: aircraft.lastSeen,
     icao: aircraft.icao,
     callsign: aircraft.callsign,
@@ -183,3 +196,42 @@ export function cacheRoute(
 ): void {
   upsertRouteStmt.run({ callsign: callsign.trim().toUpperCase(), resolvedAt: Date.now(), ...data });
 }
+
+// The zone list: one row per aircraft that was captured inside the zone in the
+// window, carrying its most recent zone capture. Newest first.
+const zoneRecentStmt = db.prepare(`
+  SELECT a.* FROM aircraft_seen a
+  JOIN (
+    SELECT icao, MAX(timestamp) AS last_ts
+    FROM aircraft_seen
+    WHERE near = 1 AND timestamp >= ?
+    GROUP BY icao
+  ) m ON a.icao = m.icao AND a.timestamp = m.last_ts
+  WHERE a.near = 1
+  ORDER BY a.timestamp DESC
+  LIMIT ?
+`);
+
+export function getZoneRecent(sinceMs: number, limit = 200): AircraftSeenRow[] {
+  return zoneRecentStmt.all(sinceMs, limit) as AircraftSeenRow[];
+}
+
+const sightingsStmt = db.prepare(`
+  SELECT * FROM aircraft_seen
+  WHERE icao = ? AND near = 1 AND timestamp >= ?
+  ORDER BY timestamp DESC
+  LIMIT ?
+`);
+
+export function getSightingsForIcao(icao: string, sinceMs: number, limit = 500): AircraftSeenRow[] {
+  return sightingsStmt.all(icao.toUpperCase(), sinceMs, limit) as AircraftSeenRow[];
+}
+
+const pruneStmt = db.prepare(`DELETE FROM aircraft_seen WHERE timestamp < ?`);
+
+// Drops every capture older than the window. Runs at startup and hourly, so
+// the table never holds more than the window plus one hour.
+export function pruneSightingsOlderThan(cutoffMs: number): number {
+  return pruneStmt.run(cutoffMs).changes;
+}
+

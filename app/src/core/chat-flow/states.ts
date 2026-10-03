@@ -713,7 +713,8 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     display(
       isAgentMode()
         ? { status: "agente...", emoji: "🌐", RGB: "#7a5cff", text: "Agente pensando..." }
-        : { status: "thinking", emoji: DEFAULT_EMOJI, RGB: "#00c8a3", text: "Pensando..." },
+        // Same scanning look as wardriving (wardrive-mode.ts): "Escaneando redes…" in orange.
+        : { status: "thinking", emoji: DEFAULT_EMOJI, RGB: "#ff9500", text: "Escaneando redes..." },
     );
     const currentAnswerId = ctx.answerId;
 

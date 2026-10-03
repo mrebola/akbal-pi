@@ -419,3 +419,11 @@ header.topbar { z-index: 1001; }
 .ar-detail-card { width: min(420px, calc(100vw - 32px)); }
 
 .ar-detail-body .apm-title { font-size: 18px; }
+
+/* Zone cards (24 h): same card as the live list, plus the aircraft's captures. */
+.ar-zone-cards { display: flex; flex-direction: column; gap: 8px; }
+.ar-zone-seen { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.ar-zone-count { font-size: 11px; color: var(--text-muted); margin: 6px 0 4px; }
+.ar-zone-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.ar-zone-table th, .ar-zone-table td { text-align: left; padding: 3px 4px; border-top: 1px solid var(--border); }
+.ar-zone-table th { color: var(--text-secondary); font-weight: 600; }

@@ -1355,8 +1355,14 @@ export class WebAdminServer {
 
     // Aircraft captured inside the zone around Akbal in the last 24 h, newest
     // first, one row per aircraft. Empty when there is no known own position.
+    // Each row carries its own captures in the window, so the page draws one
+    // card per aircraft with no extra request per card.
     router.get("/api/aircraft/zone", (ctx) => {
-      ctx.body = getZoneRecent(Date.now() - SIGHTING_WINDOW_MS);
+      const since = Date.now() - SIGHTING_WINDOW_MS;
+      ctx.body = getZoneRecent(since).map((row) => ({
+        ...row,
+        sightings: getSightingsForIcao(row.icao, since, 20),
+      }));
     });
 
     // Zone captures of one aircraft in the last 24 h, newest first.

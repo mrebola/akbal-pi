@@ -1,7 +1,7 @@
 # Arbitraje de memoria: voz del dispositivo vs chat web
 
 Fecha: 2026-10-03
-Estado: Implementado y desplegado. Liberación por inactividad probada en la Pi. Pendiente: pulsación de 3 s con el botón físico.
+Estado: Implementado y desplegado. Liberación por inactividad probada en la Pi. La pulsación de 3 s con el botón físico quedó cancelada por decisión del dueño; el modo chat web resuelve el conflicto de pantalla.
 
 ## Problema
 

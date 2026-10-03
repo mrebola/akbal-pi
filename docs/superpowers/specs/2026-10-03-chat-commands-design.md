@@ -1,7 +1,7 @@
 # Comandos en el chat web (`/aviones`, `/wifi`, `/estado`, `/help`, `/ask`)
 
 Fecha: 2026-10-03
-Estado: Terminado y desplegado (v1, solo lectura: /help, /aviones, /wifi, /gps, /estado, /ask). Pendiente solo la revisión visual en el navegador.
+Estado: Terminado y desplegado (v1, solo lectura: /help, /aviones, /wifi, /gps, /estado, /ask). La revisión visual en el navegador quedó cancelada por decisión del dueño.
 
 ## Objetivo
 

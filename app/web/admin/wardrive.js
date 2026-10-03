@@ -915,8 +915,15 @@ function renderActivityTicker(st) {
   const box = document.getElementById("wd-activity");
   if (!box) return;
   const act = st?.activity || [];
-  if (box._akbalTs === act[0]?.ts) return; // nothing new, skip reflow
-  box._akbalTs = act[0]?.ts || 0;
+  // Bug: with no activity yet, act[0]?.ts and the not-yet-set box._akbalTs
+  // are BOTH undefined, so undefined === undefined short-circuited this on
+  // the very first call and the box never got its "Escaneando redes…"
+  // fallback — it just stayed empty (its bare server-rendered <div>),
+  // reading as a broken/empty bar rather than idle status. childElementCount
+  // forces at least one real render even when the ts "hasn't changed".
+  const ts = act[0]?.ts || 0;
+  if (box._akbalTs === ts && box.childElementCount > 0) return; // nothing new, skip reflow
+  box._akbalTs = ts;
   box.classList.toggle("has-activity", act.length > 0);
   box.innerHTML = act.length
     ? act

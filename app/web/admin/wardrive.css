@@ -720,17 +720,15 @@
   /* .wd-radio-compare's desktop spot (bottom-right, 8px from the edge)
      sits right under .wd-activity (bottom-center, nearly full width here)
      and under .wd-panel (moved to bottom:150px above) — all three used to
-     stack on top of each other. .wd-panel vacates the top-right corner on
-     mobile (it moves down here), so dock this card there instead: clear
-     of both the ticker and the panel, and it's collapsed by default anyway
-     (see wardrive.js) so it's just a small pill most of the time. */
-  .wd-radio-compare {
-    top: calc(var(--header-height, 64px) + 12px);
-    right: 14px;
-    bottom: auto;
-    left: auto;
-    max-width: calc(100vw - 28px);
-  }
+     stack on top of each other. Moving it to the top-right corner (tried
+     previously) just traded one overlap for another: .wd-hud's own
+     min-width:270px at top-left reaches past the halfway point on any
+     current phone, so the two cards collided there too, immediately on
+     load, regardless of collapsed state ("esa barra gris... estorbando").
+     There's no free corner left for a 4th floating card on a phone screen
+     — it's secondary diagnostic data (1-vs-2-radio efficiency), not
+     something needed while actually driving, so it's desktop/tablet only. */
+  .wd-radio-compare { display: none !important; }
 }
 /* AP row highlight while being attacked */
 .wd-ap-row.attacking {

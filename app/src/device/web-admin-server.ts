@@ -57,7 +57,7 @@ import { trimToWindow } from "../chat-history/context";
 import { fallbackTitle } from "../chat-history/title";
 import { generateTitle, generateTitleFromQuestion, getContextWindow } from "../chat-history/ollama";
 import type { StoredChat } from "../chat-history/types";
-import { needsAutoTitle, needsTitleBeforeReply, settleExchange } from "../chat-history/settle";
+import { firstQuestion, needsAutoTitle, needsTitleBeforeReply, settleExchange } from "../chat-history/settle";
 import { applyDecision, abandonWebClaim } from "../memory/model-memory";
 import { ollamaDeps } from "../memory/ollama-deps";
 import { memoryArbiter, webIdle, cancelHooks } from "../memory/shared";
@@ -1120,7 +1120,8 @@ export class WebAdminServer {
       // A new chat is titled from its first question before the reply starts,
       // so the sidebar shows the title as soon as the stream opens.
       if (chat && needsTitleBeforeReply(chat)) {
-        const titled = (await generateTitleFromQuestion(model, newMessage)) || fallbackTitle(newMessage);
+        const question = firstQuestion(chat) || newMessage;
+        const titled = (await generateTitleFromQuestion(model, question)) || fallbackTitle(question);
         chat = chatStore.update(chat.id, { title: titled }) ?? chat;
       }
 

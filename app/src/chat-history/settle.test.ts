@@ -4,7 +4,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { ChatStore } from "./store";
-import { needsAutoTitle, needsTitleBeforeReply, settleExchange } from "./settle";
+import { firstQuestion, needsAutoTitle, needsTitleBeforeReply, settleExchange } from "./settle";
 
 const newStore = (): ChatStore => new ChatStore(fs.mkdtempSync(path.join(os.tmpdir(), "chat-settle-")));
 
@@ -68,4 +68,22 @@ test("no automatic title is generated after the reply once a title was set befor
   store.update(chat.id, { title: "Título previo" });
   const replied = store.appendMessage(chat.id, "assistant", "respuesta");
   assert.equal(needsAutoTitle(replied), false);
+});
+
+test("a chat that started with commands still gets its title from the first real question", () => {
+  const store = newStore();
+  const chat = store.createWithMessage("m", "user", "/help");
+  store.appendMessage(chat.id, "assistant", "Comandos disponibles");
+  store.appendMessage(chat.id, "user", "/wifi akbal_lab");
+  store.appendMessage(chat.id, "assistant", "akbal_lab · canal 11");
+  const withQuestion = store.appendMessage(chat.id, "user", "que wifi tiene mas clientes?");
+  assert.equal(needsTitleBeforeReply(withQuestion), true);
+  assert.equal(firstQuestion(withQuestion!), "que wifi tiene mas clientes?");
+});
+
+test("a command-only chat has no question to title from", () => {
+  const store = newStore();
+  const chat = store.createWithMessage("m", "user", "/help");
+  assert.equal(needsTitleBeforeReply(chat), false);
+  assert.equal(firstQuestion(chat), null);
 });

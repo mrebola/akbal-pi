@@ -5,6 +5,7 @@ import { ToolReturnTag } from "../../type";
 import { getWifiRadarSnapshot } from "../../wifiradar/service";
 import { AdminToolDescriptor } from "./types";
 import { findAccessPoints } from "./ap-search";
+import { topByClients } from "./ap-rank";
 
 export const wifiradarAdminTools: AdminToolDescriptor[] = [
   {
@@ -42,7 +43,14 @@ export const wifiradarAdminTools: AdminToolDescriptor[] = [
               `- ${ap.ssid || "(sin SSID)"} · ${ap.bssid} · canal ${ap.channel} · ${ap.rssi}dBm · ${ap.security} · ${ap.clients} cliente(s)`,
           )
           .join("\n");
-        return `${ToolReturnTag.Success}${snapshot.accessPoints.length} access point(s) y ${snapshot.devices.length} dispositivo(s) detectado(s)${demoNote}:\n${lines}`;
+        // Computed here, not left to the model: the small local model guessed
+        // a client ranking from an unsorted list once. Networks with zero
+        // clients are never reported as top networks.
+        const top = topByClients(snapshot.accessPoints, 3);
+        const ranking = top.length
+          ? top.map((a) => `${a.ssid || "(sin SSID)"} (canal ${a.channel ?? "—"}) con ${a.clients} cliente(s)`).join("; ")
+          : "ninguna red tiene clientes conectados ahora";
+        return `${ToolReturnTag.Success}${snapshot.accessPoints.length} access point(s) y ${snapshot.devices.length} dispositivo(s) detectado(s)${demoNote}:\n${lines}\nMás clientes conectados: ${ranking}.`;
       },
     },
   },

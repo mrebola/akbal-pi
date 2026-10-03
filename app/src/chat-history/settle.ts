@@ -20,10 +20,17 @@ export const settleExchange = (
   return store.get(chatId);
 };
 
-// A brand-new chat gets its title from the first question, before the reply
-// starts. Only the first turn, and never after a rename.
+// The first real question of a chat: commands ("/...") are not questions, so a
+// chat that began with commands is still titled by its first question.
+export const firstQuestion = (chat: StoredChat): string | null => {
+  const found = chat.messages.find((m) => m.role === "user" && !m.content.trim().startsWith("/"));
+  return found ? found.content : null;
+};
+
+// The title is generated from the first question, before the reply starts,
+// as long as the chat still has its default title and was not renamed.
 export const needsTitleBeforeReply = (chat: StoredChat | null): boolean =>
-  !!chat && !chat.titleEdited && chat.title === "Chat nuevo" && chat.messages.length === 1;
+  !!chat && !chat.titleEdited && chat.title === "Chat nuevo" && firstQuestion(chat) !== null;
 
 // Automatic titles are for the first exchange only, and never after a rename or
 // a title already set before the reply.

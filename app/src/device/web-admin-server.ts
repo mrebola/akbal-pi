@@ -200,7 +200,9 @@ export class WebAdminServer {
         PUBLIC_PATHS.has(ctx.path) ||
         ctx.path.startsWith("/avatar/") ||
         ctx.path === "/i18n.js" ||
-        ctx.path.startsWith("/i18n/")
+        ctx.path.startsWith("/i18n/") ||
+        // The tab icon is requested by the login page too, before any session.
+        ctx.path === "/favicon.svg"
       ) {
         await next();
         return;

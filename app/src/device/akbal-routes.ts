@@ -7,6 +7,7 @@ import { buildSessionFiles, SessionInput } from "../akbal/session-files";
 import { buildManifest } from "../akbal/format";
 import { packPackage, readPackage } from "../akbal/package";
 import { SharedSessions } from "../akbal/shared-store";
+import { resolveCapturePath } from "../akbal/capture-path";
 
 // Imported sessions live apart from this Pi's own captures.
 export const sharedSessions = new SharedSessions(path.join(dataDir, "shared-sessions"));
@@ -25,8 +26,8 @@ const sessionInput = (id: string, includeCredentials: boolean): SessionInput | n
       method: h.method,
       capturedAt: h.captured_at,
       password: h.password,
-      capFile: h.cap_file,
-      hashFile: h.hash_file,
+      capFile: resolveCapturePath(h.cap_file, h.session_dir),
+      hashFile: h.hash_file ? resolveCapturePath(h.hash_file, h.session_dir) : null,
     }));
   const capFiles: Record<string, Buffer> = {};
   if (includeCredentials) {

@@ -49,6 +49,7 @@ import { llmFuncMap } from "../config/llm-tools";
 import { adminTools, adminFuncMap, adminToolMeta } from "../config/admin-tools/registry";
 import { linkForSection, AdminSectionId } from "../config/admin-tools/ui-links";
 import { getBasePersonaPrompt } from "../config/llm-config";
+import { WEB_CHAT_TOOL_RULE } from "../config/web-chat-rules";
 import { chatStore, registerChatHistoryRoutes } from "./chat-history-routes";
 import { trimToWindow } from "../chat-history/context";
 import { fallbackTitle } from "../chat-history/title";
@@ -1058,7 +1059,10 @@ export class WebAdminServer {
       // rather than the voice flow's `systemPrompt`, which also bakes in
       // "format for text-to-speech" — wrong constraint for a text UI.
       if (!messages.some((m) => m.role === "system")) {
-        messages.unshift({ role: "system", content: getBasePersonaPrompt() });
+        messages.unshift(
+          { role: "system", content: getBasePersonaPrompt() },
+          { role: "system", content: WEB_CHAT_TOOL_RULE },
+        );
       }
       // RAG, same knowledge base the voice flow already queries
       // (core/Knowledge.ts) — grounds "¿qué es X?" / "¿qué hace Akbal?"

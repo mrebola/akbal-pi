@@ -68,6 +68,18 @@ export class ChatStore {
     return chat;
   }
 
+  // Marks the last assistant turn as a voice reply and records its clips.
+  setLastAssistantAudio(id: string, audio: string[]): StoredChat | null {
+    const chat = this.get(id);
+    if (!chat) return null;
+    const last = chat.messages[chat.messages.length - 1];
+    if (last?.role !== "assistant") return chat;
+    last.voice = true;
+    last.audio = audio;
+    this.writeFile(chat);
+    return chat;
+  }
+
   removeLastUserMessage(id: string): void {
     const chat = this.get(id);
     if (!chat) return;

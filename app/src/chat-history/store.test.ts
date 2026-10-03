@@ -107,3 +107,21 @@ test("deleteAll leaves files that are not chats alone", () => {
   assert.equal(store.deleteAll(), 1);
   assert.equal(fs.existsSync(path.join(dir, "notas.json")), true);
 });
+
+test("setLastAssistantAudio records the clip names on the last assistant turn", () => {
+  const dir = newDir();
+  const store = new ChatStore(dir);
+  const chat = store.createWithMessage("m", "user", "contéstame por voz");
+  store.appendMessage(chat.id, "assistant", "Hola");
+  const updated = store.setLastAssistantAudio(chat.id, ["a-1-0.wav", "a-1-1.wav"]);
+  const last = updated?.messages[updated.messages.length - 1];
+  assert.equal(last?.voice, true);
+  assert.deepEqual(last?.audio, ["a-1-0.wav", "a-1-1.wav"]);
+});
+
+test("setLastAssistantAudio does nothing when the last turn is not the assistant's", () => {
+  const dir = newDir();
+  const store = new ChatStore(dir);
+  const chat = store.createWithMessage("m", "user", "hola");
+  assert.equal(store.setLastAssistantAudio(chat.id, ["x.wav"])?.messages[0].audio, undefined);
+});

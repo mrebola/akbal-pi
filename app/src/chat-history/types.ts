@@ -3,6 +3,9 @@ export type ChatRole = "user" | "assistant" | "system";
 export interface StoredMessage {
   role: ChatRole;
   content: string;
+  // Set on a reply that was asked for by voice: the clip names, in order.
+  voice?: boolean;
+  audio?: string[];
 }
 
 export interface ChatMeta {

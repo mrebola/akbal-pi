@@ -35,7 +35,7 @@ async function main() {
   // Filmic response: real night shots have crushed blacks and rolled
   // highlights — this keeps the dark side truly dark without raising blacks.
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.9;
+  renderer.toneMappingExposure = 1.35;
 
   // Slow ambient starfield backdrop.
   {
@@ -140,7 +140,8 @@ async function main() {
           // Day: the albedo map, slightly contrasted — the ACES tonemapper
           // does the rest; no extra dimming so oceans read deep blue.
           dayColor = texture2D(dayMap, vUv).rgb;
-          dayColor = mix(dayColor, dayColor * dayColor * 2.4, 0.30); // S-curve
+          // Lift the midtones so continents read clearly (was a dark S-curve).
+          dayColor = pow(dayColor, vec3(0.8)) * 1.1;
           // Night lights (emissive): warm sodium streets + brighter cores.
           vec3 lights = texture2D(lightsMap, vUv).rgb;
           vec3 lamps = pow(lights, vec3(1.0 / 1.9)); // lift mid-tones: streets appear
@@ -169,7 +170,7 @@ async function main() {
         float diffuse = 0.82 + 0.18 * clamp(sunAmount, -1.0, 1.0);
         vec3 color = nightColor * nightFactor;
         color += cityLights * nightFactor; // lights ONLY where it's night
-        color = mix(color, dayColor * (0.15 + 0.85 * diffuse), dayFactor);
+        color = mix(color, dayColor * (0.7 + 0.3 * diffuse), dayFactor);
         color += twilightTint;
 
         // Ocean specular on the day side only.

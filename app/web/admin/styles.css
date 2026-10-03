@@ -166,6 +166,15 @@ main {
   flex: 1;
   display: flex;
   min-height: 0;
+  /* Flex items default to min-width:auto (content-based), so a single wide,
+     non-wrapping element anywhere inside ANY tab panel (a toolbar row with
+     flex-shrink:0 buttons, a list row without flex-wrap, etc.) would force
+     this whole item — and with it the page — wider than the viewport.
+     body{overflow-x:hidden} then hides that extra width with no way to
+     scroll to it, so everything on the page looks silently clipped on the
+     right. min-width:0 lets main shrink to the viewport instead, so only
+     the actual offending element overflows (and stays fixable locally). */
+  min-width: 0;
 }
 
 .tab-panel {
@@ -173,6 +182,7 @@ main {
   flex: 1;
   flex-direction: column;
   min-height: 0;
+  min-width: 0; /* same min-width:auto trap as main above, one level down */
   padding: 16px;
 }
 
@@ -725,6 +735,8 @@ button.secondary {
      with Entrar/Salir — it's now a peer of the buttons in
      .wd-banner-controls instead, so both align the same way. */
   align-items: flex-start;
+  flex-wrap: wrap; /* .wd-banner-controls (dongle + Entrar/Salir) doesn't shrink —
+     let it drop to its own line on narrow screens instead of overflowing. */
   gap: 12px;
   padding: 12px 14px;
   background: var(--bg-raised);
@@ -733,7 +745,7 @@ button.secondary {
   margin-bottom: 12px;
 }
 
-.wd-banner-controls { display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-top: 1px; }
+.wd-banner-controls { display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-top: 1px; flex-wrap: wrap; }
 
 .wd-banner-text { flex: 1; min-width: 0; }
 
@@ -1151,6 +1163,8 @@ button.secondary {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap; /* "Ver archivos" (+ del/eye buttons) was being pushed off
+     the right edge on narrow screens — let it wrap to its own line. */
   gap: 10px;
   padding: 8px 12px;
   background: var(--bg-raised);
@@ -1652,6 +1666,7 @@ button.secondary {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 14px 16px;
+  min-width: 0; /* grid items have the same min-width:auto blowout risk as flex items */
 }
 .cfg-card-head {
   display: flex;
@@ -2835,6 +2850,13 @@ a.wd-bell-item-link:hover .wd-bell-item-ssid { color: var(--accent); }
 .drawer-hdr-right-mount .nav-dropdown { position: static; box-shadow: none; margin-top: 6px; }
 .drawer-hdr-right-mount .lang-dd.open .lang-dd-menu { position: static; display: flex; flex-direction: column; box-shadow: none; margin-top: 6px; width: 100%; }
 .drawer-hdr-right-mount .popover { position: static; box-shadow: none; margin-top: 10px; width: 100%; }
+/* The bell's own dropdown (.wd-bell-dropdown, wd-notify.js) is a separate
+   component from .popover and was missing this same override: anchored
+   with position:absolute; right:0; width:300px to .wd-bell-wrap, which
+   inside the drawer sits near the LEFT of the row (bell is first), so the
+   300px panel extended mostly off-screen to the left instead of under the
+   bell. Same fix as .popover above: stack it static and full width. */
+.drawer-hdr-right-mount .wd-bell-dropdown { position: static; box-shadow: none; margin-top: 10px; width: 100%; max-height: 50vh; }
 
 @media (max-width: 900px) {
   .tabs, .hdr-right { display: none; } /* desktop nav row hides — everything moves into the drawer */
@@ -3059,6 +3081,7 @@ a.wd-bell-item-link:hover .wd-bell-item-ssid { color: var(--accent); }
 
 /* ---- Dispositivos: grilla de cards ---- */
 .dev-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.dev-grid > .card { min-width: 0; }
 .dev-grid .usb-devices-list li:only-child.muted,
 .usb-devices-list li.muted { color: var(--text-secondary); background: transparent; border: 1px dashed var(--border); }
 

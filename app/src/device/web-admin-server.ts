@@ -52,6 +52,7 @@ import { getBasePersonaPrompt } from "../config/llm-config";
 import { WEB_CHAT_TOOL_RULE } from "../config/web-chat-rules";
 import { selectToolsForMessage } from "../config/admin-tools/route-tools";
 import { chatStore, registerChatHistoryRoutes } from "./chat-history-routes";
+import { registerChatCommandRoutes } from "./chat-commands-routes";
 import { trimToWindow } from "../chat-history/context";
 import { fallbackTitle } from "../chat-history/title";
 import { generateTitle, generateTitleFromQuestion, getContextWindow } from "../chat-history/ollama";
@@ -875,6 +876,7 @@ export class WebAdminServer {
     });
 
     registerChatHistoryRoutes(router);
+    registerChatCommandRoutes(router);
 
     router.get("/api/models", async (ctx) => {
       ctx.body = await listOllamaModelsWithSize();

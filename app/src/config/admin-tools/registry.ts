@@ -19,7 +19,7 @@ import { wardriveAdminTools } from "./wardrive-tools";
 import { systemAdminTools } from "./system-tools";
 import { aircraftRadarAdminTools } from "./aircraft-radar-tools";
 
-const ADMIN_TOOL_DESCRIPTORS: AdminToolDescriptor[] = [
+export const ADMIN_TOOL_DESCRIPTORS: AdminToolDescriptor[] = [
   ...systemAdminTools,
   ...wifiradarAdminTools,
   ...aircraftRadarAdminTools,

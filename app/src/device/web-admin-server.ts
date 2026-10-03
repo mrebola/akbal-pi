@@ -50,6 +50,7 @@ import { adminTools, adminFuncMap, adminToolMeta } from "../config/admin-tools/r
 import { linkForSection, AdminSectionId } from "../config/admin-tools/ui-links";
 import { getBasePersonaPrompt } from "../config/llm-config";
 import { WEB_CHAT_TOOL_RULE } from "../config/web-chat-rules";
+import { selectToolsForMessage } from "../config/admin-tools/route-tools";
 import { chatStore, registerChatHistoryRoutes } from "./chat-history-routes";
 import { trimToWindow } from "../chat-history/context";
 import { fallbackTitle } from "../chat-history/title";
@@ -1165,6 +1166,17 @@ export class WebAdminServer {
       const writeFrame = (obj: unknown): void => {
         if (!ctx.res.writableEnded) ctx.res.write(`${JSON.stringify(obj)}\n`);
       };
+      // A small local model picks the wrong tool when all of them are offered:
+      // a question that names a subsystem gets only that subsystem's tools.
+      const lastUserText = [...messages].reverse().find((m) => m.role === "user")?.content || "";
+      const sectioned = adminTools.map((tool) => ({
+        tool,
+        sectionId: adminToolMeta[tool.function.name]?.sectionId,
+      }));
+      const toolsForTurn = selectToolsForMessage(
+        lastUserText,
+        sectioned.filter((item): item is { tool: typeof item.tool; sectionId: AdminSectionId } => !!item.sectionId),
+      ).map((item) => item.tool);
       const touchedSections = new Set<AdminSectionId>();
       let assistantText = "";
       // The device can take the one resident model mid-reply (see memory/device-takeover.ts).
@@ -1199,7 +1211,7 @@ export class WebAdminServer {
           // that sending it in full is fine; registry.ts's
           // adminToolsForSection() is kept ready for when Fase 2/3 grow
           // the catalog enough to need trimming.
-          tools: adminTools,
+          tools: toolsForTurn,
           funcMap: { ...llmFuncMap, ...adminFuncMap },
           maxToolRounds: WEB_ADMIN_CHAT_MAX_TOOL_ROUNDS,
           numPredict: MAX_PREDICT_TOKENS,

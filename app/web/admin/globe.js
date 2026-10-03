@@ -130,8 +130,9 @@ async function main() {
         float sunAmount = dot(n, s);
         // Short, defined terminator: full day by sunAmount=0.12, full night
         // by -0.15. No wide gray band.
-        float dayFactor = smoothstep(TERMINATOR.x, TERMINATOR.y, sunAmount);
-        float nightFactor = 1.0 - smoothstep(-0.15, 0.05, sunAmount);
+        // Daylight everywhere: the whole globe is lit, so there is no night side.
+        float dayFactor = 1.0;
+        float nightFactor = 0.0;
 
         vec3 dayColor;
         vec3 cityLights;
@@ -160,11 +161,12 @@ async function main() {
         vec3 nightColor = vec3(NIGHT_AMBIENT) * (0.6 + 0.4 * dayColor.g);
         // Twilight: a short warm band exactly at the terminator (sunset hue),
         // fading out fast — not a wide brown smear.
-        float twilight = (1.0 - smoothstep(0.0, 0.25, abs(sunAmount))) * smoothstep(-0.35, 0.05, sunAmount);
+        float twilight = 0.0;
         vec3 twilightTint = vec3(0.85, 0.38, 0.10) * twilight * 0.28;
 
         // Compose: night base + city lights, then day lit by N·L over it.
-        float diffuse = max(sunAmount, 0.0);
+        // Even daylight with a gentle gradient toward the sun, never dark.
+        float diffuse = 0.82 + 0.18 * clamp(sunAmount, -1.0, 1.0);
         vec3 color = nightColor * nightFactor;
         color += cityLights * nightFactor; // lights ONLY where it's night
         color = mix(color, dayColor * (0.15 + 0.85 * diffuse), dayFactor);
@@ -276,7 +278,6 @@ async function main() {
   // dark disc.
   let initialCameraFramed = false;
   const INITIAL_CAMERA_DIST = camera.position.length();
-  let subsolarMarker = null;
   function updateSunPosition() {
     const d = new Date();
     const dir = solarDirectionEquatorial(d);
@@ -292,17 +293,6 @@ async function main() {
     atmosphere.material.uniforms.sunDirection.value.copy(unit);
     sun.position.copy(pos);
     sunTarget.position.set(0, 0, 0);
-    // Diagnostic marker: where the sun is directly overhead, on the surface.
-    // Compare it with the continents and the lit side to check the mapping.
-    const sub = latLonToVec3(decDeg, lonSub, EARTH_R * 1.02);
-    if (!subsolarMarker) {
-      subsolarMarker = new THREE.Mesh(
-        new THREE.SphereGeometry(0.22, 16, 12),
-        new THREE.MeshBasicMaterial({ color: 0xff3030 }),
-      );
-      scene.add(subsolarMarker);
-    }
-    subsolarMarker.position.copy(sub);
     // The visible sun (shader sphere + corona) sits at the same point:
     sunGroup.position.copy(pos);
     if (!initialCameraFramed) {

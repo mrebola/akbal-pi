@@ -53,6 +53,7 @@ import { trimToWindow } from "../chat-history/context";
 import { fallbackTitle } from "../chat-history/title";
 import { generateTitle, getContextWindow } from "../chat-history/ollama";
 import type { StoredChat } from "../chat-history/types";
+import { needsAutoTitle, settleExchange } from "../chat-history/settle";
 import { enableRAG } from "../cloud-api/knowledge";
 import { getSystemPromptWithKnowledge } from "../core/Knowledge";
 import { listSoulEditableFiles, writeSoulEditableFile, triggerKnowledgeReindex } from "../config/soul-files";
@@ -1132,9 +1133,17 @@ export class WebAdminServer {
       };
       const touchedSections = new Set<AdminSectionId>();
       let assistantText = "";
-      // Saves whatever reply text arrived, including a cancelled partial reply.
-      const persistAssistant = (): void => {
-        if (chat && assistantText) chatStore.appendMessage(chat.id, "assistant", assistantText);
+      // One place decides what a finished, cancelled or failed exchange leaves
+      // on disk and whether it gets a title (see chat-history/settle.ts).
+      const finishChat = async (aborted: boolean): Promise<void> => {
+        if (!chat) return;
+        settleExchange(chatStore, chat.id, { assistantText, isNewChat });
+        if (!streaming || !needsAutoTitle(chatStore.get(chat.id))) return;
+        // A cancelled or empty first reply gets the fallback label right away.
+        const generated = !aborted && assistantText ? await generateTitle(model, newMessage, assistantText) : null;
+        const title = generated || fallbackTitle(newMessage);
+        chatStore.update(chat.id, { title });
+        if (!aborted) writeFrame({ chat_title: { id: chat.id, title } });
       };
       try {
         await runAdminChatToolLoop({
@@ -1185,14 +1194,13 @@ export class WebAdminServer {
           // Client already gone — nothing to send a response to, but the
           // partial reply still belongs in the chat.
           cleanupListeners();
-          persistAssistant();
+          await finishChat(true);
           if (streaming) ctx.res.end();
           return;
         }
         if (!streaming) {
           cleanupListeners();
-          if (chat && isNewChat) chatStore.delete(chat.id);
-          else if (chat) chatStore.removeLastUserMessage(chat.id);
+          await finishChat(false);
           ctx.status = 502;
           ctx.body = { error: err?.message || String(err) };
           return;
@@ -1200,17 +1208,7 @@ export class WebAdminServer {
         console.error("[AdminChat] Error mid-stream:", err?.message || err);
       }
       cleanupListeners();
-      persistAssistant();
-      if (chat && streaming && !abortController.signal.aborted && assistantText) {
-        const stored = chatStore.get(chat.id);
-        // Only the first exchange gets an automatic title, and never after a rename.
-        if (stored && !stored.titleEdited && stored.messages.length === 2) {
-          const generated = await generateTitle(model, newMessage, assistantText);
-          const title = generated || fallbackTitle(newMessage);
-          chatStore.update(chat.id, { title });
-          writeFrame({ chat_title: { id: chat.id, title } });
-        }
-      }
+      await finishChat(abortController.signal.aborted);
       if (streaming) ctx.res.end();
     });
 

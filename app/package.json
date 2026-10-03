@@ -31,6 +31,7 @@
     "@picovoice/leopard-node": "^2.0.2",
     "@picovoice/orca-node": "^2.0.1",
     "@qdrant/js-client-rest": "^1.16.2",
+    "adm-zip": "^0.5.16",
     "axios": "^1.13.5",
     "better-sqlite3": "^12.11.1",
     "crypto": "^1.0.1",

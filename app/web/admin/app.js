@@ -34,7 +34,9 @@ async function apiFetch(input, init) {
   return res;
 }
 
-let history = [];
+// The server is the source of truth for chats (see chat-history.js).
+// activeChatId is null until the first message creates the chat on disk.
+let activeChatId = null;
 let sending = false;
 let activeController = null;
 
@@ -385,11 +387,31 @@ async function loadModels() {
   }
 }
 
-modelSelect.addEventListener("change", () => {
-  // Local only — ver el comentario de loadModels() arriba sobre por qué
-  // esto no toca /api/models/select ni el modelo de voz.
-  history = [];
-  addMessage("system", `Chat ahora con ${modelSelect.value}`);
+modelSelect.addEventListener("change", async () => {
+  if (!activeChatId) {
+    // Nothing persisted yet: the choice applies to the next chat created.
+    addMessage("system", `El próximo chat usará ${modelSelect.value}`);
+    return;
+  }
+  const newModel = modelSelect.value;
+  const ok = await ChatHistory.confirm({
+    title: `Cambiar a ${newModel}`,
+    body: "Se descargará el modelo actual y se cargará ese. Este chat usará el nuevo modelo desde ahora.",
+    ok: "Cambiar modelo",
+  });
+  if (!ok) {
+    // Put the select back to the chat's own model.
+    const chat = await fetch(`/api/chats/${activeChatId}`).then((r) => r.json());
+    modelSelect.value = chat.model;
+    return;
+  }
+  await fetch(`/api/chats/${activeChatId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model: newModel }),
+  });
+  await loadChatModelWithUi({ model: newModel });
+  ChatHistory.refresh();
 });
 
 // Populate the speaker dropdown + the paired-speakers list (with a "delete"
@@ -620,14 +642,11 @@ audioOutputSelect.addEventListener("change", async () => {
 });
 
 async function sendMessage(text) {
-  history.push({ role: "user", content: text });
   addMessage("user", text);
   const assistantEl = addMessage("assistant", "");
   // AbortController wired to the Cancelar button (below) and to the
   // fetch's `signal` — aborting closes the connection to the server, which
-  // (see device/web-admin-server.ts) closes *its* connection to Ollama in
-  // turn, actually stopping the generation instead of leaving it running
-  // unread. See docs/web-ui.md for the incident this fixed.
+  // closes its connection to Ollama and stops the generation.
   const controller = new AbortController();
   activeController = controller;
   setSendingUi(true);
@@ -638,7 +657,7 @@ async function sendMessage(text) {
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: history, model: modelSelect.value }),
+      body: JSON.stringify({ chatId: activeChatId, message: text, model: modelSelect.value }),
       signal: controller.signal,
     });
     if (!res.ok || !res.body) {
@@ -659,6 +678,13 @@ async function sendMessage(text) {
         if (!line) continue;
         try {
           const chunk = JSON.parse(line);
+          if (chunk.chat) {
+            activeChatId = chunk.chat.id;
+            ChatHistory.setActive(activeChatId);
+          }
+          if (chunk.chat_title) {
+            ChatHistory.refresh();
+          }
           if (chunk.message?.content) {
             if (!hasStartedTalking) {
               hasStartedTalking = true;
@@ -692,11 +718,91 @@ async function sendMessage(text) {
     setSendingUi(false);
     setAvatarTalking(false);
     finishToolRow();
+    ChatHistory.refresh();
   }
-  if (fullText) {
-    // Keep even a cancelled partial reply in history — a follow-up message
-    // still has the (truncated) context of what was already said.
-    history.push({ role: "assistant", content: fullText });
+}
+
+function resetChatView() {
+  activeChatId = null;
+  chatLog.innerHTML = "";
+  document.getElementById("chat-empty").classList.remove("hidden");
+  ChatHistory.setActive(null);
+}
+
+function newChat() {
+  if (sending) return;
+  resetChatView();
+}
+
+async function openChat(id) {
+  if (sending) return;
+  const res = await fetch(`/api/chats/${id}`);
+  if (!res.ok) {
+    addMessage("system", "No se pudo abrir el chat.");
+    return;
+  }
+  const chat = await res.json();
+  activeChatId = chat.id;
+  chatLog.innerHTML = "";
+  document.getElementById("chat-empty").classList.add("hidden");
+  for (const m of chat.messages) {
+    const el = addMessage(m.role === "assistant" ? "assistant" : "user", m.content);
+    if (m.role === "assistant") el.innerHTML = renderMarkdown(m.content);
+  }
+  ChatHistory.setActive(chat.id);
+  await ensureModelFor(chat);
+}
+
+ChatHistory.onOpen = openChat;
+ChatHistory.onNew = newChat;
+ChatHistory.onDeleted = (id) => {
+  if (id === activeChatId) resetChatView();
+};
+
+// Opening a chat whose model is not the loaded one: warn with the last
+// measured load time, then unload-and-load only after the user confirms.
+async function ensureModelFor(chat) {
+  if (modelSelect.value === chat.model) return;
+  modelSelect.value = chat.model;
+  const exists = [...modelSelect.options].some((o) => o.value === chat.model);
+  if (!exists) {
+    addMessage("system", `El modelo ${chat.model} ya no está instalado. El chat queda en solo lectura hasta reinstalarlo o elegir otro.`);
+    chatInput.disabled = true;
+    chatSend.disabled = true;
+    return;
+  }
+  const stats = await fetch("/api/chat-models/stats").then((r) => r.json()).catch(() => ({}));
+  const last = stats[chat.model];
+  const hint = last
+    ? `La última carga tardó unos ${Math.round(last / 1000)} s.`
+    : "La primera carga puede tardar bastante en la Pi.";
+  const ok = await ChatHistory.confirm({
+    title: `Cambiar a ${chat.model}`,
+    body: `Este chat usa ${chat.model}. Se descargará el modelo actual y se cargará ese. ${hint}`,
+    ok: "Cambiar modelo",
+  });
+  if (!ok) {
+    addMessage("system", `Sigue activo ${modelSelect.value}. Para usar ${chat.model} en este chat, abrilo de nuevo y confirmá.`);
+    return;
+  }
+  await loadChatModelWithUi(chat);
+}
+
+async function loadChatModelWithUi(chat) {
+  addMessage("system", `Cargando ${chat.model}…`);
+  chatInput.disabled = true;
+  try {
+    const res = await fetch("/api/chat-models/load", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: chat.model }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+    addMessage("system", `Listo: ${chat.model}`);
+  } catch (err) {
+    addMessage("system", `No se pudo cargar ${chat.model}: ${err.message}`);
+  } finally {
+    chatInput.disabled = false;
   }
 }
 
@@ -1945,6 +2051,7 @@ async function refreshSettings() {
 void loadStatus();
 void loadAudioOutputs();
 void loadModels();
+ChatHistory.init();
 // Battery (and the rest of /api/status) refreshes on its own — no manual
 // reload needed to see the % move.
 setInterval(() => void loadStatus(), 60000);

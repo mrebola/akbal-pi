@@ -41,6 +41,13 @@ body {
   color: var(--text-primary);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   min-height: 100vh;
+  /* 100vh is the *largest* possible viewport (Safari's address/tab bar
+     hidden) — on load, with that bar still shown, the real visible area is
+     shorter, so content sized to 100vh (like .chat-form, the last item in
+     this column) extended past the visible fold, under the browser's own
+     bottom bar. 100dvh tracks whichever is actually visible right now.
+     Safari support: 15.4+ — harmless no-op fallback to 100vh otherwise. */
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
@@ -266,6 +273,10 @@ select, input[type="password"], textarea {
   display: flex;
   gap: 8px;
   margin-top: 12px;
+  /* Clears the home-indicator strip / Safari's floating bottom bar instead
+     of sitting flush with the physical edge underneath them (needs
+     viewport-fit=cover on the page's <meta viewport> to be non-zero). */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .chat-form textarea {
@@ -748,6 +759,17 @@ button.secondary {
 .wd-banner-controls { display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-top: 1px; flex-wrap: wrap; }
 
 .wd-banner-text { flex: 1; min-width: 0; }
+
+@media (max-width: 720px) {
+  /* flex-wrap on .wd-mode-banner only moves .wd-banner-controls to its own
+     line once it genuinely doesn't fit next to .wd-banner-text — but
+     .wd-banner-text can shrink down to a couple of words first, so the
+     controls often stayed on the same row with barely enough room,
+     clipping a few px off "Entrar". Give the dongle picker + button the
+     card's full width on their own row every time on mobile, instead of
+     only when wrapping is unavoidable. */
+  .wd-banner-controls { flex-basis: 100%; }
+}
 
 .wd-banner-title {
   font-size: 13px;
@@ -3203,6 +3225,25 @@ a.wd-bell-item-link:hover .wd-bell-item-ssid { color: var(--accent); }
   font-family: "Courier New", Courier, monospace;
   box-shadow: 0 0 40px rgba(80, 255, 120, 0.12), 0 20px 60px rgba(0, 0, 0, 0.6);
   animation: apm-in 0.18s ease;
+}
+
+@media (max-width: 720px) {
+  /* Fullscreen on mobile instead of a centered card with margins: these
+     cards (satellite detail on GPS/Globo 3D, network detail on
+     Wardrive/WiFi Radar/Wifi Audit) run long — ~14 rows for a satellite —
+     and the phone screen is cramped enough already without also losing
+     ~160px to top/bottom margins. Covers the topbar too (raised above its
+     z-index:1001 — #gps-header/#wd-header/etc, all the same value); the
+     fixed ✕ (see .apm-close above) is how you get back, same as before. */
+  .apm { z-index: 1010; }
+  .apm-card {
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: 0;
+    padding: calc(52px + env(safe-area-inset-top, 0px)) 18px calc(18px + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 @keyframes apm-in {

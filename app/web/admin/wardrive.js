@@ -11,6 +11,13 @@ const POLL_MS = 1000;
 const WORLD_VIEW = { lat: 20, lon: 0, zoom: 2 };
 const FIX_ZOOM = 16;
 const MAX_TRACK_POINTS = 1500; // live polyline cap (DB keeps everything)
+// Used by initCollapsibleHuds(), called from the top-level init sequence
+// below — must be declared before that point runs or referencing it inside
+// isMobile() throws "Cannot access before initialization" (TDZ), which
+// aborted the whole script and broke everything after it in the init
+// sequence, including initControls()'s #wd-toggle click handler (start/stop
+// stopped working entirely, not just the collapse feature).
+const WD_MOBILE_BREAKPOINT = 640;
 
 let map = null;
 let posMarker = null;
@@ -619,9 +626,9 @@ function initPanel() {
 // Only .wd-activity (bottom-center "what's happening now" ticker) and the
 // start/stop button always stay visible — everything else defaults to a
 // compact pill on narrow screens and expands on tap, same pattern as the
-// pre-existing .wd-panel-collapse.
-const WD_MOBILE_BREAKPOINT = 640;
-
+// pre-existing .wd-panel-collapse. (WD_MOBILE_BREAKPOINT is declared near
+// the top of the file, above the init-call sequence — see the comment
+// there.)
 function initCollapsibleHuds() {
   const isMobile = () => window.innerWidth <= WD_MOBILE_BREAKPOINT;
 

@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Akbal · Crack Station</title>
   <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
@@ -140,8 +140,13 @@
       <div class="wd-modal-header">
         <span id="wd-crack-files-title" data-i18n="crackstation.files_title">Archivos</span>
         <div class="wd-modal-actions">
-          <button id="wd-crack-files-delete-session" class="wd-danger" data-i18n="crackstation.files_delete_session">Borrar sesión completa</button>
-          <button id="wd-crack-files-close" class="secondary" data-i18n="crackstation.files_close">Cerrar</button>
+          <button id="wd-crack-files-delete-session" class="wd-danger" data-i18n="crackstation.files_delete_session">Borrar sesión</button>
+          <!-- Was a text button ("Cerrar") the same size/weight as "Borrar
+               sesión" right next to it — easy to misread as another
+               destructive action. × icon matches #wd-progress-close
+               elsewhere in this same .wd-modal-actions pattern; the label
+               moves to the tooltip/aria-label instead of the button text. -->
+          <button id="wd-crack-files-close" class="secondary" title="Cerrar" data-i18n-title="crackstation.files_close" aria-label="Cerrar" data-i18n-aria-label="crackstation.files_close">×</button>
         </div>
       </div>
       <div style="overflow: auto; padding: 4px;">

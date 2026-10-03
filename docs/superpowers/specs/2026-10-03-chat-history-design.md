@@ -39,6 +39,9 @@ de la pantalla LCD.
 | Título de respaldo | Primeras palabras del primer mensaje del usuario |
 | Organización en la lista | Sección "Fijados" arriba, luego "Recientes" de más nuevo a más viejo |
 | Borrar | Confirmación en la UI con el título del chat; el backend borra solo cuando recibe la petición |
+| Audio por respuesta | Cada respuesta del asistente tiene una bocina que genera y reproduce la respuesta con la voz de Akbal |
+| Respuesta por voz | Si el usuario pide respuesta hablada ("contéstame por voz", etc.), la respuesta se muestra solo como audio reproducible |
+| Toggle DEMO | No aparece en el chat. El chat no tiene fuente de datos sintéticos |
 
 ## Modelo de datos
 
@@ -54,10 +57,15 @@ Archivo `data/chat_history/<id>.json`:
   "updatedAt": "2026-10-03T14:35:12Z",
   "messages": [
     { "role": "user", "content": "…" },
-    { "role": "assistant", "content": "…" }
+    { "role": "assistant", "content": "…" },
+    { "role": "assistant", "content": "…", "voice": true, "audio": "k3j2a9…-3.wav" }
   ]
 }
 ```
+
+- `voice` y `audio` son opcionales en los mensajes del asistente.
+  `voice: true` marca una respuesta que se pidió por voz. `audio` es el
+  nombre del WAV generado, si ya existe.
 
 - `id`: generado con `crypto.randomUUID()`.
 - `updatedAt`: se actualiza al guardar una respuesta. Determina el orden
@@ -133,6 +141,53 @@ un campo opcional `chatId`.
   pantalla vuelve a "Nuevo chat".
 - Si el servidor no responde, la UI conserva el texto escrito y muestra el
   error sin perder la conversación en pantalla.
+- El chat no muestra ningún control de fuente de datos (LIVE/DEMO). La
+  barra de herramientas contextual se oculta en esa pestaña.
+
+## Bocina y respuestas por voz
+
+**Bocina por respuesta.** Cada respuesta del asistente tiene un botón de
+bocina. Al presionarlo, el servidor sintetiza el texto con la voz de Akbal
+(la misma voz configurada para el chat por voz; ver
+`docs/piper-voice-selection.md`) y la UI lo reproduce en el navegador.
+
+- La síntesis es bajo demanda. El audio no se genera al llegar la respuesta.
+- El WAV se guarda junto al chat, en `data/chat_history/web/audio/`, y el
+  mensaje guarda su nombre en `audio`. Presionar la bocina otra vez
+  reproduce el archivo existente, sin volver a sintetizar.
+- La síntesis reutiliza el paso de generación de los proveedores de TTS
+  (piper), pero no reproduce en el altavoz de la Pi. Hoy los proveedores
+  reproducen en el dispositivo al terminar; para el chat web hay que
+  separar la generación del archivo de la reproducción.
+- Mientras se sintetiza, el botón muestra un estado de carga. Si falla,
+  muestra el error en el mensaje.
+
+**Respuesta por voz.** Si el usuario pide una respuesta hablada, la
+respuesta se muestra solo como audio reproducible, sin texto visible.
+
+- Frases que activan el modo, sin distinguir mayúsculas ni acentos: "por
+  voz", "en voz alta", "contéstame con audio", "háblame", "dímelo con voz".
+  La detección es por palabras clave en el servidor, sin llamar al modelo.
+- El modelo genera la respuesta igual que siempre. El texto se guarda en el
+  chat (`content`) para que siga siendo contexto de las siguientes
+  respuestas, pero la UI no lo muestra.
+- El servidor sintetiza el audio antes de cerrar el stream y envía un frame
+  `{ audio: { file, chatId, index } }`. La UI pone el reproductor como
+  contenido del mensaje.
+- El modo aplica solo a esa respuesta. El siguiente mensaje vuelve a ser
+  texto, salvo que el usuario vuelva a pedir voz.
+- La bocina de la respuesta por voz también existe, para reproducirla de
+  nuevo.
+
+**Endpoints nuevos:**
+
+| Método | Ruta | Uso |
+|---|---|---|
+| `POST` | `/api/chats/:id/messages/:index/audio` | Sintetiza la respuesta `index` si no existe el WAV y devuelve `{ file }` |
+| `GET` | `/api/chat-audio/:file` | Sirve el WAV. Solo acepta nombres de la carpeta de audio |
+
+- `:file` se valida con una expresión regular antes de tocar el disco.
+- Al borrar un chat, se borran también sus WAV.
 
 ## Manejo de errores
 
@@ -157,6 +212,10 @@ El repo no tiene tests automatizados. La validación es:
    - eliminar con confirmación, y cancelar la confirmación
    - reiniciar el servicio y verificar que los chats siguen ahí
    - corromper a propósito un JSON en una copia y verificar que la lista sigue funcionando
+   - presionar la bocina en una respuesta de texto y verificar que se reproduce; presionarla de nuevo y verificar que no vuelve a sintetizar
+   - pedir "contéstame por voz" y verificar que la respuesta es solo un reproductor, sin texto visible; el siguiente mensaje vuelve a ser texto
+   - borrar un chat con audios y verificar que sus WAV se borran
+   - verificar que la pestaña de chat no muestra LIVE/DEMO
 
 ## Riesgos
 
@@ -165,3 +224,9 @@ El repo no tiene tests automatizados. La validación es:
   detalle.
 - **Estimación de tokens.** Por caracteres puede recortar de más o de
   menos. Se ajusta con una constante si hace falta.
+- **Síntesis lenta en la Pi.** Una respuesta larga por voz puede tardar
+  mucho en sintetizarse. Hace falta definir un límite de longitud o
+  sintetizar por párrafos; queda abierto para el plan.
+- **Reproducción en la Pi.** Los proveedores de TTS hoy reproducen en el
+  altavoz. Si no se separa la generación del archivo, el chat web haría
+  sonar la Pi cada vez que se pide audio.

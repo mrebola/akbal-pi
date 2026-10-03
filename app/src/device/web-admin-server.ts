@@ -48,6 +48,7 @@ import { llmFuncMap } from "../config/llm-tools";
 import { adminTools, adminFuncMap, adminToolMeta } from "../config/admin-tools/registry";
 import { linkForSection, AdminSectionId } from "../config/admin-tools/ui-links";
 import { getBasePersonaPrompt } from "../config/llm-config";
+import { registerChatHistoryRoutes } from "./chat-history-routes";
 import { enableRAG } from "../cloud-api/knowledge";
 import { getSystemPromptWithKnowledge } from "../core/Knowledge";
 import { listSoulEditableFiles, writeSoulEditableFile, triggerKnowledgeReindex } from "../config/soul-files";
@@ -861,6 +862,8 @@ export class WebAdminServer {
     router.post("/api/soul/reindex", async (ctx) => {
       ctx.body = triggerKnowledgeReindex();
     });
+
+    registerChatHistoryRoutes(router);
 
     router.get("/api/models", async (ctx) => {
       ctx.body = await listOllamaModelsWithSize();

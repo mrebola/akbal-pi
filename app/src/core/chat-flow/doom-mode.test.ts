@@ -92,3 +92,9 @@ test("a leave from the web chat, a reply or an approval keeps the game when the 
   assert.equal(shouldStopOnLeave("pi", false), true);
   assert.equal(shouldStopOnLeave(null, false), true);
 });
+
+test("a game that was already running when the Pi returns to sleep gets the mirror", () => {
+  // Same decision the sleep re-check makes in ChatFlow.transitionTo: no new game needed.
+  assert.equal(decideMirrorEntry("sleep", "web", true), "enter-mirror");
+  assert.equal(decideMirrorEntry("sleep", "web", false), "none");
+});

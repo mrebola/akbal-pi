@@ -10,6 +10,7 @@ import { getWardriveService } from "./wifi-audit/service";
 import { startWardriveDisplayMirror } from "./core/chat-flow/wifi-audit-mode";
 import { getDriveWardriveService } from "./wardrive/service";
 import { startWardriveDisplayMirror as startDriveMirror } from "./core/chat-flow/wardrive-mode";
+import { doomSession } from "./core/chat-flow/doom-mode";
 import { startAircraftRadarService, stopAircraftRadarService } from "./services/adsb/service";
 import { startGnssService, stopGnssService } from "./services/gnss/service";
 import { startAutoReconnectWatchdog } from "./utils/wifi";
@@ -48,6 +49,8 @@ startAutoReconnectWatchdog();
 // system for why this isn't a plain SIGTERM listener here.
 startWifiRadarService();
 registerShutdownHook(() => stopWifiRadarService());
+// Killing the game also ends its aplay and fluidsynth (see DoomSession.stop).
+registerShutdownHook(() => doomSession.stop());
 
 // Aircraft Radar (HackRF One + dump1090, RX-only ADS-B — docs/aircraft-radar.md).
 // Unconditional start, same as WIFIRADAR above — but unlike it, no HackRF

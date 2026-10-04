@@ -5,6 +5,7 @@ import { spawn } from "child_process";
 import type { Readable } from "stream";
 import type { Status } from "../../device/display";
 import { DoomOwner, DoomSession, DoomState, EngineProcess } from "../../doom/session";
+import { DoomGame, wadFileName } from "../../doom/wad";
 import { AudioOut, AudioProcess } from "../../doom/audio-out";
 import { MusicPlayer, MusicProcess } from "../../doom/music";
 import { ControlTokens } from "../../doom/tokens";
@@ -20,7 +21,7 @@ const DOOM_ENGINE_BIN = path.join(APP_DIR, "doom", "bin", "doom-engine");
 // Absolute on purpose: the engine runs with cwd=APP_DIR, so a relative override would break.
 // Data the DOOM runtime keeps: WAD, soundfont and settings.json.
 const DOOM_DATA_DIR = path.resolve(process.env.DOOM_WAD_DIR || path.join(APP_DIR, "data", "doom"));
-const DOOM_WAD = path.join(DOOM_DATA_DIR, "freedoom1.wad");
+const wadPathFor = (game: DoomGame): string => path.join(DOOM_DATA_DIR, wadFileName(game));
 // Optional: without it the game runs silent. scripts/fetch-doom-soundfont.sh puts it here.
 const DOOM_SOUNDFONT = path.join(DOOM_DATA_DIR, "soundfont.sf2");
 
@@ -184,11 +185,11 @@ export async function resolveDoomScreenUrl(port: number): Promise<string> {
   });
 }
 
-function spawnDoomEngine(): EngineProcess {
+function spawnDoomEngine(game: DoomGame): EngineProcess {
   // -iwad: the WAD is named explicitly. cwd=APP_DIR: the engine writes its
   // converted music to <cwd>/data/doom/music, the same place the player reads.
   // fd 3 = PCM for sound effects, fd 4 = control lines (song/stop/pause/resume).
-  const child = spawn(DOOM_ENGINE_BIN, ["-iwad", DOOM_WAD], {
+  const child = spawn(DOOM_ENGINE_BIN, ["-iwad", wadPathFor(game)], {
     cwd: APP_DIR,
     stdio: ["pipe", "pipe", "inherit", "pipe", "pipe"],
   });
@@ -246,7 +247,7 @@ export const doomSession = new DoomSession({
   tokens: doomTokens,
   lock: doomLock,
   binaryExists: () => fs.existsSync(DOOM_ENGINE_BIN),
-  wadExists: () => fs.existsSync(DOOM_WAD),
+  wadExists: (game) => fs.existsSync(wadPathFor(game)),
   openAudio: (onError) => new AudioOut(spawnAplay, onError),
   openMusic: (onError) => new MusicPlayer(spawnFluidsynth, DOOM_SOUNDFONT, undefined, onError),
   settingsDir: DOOM_DATA_DIR,
@@ -352,7 +353,9 @@ export function leaveDoomMode(): void {
   mirrorActive = false;
   unsubscribers.forEach((off) => off());
   unsubscribers = [];
-  if (doomSession.owner() !== "web") doomSession.stop();
+  // Any leave ends the game for everyone, the web owner included: the hold on
+  // the Pi is the exit the spec gives it.
+  doomSession.stop();
   sendDisplay({ game_orientation: 1 });
 }
 

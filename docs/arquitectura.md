@@ -54,6 +54,7 @@ subgraph group_doom["DOOM"]
   node_doomowner["Dueño del juego (Pi o web)<br/>[session.ts]"]
   node_doomaudio["Salida de audio de DOOM<br/>[audio-out.ts]"]
   node_doommusic["Música MIDI de DOOM<br/>[music.ts]"]
+  node_doomwad["Juego elegido (doom1 o freedoom1)<br/>[wad.ts]"]
 end
 
 subgraph group_services["Servicios del dispositivo"]
@@ -103,6 +104,7 @@ node_admin -->|"activa modo chat"| node_webmode
 node_webmode -->|"congela pantalla"| node_display
 node_flow -->|"entra o sale de DOOM"| node_doommode
 node_doommode -->|"arranca y detiene el motor"| node_doomsession
+node_doomsession -->|"elige el WAD del juego"| node_doomwad
 node_doommode -->|"envía cuadros"| node_display
 node_doomroutes -->|"reparte cuadros y estado"| node_doomsession
 node_webserver -->|"monta /ws/doom"| node_doomroutes

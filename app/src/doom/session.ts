@@ -3,6 +3,7 @@ import { ControlTokens } from "./tokens";
 import { ControllerLock } from "./control";
 import { DoomKey, KEY_CODES } from "./keymap";
 import { VOLUME_DEFAULT, clampVolume, gainFor } from "./volume";
+import { DoomGame, pickDefaultGame, wadFileName } from "./wad";
 import { loadVolume, saveVolume } from "./settings-store";
 import { parseControlLine, type ControlMessage } from "./audio-out";
 import { StringDecoder } from "node:string_decoder";
@@ -34,14 +35,19 @@ export interface DoomState {
   // Set when the music is off or stopped; the game itself keeps running.
   musicError: string | null;
   owner: DoomOwner;
+  // The game that runs now; null while none does.
+  game: DoomGame | null;
+  // True after a deliberate stop (web's Salir or the Pi's hold). A crash is an
+  // error instead, and a fresh start clears it.
+  closed: boolean;
 }
 
 export interface DoomSessionDeps {
-  spawnEngine: () => EngineProcess;
+  spawnEngine: (game: DoomGame) => EngineProcess;
   tokens: ControlTokens;
   lock: ControllerLock;
   binaryExists: () => boolean;
-  wadExists: () => boolean;
+  wadExists: (game: DoomGame) => boolean;
   // Optional: without it the game runs silent (tests, or no audio device).
   // onError reports a sink that failed on its own, shown in the state.
   openAudio?: (onError: (message: string) => void) => AudioSink;
@@ -78,6 +84,8 @@ export class DoomSession {
   private error: string | null = null;
   private audioError: string | null = null;
   private musicError: string | null = null;
+  private gameValue: DoomGame | null = null;
+  private closedValue = false;
   private ownerValue: DoomOwner = null;
   private volumeValue = VOLUME_DEFAULT;
   private frameListeners = new Set<(rgb565: Buffer) => void>();
@@ -94,10 +102,13 @@ export class DoomSession {
 
   constructor(private deps: DoomSessionDeps) {}
 
-  start(): { ok: boolean; error?: string; token?: string } {
+  // Without a game, doom1 is used when its WAD is there, else freedoom1.
+  start(game?: DoomGame): { ok: boolean; error?: string; token?: string } {
     if (this.engine) return { ok: true, token: this.deps.tokens.current() ?? undefined };
-    if (!this.deps.wadExists()) {
-      return { ok: false, error: "Falta el WAD: corre scripts/fetch-doom-wad.sh" };
+    const chosen = game ?? pickDefaultGame((g) => this.deps.wadExists(g));
+    if (!this.deps.wadExists(chosen)) {
+      const hint = chosen === "freedoom1" ? " corre scripts/fetch-doom-wad.sh" : " copia el archivo a data/doom";
+      return { ok: false, error: `Falta el WAD ${wadFileName(chosen)}:${hint}` };
     }
     if (!this.deps.binaryExists()) {
       return { ok: false, error: "Falta el motor: corre scripts/fetch-doom-engine.sh" };
@@ -105,9 +116,11 @@ export class DoomSession {
     this.error = null;
     this.audioError = null;
     this.musicError = null;
+    this.gameValue = chosen;
+    this.closedValue = false;
     if (this.deps.settingsDir) this.volumeValue = loadVolume(this.deps.settingsDir);
     this.reader = new FrameReader();
-    const engine = this.deps.spawnEngine();
+    const engine = this.deps.spawnEngine(chosen);
     this.engine = engine;
     this.audio = this.deps.openAudio?.((message) => {
       if (this.engine !== engine) return;
@@ -170,6 +183,7 @@ export class DoomSession {
 
   stop(): void {
     const engine = this.engine;
+    if (engine) this.closedValue = true;
     this.engine = null;
     this.ownerValue = null;
     this.releaseKeys(engine);
@@ -252,6 +266,8 @@ export class DoomSession {
       audioError: this.audioError,
       musicError: this.musicError,
       owner: this.ownerValue,
+      game: this.engine ? this.gameValue : null,
+      closed: this.closedValue,
     };
   }
 

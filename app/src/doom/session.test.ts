@@ -567,3 +567,101 @@ test("a song that starts outside a reply is not paused", async () => {
   await flush();
   assert.deepEqual(music.kinds, ["song"]);
 });
+
+// Fake sound sinks that count their stops, so a test can see stop() reach them.
+function fakeSinks() {
+  const audio = { started: 0, stopped: 0, written: [] as Buffer[] };
+  const music = { stopped: 0, handled: [] as unknown[] };
+  return {
+    audio,
+    music,
+    openAudio: () => ({
+      start: () => { audio.started++; },
+      write: (pcm: Buffer) => { audio.written.push(pcm); },
+      stop: () => { audio.stopped++; },
+    }),
+    openMusic: () => ({
+      handle: (m: unknown) => { music.handled.push(m); },
+      setGain: () => {},
+      stop: () => { music.stopped++; },
+    }),
+  };
+}
+
+test("stop ends the engine, the sound effects and the music at once", () => {
+  const sinks = fakeSinks();
+  const { session, fake } = makeSession({ openAudio: sinks.openAudio, openMusic: sinks.openMusic });
+  session.start();
+  session.stop();
+  assert.equal(fake.wasKilled(), true, "the engine must be killed");
+  assert.equal(sinks.audio.stopped, 1, "aplay's sink must be stopped");
+  assert.equal(sinks.music.stopped, 1, "fluidsynth's player must be stopped");
+});
+
+test("a crash also ends the sound, not only stop", () => {
+  const sinks = fakeSinks();
+  const { session, fake } = makeSession({ openAudio: sinks.openAudio, openMusic: sinks.openMusic });
+  session.start();
+  fake.crash();
+  assert.equal(sinks.audio.stopped, 1);
+  assert.equal(sinks.music.stopped, 1);
+});
+
+test("state.closed is true after a stop and false for a crash or a fresh start", () => {
+  const { session, fake } = makeSession();
+  assert.equal(session.state().closed, false);
+  session.start();
+  assert.equal(session.state().closed, false);
+  session.stop();
+  assert.equal(session.state().closed, true);
+  assert.equal(session.state().running, false);
+  session.start();
+  assert.equal(session.state().closed, false, "a new start clears the closed flag");
+  fake.crash();
+  assert.equal(session.state().closed, false, "a crash is an error, not a close");
+});
+
+test("state.game is the game that runs, and null when none does", () => {
+  const { session } = makeSession({ wadExists: (g: string) => g === "freedoom1" });
+  assert.equal(session.state().game, null);
+  session.start();
+  assert.equal(session.state().game, "freedoom1", "without Doom1.WAD the default is freedoom1");
+  session.stop();
+  assert.equal(session.state().game, null);
+});
+
+test("the default game is doom1 when its WAD exists", () => {
+  const seen: string[] = [];
+  const { session } = makeSession({
+    spawnEngine: ((game: string) => { seen.push(game); return makeSession().fake.engine; }) as never,
+  });
+  session.start();
+  assert.deepEqual(seen, ["doom1"]);
+});
+
+test("an explicit game is spawned with its own WAD", () => {
+  const seen: string[] = [];
+  const { session } = makeSession({
+    spawnEngine: ((game: string) => { seen.push(game); return makeSession().fake.engine; }) as never,
+  });
+  const r = session.start("freedoom1");
+  assert.equal(r.ok, true);
+  assert.deepEqual(seen, ["freedoom1"]);
+});
+
+test("a missing WAD names the file of the chosen game", () => {
+  const { session } = makeSession({ wadExists: (g) => g !== "doom1" });
+  const r = session.start("doom1");
+  assert.equal(r.ok, false);
+  assert.match(r.error!, /Doom1\.WAD/);
+});
+
+test("the Pi's leave stops the game even while the web owns it", () => {
+  const { session, fake } = makeSession();
+  session.start();
+  session.claimOwner("web");
+  session.stop();
+  assert.equal(fake.wasKilled(), true);
+  assert.equal(session.state().running, false);
+  assert.equal(session.state().closed, true);
+});

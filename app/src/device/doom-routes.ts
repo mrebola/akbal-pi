@@ -4,13 +4,14 @@ import { DoomOwner, DoomSession, DoomState } from "../doom/session";
 import { DOOM_KEYS, DoomKey } from "../doom/keymap";
 import { encodeFrameJpeg } from "../doom/frame-jpeg";
 import { clampVolume } from "../doom/volume";
+import { DOOM_GAMES, DoomGame } from "../doom/wad";
 
 export type DoomClientMessage =
   | { type: "claim"; token: string }
   | { type: "release" }
   | { type: "key"; key: DoomKey; down: boolean }
   | { type: "stream"; on: boolean }
-  | { type: "play-here" }
+  | { type: "play-here"; game?: DoomGame }
   | { type: "volume"; value: number }
   | { type: "stop" };
 
@@ -28,7 +29,11 @@ export function parseDoomMessage(raw: string): DoomClientMessage | null {
     return { type: "key", key: m.key, down: m.down };
   }
   if (m.type === "stream" && typeof m.on === "boolean") return { type: "stream", on: m.on };
-  if (m.type === "play-here") return { type: "play-here" };
+  if (m.type === "play-here") {
+    if (m.game === undefined) return { type: "play-here" };
+    if (!(DOOM_GAMES as readonly string[]).includes(m.game)) return null;
+    return { type: "play-here", game: m.game };
+  }
   if (m.type === "stop") return { type: "stop" };
   if (m.type === "volume" && typeof m.value === "number") return { type: "volume", value: m.value };
   return null;
@@ -138,6 +143,8 @@ export function attachDoomSocket(
         controlled: s.controller,
         error: claimError ?? s.error,
         audioError: s.audioError,
+        game: s.game,
+        closed: s.closed,
         musicError: s.musicError,
         streaming: c?.streaming ?? false,
         url: screenUrl(),
@@ -218,7 +225,7 @@ export function attachDoomSocket(
     sendState(ws);
     // Jugar aquí from the web starts the engine, so it passes the same daemon
     // check as the Pi's own start. Async: the reply waits for the check.
-    const playHere = async () => {
+    const playHere = async (game?: DoomGame) => {
       if (decideStartForPlayHere(session.state().running) === "start") {
         const blocked = await (options.daemonBlockedReason ?? defaultDaemonBlockedReason)();
         if (!clients.has(ws)) return;
@@ -230,7 +237,7 @@ export function attachDoomSocket(
       let claimError: string | undefined;
       let r: { ok: boolean; token?: string; error?: string };
       if (decideStartForPlayHere(session.state().running) === "start") {
-        const started = session.start();
+        const started = session.start(game);
         r = started.ok ? session.claimOwner("web") : { ok: false, error: started.error };
       } else r = session.claimOwner("web");
       if (r.ok) {
@@ -258,7 +265,7 @@ export function attachDoomSocket(
         return;
       }
       if (msg.type === "play-here") {
-        void playHere();
+        void playHere(msg.game);
         return;
       }
       if (msg.type === "claim") {

@@ -1,4 +1,5 @@
 import fs from "fs";
+import { hasValidSessionCookie } from "./admin-session-cookie";
 import path from "path";
 import http from "http";
 import crypto from "crypto";
@@ -239,16 +240,7 @@ export class WebAdminServer {
   // Same token check as sessionAuth(), for the raw upgrade request behind
   // the WebSocket server (see start()) — there is no Koa ctx there.
   private isValidSessionCookie(cookieHeader: string | undefined): boolean {
-    if (!cookieHeader) return false;
-    for (const part of cookieHeader.split(";")) {
-      const eq = part.indexOf("=");
-      if (eq === -1) continue;
-      const name = part.slice(0, eq).trim();
-      if (name !== SESSION_COOKIE) continue;
-      const value = decodeURIComponent(part.slice(eq + 1).trim());
-      return this.validSessions.has(value);
-    }
-    return false;
+    return hasValidSessionCookie(cookieHeader, SESSION_COOKIE, this.validSessions);
   }
 
   private registerRoutes(router: Router): void {

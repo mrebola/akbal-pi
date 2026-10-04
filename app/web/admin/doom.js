@@ -34,10 +34,25 @@
   const statusEl = $("status");
   const hintEl = $("hint");
   const claimBtn = $("claim");
+  const playHereBtn = $("play-here");
+  const volumeDownBtn = $("volume-down");
+  const volumeUpBtn = $("volume-up");
+  const volumeValueEl = $("volume-value");
+  const consoleBar = $("console-bar");
+  const warningsEl = $("warnings");
+  const audioWarningEl = $("audio-warning");
+  const musicWarningEl = $("music-warning");
+  const rotateHintEl = $("rotate-hint");
+  const topbarEl = $("topbar");
   const streamSwitch = $("stream");
   const controlsEl = $("controls");
   const canvas = $("screen");
   const canvasCtx = canvas.getContext("2d");
+
+  const VOLUME_MIN = 0;
+  const VOLUME_MAX = 100;
+  const VOLUME_STEP = 5;
+  const portraitQuery = window.matchMedia("(orientation: portrait)");
 
   // The token comes from the QR URL. It is only ever sent in the "claim"
   // message, never logged or put in the DOM.
@@ -47,6 +62,11 @@
   let connected = false;
   let controller = false;
   let running = false;
+  let owner = null; // "pi" | "web" | null, from the server state
+  let mirror = false; // true when another device or the Pi is playing
+  let volume = null; // last volume the server reported (0..100), null until known
+  let audioError = null;
+  let musicError = null;
   let serverError = null;
   let retryDelay = RETRY_MIN_MS;
   let retryTimer = null;
@@ -120,26 +140,90 @@
     hintEl.textContent = text;
   }
 
+  // Only the web owner's own socket is allowed to change volume; the server
+  // drops the message from anyone else, so the buttons stay off for them too.
+  function isWebOwner() {
+    return owner === "web" && !mirror;
+  }
+
+  function clampVolume(value) {
+    return Math.min(VOLUME_MAX, Math.max(VOLUME_MIN, value));
+  }
+
   function renderStatus() {
     let text;
     if (!connected) text = "Reconectando con Akbal…";
-    else if (!running) text = "DOOM no está corriendo en la Pi";
+    else if (mirror) {
+      text = owner === "pi"
+        ? "DOOM corre en la Pi. Estás viendo el espejo."
+        : "DOOM juega desde otro dispositivo. Estás viendo el espejo.";
+    } else if (!running) text = "DOOM no está corriendo en la Pi";
     else if (controller) text = "Tienes el control";
     else text = "Juego en curso. Toca Tomar control para jugar.";
     statusEl.textContent = serverError ? `${text} · Error: ${serverError}` : text;
 
     claimBtn.textContent = controller ? "Soltar control" : "Tomar control";
-    claimBtn.disabled = !connected || !token;
+    claimBtn.disabled = !connected || !token || mirror;
     controlsEl.classList.toggle("locked", !controller);
+    controlsEl.classList.toggle("mirror", mirror);
+
+    // Jugar aquí starts the game when nothing runs, or takes it over from the
+    // Pi when we are only mirroring it.
+    playHereBtn.hidden = !(mirror || !running);
+    playHereBtn.disabled = !connected;
+
+    const canStep = connected && isWebOwner() && volume !== null;
+    volumeDownBtn.disabled = !canStep || volume <= VOLUME_MIN;
+    volumeUpBtn.disabled = !canStep || volume >= VOLUME_MAX;
+    volumeValueEl.textContent = volume === null ? "—" : `${volume}%`;
+
+    // Keys are disabled while mirroring. sync() would not send them anyway
+    // without control, but the disabled look makes the state clear.
+    for (const els of keyEls.values()) {
+      for (const el of els) el.disabled = mirror;
+    }
 
     if (!token) setHint("Falta el token en la URL. Abre esta página desde el QR de la Pi.");
+  }
+
+  function renderWarnings() {
+    audioWarningEl.hidden = !audioError;
+    audioWarningEl.textContent = audioError ? `Sin sonido: ${audioError}` : "";
+    musicWarningEl.hidden = !musicError;
+    musicWarningEl.textContent = musicError ? `Sin música: ${musicError}` : "";
+    warningsEl.hidden = !audioError && !musicError;
+  }
+
+  // Portrait hides the controls and shows the rotate hint. The hint sits
+  // under the topbar so the hamburger menu still works to leave this page.
+  function renderOrientation() {
+    const portrait = portraitQuery.matches && window.innerWidth < window.innerHeight;
+    rotateHintEl.hidden = !portrait;
+    controlsEl.hidden = portrait;
+    consoleBar.hidden = portrait;
+    document.documentElement.style.setProperty("--doom-topbar-h", `${topbarEl.offsetHeight}px`);
   }
 
   function handleState(msg) {
     running = Boolean(msg.running);
     controller = Boolean(msg.controller);
+    owner = msg.owner === "pi" || msg.owner === "web" ? msg.owner : null;
+    mirror = Boolean(msg.mirror);
+    if (typeof msg.volume === "number") volume = msg.volume;
+    audioError = msg.audioError || null;
+    musicError = msg.musicError || null;
     serverError = msg.error || null;
+
+    // A mirror always sees the game, so turn the video on once. The user can
+    // still switch it off afterwards.
+    if (mirror && !streamSwitch.checked) {
+      streamSwitch.checked = true;
+      canvas.hidden = false;
+      send({ type: "stream", on: true });
+    }
+
     renderStatus();
+    renderWarnings();
     sync();
   }
 
@@ -266,6 +350,23 @@
     send({ type: "stream", on });
   });
 
+  playHereBtn.addEventListener("click", () => {
+    send({ type: "play-here" });
+  });
+
+  // The step is taken from the last volume the server reported, not from a
+  // local guess, so the value always matches what the Pi plays.
+  function stepVolume(delta) {
+    if (volume === null) return;
+    send({ type: "volume", value: clampVolume(volume + delta) });
+  }
+
+  volumeDownBtn.addEventListener("click", () => stepVolume(-VOLUME_STEP));
+  volumeUpBtn.addEventListener("click", () => stepVolume(VOLUME_STEP));
+
+  portraitQuery.addEventListener("change", renderOrientation);
+  window.addEventListener("resize", renderOrientation);
+
   // Gamepad. Polled every animation frame because the Gamepad API has no
   // reliable button events across browsers. Only changes reach sync().
   function readGamepad() {
@@ -311,6 +412,8 @@
   }
 
   renderStatus();
+  renderWarnings();
+  renderOrientation();
   connect();
   requestAnimationFrame(pollGamepad);
 })();

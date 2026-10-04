@@ -1,55 +1,29 @@
-/* Control page for DOOM. Self-contained: it does not depend on styles.css.
-   Colors match the admin tokens (--accent #50ff78 on a dark background). */
-
-:root {
-  --bg: #0b0d0f;
-  --bg-raised: #15181b;
-  --bg-elevated: #1c2024;
-  --border: #2a3036;
-  --text-primary: #e6e9ec;
-  --text-muted: #7d838a;
-  --accent: #50ff78;
-  --accent-dim: #234a30;
-  --accent-soft: rgba(80, 255, 120, 0.12);
-  --danger: #ff6b6b;
-  --gap: 12px;
-  --key-min: 56px;
-}
-
-:root { color-scheme: dark; }
+/* Control page for DOOM. Layout only: colors, radius and type come from the
+   :root tokens in styles.css (loaded first), so the page follows the same
+   palette and light/dark rules as the rest of the admin. */
 
 [hidden] { display: none !important; }
 
-* { box-sizing: border-box; }
-
-html, body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text-primary);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-}
-
-body {
-  min-height: 100vh;
-  padding: 16px;
-  padding-left: max(16px, env(safe-area-inset-left));
-  padding-right: max(16px, env(safe-area-inset-right));
-  padding-bottom: max(16px, env(safe-area-inset-bottom));
-  overflow-x: hidden;
+.doom-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 16px max(16px, env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
   -webkit-tap-highlight-color: transparent;
 }
 
-h1 {
+.doom-title {
   margin: 0;
-  font-size: 1.4rem;
+  font-size: 1.2rem;
   letter-spacing: 0.12em;
   color: var(--accent);
 }
 
-.top { margin-bottom: 14px; }
-
 .status {
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   font-size: 0.95rem;
   color: var(--text-primary);
 }
@@ -61,26 +35,36 @@ h1 {
   color: var(--text-muted);
 }
 
-.layout {
+.warnings {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  max-width: 1100px;
-  margin: 0 auto;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 209, 102, 0.08);
+  color: var(--warning);
+  font-size: 0.9rem;
 }
 
-/* Screen (optional video) */
+.warnings p { margin: 0; }
+
+/* Screen (optional video, always on while mirroring) */
 .screen-wrap {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 10px;
 }
 
 #screen {
   display: block;
-  width: 100%;
-  max-width: 560px;
-  height: auto;
+  /* Tall enough to see, short enough that the controls still fit on a phone
+     held sideways. */
+  height: min(40vh, 340px);
+  width: auto;
+  max-width: 100%;
   aspect-ratio: 280 / 175;
   background: #000;
   border: 1px solid var(--border);
@@ -92,7 +76,7 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  min-height: var(--key-min);
+  min-height: 56px;
   font-size: 1rem;
   cursor: pointer;
   user-select: none;
@@ -105,42 +89,101 @@ h1 {
   accent-color: var(--accent);
 }
 
-/* Control */
-.console {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap);
-}
-
-.claim {
-  min-height: var(--key-min);
-  width: 100%;
-  border: 1px solid var(--accent);
-  border-radius: 8px;
-  background: var(--accent-soft);
-  color: var(--accent);
+/* Buttons outside the pad (claim, play here, volume) */
+.btn {
+  min-height: 56px;
+  padding: 0 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
   font: inherit;
-  font-size: 1.05rem;
+  font-size: 1.02rem;
   font-weight: 600;
   cursor: pointer;
   touch-action: manipulation;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.console {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.console-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.claim,
+.play-here {
+  flex: 1 1 200px;
+}
+
+.claim {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .claim:disabled {
   border-color: var(--border);
   background: var(--bg-raised);
   color: var(--text-muted);
-  cursor: not-allowed;
+  opacity: 1;
 }
 
+.play-here {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.play-here:disabled {
+  opacity: 0.45;
+}
+
+.volume {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.step {
+  width: 56px;
+  min-width: 56px;
+  padding: 0;
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.volume-value {
+  min-width: 4ch;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 1.05rem;
+  color: var(--text-primary);
+}
+
+/* SNES-style pad: D-pad left, system keys in the middle, face buttons right,
+   weapons across the bottom. */
 .controls {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto auto minmax(0, 1fr);
   grid-template-areas:
-    "dpad actions"
-    "weapons weapons";
-  gap: var(--gap);
-  align-items: start;
+    "dpad center actions"
+    "weapons weapons weapons";
+  gap: 12px 16px;
+  align-items: center;
 }
 
 .controls.locked .key { opacity: 0.45; }
@@ -153,30 +196,61 @@ h1 {
   gap: 6px;
 }
 
+.dpad-center,
+.dpad-empty {
+  display: block;
+}
+
+.center {
+  grid-area: center;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pill {
+  min-width: 96px;
+  min-height: 56px;
+}
+
 .actions {
   grid-area: actions;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-auto-rows: 1fr;
-  gap: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
   min-width: 0;
 }
 
 .actions .fire {
-  grid-column: 1 / -1;
+  min-width: 128px;
+  min-height: 96px;
+  border-radius: 999px;
+}
+
+.actions .key:not(.fire) {
+  min-width: 96px;
   min-height: 72px;
 }
 
 .weapons {
   grid-area: weapons;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(var(--key-min), 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 6px;
 }
 
-.dpad-center,
-.dpad-empty {
-  display: block;
+.weapons-title {
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.weapon-keys {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(56px, 1fr));
+  gap: 6px;
 }
 
 .key {
@@ -185,11 +259,11 @@ h1 {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-width: var(--key-min);
-  min-height: var(--key-min);
+  min-width: 56px;
+  min-height: 56px;
   padding: 4px 6px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
   background: var(--bg-elevated);
   color: var(--text-primary);
   font: inherit;
@@ -199,6 +273,10 @@ h1 {
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
+}
+
+.key:disabled {
+  cursor: not-allowed;
 }
 
 .key .label {
@@ -217,7 +295,7 @@ h1 {
 }
 
 .key.is-down,
-.key:active {
+.key:not(:disabled):active {
   border-color: var(--accent);
   background: var(--accent-dim);
   color: var(--accent);
@@ -225,20 +303,79 @@ h1 {
 
 .key.is-down small { color: var(--accent); }
 
-.key:focus-visible {
+.key:focus-visible,
+.btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
+/* Portrait: the controls are hidden and this covers the page under the
+   topbar. The topbar keeps its z-index, so the hamburger still works. */
+.rotate-hint {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: var(--doom-topbar-h, 56px);
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 24px;
+  background: var(--bg);
+  color: var(--text-primary);
+  text-align: center;
+  font-size: 1.1rem;
+}
+
+.rotate-hint p { margin: 0; }
+
+.rotate-icon {
+  display: block;
+  width: 44px;
+  height: 72px;
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  animation: rotate-phone 1.8s ease-in-out infinite alternate;
+}
+
+@keyframes rotate-phone {
+  0%, 30% { transform: rotate(0deg); }
+  70%, 100% { transform: rotate(90deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rotate-icon { animation: none; }
+}
+
+/* Short landscape phones: drop the title to keep the pad on screen. */
+@media (max-height: 500px) and (orientation: landscape) {
+  .doom-title { display: none; }
+  #screen { height: min(34vh, 200px); }
+}
+
 /* Desktop: screen on the left, console on the right, larger targets. */
 @media (min-width: 900px) {
-  body { padding: 24px; }
-
-  .layout {
+  .doom-page {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     align-items: start;
-    gap: 32px;
+    gap: 24px 32px;
+    padding: 24px;
+  }
+
+  .doom-head { grid-column: 1 / -1; }
+
+  .screen-wrap { grid-column: 1; }
+
+  .console { grid-column: 2; }
+
+  #screen {
+    width: 100%;
+    max-width: 560px;
+    height: auto;
   }
 
   .dpad {
@@ -247,13 +384,11 @@ h1 {
     gap: 8px;
   }
 
-  .actions { gap: 8px; }
+  .center { gap: 10px; }
 
-  .actions .fire { min-height: 96px; }
+  .actions .fire { min-width: 160px; min-height: 112px; }
 
-  .weapons { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .actions .key:not(.fire) { min-width: 112px; min-height: 84px; }
 
-  .controls {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
+  .weapon-keys { grid-template-columns: repeat(7, minmax(0, 1fr)); }
 }

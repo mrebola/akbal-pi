@@ -1,7 +1,14 @@
 # DOOM en Akbal Pi (DoomGeneric)
 
 Fecha: 2026-10-03
-Estado: Diseño aprobado por el dueño. Pendiente de revisión del spec antes del plan.
+Estado: Implementado.
+
+Verificado en código (host, sin dispositivo): compilación TypeScript limpia y
+52 pruebas de `node:test` del módulo DOOM (teclas, tokens, control, cuadros,
+sesión, rutas WebSocket, modo de pantalla y estado del chat web); sintaxis de
+`doom.js` y de los scripts Python. Pendiente de verificación en la Pi (pantalla,
+arranque del motor, QR, rotación a horizontal, control desde el celular): ver
+`docs/doom.md`, sección "Verificación en la Pi".
 
 ## Objetivo
 
@@ -73,7 +80,7 @@ Cliente → servidor (JSON):
 - `{ "type": "claim" }`: pide el control. Responde con `state` y `controller: true`
   o `controller: false` si ya hay otro.
 - `{ "type": "release" }`: suelta el control.
-- `{ "type": "key", "code": "<nombre>", "down": true|false }`: solo lo acepta el
+- `{ "type": "key", "key": "<nombre>", "down": true|false }`: solo lo acepta el
   controlador.
 - `{ "type": "stream", "on": true|false }`: activa o apaga el video de este cliente.
 

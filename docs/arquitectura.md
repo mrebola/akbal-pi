@@ -46,6 +46,13 @@ subgraph group_radio["Radio y ubicación"]
   node_aircraft["Radar ADS-B<br/>[service.ts]"]
 end
 
+subgraph group_doom["DOOM"]
+  node_doommode["Modo DOOM en pantalla<br/>[doom-mode.ts]"]
+  node_doomsession["Sesión del motor<br/>[session.ts]"]
+  node_doomroutes["Ruta WebSocket de DOOM<br/>[doom-routes.ts]"]
+  node_doompage["Página de control<br/>[doom.js]"]
+end
+
 subgraph group_services["Servicios del dispositivo"]
   node_gps["Posición GPS<br/>[gps.ts]"]
   node_music["Reproductor musical<br/>[music-player.ts]"]
@@ -91,6 +98,14 @@ node_aircraft -->|"usa posición"| node_gps
 node_admin -->|"controla música"| node_music
 node_admin -->|"activa modo chat"| node_webmode
 node_webmode -->|"congela pantalla"| node_display
+node_flow -->|"entra o sale de DOOM"| node_doommode
+node_doommode -->|"arranca y detiene el motor"| node_doomsession
+node_doommode -->|"envía cuadros"| node_display
+node_doomroutes -->|"reparte cuadros y estado"| node_doomsession
+node_webserver -->|"monta /ws/doom"| node_doomroutes
+node_webserver -->|"sirve /doom"| node_doompage
+node_person -->|"controla desde el celular"| node_doompage
+node_doompage -->|"claim, teclas y video"| node_doomroutes
 
 click node_button "https://github.com/mrebola/akbal-pi/blob/main/app/src/device/audio.ts"
 click node_flow "https://github.com/mrebola/akbal-pi/blob/main/app/src/core/ChatFlow.ts"
@@ -118,6 +133,10 @@ click node_audit "https://github.com/mrebola/akbal-pi/blob/main/app/src/wifi-aud
 click node_aircraft "https://github.com/mrebola/akbal-pi/blob/main/app/src/services/adsb/service.ts"
 click node_gps "https://github.com/mrebola/akbal-pi/blob/main/app/src/utils/gps.ts"
 click node_music "https://github.com/mrebola/akbal-pi/blob/main/app/src/device/music-player.ts"
+click node_doommode "https://github.com/mrebola/akbal-pi/blob/main/app/src/core/chat-flow/doom-mode.ts"
+click node_doomsession "https://github.com/mrebola/akbal-pi/blob/main/app/src/doom/session.ts"
+click node_doomroutes "https://github.com/mrebola/akbal-pi/blob/main/app/src/device/doom-routes.ts"
+click node_doompage "https://github.com/mrebola/akbal-pi/blob/main/app/web/admin/doom.js"
 
 classDef toneNeutral fill:#f8fafc,stroke:#334155,stroke-width:1.5px,color:#0f172a
 classDef toneBlue fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#172554
@@ -131,6 +150,7 @@ class node_speech,node_llm,node_plugins,node_knowledge,node_tts,node_clips toneA
 class node_admin,node_webserver,node_wifi,node_storage,node_chats,node_commands toneMint
 class node_radar,node_wardrive,node_audit,node_aircraft toneRose
 class node_gps,node_music,node_person,node_externalai,node_radiohardware toneIndigo
+class node_doommode,node_doomsession,node_doomroutes,node_doompage toneTeal
 ```
 
 ## Notas
@@ -142,5 +162,8 @@ class node_gps,node_music,node_person,node_externalai,node_radiohardware toneInd
   (`web-chat-mode.ts`); el estado vive en `web-chat-state.ts`.
 - **Comandos del chat:** responden desde los datos del sistema, sin pasar por el
   LLM. Solo `/ask` llega al modelo (`registry-core.ts`).
+- **DOOM:** una sola instancia del motor, que vive en `doom-mode.ts` (singletons
+  `doomSession`, `doomTokens` y `doomLock`). La pantalla y la web son vistas y
+  control de esa misma partida; ver `docs/doom.md`.
 - **Voz de las respuestas:** los audios se generan con Piper y se guardan junto al
   chat; no suenan en el altavoz de la Pi (`piper-clips.ts`).

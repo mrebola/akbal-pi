@@ -2,6 +2,7 @@ import fs from "fs";
 import net from "net";
 import path from "path";
 import { spawn } from "child_process";
+import type { Readable } from "stream";
 import type { Status } from "../../device/display";
 import { DoomSession, DoomState, EngineProcess } from "../../doom/session";
 import { ControlTokens } from "../../doom/tokens";
@@ -14,7 +15,8 @@ import { getApStatus } from "../../utils/access-point";
 
 const APP_DIR = path.resolve(__dirname, "../../..");
 const DOOM_ENGINE_BIN = path.join(APP_DIR, "doom", "bin", "doom-engine");
-const DOOM_WAD = path.join(process.env.DOOM_WAD_DIR || path.join(APP_DIR, "data", "doom"), "freedoom1.wad");
+// Absolute on purpose: the engine runs with cwd=APP_DIR, so a relative override would break.
+const DOOM_WAD = path.resolve(process.env.DOOM_WAD_DIR || path.join(APP_DIR, "data", "doom"), "freedoom1.wad");
 
 const CONFIRM_HOLD_MS = 900;
 const HOLD_TICK_MS = 60;
@@ -108,11 +110,18 @@ export async function resolveDoomScreenUrl(port: number): Promise<string> {
 }
 
 function spawnDoomEngine(): EngineProcess {
-  // -iwad: the engine would otherwise search the process cwd for the WAD.
-  const child = spawn(DOOM_ENGINE_BIN, ["-iwad", DOOM_WAD], { stdio: ["pipe", "pipe", "inherit"] });
+  // -iwad: the WAD is named explicitly. cwd=APP_DIR: the engine writes its
+  // converted music to <cwd>/data/doom/music, the same place the player reads.
+  // fd 3 = PCM for sound effects, fd 4 = control lines (song/stop/pause/resume).
+  const child = spawn(DOOM_ENGINE_BIN, ["-iwad", DOOM_WAD], {
+    cwd: APP_DIR,
+    stdio: ["pipe", "pipe", "inherit", "pipe", "pipe"],
+  });
   return {
     stdout: child.stdout!,
     stdin: child.stdin!,
+    audio: child.stdio[3] as Readable,
+    control: child.stdio[4] as Readable,
     kill: () => child.kill(),
     onExit: (cb) => {
       child.once("exit", (code) => cb(code));

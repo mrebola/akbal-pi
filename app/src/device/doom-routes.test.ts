@@ -30,6 +30,8 @@ function makeSession() {
   const engine: EngineProcess = {
     stdout: new PassThrough(),
     stdin,
+    audio: new PassThrough(),
+    control: new PassThrough(),
     kill: () => {},
     onExit: () => {},
   };
@@ -114,6 +116,8 @@ test("only the holder's keys reach the engine", async () => {
   wss.emit("connection", holder as unknown as WebSocket);
   wss.emit("connection", watcher as unknown as WebSocket);
   holder.emit("message", Buffer.from(JSON.stringify({ type: "claim", token: token() })));
+  // The engine's startup "volume" line is not key traffic; start from a clean slate.
+  written.length = 0;
 
   watcher.emit("message", Buffer.from(JSON.stringify({ type: "key", key: "fire", down: true })));
   await tick();

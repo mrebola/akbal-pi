@@ -3,11 +3,20 @@ import { ControlTokens } from "./tokens";
 import { ControllerLock } from "./control";
 import { DoomKey, KEY_CODES } from "./keymap";
 import { VOLUME_DEFAULT, clampVolume } from "./volume";
+import { parseControlLine, type ControlMessage } from "./audio-out";
+import { StringDecoder } from "node:string_decoder";
 import type { Readable, Writable } from "node:stream";
+
+// Control lines are a few hundred bytes at most; a longer run without a newline
+// means the stream is garbage, so it is dropped instead of growing forever.
+const MAX_CONTROL_PENDING = 8192;
 
 export interface EngineProcess {
   stdout: Readable;
   stdin: Writable;
+  // fd 3: sound effects as PCM. fd 4: music and sound control lines.
+  audio: Readable;
+  control: Readable;
   kill(): void;
   onExit(cb: (code: number | null) => void): void;
 }
@@ -41,6 +50,8 @@ export class DoomSession {
   private ownerValue: DoomOwner = null;
   private volumeValue = VOLUME_DEFAULT;
   private frameListeners = new Set<(rgb565: Buffer) => void>();
+  private audioListeners = new Set<(pcm: Buffer) => void>();
+  private controlListeners = new Set<(msg: ControlMessage) => void>();
   private stateListeners = new Set<(s: DoomState) => void>();
   // Keys the controller has pressed and not yet released. Sent "up" when the
   // control changes hands or the engine goes away, so nothing stays stuck.
@@ -70,7 +81,28 @@ export class DoomSession {
     const lost = () => this.engineLost(engine, ENGINE_STOPPED);
     engine.stdin.on("error", lost);
     engine.stdout.on("error", lost);
+    engine.audio.on("error", lost);
+    engine.control.on("error", lost);
+    // Flowing mode drains fd 4 as soon as data arrives: the engine's writes
+    // block on the game thread, so a stalled reader would freeze the game.
+    engine.audio.on("data", (chunk: Buffer) => {
+      this.audioListeners.forEach((cb) => cb(chunk));
+    });
+    const decoder = new StringDecoder("utf8");
+    let pending = "";
+    engine.control.on("data", (chunk: Buffer) => {
+      pending += decoder.write(chunk);
+      let nl = pending.indexOf("\n");
+      while (nl !== -1) {
+        const msg = parseControlLine(pending.slice(0, nl));
+        pending = pending.slice(nl + 1);
+        if (msg) this.controlListeners.forEach((cb) => cb(msg));
+        nl = pending.indexOf("\n");
+      }
+      if (pending.length > MAX_CONTROL_PENDING) pending = "";
+    });
     engine.onExit(lost);
+    this.send(engine, `volume ${this.volumeValue}`);
     const token = this.deps.tokens.issue();
     this.emitState();
     return { ok: true, token };
@@ -92,14 +124,14 @@ export class DoomSession {
     return this.ownerValue;
   }
 
-  // Storage only for now: the engine's audio gain is wired in with the sound
-  // task, and settings.json is written there too.
   volume(): number {
     return this.volumeValue;
   }
 
+  // The engine scales its own sound effects; music gain is applied in Node.
   setVolume(value: number): void {
     this.volumeValue = clampVolume(value);
+    if (this.engine) this.send(this.engine, `volume ${this.volumeValue}`);
     this.emitState();
   }
 
@@ -160,6 +192,16 @@ export class DoomSession {
   onFrame(cb: (rgb565: Buffer) => void): () => void {
     this.frameListeners.add(cb);
     return () => this.frameListeners.delete(cb);
+  }
+
+  onAudio(cb: (pcm: Buffer) => void): () => void {
+    this.audioListeners.add(cb);
+    return () => this.audioListeners.delete(cb);
+  }
+
+  onControl(cb: (msg: ControlMessage) => void): () => void {
+    this.controlListeners.add(cb);
+    return () => this.controlListeners.delete(cb);
   }
 
   onState(cb: (s: DoomState) => void): () => void {

@@ -14,13 +14,17 @@ function fakeEngine() {
   stdin.on("data", (d) => written.push(String(d)));
   let exitCb: (code: number | null) => void = () => {};
   let killed = false;
+  const audio = new PassThrough();
+  const control = new PassThrough();
   const engine: EngineProcess = {
     stdout,
     stdin,
+    audio,
+    control,
     kill: () => { killed = true; exitCb(null); },
     onExit: (cb) => { exitCb = cb; },
   };
-  return { engine, stdin, stdout, written, wasKilled: () => killed, crash: () => exitCb(1) };
+  return { engine, stdin, stdout, audio, control, written, wasKilled: () => killed, crash: () => exitCb(1) };
 }
 
 function makeSession(overrides: Partial<ConstructorParameters<typeof DoomSession>[0]> = {}) {
@@ -247,4 +251,38 @@ test("volume starts at the default and setVolume stores a clamped, stepped value
   assert.equal(session.volume(), 100);
   session.setVolume(-3);
   assert.equal(session.volume(), 0);
+});
+
+const nextTick = () => new Promise<void>((r) => setImmediate(r));
+
+test("fd 4 lines reach onControl whole, even when split across chunks; junk is skipped", async () => {
+  const { session, fake } = makeSession();
+  const got: unknown[] = [];
+  session.onControl((m) => got.push(m));
+  session.start();
+  fake.control.write("song /data/doom/music/0.mid 1\nsto");
+  fake.control.write("p\nhack\n");
+  await nextTick();
+  assert.deepEqual(got, [
+    { kind: "song", path: "/data/doom/music/0.mid", loop: true },
+    { kind: "stop" },
+  ]);
+});
+
+test("fd 3 PCM reaches onAudio", async () => {
+  const { session, fake } = makeSession();
+  const got: Buffer[] = [];
+  session.onAudio((pcm) => got.push(pcm));
+  session.start();
+  fake.audio.write(Buffer.from([1, 2, 3, 4]));
+  await nextTick();
+  assert.deepEqual(Buffer.concat(got), Buffer.from([1, 2, 3, 4]));
+});
+
+test("the volume is sent to the engine at start and on every change", async () => {
+  const { session, fake } = makeSession();
+  session.start();
+  session.setVolume(35);
+  await nextTick();
+  assert.equal(fake.written.join(""), `volume ${VOLUME_DEFAULT}\nvolume 35\n`);
 });

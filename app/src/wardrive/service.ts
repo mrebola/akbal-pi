@@ -228,6 +228,7 @@ export class DriveWardriveService extends EventEmitter {
     if (getPlatformMode() === "demo") {
       this.demo = true;
       this.discovery = [];
+      this.radiosConnected = 0;
       this.running = true;
       this.beginSession(true);
       this.broadcastStatus();
@@ -335,6 +336,7 @@ export class DriveWardriveService extends EventEmitter {
   private async stopInternal(restore: boolean): Promise<void> {
     const wasRunning = this.running;
     this.running = false;
+    this.radiosConnected = 0;
     this.stopTimers();
     this.pmkidRunner?.stop();
     this.pmkidRunner = null;

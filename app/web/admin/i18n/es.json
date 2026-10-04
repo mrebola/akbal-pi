@@ -500,6 +500,7 @@
     "radio_role_discovery": "descubrimiento",
     "radios_none": "sin radios activas",
     "radios_short": "{mode} pedido, {available} radios disponibles",
+    "radios_short_one": "{mode} pedido, 1 radio disponible",
     "home_guard_title": "La red a la que Akbal está conectado NUNCA es atacada — el motor la excluye",
     "home_guard_protected": "protegida",
     "compare_title": "EFICIENCIA RADIOS",

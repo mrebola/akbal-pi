@@ -500,6 +500,7 @@
     "radio_role_discovery": "discovery",
     "radios_none": "no active radios",
     "radios_short": "{mode} requested, {available} radios available",
+    "radios_short_one": "{mode} requested, 1 radio available",
     "home_guard_title": "The network Akbal is connected to is NEVER attacked — the engine excludes it",
     "home_guard_protected": "protected",
     "compare_title": "RADIO EFFICIENCY",

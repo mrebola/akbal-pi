@@ -724,13 +724,17 @@ function renderActiveRadios(st) {
     return `${String(r.iface || "?").toUpperCase()} · ${role}`;
   });
   const parts = [radios.join(" · ") || t("wardrive.radios_none", "sin radios activas")];
-  const requested = { single: 1, dual: 2, triple: 3 }[st.radioMode];
-  if (requested && st.radiosConnected < requested) {
+  // Only triple can fall short in a way the operator should see: dual and
+  // single are satisfied by any single-radio or two-radio setup.
+  if (st.radioMode === "triple" && st.radiosConnected < 3) {
+    const mode = t("wardrive.radios_triple", "triple");
     parts.push(
-      t("wardrive.radios_short", "{mode} pedido, {available} radios disponibles", {
-        mode: t(`wardrive.radios_${st.radioMode}`, st.radioMode),
-        available: st.radiosConnected,
-      }),
+      st.radiosConnected === 1
+        ? t("wardrive.radios_short_one", "{mode} pedido, 1 radio disponible", { mode })
+        : t("wardrive.radios_short", "{mode} pedido, {available} radios disponibles", {
+            mode,
+            available: st.radiosConnected,
+          }),
     );
   }
   host.textContent = parts.join(" — ");

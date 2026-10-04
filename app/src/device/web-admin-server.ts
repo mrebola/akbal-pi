@@ -2087,9 +2087,10 @@ export class WebAdminServer {
       );
     });
 
-    // Radio-count preference ("single" = 1 dongle shared, "dual" =
-    // discovery + dedicated attacker when 2 monitor dongles exist, "auto"
-    // = dual whenever possible). Only changeable with the session stopped.
+    // Radio-count preference: "auto" = every connected monitor radio (default),
+    // "single" = 1 shared radio, "dual" = 2 radios (1 attack + 1 discovery),
+    // "triple" = 3 radios (1 attack + 2 discovery). Only changeable with the
+    // session stopped.
     router.get("/api/wardrive/drive/radio-mode", (ctx) => {
       ctx.body = { ok: true, mode: drive.getRadioMode() };
     });

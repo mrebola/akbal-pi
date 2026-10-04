@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { doomScreenUrl, shouldLeaveDoom, doomBlockedReason, withControlToken, doomQrText, screenFaceFor, decideOnEngineStopped, decideMirrorEntry, shouldStopOnLeave } from "./doom-mode";
+import { doomScreenUrl, shouldLeaveDoom, doomBlockedReason, withControlToken, doomQrText, screenFaceFor, decideOnEngineStopped, decideMirrorEntry, shouldStopOnLeave, decideLeaveDoom } from "./doom-mode";
 
 test("uses the Tailscale host when Tailscale is up", () => {
   assert.equal(
@@ -97,4 +97,13 @@ test("a game that was already running when the Pi returns to sleep gets the mirr
   // Same decision the sleep re-check makes in ChatFlow.transitionTo: no new game needed.
   assert.equal(decideMirrorEntry("sleep", "web", true), "enter-mirror");
   assert.equal(decideMirrorEntry("sleep", "web", false), "none");
+});
+
+test("every exit from DOOM restores the vertical screen, whoever owns the game", () => {
+  assert.equal(decideLeaveDoom("doom", "sleep", "web"), "restore-orientation");
+  assert.equal(decideLeaveDoom("doom", "sleep", "pi"), "restore-orientation");
+  assert.equal(decideLeaveDoom("doom", "sleep", null), "restore-orientation");
+  assert.equal(decideLeaveDoom("doom", "web_chat", "web"), "restore-orientation");
+  assert.equal(decideLeaveDoom("doom", "doom", "web"), "none");
+  assert.equal(decideLeaveDoom("sleep", "doom", "web"), "none");
 });

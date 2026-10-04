@@ -17,11 +17,11 @@ import {
 } from "../device/im-bridge";
 import { FlowStateMachine } from "./chat-flow/stateMachine";
 import {
+  decideLeaveDoom,
   decideMirrorEntry,
   doomSession,
   leaveDoomMode,
   requestDoomMirror,
-  shouldLeaveDoom,
 } from "./chat-flow/doom-mode";
 import { flowStates } from "./chat-flow/states";
 import { ChatFlowContext, FlowName } from "./chat-flow/types";
@@ -315,7 +315,7 @@ class ChatFlow implements ChatFlowContext {
     if (flowName !== "music" && isMusicPlaying()) {
       stopMusicPlayback();
     }
-    if (shouldLeaveDoom(this.currentFlowName, flowName)) {
+    if (decideLeaveDoom(this.currentFlowName, flowName, doomSession.owner()) === "restore-orientation") {
       leaveDoomMode();
     }
     // Every exit from a spoken reply goes through here (normal end, stop,

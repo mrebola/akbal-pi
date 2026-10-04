@@ -116,8 +116,15 @@ export interface DoomFlowHooks {
   returnToSleep: () => void;
 }
 
+// Every exit from DOOM gives the vertical screen back, whoever owns the game:
+// leaveDoomMode sends game_orientation 1 on each of them.
+export function decideLeaveDoom(from: string, to: string, owner: DoomOwner): "restore-orientation" | "none" {
+  void owner;
+  return from === "doom" && to !== "doom" ? "restore-orientation" : "none";
+}
+
 export function shouldLeaveDoom(from: string, to: string): boolean {
-  return from === "doom" && to !== "doom";
+  return decideLeaveDoom(from, to, null) === "restore-orientation";
 }
 
 // Pantalla directa = Whisplay driver in this process (WhisplayBoard). When the

@@ -43,7 +43,13 @@ export class AudioOut {
 
   start(): void {
     if (this.proc || this.closed) return;
-    const proc = this.spawnProcess("aplay", aplayArgs());
+    let proc: AudioProcess;
+    try {
+      proc = this.spawnProcess("aplay", aplayArgs());
+    } catch {
+      this.close("[DOOM audio] no se pudo lanzar aplay; el juego sigue sin sonido");
+      return;
+    }
     this.proc = proc;
     // Without a listener a write to a dead aplay would crash the whole process.
     proc.stdin.on("error", () => this.close("[DOOM audio] aplay dejó de aceptar audio"));

@@ -68,3 +68,9 @@ test("AudioOut stop kills aplay and closes the output", () => {
   out.write(Buffer.from([1]));
   assert.equal(fake.written.length, 0);
 });
+
+test("AudioOut survives a spawn that throws: start does not throw and writes are dropped", () => {
+  const out = new AudioOut(() => { throw new Error("spawn aplay ENOENT"); });
+  assert.doesNotThrow(() => out.start());
+  assert.doesNotThrow(() => out.write(Buffer.from([1])));
+});

@@ -5,6 +5,7 @@ import { spawn } from "child_process";
 import type { Readable } from "stream";
 import type { Status } from "../../device/display";
 import { DoomSession, DoomState, EngineProcess } from "../../doom/session";
+import { AudioOut, AudioProcess } from "../../doom/audio-out";
 import { ControlTokens } from "../../doom/tokens";
 import { ControllerLock } from "../../doom/control";
 import { getNetworkInfo, generateConnectQr } from "../../utils/network-info";
@@ -130,6 +131,20 @@ function spawnDoomEngine(): EngineProcess {
   };
 }
 
+// aplay is optional: if it is missing or dies, AudioOut closes and the game
+// simply plays without sound. Its stdout and stderr are dropped on purpose.
+function spawnAplay(cmd: string, args: string[]): AudioProcess {
+  const child = spawn(cmd, args, { stdio: ["pipe", "ignore", "ignore"] });
+  return {
+    stdin: child.stdin!,
+    kill: () => child.kill(),
+    onExit: (cb) => {
+      child.once("exit", () => cb());
+      child.once("error", () => cb());
+    },
+  };
+}
+
 export const doomTokens = new ControlTokens();
 export const doomLock = new ControllerLock();
 export const doomSession = new DoomSession({
@@ -138,6 +153,7 @@ export const doomSession = new DoomSession({
   lock: doomLock,
   binaryExists: () => fs.existsSync(DOOM_ENGINE_BIN),
   wadExists: () => fs.existsSync(DOOM_WAD),
+  openAudio: () => new AudioOut(spawnAplay),
 });
 
 let unsubscribers: Array<() => void> = [];

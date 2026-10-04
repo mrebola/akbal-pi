@@ -286,3 +286,71 @@ test("the volume is sent to the engine at start and on every change", async () =
   await nextTick();
   assert.equal(fake.written.join(""), `volume ${VOLUME_DEFAULT}\nvolume 35\n`);
 });
+
+function countingSink() {
+  const sinks: Array<{ started: number; stopped: number; written: Buffer[] }> = [];
+  const openAudio = () => {
+    const sink = { started: 0, stopped: 0, written: [] as Buffer[] };
+    sinks.push(sink);
+    return {
+      start: () => { sink.started++; },
+      write: (pcm: Buffer) => { sink.written.push(pcm); },
+      stop: () => { sink.stopped++; },
+    };
+  };
+  return { sinks, openAudio };
+}
+
+test("one audio sink per engine run: opened on start, fed PCM, stopped on stop", async () => {
+  const { sinks, openAudio } = countingSink();
+  const { session, fake } = makeSession({ openAudio });
+  session.start();
+  fake.audio.write(Buffer.from([7, 8]));
+  await nextTick();
+  assert.equal(sinks.length, 1);
+  assert.equal(sinks[0].started, 1);
+  assert.deepEqual(Buffer.concat(sinks[0].written), Buffer.from([7, 8]));
+  session.stop();
+  assert.equal(sinks[0].stopped, 1);
+});
+
+test("an engine that dies stops its audio sink too", () => {
+  const { sinks, openAudio } = countingSink();
+  const { session, fake } = makeSession({ openAudio });
+  session.start();
+  fake.crash();
+  assert.equal(sinks[0].stopped, 1);
+  assert.equal(session.state().running, false);
+});
+
+test("a second start after stop opens a fresh sink", () => {
+  const { sinks, openAudio } = countingSink();
+  const { session } = makeSession({ openAudio });
+  session.start();
+  session.stop();
+  session.start();
+  assert.equal(sinks.length, 2);
+  assert.equal(sinks[1].started, 1);
+  assert.equal(sinks[1].stopped, 0);
+});
+
+test("AudioOut behind the session: PCM reaches aplay's stdin, and a missing aplay is silent", async () => {
+  const { AudioOut } = require("./audio-out") as typeof import("./audio-out");
+  const aplayIn = new PassThrough();
+  const aplayWritten: Buffer[] = [];
+  aplayIn.on("data", (d) => aplayWritten.push(d));
+  const spawned: string[] = [];
+  const { session, fake } = makeSession({
+    openAudio: () => new AudioOut((cmd) => { spawned.push(cmd); return { stdin: aplayIn, kill: () => {}, onExit: () => {} }; }),
+  });
+  session.start();
+  fake.audio.write(Buffer.from([9, 9]));
+  await nextTick();
+  assert.deepEqual(spawned, ["aplay"]);
+  assert.deepEqual(Buffer.concat(aplayWritten), Buffer.from([9, 9]));
+
+  const missing = makeSession({
+    openAudio: () => new AudioOut(() => { throw new Error("spawn aplay ENOENT"); }),
+  });
+  assert.equal(missing.session.start().ok, true, "a missing aplay must not fail the engine start");
+});

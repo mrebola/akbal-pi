@@ -37,9 +37,19 @@ export interface DoomSessionDeps {
   lock: ControllerLock;
   binaryExists: () => boolean;
   wadExists: () => boolean;
+  // Optional: without it the game runs silent (tests, or no audio device).
+  openAudio?: () => AudioSink;
 }
 
 const ENGINE_STOPPED = "El motor de DOOM se detuvo.";
+
+// What the session needs from the sound output (AudioOut in production). One
+// sink lives per engine run: it is opened on start and stopped on stop or loss.
+export interface AudioSink {
+  start(): void;
+  write(pcm: Buffer): void;
+  stop(): void;
+}
 
 // Single owner of the one engine process. Everyone else (screen, web) reads
 // from here and sends keys through here.
@@ -50,6 +60,7 @@ export class DoomSession {
   private ownerValue: DoomOwner = null;
   private volumeValue = VOLUME_DEFAULT;
   private frameListeners = new Set<(rgb565: Buffer) => void>();
+  private audio: AudioSink | null = null;
   private audioListeners = new Set<(pcm: Buffer) => void>();
   private controlListeners = new Set<(msg: ControlMessage) => void>();
   private stateListeners = new Set<(s: DoomState) => void>();
@@ -71,6 +82,8 @@ export class DoomSession {
     this.reader = new FrameReader();
     const engine = this.deps.spawnEngine();
     this.engine = engine;
+    this.audio = this.deps.openAudio?.() ?? null;
+    this.audio?.start();
     engine.stdout.on("data", (chunk: Buffer) => {
       for (const frame of this.reader.push(chunk)) {
         this.frameListeners.forEach((cb) => cb(frame));
@@ -85,7 +98,11 @@ export class DoomSession {
     engine.control.on("error", lost);
     // Flowing mode drains fd 4 as soon as data arrives: the engine's writes
     // block on the game thread, so a stalled reader would freeze the game.
+    // Guarded by engine identity: a chunk from a stopped engine must not reach
+    // the sink or listeners of the next one.
     engine.audio.on("data", (chunk: Buffer) => {
+      if (this.engine !== engine) return;
+      this.audio?.write(chunk);
       this.audioListeners.forEach((cb) => cb(chunk));
     });
     const decoder = new StringDecoder("utf8");
@@ -96,7 +113,7 @@ export class DoomSession {
       while (nl !== -1) {
         const msg = parseControlLine(pending.slice(0, nl));
         pending = pending.slice(nl + 1);
-        if (msg) this.controlListeners.forEach((cb) => cb(msg));
+        if (msg && this.engine === engine) this.controlListeners.forEach((cb) => cb(msg));
         nl = pending.indexOf("\n");
       }
       if (pending.length > MAX_CONTROL_PENDING) pending = "";
@@ -116,6 +133,7 @@ export class DoomSession {
     this.deps.tokens.revokeAll();
     const holder = this.deps.lock.holder();
     if (holder !== null) this.deps.lock.release(holder);
+    this.stopAudio();
     engine?.kill();
     this.emitState();
   }
@@ -220,8 +238,15 @@ export class DoomSession {
     if (holder !== null) this.deps.lock.release(holder);
     this.deps.tokens.revokeAll();
     this.error = message;
+    this.stopAudio();
     engine.kill();
     this.emitState();
+  }
+
+  private stopAudio(): void {
+    const sink = this.audio;
+    this.audio = null;
+    sink?.stop();
   }
 
   private releaseKeys(engine: EngineProcess | null): void {

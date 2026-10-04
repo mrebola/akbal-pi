@@ -141,6 +141,7 @@ import {
   onWebChatExit,
 } from "./web-chat-mode";
 import { isWebChatModeOn, setWebChatMode } from "./web-chat-state";
+import { enterDoomMode, handleDoomPress, handleDoomRelease, leaveDoomMode, resolveDoomScreenUrl } from "./doom-mode";
 import { getDriveWardriveService } from "../../wardrive/service";
 import { isAgentMode, setDeviceMode } from "../../config/device-mode";
 import { setAudioOutputTarget } from "../../config/audio-output";
@@ -340,6 +341,10 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       }
       if (key === "wardrive") {
         ctx.transitionTo("wardrive");
+        return;
+      }
+      if (key === "doom") {
+        ctx.transitionTo("doom");
         return;
       }
       if (key === "about") {
@@ -1409,5 +1414,18 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     onButtonPressed(() => handleWebChatPress());
     onButtonReleased(() => handleWebChatRelease());
     enterWebChatMode();
+  },
+  doom: (ctx: ChatFlowContext) => {
+    // Hold the button to leave; the hold also restores the vertical screen.
+    onButtonDoubleClick(null);
+    onButtonPressed(() => handleDoomPress(() => {
+      leaveDoomMode();
+      ctx.transitionTo("sleep");
+    }));
+    onButtonReleased(() => handleDoomRelease());
+    // The URL lookup is async; if the player already left, don't start the engine.
+    void resolveDoomScreenUrl(8090).then((url) => {
+      if (ctx.currentFlowName === "doom") void enterDoomMode(url);
+    });
   },
 };

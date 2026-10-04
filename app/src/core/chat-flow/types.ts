@@ -29,6 +29,7 @@ export type FlowName =
   | "wifi_radar"
   | "aircraft_radar"
   | "wardrive"
+  | "doom"
   | "web_chat"
   | "about";
 

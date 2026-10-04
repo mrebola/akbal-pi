@@ -1,4 +1,5 @@
 from PIL import Image, ImageDraw, ImageFont, ImageSequence
+import base64
 import os
 import time
 import socket
@@ -32,6 +33,15 @@ VIDEO_WIDTH = 240
 VIDEO_HEIGHT = 196
 TEXT_BAND_HEIGHT = 64  # LCD_HEIGHT (280) = TOP_BAR_HEIGHT (20) + VIDEO_HEIGHT (196) + TEXT_BAND_HEIGHT (64)
 BOTTOM_TEXT_MAX_LINES = 2
+# DOOM screen (horizontal, 280x240): the engine's 280x175 frame sits between a
+# 32px band on top (hold-to-exit progress) and a black band at the bottom.
+GAME_WIDTH = 280
+GAME_HEIGHT = 240
+GAME_FRAME_HEIGHT = 175
+GAME_FRAME_BYTES = GAME_WIDTH * GAME_FRAME_HEIGHT * 2
+GAME_TOP_BAND = (GAME_HEIGHT - GAME_FRAME_HEIGHT) // 2
+GAME_BOTTOM_BAND = GAME_HEIGHT - GAME_TOP_BAND - GAME_FRAME_HEIGHT
+GAME_QR_SIZE = 160
 BOTTOM_TEXT_FONT_SIZE = 16
 BOTTOM_TEXT_MARGIN_X = 10
 TOP_BAR_MARGIN_X = 14
@@ -135,6 +145,11 @@ current_model_ui_index = 0
 current_model_ui_total = 0
 current_model_ui_active = False
 current_model_ui_qr_path = ""
+# DOOM screen state. game_screen_active is True only while the LCD is
+# horizontal (orientation 3); the render thread then draws only the game.
+game_screen_active = False
+current_game_frame = None  # RGB565 big-endian bytes of the last engine frame
+current_game_qr_path = ""
 current_help_ui = ""
 current_help_ui_body = ""
 current_help_ui_page = 0
@@ -243,6 +258,9 @@ class RenderThread(threading.Thread):
     def render_frame(self, status, text):
         global current_image_path, current_image, camera_mode
         self.pending_auto_scroll_after_hold = False
+        if game_screen_active:
+            self.render_game_screen(text)
+            return False
         if camera_mode:
             return False  # Skip rendering if in camera mode
         if current_music_ui:
@@ -961,6 +979,56 @@ class RenderThread(threading.Thread):
     def request_render(self):
         self.render_event.set()
 
+    def invalidate_caches(self):
+        # The DOOM screen paints over the whole panel, so every portrait
+        # cache has to redraw the next time the vertical UI comes back.
+        self.top_bar_cache_key = None
+        self.bottom_text_cache_key = None
+        self.model_ui_cache_key = None
+        self.help_ui_cache_key = None
+        self.about_ui_cache_key = None
+        self.music_ui_cache_key = None
+        self.wardrive_ui_cache_key = None
+        self.radar_ui_cache_key = None
+        self.aircraft_radar_ui_cache_key = None
+        self.last_drawn_gif_key = None
+        self.last_drawn_frame_index = -1
+
+    def render_game_screen(self, text):
+        if current_game_frame is None:
+            self.render_game_qr(text)
+            return
+        top = Image.new("RGB", (GAME_WIDTH, GAME_TOP_BAND), (0, 0, 0))
+        if current_model_ui == "confirm":
+            label = f"Mantén para salir: {int(current_model_ui_percent or 0)}%"
+            self._draw_centered(ImageDraw.Draw(top), label, self.model_ui_hint_font,
+                                (GAME_TOP_BAND - 14) // 2, GAME_WIDTH // 2, TEXT_SECONDARY)
+        self.whisplay.draw_image(0, 0, GAME_WIDTH, GAME_TOP_BAND,
+                                 ImageUtils.image_to_rgb565(top, GAME_WIDTH, GAME_TOP_BAND))
+        self.whisplay.draw_image(0, GAME_TOP_BAND, GAME_WIDTH, GAME_FRAME_HEIGHT, list(current_game_frame))
+        self.whisplay.draw_image(0, GAME_TOP_BAND + GAME_FRAME_HEIGHT, GAME_WIDTH, GAME_BOTTOM_BAND,
+                                 [0] * (GAME_WIDTH * GAME_BOTTOM_BAND * 2))
+
+    def render_game_qr(self, text):
+        # Node renders the QR PNG (same generator as the WiFi direct screen)
+        # and sends its path; this side only pastes it.
+        frame = Image.new("RGB", (GAME_WIDTH, GAME_HEIGHT), (0, 0, 0))
+        if current_game_qr_path and os.path.exists(current_game_qr_path):
+            try:
+                qr = Image.open(current_game_qr_path).convert("RGBA").resize(
+                    (GAME_QR_SIZE, GAME_QR_SIZE), Image.NEAREST)
+                frame.paste(qr, ((GAME_WIDTH - GAME_QR_SIZE) // 2, 6), qr)
+            except Exception as e:
+                print(f"[Game] Failed to load QR {current_game_qr_path}: {e}")
+        draw = ImageDraw.Draw(frame)
+        lines = [line for line in TextUtils.wrap_text(draw, text or "", self.model_ui_hint_font, GAME_WIDTH - 24) if line][:2]
+        y = 6 + GAME_QR_SIZE + 8
+        for line in lines:
+            self._draw_centered(draw, line, self.model_ui_hint_font, y, GAME_WIDTH // 2, TEXT_PRIMARY)
+            y += 18
+        self.whisplay.draw_image(0, 0, GAME_WIDTH, GAME_HEIGHT,
+                                 ImageUtils.image_to_rgb565(frame, GAME_WIDTH, GAME_HEIGHT))
+
     def run(self):
         frame_interval = 1 / self.fps
         while self.running:
@@ -978,6 +1046,44 @@ class RenderThread(threading.Thread):
     def stop(self):
         self.running = False
         self.render_event.set()
+
+
+def set_game_orientation(whisplay, mode):
+    global game_screen_active, current_game_frame
+    mode = int(mode)
+    setter = getattr(whisplay, "set_orientation", None)
+    if setter is None:
+        print("[Game] This display backend cannot rotate the screen; DOOM uses the vertical UI")
+        game_screen_active = False
+    else:
+        setter(mode)
+        game_screen_active = mode == 3
+    if not game_screen_active:
+        current_game_frame = None
+        if render_thread is not None:
+            render_thread.invalidate_caches()
+    if render_thread is not None:
+        render_thread.request_render()
+
+
+def update_game_screen(frame_b64=None, qr_path=None):
+    global current_game_frame, current_game_qr_path
+    if not game_screen_active:
+        return
+    if qr_path is not None:
+        current_game_frame = None
+        current_game_qr_path = qr_path
+    if frame_b64 is not None:
+        raw = base64.b64decode(frame_b64)
+        if len(raw) != GAME_FRAME_BYTES:
+            print(f"[Game] Frame with {len(raw)} bytes, expected {GAME_FRAME_BYTES}")
+            return
+        # The engine writes RGB565 little-endian; the panel wants high byte first.
+        swapped = bytearray(raw)
+        swapped[0::2], swapped[1::2] = raw[1::2], raw[0::2]
+        current_game_frame = bytes(swapped)
+    if render_thread is not None:
+        render_thread.request_render()
 
 
 def update_display_data(status=None, emoji=None, text=None,
@@ -1352,6 +1458,9 @@ def handle_client(client_socket, addr, whisplay):
                     wardrive_captured = content.get("wardrive_captured", None)
                     wardrive_total = content.get("wardrive_total", None)
                     top_bar_mode = content.get("top_bar_mode", None)
+                    game_frame = content.get("game_frame", None)
+                    game_orientation = content.get("game_orientation", None)
+                    game_qr_path = content.get("game_qr_path", None)
 
                     if rgbled:
                         rgb255_tuple = ColorUtils.get_rgb255_from_any(rgbled)
@@ -1389,6 +1498,12 @@ def handle_client(client_socket, addr, whisplay):
                             camera_thread.capture()
                             notification = {"event": "camera_capture"}
                             send_to_all_clients(notification)
+
+                    if game_orientation is not None:
+                        set_game_orientation(whisplay, game_orientation)
+
+                    if (game_frame is not None) or (game_qr_path is not None):
+                        update_game_screen(frame_b64=game_frame, qr_path=game_qr_path)
 
                     if (text is not None) or (text_delta is not None) or (status is not None) or (emoji is not None) or \
                        (battery_level is not None) or (battery_color is not None) or \

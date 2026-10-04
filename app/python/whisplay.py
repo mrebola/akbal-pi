@@ -227,6 +227,8 @@ class WhisplayBoard:
     # LCD parameters
     LCD_WIDTH = 240
     LCD_HEIGHT = 280
+    # Mode last sent with MADCTL (0x36); 1 is the vertical default.
+    _use_horizontal = 1
     CornerHeight = 20  # Rounded corner height in pixels
 
     # Physical pin definitions (BOARD mode - shared by both platforms)
@@ -512,6 +514,14 @@ class WhisplayBoard:
         self._send_command(0x21)
         self._send_command(0x29)
 
+    def set_orientation(self, mode):
+        # Modes from the verified panel: 1 = vertical (0xC0), 3 = horizontal (0xA0).
+        # 2 (0x70) is upside down on this panel and is not used by the app.
+        madctl = {1: 0xC0, 2: 0x70, 3: 0xA0}[mode]
+        self._send_command(0x36, madctl)
+        self._use_horizontal = mode
+        self.LCD_WIDTH, self.LCD_HEIGHT = (280, 240) if mode in (2, 3) else (240, 280)
+
     def _send_command(self, cmd, *args):
         self._gpio_output(self.DC_PIN, 0)
         self.spi.xfer2([cmd])
@@ -581,7 +591,7 @@ class WhisplayBoard:
     def draw_image(self, x, y, width, height, pixel_data):
         if (x + width > self.LCD_WIDTH) or (y + height > self.LCD_HEIGHT):
             raise ValueError("Image dimensions exceed screen bounds")
-        self.set_window(x, y, x + width - 1, y + height - 1)
+        self.set_window(x, y, x + width - 1, y + height - 1, use_horizontal=self._use_horizontal)
         self._send_data(pixel_data)
 
     # ========== RGB LED & Button ==========

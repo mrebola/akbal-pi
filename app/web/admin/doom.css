@@ -210,7 +210,7 @@
   grid-template-areas:
     "run fire"
     "use fire"
-    "menu enter";
+    "menu .";
   grid-auto-rows: 60px;
   gap: 6px;
   justify-self: end;
@@ -222,7 +222,6 @@
 .actions .use   { grid-area: use; }
 .actions .fire  { grid-area: fire; border-radius: 40px; }
 .actions .menu  { grid-area: menu; }
-.actions .enter { grid-area: enter; }
 
 .weapons {
   grid-area: weapons;

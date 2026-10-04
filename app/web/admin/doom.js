@@ -314,15 +314,21 @@
   // On-screen buttons. Pointer events cover touch, pen and mouse. Up is sent
   // on pointerup, pointerleave and pointercancel, so a finger that slides off
   // or a browser gesture cannot leave a key stuck down on the server.
+  // A button can press more than one logical key. FIRE also sends Enter, so
+  // the game can be started from the same on-screen button. Keyboard keeps its
+  // own mapping (Enter is its own key there).
+  const POINTER_KEYS = { fire: ["fire", "enter"] };
   document.querySelectorAll("[data-key]").forEach((el) => {
-    const key = el.dataset.key;
+    const keys = POINTER_KEYS[el.dataset.key] || [el.dataset.key];
     el.addEventListener("pointerdown", (event) => {
       if (event.pointerType === "mouse" && event.button !== 0) return;
       event.preventDefault();
       if (!controller) setHint("Toma el control primero.");
-      press(`ptr:${event.pointerId}:${key}`, key);
+      for (const key of keys) press(`ptr:${event.pointerId}:${key}`, key);
     });
-    const up = (event) => release(`ptr:${event.pointerId}:${key}`);
+    const up = (event) => {
+      for (const key of keys) release(`ptr:${event.pointerId}:${key}`);
+    };
     el.addEventListener("pointerup", up);
     el.addEventListener("pointerleave", up);
     el.addEventListener("pointercancel", up);

@@ -69,7 +69,7 @@ async function renderScreen(): Promise<void> {
       about_ui_body: PAGES[pageIndex],
       about_ui_page: pageIndex + 1,
       about_ui_total: TOTAL_PAGES,
-      text: "Click: siguiente · Mantén: salir",
+      text: "Click: siguiente\nMantén: salir",
     });
     return;
   }
@@ -97,7 +97,7 @@ async function renderScreen(): Promise<void> {
     model_ui_label: "Cypher404: El Manifiesto",
     model_ui_description: "cypher404.com/book",
     model_ui_qr_path: qrPath,
-    text: "Escaneá para comprar el libro · Mantén: salir",
+    text: "Escanea para comprar el libro\nMantén: salir",
   });
 }
 

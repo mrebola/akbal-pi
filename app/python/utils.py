@@ -210,20 +210,36 @@ class TextUtils:
 
   @staticmethod
   def wrap_text(draw, text, font, max_width):
+    # "\n" forces a new line (used by the button hints: one action per line).
+    # Inside a paragraph, a line only breaks at a space, so "Mantén: elegir"
+    # never splits into "Mantén" / ": elegir" on the device. Only a single
+    # word wider than the line falls back to breaking by character.
+    def width_of(s):
+      return sum(TextUtils.get_char_size(font, c)[0] for c in s)
+
+    def wrap_paragraph(paragraph):
+      out = []
+      current_line = ""
+      for word in paragraph.split(" "):
+        candidate = word if not current_line else current_line + " " + word
+        if width_of(candidate) <= max_width:
+          current_line = candidate
+          continue
+        if current_line:
+          out.append(current_line)
+        piece = ""
+        for char in word:
+          if width_of(piece + char) <= max_width or not piece:
+            piece += char
+          else:
+            out.append(piece)
+            piece = char
+        current_line = piece
+      if current_line:
+        out.append(current_line)
+      return out
+
     lines = []
-    current_line = ""
-    current_width = 0
-    for char in text:
-      test_line = current_line + char
-      char_width = TextUtils.get_char_size(font, char)[0]
-      current_width += char_width
-      w = current_width
-      if w <= max_width:
-        current_line = test_line
-      else:
-        lines.append(current_line)
-        current_line = char
-        current_width = char_width
-    if current_line:
-      lines.append(current_line)
+    for paragraph in text.split("\n"):
+      lines.extend(wrap_paragraph(paragraph))
     return lines

@@ -72,7 +72,7 @@ function renderSelectScreen(): void {
     model_ui_index: selectedIndex + 1,
     model_ui_total: DEVICE_MODE_OPTIONS.length,
     model_ui_active: isActive,
-    text: "Click: siguiente · Mantén: elegir",
+    text: "Click: siguiente\nMantén: elegir",
   });
 }
 

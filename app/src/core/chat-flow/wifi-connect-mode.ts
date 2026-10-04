@@ -115,7 +115,7 @@ async function renderView(): Promise<void> {
       model_ui_label: status.ssid,
       model_ui_description: `Clave: ${status.password}`,
       model_ui_qr_path: qrPath,
-      text: `Uní tu teléfono a "${status.ssid}" · Click: QR de la web · Mantén: desactivar`,
+      text: `Conecta tu teléfono a "${status.ssid}" · Click: QR de la web · Mantén: desactivar`,
     });
   } else {
     const qrPath = await generateApUrlQrFile(status).catch((err) => {
@@ -126,10 +126,10 @@ async function renderView(): Promise<void> {
     display({
       model_ui: "network",
       model_ui_title: "WIFI DIRECTO",
-      model_ui_label: "Abrí la web",
+      model_ui_label: "Abre la web",
       model_ui_description: status.url,
       model_ui_qr_path: qrPath,
-      text: "Escaneá para abrir la web · Click: QR del wifi · Mantén: desactivar",
+      text: "Escanea para abrir la web · Click: QR del wifi · Mantén: desactivar",
     });
   }
 }

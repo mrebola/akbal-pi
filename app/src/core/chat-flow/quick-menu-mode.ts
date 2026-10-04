@@ -1,4 +1,7 @@
 import { display } from "../../device/display";
+import { isAgentMode } from "../../config/device-mode";
+import { getApStatus } from "../../utils/access-point";
+import { getWifiStatus } from "../../utils/wifi";
 
 // Entry point for everything that used to need its own gesture (a double
 // click for the camera, a specific phrase for the model/mode menus) — a
@@ -13,6 +16,7 @@ export type QuickMenuKey =
   | "help"
   | "camera"
   | "volume"
+  | "wifi_saved"
   | "wifi_connect"
   | "network"
   | "wifiradar"
@@ -24,28 +28,28 @@ export type QuickMenuKey =
 
 type QuickMenuItem = { key: QuickMenuKey; label: string; description: string };
 
-// Order: IA (model/mode) → audio/media (grouped together — volume used to
-// sit apart from audio_output/jukebox with help/camera in between, for no
-// real reason) → utilidades personales (help/camera) → red y radares
-// (wifi_connect...wardrive). Labels match the web admin's naming for the
-// same feature 1:1 (see app/web/admin/i18n/es.json's topbar.* and
-// settings.general.ap_* keys) — they used to drift (e.g. "Wifi connect"
-// here vs. "WiFi directo (punto de acceso)" on the web for the same AP
-// toggle), which reads as two different features when it's one.
+// Order: conectar a wifi first (the everyday action), then modo, WiFi directo
+// and wardrive, then the rest in any order, DOOM second-to-last and "Acerca
+// de" last. Labels match the web admin's naming for the same feature 1:1
+// (see app/web/admin/i18n/es.json's topbar.* and settings.general.ap_* keys)
+// — they used to drift (e.g. "Wifi connect" here vs. "WiFi directo (punto de
+// acceso)" on the web for the same AP toggle), which reads as two different
+// features when it's one.
 const BASE_ITEMS: QuickMenuItem[] = [
+  { key: "wifi_saved", label: "Conectar a wifi", description: "Redes guardadas" },
+  { key: "mode", label: "Modo", description: "Agente o local" },
+  { key: "wifi_connect", label: "WiFi directo", description: "Red propia de la Pi" },
+  { key: "wardrive", label: "Wardrive", description: "Captura en el auto + GPS" },
   { key: "model", label: "Modelo", description: "Elegir modelo de IA" },
-  { key: "mode", label: "Modo", description: "Agente u local" },
   { key: "audio_output", label: "Audio", description: "Bocina Pi o bluetooth" },
   { key: "jukebox", label: "OST", description: "OST de Cypher" },
   { key: "volume", label: "Volumen", description: "Subir/bajar el sonido" },
   { key: "help", label: "Ayuda", description: "Comandos de voz" },
   { key: "camera", label: "Cámara", description: "Tomar una foto" },
-  { key: "wifi_connect", label: "WiFi directo", description: "Conectate directo por wifi" },
   { key: "network", label: "Conexión web", description: "IP, tailscale y QR" },
   { key: "wifiradar", label: "WiFi Radar", description: "Ver redes cercanas" },
   { key: "aircraft_radar", label: "Radar de Aviones", description: "Ver tráfico aéreo cercano" },
-  { key: "wardrive", label: "Wardrive", description: "Captura en el auto + GPS" },
-  { key: "doom", label: "DOOM", description: "Juega DOOM con tu celular" },
+  { key: "doom", label: "DOOM", description: "Jugar DOOM con tu celular" },
   { key: "about", label: "Acerca de", description: "Cypher404: El Manifiesto" },
 ];
 
@@ -91,18 +95,63 @@ function currentItem(): QuickMenuItem {
   return items[selectedIndex];
 }
 
+// Live state shown on the card, so an item says what it is doing right now
+// ("● Activo" + detail) instead of only what it is. Read asynchronously when
+// the menu opens (see refreshItemStatus) — the card never waits for it.
+const itemState = {
+  apOn: false,
+  apSsid: "",
+  wifiSsid: null as string | null,
+};
+let inMenu = false;
+
+type ItemStatus = { description: string; active: boolean };
+
+function statusOf(item: QuickMenuItem): ItemStatus {
+  if (item.key === "mode") {
+    return { description: `Ahora: ${isAgentMode() ? "agente" : "local"}`, active: false };
+  }
+  if (item.key === "wifi_connect") {
+    return itemState.apOn
+      ? { description: `Encendido · ${itemState.apSsid}`, active: true }
+      : { description: item.description, active: false };
+  }
+  if (item.key === "wifi_saved" && itemState.wifiSsid) {
+    return { description: "Conectada", active: true };
+  }
+  return { description: item.description, active: false };
+}
+
+async function refreshItemStatus(): Promise<void> {
+  try {
+    const ap = await getApStatus();
+    itemState.apOn = ap.active;
+    itemState.apSsid = ap.ssid;
+  } catch (err) {
+    console.warn("[quick-menu] AP status failed:", err);
+  }
+  try {
+    const wifi = await getWifiStatus();
+    itemState.wifiSsid = wifi.connected ? wifi.ssid : null;
+  } catch (err) {
+    console.warn("[quick-menu] wifi status failed:", err);
+  }
+  if (inMenu) renderScreen();
+}
+
 function renderScreen(): void {
   const item = currentItem();
+  const state = statusOf(item);
   display({
     status: "quick_menu",
     model_ui: "select",
     model_ui_title: "MENÚ",
     model_ui_label: item.label,
-    model_ui_description: item.description,
+    model_ui_description: state.description,
     model_ui_index: selectedIndex + 1,
     model_ui_total: items.length,
-    model_ui_active: false,
-    text: "Click: siguiente · Mantén: elegir",
+    model_ui_active: state.active,
+    text: "Click: siguiente\nMantén: elegir",
   });
 }
 
@@ -110,6 +159,7 @@ export function resetQuickMenuControl(): void {
   clearHoldTimers();
   clearIdleTimer();
   pressStartedAt = 0;
+  inMenu = false;
 }
 
 export function onQuickMenuConfirm(callback: (key: QuickMenuKey) => void): void {
@@ -136,8 +186,10 @@ export function enterQuickMenuMode(enableCamera: boolean): void {
   resetQuickMenuControl();
   items = enableCamera ? BASE_ITEMS : BASE_ITEMS.filter((i) => i.key !== "camera");
   selectedIndex = 0;
+  inMenu = true;
   renderScreen();
   armIdleTimer();
+  void refreshItemStatus();
 }
 
 export function handleQuickMenuPress(): void {
@@ -151,7 +203,7 @@ export function handleQuickMenuPress(): void {
       model_ui: "confirm",
       model_ui_title: "MENÚ",
       model_ui_label: currentItem().label,
-      model_ui_description: currentItem().description,
+      model_ui_description: statusOf(currentItem()).description,
       model_ui_percent: percent,
       text: "Manteniendo presionado...",
     });

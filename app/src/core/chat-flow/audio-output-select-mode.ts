@@ -88,7 +88,7 @@ function renderSelectScreen(): void {
     model_ui_index: selectedIndex + 1,
     model_ui_total: options.length,
     model_ui_active: isActive,
-    text: "Click: siguiente · Mantén: elegir",
+    text: "Click: siguiente\nMantén: elegir",
   });
 }
 

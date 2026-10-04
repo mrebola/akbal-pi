@@ -60,7 +60,7 @@ async function renderScreen(): Promise<void> {
     model_ui_label: shortHost,
     model_ui_description: info.lanIp ? `${info.lanIp}:${WEB_ADMIN_PORT}` : "",
     model_ui_qr_path: qrPath,
-    text: `Abrí ${info.url} desde tu navegador · Mantén: salir`,
+    text: `Abre ${info.url} desde tu navegador · Mantén: salir`,
   });
 }
 

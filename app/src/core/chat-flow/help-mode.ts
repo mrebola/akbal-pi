@@ -84,7 +84,7 @@ function renderScreen(): void {
     help_ui_body: body,
     help_ui_page: pageIndex + 1,
     help_ui_total: PAGES.length,
-    text: "Click: siguiente · Mantén: salir",
+    text: "Click: siguiente\nMantén: salir",
   });
 }
 

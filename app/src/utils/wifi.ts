@@ -247,6 +247,21 @@ export async function connectToWifi(
   }
 }
 
+// Every saved (known) network, in range or not — a saved profile that isn't
+// in the scan keeps signal 0 so the caller can tell "out of range" apart from
+// a weak signal. The active one goes first, then strongest signal.
+export async function listSavedWifiNetworks(): Promise<WifiNetwork[]> {
+  const [profiles, scan] = await Promise.all([listWifiConnectionProfiles(), scanWifiNetworks()]);
+  const inRange = new Map(scan.map((n) => [n.ssid, n]));
+  const saved: WifiNetwork[] = profiles.map(({ ssid }) => {
+    const seen = inRange.get(ssid);
+    return seen
+      ? { ...seen, saved: true }
+      : { ssid, signal: 0, secure: true, saved: true, active: false };
+  });
+  return saved.sort((a, b) => Number(b.active) - Number(a.active) || b.signal - a.signal);
+}
+
 export async function forgetWifi(ssid: string): Promise<{ ok: boolean; error?: string }> {
   try {
     const connectionName = (await findWifiConnectionName(ssid)) || ssid;

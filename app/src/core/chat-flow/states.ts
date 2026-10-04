@@ -100,6 +100,14 @@ import {
   onWifiConnectExit,
 } from "./wifi-connect-mode";
 import {
+  enterWifiSavedMode,
+  handleWifiSavedDoubleClick,
+  handleWifiSavedPress,
+  handleWifiSavedRelease,
+  onWifiSavedExit,
+  resetWifiSavedControl,
+} from "./wifi-saved-mode";
+import {
   enterNetworkInfoMode,
   handleNetworkInfoDoubleClick,
   handleNetworkInfoPress,
@@ -301,7 +309,7 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       ...(getCurrentStatus().text.endsWith("Escuchando...") ||
       getCurrentStatus().text.includes("Mantén:") ||
       !getCurrentStatus().text
-        ? { text: "Click: menú · Mantén: hablar" }
+        ? { text: "Click: menú\nMantén: hablar" }
         : {}),
     });
   },
@@ -329,6 +337,10 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       }
       if (key === "volume") {
         ctx.transitionTo("volume_adjust");
+        return;
+      }
+      if (key === "wifi_saved") {
+        ctx.transitionTo("wifi_saved");
         return;
       }
       if (key === "wifi_connect") {
@@ -1340,6 +1352,18 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     onButtonPressed(() => handleVolumeAdjustPress());
     onButtonReleased(() => handleVolumeAdjustRelease());
     enterVolumeAdjustMode();
+  },
+  wifi_saved: (ctx: ChatFlowContext) => {
+    onWifiSavedExit(() => {
+      resetWifiSavedControl();
+      if (ctx.currentFlowName === "wifi_saved") {
+        ctx.transitionTo("sleep");
+      }
+    });
+    onButtonDoubleClick(() => handleWifiSavedDoubleClick());
+    onButtonPressed(() => handleWifiSavedPress());
+    onButtonReleased(() => handleWifiSavedRelease());
+    void enterWifiSavedMode();
   },
   wifi_connect: (ctx: ChatFlowContext) => {
     onWifiConnectExit(() => {

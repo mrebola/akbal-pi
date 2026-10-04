@@ -25,6 +25,7 @@ export type FlowName =
   | "quick_menu"
   | "volume_adjust"
   | "wifi_connect"
+  | "wifi_saved"
   | "network_info"
   | "wifi_radar"
   | "aircraft_radar"

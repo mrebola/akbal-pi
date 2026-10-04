@@ -30,11 +30,27 @@ export function fluidsynthOnPath(): boolean {
   return false;
 }
 
+export const MISSING_SOUNDFONT = "Falta el soundfont: corre scripts/fetch-doom-soundfont.sh";
+export const MISSING_FLUIDSYNTH = "Falta fluidsynth: instálalo en la Pi";
+export const MUSIC_STOPPED = "La música se detuvo";
+
+// A looped song that ends faster than this is treated as broken. One quick
+// relaunch is allowed; the next quick end stops the music until the next song.
+const FAST_EXIT_MS = 2000;
+
 interface Song {
   path: string;
   loop: boolean;
   proc: MusicProcess | null;
   paused: boolean;
+  startedAt: number;
+  fastExits: number;
+}
+
+function spawnMessage(err: Error): string {
+  return (err as NodeJS.ErrnoException).code === "ENOENT"
+    ? MISSING_FLUIDSYNTH
+    : `fluidsynth no arrancó: ${err.message}`;
 }
 
 // One player per engine run. Every process is spawned asynchronously and never
@@ -48,8 +64,18 @@ export class MusicPlayer {
     private spawn: SpawnMusic,
     private soundfont: string | null,
     hasFluidsynth: () => boolean = fluidsynthOnPath,
+    // Told once per reason music is off or stops; the game keeps running.
+    private onError?: (message: string) => void,
   ) {
-    this.ok = soundfont !== null && fs.existsSync(soundfont) && hasFluidsynth();
+    if (soundfont === null || !fs.existsSync(soundfont)) {
+      this.ok = false;
+      this.report(MISSING_SOUNDFONT);
+    } else if (!hasFluidsynth()) {
+      this.ok = false;
+      this.report(MISSING_FLUIDSYNTH);
+    } else {
+      this.ok = true;
+    }
   }
 
   available(): boolean {
@@ -67,7 +93,7 @@ export class MusicPlayer {
     switch (msg.kind) {
       case "song":
         this.stopProcess();
-        this.song = { path: msg.path, loop: msg.loop, proc: null, paused: false };
+        this.song = { path: msg.path, loop: msg.loop, proc: null, paused: false, startedAt: 0, fastExits: 0 };
         this.launch(this.song);
         return;
       case "stop":
@@ -101,30 +127,37 @@ export class MusicPlayer {
       proc = this.spawn("fluidsynth", fluidsynthArgs(this.soundfont, s.path, this.gain));
     } catch (err) {
       this.ok = false;
-      console.warn(`[DOOM music] no se pudo lanzar fluidsynth: ${(err as Error).message}`);
+      this.report(spawnMessage(err as Error));
       return;
     }
     s.proc = proc;
+    s.startedAt = Date.now();
     proc.onExit((code, error) => {
       // A stale exit (song replaced or stopped) must not touch the current song.
       if (this.song !== s || s.proc !== proc) return;
       s.proc = null;
       if (error) {
         this.ok = false;
-        console.warn(`[DOOM music] fluidsynth no arrancó: ${error.message}`);
+        this.report(spawnMessage(error));
         return;
       }
       if (s.paused) {
         s.paused = false;
-        console.warn("[DOOM music] la música terminó mientras estaba en pausa; no se reinicia");
+        this.report("La música terminó mientras estaba en pausa; no se reinicia");
         return;
       }
       // Only a clean end loops. A crash is not retried, so it cannot spin.
       if (code !== 0) {
-        console.warn(`[DOOM music] fluidsynth terminó con código ${code}; sin música`);
+        this.report(`${MUSIC_STOPPED}: fluidsynth terminó con código ${code}`);
         return;
       }
-      if (s.loop) this.launch(s);
+      if (!s.loop) return;
+      s.fastExits = Date.now() - s.startedAt < FAST_EXIT_MS ? s.fastExits + 1 : 0;
+      if (s.fastExits > 1) {
+        this.report(`${MUSIC_STOPPED}: la canción termina sin parar`);
+        return;
+      }
+      this.launch(s);
     });
   }
 
@@ -137,6 +170,11 @@ export class MusicPlayer {
     if (s.paused) this.signal(proc, "SIGCONT");
     s.paused = false;
     this.signal(proc, "SIGTERM");
+  }
+
+  private report(message: string): void {
+    this.onError?.(message);
+    console.warn(`[DOOM music] ${message}`);
   }
 
   // Returns false if the process is already gone; the exit handler covers that.

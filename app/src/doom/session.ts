@@ -3,6 +3,7 @@ import { ControlTokens } from "./tokens";
 import { ControllerLock } from "./control";
 import { DoomKey, KEY_CODES } from "./keymap";
 import { VOLUME_DEFAULT, clampVolume, gainFor } from "./volume";
+import { loadVolume, saveVolume } from "./settings-store";
 import { parseControlLine, type ControlMessage } from "./audio-out";
 import { StringDecoder } from "node:string_decoder";
 import type { Readable, Writable } from "node:stream";
@@ -30,6 +31,8 @@ export interface DoomState {
   error: string | null;
   // Set when the sound is off; the game itself keeps running.
   audioError: string | null;
+  // Set when the music is off or stopped; the game itself keeps running.
+  musicError: string | null;
   owner: DoomOwner;
 }
 
@@ -43,7 +46,11 @@ export interface DoomSessionDeps {
   // onError reports a sink that failed on its own, shown in the state.
   openAudio?: (onError: (message: string) => void) => AudioSink;
   // Optional, like openAudio: one music player per engine run, fed by fd 4.
-  openMusic?: () => MusicSink;
+  // onError reports why the player cannot run, or that it stopped.
+  openMusic?: (onError: (message: string) => void) => MusicSink;
+  // Optional: where settings.json lives. Without it the volume is not kept
+  // between engine runs.
+  settingsDir?: string;
 }
 
 const ENGINE_STOPPED = "El motor de DOOM se detuvo.";
@@ -70,6 +77,7 @@ export class DoomSession {
   private reader = new FrameReader();
   private error: string | null = null;
   private audioError: string | null = null;
+  private musicError: string | null = null;
   private ownerValue: DoomOwner = null;
   private volumeValue = VOLUME_DEFAULT;
   private frameListeners = new Set<(rgb565: Buffer) => void>();
@@ -94,6 +102,8 @@ export class DoomSession {
     }
     this.error = null;
     this.audioError = null;
+    this.musicError = null;
+    if (this.deps.settingsDir) this.volumeValue = loadVolume(this.deps.settingsDir);
     this.reader = new FrameReader();
     const engine = this.deps.spawnEngine();
     this.engine = engine;
@@ -103,7 +113,11 @@ export class DoomSession {
       this.emitState();
     }) ?? null;
     this.audio?.start();
-    this.music = this.deps.openMusic?.() ?? null;
+    this.music = this.deps.openMusic?.((message) => {
+      if (this.engine !== engine) return;
+      this.musicError = message;
+      this.emitState();
+    }) ?? null;
     this.music?.setGain(gainFor(this.volumeValue));
     engine.stdout.on("data", (chunk: Buffer) => {
       for (const frame of this.reader.push(chunk)) {
@@ -174,6 +188,7 @@ export class DoomSession {
   // The engine scales its own sound effects; music gain is applied in Node.
   setVolume(value: number): void {
     this.volumeValue = clampVolume(value);
+    this.persistVolume();
     if (this.engine) this.send(this.engine, `volume ${this.volumeValue}`);
     this.music?.setGain(gainFor(this.volumeValue));
     this.emitState();
@@ -230,6 +245,7 @@ export class DoomSession {
       controller: this.deps.lock.holder() !== null,
       error: this.error,
       audioError: this.audioError,
+      musicError: this.musicError,
       owner: this.ownerValue,
     };
   }
@@ -275,6 +291,17 @@ export class DoomSession {
     const sink = this.audio;
     this.audio = null;
     sink?.stop();
+  }
+
+  // A failed write must not stop the game; the volume still applies this run.
+  private persistVolume(): void {
+    const dir = this.deps.settingsDir;
+    if (!dir) return;
+    try {
+      saveVolume(dir, this.volumeValue);
+    } catch (err) {
+      console.warn(`[DOOM] no se pudo guardar el volumen: ${(err as Error).message}`);
+    }
   }
 
   private stopMusic(): void {

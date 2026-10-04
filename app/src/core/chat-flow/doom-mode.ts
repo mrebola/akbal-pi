@@ -18,9 +18,11 @@ import { getApStatus } from "../../utils/access-point";
 const APP_DIR = path.resolve(__dirname, "../../..");
 const DOOM_ENGINE_BIN = path.join(APP_DIR, "doom", "bin", "doom-engine");
 // Absolute on purpose: the engine runs with cwd=APP_DIR, so a relative override would break.
-const DOOM_WAD = path.resolve(process.env.DOOM_WAD_DIR || path.join(APP_DIR, "data", "doom"), "freedoom1.wad");
+// Data the DOOM runtime keeps: WAD, soundfont and settings.json.
+const DOOM_DATA_DIR = path.resolve(process.env.DOOM_WAD_DIR || path.join(APP_DIR, "data", "doom"));
+const DOOM_WAD = path.join(DOOM_DATA_DIR, "freedoom1.wad");
 // Optional: without it the game runs silent. scripts/fetch-doom-soundfont.sh puts it here.
-const DOOM_SOUNDFONT = path.resolve(process.env.DOOM_WAD_DIR || path.join(APP_DIR, "data", "doom"), "soundfont.sf2");
+const DOOM_SOUNDFONT = path.join(DOOM_DATA_DIR, "soundfont.sf2");
 
 const CONFIRM_HOLD_MS = 900;
 const HOLD_TICK_MS = 60;
@@ -172,7 +174,8 @@ export const doomSession = new DoomSession({
   binaryExists: () => fs.existsSync(DOOM_ENGINE_BIN),
   wadExists: () => fs.existsSync(DOOM_WAD),
   openAudio: (onError) => new AudioOut(spawnAplay, onError),
-  openMusic: () => new MusicPlayer(spawnFluidsynth, DOOM_SOUNDFONT),
+  openMusic: (onError) => new MusicPlayer(spawnFluidsynth, DOOM_SOUNDFONT, undefined, onError),
+  settingsDir: DOOM_DATA_DIR,
 });
 
 let unsubscribers: Array<() => void> = [];

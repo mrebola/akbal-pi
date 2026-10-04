@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PassThrough } from "node:stream";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { DoomSession, EngineProcess } from "./session";
 import { ControlTokens } from "./tokens";
 import { ControllerLock } from "./control";
@@ -444,4 +447,53 @@ test("the music gain follows the volume, for the next song started", () => {
   session.start();
   session.setVolume(35);
   assert.deepEqual(players[0].gains, [VOLUME_DEFAULT / 100, 0.35]);
+});
+
+test("the volume is saved on change and loaded on the next start", async () => {
+  const settingsDir = mkdtempSync(join(tmpdir(), "doom-session-"));
+  const first = makeSession({ settingsDir });
+  first.session.start();
+  first.session.setVolume(40);
+  const second = makeSession({ settingsDir });
+  second.session.start();
+  await nextTick();
+  assert.equal(second.session.volume(), 40);
+  assert.match(second.fake.written.join(""), /^volume 40\n/);
+});
+
+test("a missing volume file starts at the default and writes one", () => {
+  const settingsDir = mkdtempSync(join(tmpdir(), "doom-session-"));
+  const { session } = makeSession({ settingsDir });
+  session.start();
+  assert.equal(session.volume(), VOLUME_DEFAULT);
+  assert.equal(JSON.parse(readFileSync(join(settingsDir, "settings.json"), "utf8")).volume, VOLUME_DEFAULT);
+});
+
+test("a music player that cannot run shows its reason in the state, and the game keeps running", () => {
+  const reason = "Falta fluidsynth: instálalo en la Pi";
+  const { session } = makeSession({
+    openMusic: (onError) => {
+      onError(reason);
+      return { handle: () => {}, setGain: () => {}, stop: () => {} };
+    },
+  });
+  session.start();
+  assert.equal(session.state().running, true);
+  assert.equal(session.state().musicError, reason);
+});
+
+test("musicError is cleared when the engine starts again", () => {
+  let fail = true;
+  const { session } = makeSession({
+    openMusic: (onError) => {
+      if (fail) onError("Falta el soundfont: corre scripts/fetch-doom-soundfont.sh");
+      return { handle: () => {}, setGain: () => {}, stop: () => {} };
+    },
+  });
+  session.start();
+  assert.notEqual(session.state().musicError, null);
+  session.stop();
+  fail = false;
+  session.start();
+  assert.equal(session.state().musicError, null);
 });

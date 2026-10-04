@@ -3,7 +3,14 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fluidsynthArgs, MusicPlayer, type MusicProcess } from "./music";
+import {
+  fluidsynthArgs,
+  MusicPlayer,
+  type MusicProcess,
+  MISSING_FLUIDSYNTH,
+  MISSING_SOUNDFONT,
+  MUSIC_STOPPED,
+} from "./music";
 
 test("fluidsynth plays one MIDI file through the shared ALSA default, with gain", () => {
   assert.deepEqual(fluidsynthArgs("/s.sf2", "/m.mid", 0.6), [
@@ -146,4 +153,50 @@ test("a spawn that throws leaves the game running with music off", () => {
   const player = new MusicPlayer(fake.spawn, soundfont(), () => true);
   assert.doesNotThrow(() => player.handle({ kind: "song", path: "/a.mid", loop: true }));
   assert.equal(player.available(), false);
+});
+
+test("missing fluidsynth reports the install hint and never spawns", () => {
+  const fake = fakeSpawn();
+  const errors: string[] = [];
+  const player = new MusicPlayer(fake.spawn, soundfont(), () => false, (m) => errors.push(m));
+  player.handle({ kind: "song", path: "/a.mid", loop: true });
+  assert.deepEqual(errors, [MISSING_FLUIDSYNTH]);
+  assert.equal(fake.launches.length, 0);
+  assert.equal(player.available(), false);
+});
+
+test("missing soundfont reports the download hint", () => {
+  const errors: string[] = [];
+  new MusicPlayer(fakeSpawn().spawn, null, () => true, (m) => errors.push(m));
+  assert.deepEqual(errors, [MISSING_SOUNDFONT]);
+});
+
+test("fluidsynth that is not found at launch reports the install hint", () => {
+  const fake = fakeSpawn();
+  const errors: string[] = [];
+  const player = new MusicPlayer(fake.spawn, soundfont(), () => true, (m) => errors.push(m));
+  player.handle({ kind: "song", path: "/a.mid", loop: false });
+  const enoent = Object.assign(new Error("spawn fluidsynth ENOENT"), { code: "ENOENT" });
+  fake.launches[0].exit(null, enoent);
+  assert.deepEqual(errors, [MISSING_FLUIDSYNTH]);
+});
+
+test("a spawn that throws reports its own error", () => {
+  const errors: string[] = [];
+  const player = new MusicPlayer(fakeSpawn(new Error("EACCES")).spawn, soundfont(), () => true, (m) => errors.push(m));
+  player.handle({ kind: "song", path: "/a.mid", loop: false });
+  assert.deepEqual(errors, ["fluidsynth no arrancó: EACCES"]);
+});
+
+test("two quick ends in a row: one relaunch, then the music stops and says so", () => {
+  const fake = fakeSpawn();
+  const errors: string[] = [];
+  const player = new MusicPlayer(fake.spawn, soundfont(), () => true, (m) => errors.push(m));
+  player.handle({ kind: "song", path: "/loop.mid", loop: true });
+  fake.launches[0].exit(0);
+  assert.equal(fake.launches.length, 2, "first quick end relaunches once");
+  fake.launches[1].exit(0);
+  assert.equal(fake.launches.length, 2, "second quick end does not relaunch");
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], new RegExp(`^${MUSIC_STOPPED}`));
 });

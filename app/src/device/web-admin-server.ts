@@ -127,13 +127,19 @@ import {
 import { getGpsStatus, geocodePoint } from "../utils/gps";
 import { getGnssSnapshot, getGnssHistory } from "../services/gnss/service";
 import { setPlatformMode, getPlatformMode } from "../utils/platform-mode";
+import { doomSession, resolveDoomScreenUrl } from "../core/chat-flow/doom-mode";
+import { attachDoomSocket } from "./doom-routes";
 
 const SESSION_COOKIE = "akbal_session";
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days — a LAN admin
 // page for a single household device, not worth re-logging-in constantly for.
 // Paths reachable with no session at all — just enough to render and submit
 // the login form itself.
-const PUBLIC_PATHS = new Set(["/login", "/login.html", "/api/login"]);
+// The DOOM page is public: a phone that scans the QR has no admin session.
+// Its control socket (/ws/doom) is also public; the control token is checked
+// on "claim" in doom-routes.ts, not here.
+const PUBLIC_PATHS = new Set(["/login", "/login.html", "/api/login", "/doom", "/doom.js", "/doom.css"]);
+const DOOM_WS_PATH = "/ws/doom";
 // WIFIRADAR broadcasts a snapshot to every connected client on this cadence
 // — 2-4Hz per the spec, not per-packet, which is most of what keeps this
 // cheap: the aggregator can ingest hundreds of frames/sec while the network
@@ -152,6 +158,10 @@ export class WebAdminServer {
   private app: Koa;
   private server: http.Server | null = null;
   private wss: WebSocketServer | null = null;
+  private doomWss: WebSocketServer | null = null;
+  // Last resolved DOOM screen URL (Tailscale, AP or LAN). Refreshed on every
+  // /ws/doom upgrade, because attachDoomSocket reads it synchronously.
+  private doomUrl = "";
   private port: number;
   private username: string;
   private password: string;
@@ -242,6 +252,18 @@ export class WebAdminServer {
       ctx.set("Cache-Control", "no-store");
       ctx.type = "text/html";
       ctx.body = fs.createReadStream(path.resolve(__dirname, "../..", "web", "admin", "login.html"));
+    });
+
+    // Public (see PUBLIC_PATHS). Answers 404 until doom.html exists (Task 9).
+    router.get("/doom", (ctx) => {
+      const file = path.resolve(__dirname, "../..", "web", "admin", "doom.html");
+      if (!fs.existsSync(file)) {
+        ctx.status = 404;
+        return;
+      }
+      ctx.set("Cache-Control", "no-store");
+      ctx.type = "text/html";
+      ctx.body = fs.createReadStream(file);
     });
 
     router.post("/api/login", (ctx) => {
@@ -2336,10 +2358,33 @@ export class WebAdminServer {
     // checked, since a WebSocket upgrade request never goes through Koa.
     const WS_PATHS = ["/wifiradar/ws", "/aircraft-radar/ws"];
     this.wss = new WebSocketServer({ noServer: true });
+    // Separate server so the radar 'connection' handler below never sees DOOM
+    // sockets. Attached once: start() can run again after stop(), and a second
+    // attach would double the session listeners.
+    if (!this.doomWss) {
+      this.doomWss = new WebSocketServer({ noServer: true });
+      attachDoomSocket(this.doomWss, doomSession, () => this.doomUrl);
+    }
     this.server.on("upgrade", (req, socket, head) => {
       // req.url can carry a query string (/wifiradar/ws?fullMac=1) — strip it
       // for the path check or the upgrade is rejected and the socket dies.
       const pathname = (req.url || "").split("?")[0];
+      if (pathname === DOOM_WS_PATH) {
+        // No session cookie here: the phone on the DOOM QR page has no admin
+        // login. The token is checked on the "claim" message instead.
+        const doomWss = this.doomWss!;
+        resolveDoomScreenUrl(this.port)
+          .then((url) => {
+            this.doomUrl = url;
+          })
+          .catch(() => {})
+          .then(() => {
+            doomWss.handleUpgrade(req, socket, head, (ws) => {
+              doomWss.emit("connection", ws, req);
+            });
+          });
+        return;
+      }
       if (!WS_PATHS.includes(pathname) || !this.isValidSessionCookie(req.headers.cookie)) {
         socket.destroy();
         return;

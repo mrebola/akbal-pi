@@ -74,3 +74,64 @@ test("AudioOut survives a spawn that throws: start does not throw and writes are
   assert.doesNotThrow(() => out.start());
   assert.doesNotThrow(() => out.write(Buffer.from([1])));
 });
+
+test("write drops chunks once aplay has 64 KiB unread, counts them, and warns once", () => {
+  const stdin = new PassThrough();
+  let queued = 0;
+  Object.defineProperty(stdin, "writableLength", { get: () => queued });
+  let writes = 0;
+  const realWrite = stdin.write.bind(stdin);
+  stdin.write = ((chunk: any, ...rest: any[]) => { writes++; return realWrite(chunk, ...rest); }) as any;
+  const warns: string[] = [];
+  const realWarn = console.warn;
+  console.warn = (m: unknown) => { warns.push(String(m)); };
+  try {
+    const out = new AudioOut(() => ({ stdin, kill: () => {}, onExit: () => {} }));
+    out.start();
+    out.write(Buffer.alloc(100));
+    assert.equal(writes, 1, "under the cap the chunk is written");
+    queued = 64 * 1024 + 1;
+    out.write(Buffer.alloc(100));
+    out.write(Buffer.alloc(100));
+    assert.equal(writes, 1, "over the cap the chunk is dropped, not queued");
+    assert.equal(out.dropped, 2);
+    assert.equal(warns.length, 1, "the first drop warns, later ones stay quiet");
+    queued = 0;
+    out.write(Buffer.alloc(100));
+    assert.equal(writes, 2, "writes resume once aplay catches up");
+  } finally {
+    console.warn = realWarn;
+  }
+});
+
+test("a failing aplay reports a message through onError (spawn throw, then exit)", () => {
+  const errors: string[] = [];
+  const throwing = new AudioOut(() => { throw new Error("ENOENT"); }, (m) => errors.push(m));
+  throwing.start();
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /aplay/);
+
+  const realWarn = console.warn;
+  console.warn = () => {};
+  try {
+    const exits: Array<() => void> = [];
+    const later: string[] = [];
+    const out = new AudioOut(() => ({ stdin: new PassThrough(), kill: () => {}, onExit: (cb) => exits.push(cb) }), (m) => later.push(m));
+    out.start();
+    exits[0]();
+    assert.equal(later.length, 1);
+    assert.match(later[0], /aplay/);
+  } finally {
+    console.warn = realWarn;
+  }
+});
+
+test("an intentional stop does not report an error", () => {
+  const errors: string[] = [];
+  const exits: Array<() => void> = [];
+  const out = new AudioOut(() => ({ stdin: new PassThrough(), kill: () => {}, onExit: (cb) => exits.push(cb) }), (m) => errors.push(m));
+  out.start();
+  out.stop();
+  exits[0]();
+  assert.deepEqual(errors, []);
+});

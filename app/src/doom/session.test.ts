@@ -354,3 +354,49 @@ test("AudioOut behind the session: PCM reaches aplay's stdin, and a missing apla
   });
   assert.equal(missing.session.start().ok, true, "a missing aplay must not fail the engine start");
 });
+
+test("if aplay cannot start, the state says so and the game keeps running", () => {
+  const { AudioOut } = require("./audio-out") as typeof import("./audio-out");
+  const { session } = makeSession({
+    openAudio: (onError) => new AudioOut(() => { throw new Error("ENOENT"); }, onError),
+  });
+  assert.equal(session.start().ok, true);
+  assert.equal(session.state().running, true);
+  assert.match(session.state().audioError ?? "", /aplay/);
+});
+
+test("an aplay that dies mid-run sets audioError and the engine keeps running", () => {
+  const { AudioOut } = require("./audio-out") as typeof import("./audio-out");
+  const realWarn = console.warn;
+  console.warn = () => {};
+  try {
+    const exits: Array<() => void> = [];
+    const { session } = makeSession({
+      openAudio: (onError) => new AudioOut(() => ({ stdin: new PassThrough(), kill: () => {}, onExit: (cb) => exits.push(cb) }), onError),
+    });
+    session.start();
+    assert.equal(session.state().audioError, null);
+    exits[0]();
+    assert.equal(session.state().running, true);
+    assert.match(session.state().audioError ?? "", /aplay/);
+  } finally {
+    console.warn = realWarn;
+  }
+});
+
+test("audioError is cleared when the engine starts again", () => {
+  const { AudioOut } = require("./audio-out") as typeof import("./audio-out");
+  let calls = 0;
+  const { session } = makeSession({
+    openAudio: (onError) => {
+      calls++;
+      if (calls === 1) return new AudioOut(() => { throw new Error("ENOENT"); }, onError);
+      return { start: () => {}, write: () => {}, stop: () => {} };
+    },
+  });
+  session.start();
+  assert.notEqual(session.state().audioError, null);
+  session.stop();
+  session.start();
+  assert.equal(session.state().audioError, null);
+});

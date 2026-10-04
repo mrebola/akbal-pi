@@ -28,6 +28,8 @@ export interface DoomState {
   running: boolean;
   controller: boolean;
   error: string | null;
+  // Set when the sound is off; the game itself keeps running.
+  audioError: string | null;
   owner: DoomOwner;
 }
 
@@ -38,7 +40,8 @@ export interface DoomSessionDeps {
   binaryExists: () => boolean;
   wadExists: () => boolean;
   // Optional: without it the game runs silent (tests, or no audio device).
-  openAudio?: () => AudioSink;
+  // onError reports a sink that failed on its own, shown in the state.
+  openAudio?: (onError: (message: string) => void) => AudioSink;
 }
 
 const ENGINE_STOPPED = "El motor de DOOM se detuvo.";
@@ -57,6 +60,7 @@ export class DoomSession {
   private engine: EngineProcess | null = null;
   private reader = new FrameReader();
   private error: string | null = null;
+  private audioError: string | null = null;
   private ownerValue: DoomOwner = null;
   private volumeValue = VOLUME_DEFAULT;
   private frameListeners = new Set<(rgb565: Buffer) => void>();
@@ -79,10 +83,15 @@ export class DoomSession {
       return { ok: false, error: "Falta el motor: corre scripts/fetch-doom-engine.sh" };
     }
     this.error = null;
+    this.audioError = null;
     this.reader = new FrameReader();
     const engine = this.deps.spawnEngine();
     this.engine = engine;
-    this.audio = this.deps.openAudio?.() ?? null;
+    this.audio = this.deps.openAudio?.((message) => {
+      if (this.engine !== engine) return;
+      this.audioError = message;
+      this.emitState();
+    }) ?? null;
     this.audio?.start();
     engine.stdout.on("data", (chunk: Buffer) => {
       for (const frame of this.reader.push(chunk)) {
@@ -203,6 +212,7 @@ export class DoomSession {
       running: this.engine !== null,
       controller: this.deps.lock.holder() !== null,
       error: this.error,
+      audioError: this.audioError,
       owner: this.ownerValue,
     };
   }

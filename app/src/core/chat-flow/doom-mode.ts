@@ -153,7 +153,7 @@ export const doomSession = new DoomSession({
   lock: doomLock,
   binaryExists: () => fs.existsSync(DOOM_ENGINE_BIN),
   wadExists: () => fs.existsSync(DOOM_WAD),
-  openAudio: () => new AudioOut(spawnAplay),
+  openAudio: (onError) => new AudioOut(spawnAplay, onError),
 });
 
 let unsubscribers: Array<() => void> = [];

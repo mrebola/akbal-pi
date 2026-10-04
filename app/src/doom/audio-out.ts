@@ -33,13 +33,26 @@ export interface AudioProcess {
 
 export type SpawnAudio = (cmd: string, args: string[]) => AudioProcess;
 
+// About 3 s of S16 at 11025 Hz. Live audio drops a chunk rather than letting
+// the queue to aplay grow without bound in memory.
+export const MAX_PENDING_BYTES = 64 * 1024;
+
 // Owns the aplay process. If aplay dies or cannot start, output stays closed
 // and the game keeps running without sound.
 export class AudioOut {
   private proc: AudioProcess | null = null;
   private closed = false;
+  private droppedChunks = 0;
 
-  constructor(private spawnProcess: SpawnAudio) {}
+  constructor(
+    private spawnProcess: SpawnAudio,
+    // Told once when output dies on its own; not told about a deliberate stop.
+    private onError?: (message: string) => void,
+  ) {}
+
+  get dropped(): number {
+    return this.droppedChunks;
+  }
 
   start(): void {
     if (this.proc || this.closed) return;
@@ -47,22 +60,28 @@ export class AudioOut {
     try {
       proc = this.spawnProcess("aplay", aplayArgs());
     } catch {
-      this.close("[DOOM audio] no se pudo lanzar aplay; el juego sigue sin sonido");
+      this.close("no se pudo lanzar aplay; el juego sigue sin sonido");
       return;
     }
     this.proc = proc;
     // Without a listener a write to a dead aplay would crash the whole process.
-    proc.stdin.on("error", () => this.close("[DOOM audio] aplay dejó de aceptar audio"));
-    proc.onExit(() => this.close("[DOOM audio] aplay terminó"));
+    proc.stdin.on("error", () => this.close("aplay dejó de aceptar audio; el juego sigue sin sonido"));
+    proc.onExit(() => this.close("aplay terminó; el juego sigue sin sonido"));
   }
 
   write(pcm: Buffer): void {
     const proc = this.proc;
     if (!proc || this.closed || !proc.stdin.writable) return;
+    if (proc.stdin.writableLength > MAX_PENDING_BYTES) {
+      if (this.droppedChunks++ === 0) {
+        console.warn("[DOOM audio] aplay va atrasado; se descartan fragmentos de audio");
+      }
+      return;
+    }
     try {
       proc.stdin.write(pcm);
     } catch {
-      this.close("[DOOM audio] no se pudo escribir a aplay");
+      this.close("no se pudo escribir a aplay; el juego sigue sin sonido");
     }
   }
 
@@ -73,9 +92,10 @@ export class AudioOut {
     proc?.kill();
   }
 
-  private close(reason: string): void {
+  private close(message: string): void {
     if (this.closed && !this.proc) return;
-    console.warn(reason);
+    console.warn(`[DOOM audio] ${message}`);
+    this.onError?.(message);
     this.stop();
   }
 }

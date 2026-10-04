@@ -546,7 +546,7 @@
 }
 
 /* Tablets and desktop: the same pad, larger, never taller than the window. */
-@media (min-width: 900px) {
+@media (min-width: 900px) and (min-height: 500px) {
   .doom-page { gap: 16px; padding: 24px; }
   .controls { gap: 12px; }
   .zone { padding: 12px; gap: 10px; }
@@ -584,7 +584,7 @@
    pad keep the layout above. The pad items are placed directly in the page
    grid (display: contents on the wrappers), so the video can span two
    columns. */
-@media (min-width: 900px) {
+@media (min-width: 900px) and (min-height: 500px) {
   html:not(.doom-control) .doom-page {
     grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 0.8fr);
     grid-template-rows: auto auto minmax(0, 1fr) auto auto;

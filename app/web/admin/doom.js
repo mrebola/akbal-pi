@@ -291,9 +291,11 @@
     }
     wasMirror = mirror;
 
-    // The QR is fetched when the game starts, not on every state.
-    if (running !== wasRunning) {
+    // The QR is fetched when the game starts or the owner changes (claimOwner
+    // reissues the token then), never on every state.
+    if (running !== wasRunning || owner !== wasOwner) {
       wasRunning = running;
+      wasOwner = owner;
       if (running) loadQr();
       else showQrMessage();
     }
@@ -307,30 +309,34 @@
   // admin session, and the QR card is hidden on phones by CSS. The image
   // carries the link; the link text itself is never written to the DOM.
   let wasRunning = false;
-  let qrLoading = false;
-  const desktopQuery = window.matchMedia("(min-width: 900px)");
+  let wasOwner = null;
+  // Each request gets a number; only the newest answer is shown, so a slow
+  // reply for an old token cannot overwrite the current one.
+  let qrSeq = 0;
+  // Same breakpoint as the CSS desktop layout (doom.css).
+  const desktopQuery = window.matchMedia("(min-width: 900px) and (min-height: 500px)");
 
   function showQrMessage() {
+    qrSeq += 1;
     qrImg.hidden = true;
     qrImg.removeAttribute("src");
     qrMsgEl.hidden = false;
   }
 
   async function loadQr() {
-    if (controlOnly || !desktopQuery.matches || qrLoading) return;
-    qrLoading = true;
+    if (controlOnly || !desktopQuery.matches) return;
+    const seq = ++qrSeq;
     try {
       const res = await fetch("/api/doom/control-qr", { credentials: "same-origin", cache: "no-store" });
       if (!res.ok) throw new Error(`status ${res.status}`);
       const body = await res.json();
       if (typeof body.qr !== "string" || !body.qr.startsWith("data:image/")) throw new Error("no image");
+      if (seq !== qrSeq) return;
       qrImg.src = body.qr;
       qrImg.hidden = false;
       qrMsgEl.hidden = true;
     } catch {
-      showQrMessage();
-    } finally {
-      qrLoading = false;
+      if (seq === qrSeq) showQrMessage();
     }
   }
 

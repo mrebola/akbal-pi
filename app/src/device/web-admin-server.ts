@@ -140,6 +140,9 @@ const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days — a LAN admin
 // on "claim" in doom-routes.ts, not here.
 const PUBLIC_PATHS = new Set(["/login", "/login.html", "/api/login", "/doom", "/doom.js", "/doom.css"]);
 const DOOM_WS_PATH = "/ws/doom";
+// Tailscale/AP/LAN can change while the admin runs; the cached screen URL
+// follows them without any lookup on the upgrade path.
+const DOOM_URL_REFRESH_MS = 60_000;
 // WIFIRADAR broadcasts a snapshot to every connected client on this cadence
 // — 2-4Hz per the spec, not per-packet, which is most of what keeps this
 // cheap: the aggregator can ingest hundreds of frames/sec while the network
@@ -159,9 +162,10 @@ export class WebAdminServer {
   private server: http.Server | null = null;
   private wss: WebSocketServer | null = null;
   private doomWss: WebSocketServer | null = null;
-  // Last resolved DOOM screen URL (Tailscale, AP or LAN). Refreshed on every
-  // /ws/doom upgrade, because attachDoomSocket reads it synchronously.
+  // Last resolved DOOM screen URL (Tailscale, AP or LAN), refreshed by a timer
+  // in start(). attachDoomSocket reads it synchronously.
   private doomUrl = "";
+  private doomUrlTimer: ReturnType<typeof setInterval> | null = null;
   private port: number;
   private username: string;
   private password: string;
@@ -2362,27 +2366,30 @@ export class WebAdminServer {
     // sockets. Attached once: start() can run again after stop(), and a second
     // attach would double the session listeners.
     if (!this.doomWss) {
-      this.doomWss = new WebSocketServer({ noServer: true });
+      this.doomWss = new WebSocketServer({ noServer: true, maxPayload: 4096 });
       attachDoomSocket(this.doomWss, doomSession, () => this.doomUrl);
     }
+    this.refreshDoomUrl();
+    if (!this.doomUrlTimer) {
+      this.doomUrlTimer = setInterval(() => this.refreshDoomUrl(), DOOM_URL_REFRESH_MS);
+      this.doomUrlTimer.unref();
+    }
     this.server.on("upgrade", (req, socket, head) => {
+      // Registered first: a reset before the handshake finishes would otherwise
+      // be an unhandled 'error' on the raw socket.
+      socket.on("error", () => socket.destroy());
       // req.url can carry a query string (/wifiradar/ws?fullMac=1) — strip it
       // for the path check or the upgrade is rejected and the socket dies.
       const pathname = (req.url || "").split("?")[0];
       if (pathname === DOOM_WS_PATH) {
         // No session cookie here: the phone on the DOOM QR page has no admin
-        // login. The token is checked on the "claim" message instead.
+        // login. The token is checked on the "claim" message instead. The
+        // upgrade stays synchronous: the screen URL is cached by a timer, so
+        // nothing async runs between the raw socket and handleUpgrade.
         const doomWss = this.doomWss!;
-        resolveDoomScreenUrl(this.port)
-          .then((url) => {
-            this.doomUrl = url;
-          })
-          .catch(() => {})
-          .then(() => {
-            doomWss.handleUpgrade(req, socket, head, (ws) => {
-              doomWss.emit("connection", ws, req);
-            });
-          });
+        doomWss.handleUpgrade(req, socket, head, (ws) => {
+          doomWss.emit("connection", ws, req);
+        });
         return;
       }
       if (!WS_PATHS.includes(pathname) || !this.isValidSessionCookie(req.headers.cookie)) {
@@ -2418,7 +2425,17 @@ export class WebAdminServer {
     });
   }
 
+  private refreshDoomUrl(): void {
+    resolveDoomScreenUrl(this.port)
+      .then((url) => {
+        this.doomUrl = url;
+      })
+      .catch(() => {});
+  }
+
   stop(): void {
+    if (this.doomUrlTimer) clearInterval(this.doomUrlTimer);
+    this.doomUrlTimer = null;
     this.wss?.close();
     this.wss = null;
     this.server?.close();

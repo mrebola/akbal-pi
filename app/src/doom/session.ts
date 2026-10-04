@@ -25,6 +25,8 @@ export interface DoomSessionDeps {
   wadExists: () => boolean;
 }
 
+const ENGINE_STOPPED = "El motor de DOOM se detuvo.";
+
 // Single owner of the one engine process. Everyone else (screen, web) reads
 // from here and sends keys through here.
 export class DoomSession {
@@ -33,6 +35,9 @@ export class DoomSession {
   private error: string | null = null;
   private frameListeners = new Set<(rgb565: Buffer) => void>();
   private stateListeners = new Set<(s: DoomState) => void>();
+  // Keys the controller has pressed and not yet released. Sent "up" when the
+  // control changes hands or the engine goes away, so nothing stays stuck.
+  private pressed = new Set<DoomKey>();
 
   constructor(private deps: DoomSessionDeps) {}
 
@@ -53,14 +58,12 @@ export class DoomSession {
         this.frameListeners.forEach((cb) => cb(frame));
       }
     });
-    engine.onExit(() => {
-      if (this.engine !== engine) return;
-      this.engine = null;
-      this.deps.lock.release(this.deps.lock.holder() ?? "");
-      this.deps.tokens.revokeAll();
-      this.error = "El motor de DOOM se detuvo.";
-      this.emitState();
-    });
+    // A write to a dead engine emits 'error'; without a listener Node would
+    // exit the whole process, so every stream error takes the same path as exit.
+    const lost = () => this.engineLost(engine, ENGINE_STOPPED);
+    engine.stdin.on("error", lost);
+    engine.stdout.on("error", lost);
+    engine.onExit(lost);
     const token = this.deps.tokens.issue();
     this.emitState();
     return { ok: true, token };
@@ -69,6 +72,7 @@ export class DoomSession {
   stop(): void {
     const engine = this.engine;
     this.engine = null;
+    this.releaseKeys(engine);
     this.deps.tokens.revokeAll();
     const holder = this.deps.lock.holder();
     if (holder !== null) this.deps.lock.release(holder);
@@ -83,13 +87,16 @@ export class DoomSession {
 
   release(clientId: string): void {
     const before = this.deps.lock.holder();
+    if (before === clientId) this.releaseKeys(this.engine);
     this.deps.lock.release(clientId);
     if (before !== this.deps.lock.holder()) this.emitState();
   }
 
   key(clientId: string, key: DoomKey, down: boolean): boolean {
     if (!this.engine || !this.deps.lock.isHolder(clientId)) return false;
-    this.engine.stdin.write(`${down ? "down" : "up"} ${KEY_CODES[key]}\n`);
+    if (down) this.pressed.add(key);
+    else this.pressed.delete(key);
+    this.send(this.engine, `${down ? "down" : "up"} ${KEY_CODES[key]}`);
     return true;
   }
 
@@ -109,6 +116,41 @@ export class DoomSession {
   onState(cb: (s: DoomState) => void): () => void {
     this.stateListeners.add(cb);
     return () => this.stateListeners.delete(cb);
+  }
+
+  // Idempotent: the first call wins, later stream errors or exits for the
+  // same engine are ignored.
+  private engineLost(engine: EngineProcess, message: string): void {
+    if (this.engine !== engine) return;
+    this.engine = null;
+    this.releaseKeys(engine);
+    const holder = this.deps.lock.holder();
+    if (holder !== null) this.deps.lock.release(holder);
+    this.deps.tokens.revokeAll();
+    this.error = message;
+    engine.kill();
+    this.emitState();
+  }
+
+  private releaseKeys(engine: EngineProcess | null): void {
+    if (engine) {
+      for (const key of this.pressed) this.send(engine, `up ${KEY_CODES[key]}`);
+    }
+    this.pressed.clear();
+  }
+
+  // Never throws. A stdin that is closed or refuses the write means the engine
+  // is gone, so the session ends the same way as on exit.
+  private send(engine: EngineProcess, line: string): void {
+    if (engine.stdin.writable) {
+      try {
+        engine.stdin.write(`${line}\n`);
+        return;
+      } catch {
+        // Fall through to engineLost.
+      }
+    }
+    this.engineLost(engine, ENGINE_STOPPED);
   }
 
   private emitState(): void {

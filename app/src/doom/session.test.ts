@@ -19,7 +19,7 @@ function fakeEngine() {
     kill: () => { killed = true; exitCb(null); },
     onExit: (cb) => { exitCb = cb; },
   };
-  return { engine, stdout, written, wasKilled: () => killed, crash: () => exitCb(1) };
+  return { engine, stdin, stdout, written, wasKilled: () => killed, crash: () => exitCb(1) };
 }
 
 function makeSession(overrides: Partial<ConstructorParameters<typeof DoomSession>[0]> = {}) {
@@ -110,4 +110,75 @@ test("a crash sets an error and frees the control", () => {
   assert.equal(session.state().running, false);
   assert.match(session.state().error!, /motor/i);
   assert.equal(session.state().controller, false);
+});
+
+const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+test("an error on the engine's stdin ends the session without throwing", () => {
+  const { session, fake } = makeSession();
+  session.start();
+  assert.doesNotThrow(() => fake.stdin.emit("error", new Error("EPIPE")));
+  assert.equal(session.state().running, false);
+  assert.match(session.state().error!, /detuvo/);
+  assert.equal(fake.wasKilled(), true);
+});
+
+test("an error on the engine's stdout ends the session without throwing", () => {
+  const { session, fake } = makeSession();
+  session.start();
+  assert.doesNotThrow(() => fake.stdout.emit("error", new Error("EIO")));
+  assert.equal(session.state().running, false);
+  assert.match(session.state().error!, /detuvo/);
+});
+
+test("key after the engine's stdin has closed does not throw", async () => {
+  const { session, fake } = makeSession();
+  const { token } = session.start();
+  session.claim("a", token!);
+  fake.stdin.end();
+  assert.doesNotThrow(() => session.key("a", "fire", true));
+  await flush();
+  assert.equal(session.state().running, false);
+});
+
+test("releasing the controller sends up for keys still held", async () => {
+  const { session, fake } = makeSession();
+  const { token } = session.start();
+  session.claim("a", token!);
+  session.key("a", "fire", true);
+  session.release("a");
+  await flush();
+  assert.match(fake.written.join(""), /up 163\n/);
+});
+
+test("a key released before the controller lets go is not sent up twice", async () => {
+  const { session, fake } = makeSession();
+  const { token } = session.start();
+  session.claim("a", token!);
+  session.key("a", "fire", true);
+  session.key("a", "fire", false);
+  session.release("a");
+  await flush();
+  assert.equal(fake.written.join("").split("up 163\n").length - 1, 1);
+});
+
+test("a crash sends up for keys still held", async () => {
+  const { session, fake } = makeSession();
+  const { token } = session.start();
+  session.claim("a", token!);
+  session.key("a", "fire", true);
+  fake.crash();
+  await flush();
+  assert.match(fake.written.join(""), /up 163\n/);
+});
+
+test("stop sends up for keys still held before killing the engine", async () => {
+  const { session, fake } = makeSession();
+  const { token } = session.start();
+  session.claim("a", token!);
+  session.key("a", "fire", true);
+  session.stop();
+  await flush();
+  assert.match(fake.written.join(""), /up 163\n/);
+  assert.equal(fake.wasKilled(), true);
 });

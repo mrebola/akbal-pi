@@ -75,6 +75,19 @@ export function screenFaceFor(owner: "pi" | "web" | null, controller: boolean): 
   return "qr";
 }
 
+// The engine stopped while the flow still is DOOM (the web ended the game, or
+// it crashed): the Pi goes back to the menu, the same exit as the button hold.
+export function decideOnEngineStopped(currentFlow: string, running: boolean): "return-to-sleep" | "none" {
+  return currentFlow === "doom" && !running ? "return-to-sleep" : "none";
+}
+
+// What the DOOM flow lets this module ask of the flow machine. Reads the live
+// flow name and performs the normal transition, so there is one exit path.
+export interface DoomFlowHooks {
+  currentFlow: () => string;
+  returnToSleep: () => void;
+}
+
 export function shouldLeaveDoom(from: string, to: string): boolean {
   return from === "doom" && to !== "doom";
 }
@@ -202,11 +215,11 @@ export function doomQrText(hasQr: boolean, baseUrl: string): string {
 
 // Entry from the flow. Any failure ends in the error card, never in a
 // half-built screen: subscriptions are dropped and the engine is stopped.
-export async function enterDoomMode(url: string): Promise<void> {
+export async function enterDoomMode(url: string, flow: DoomFlowHooks): Promise<void> {
   const gen = ++generation;
   baseScreenUrl = url;
   try {
-    await startDoom(url, gen);
+    await startDoom(url, gen, flow);
   } catch (err) {
     if (gen !== generation) return;
     console.warn("[DOOM] enter failed:", (err as Error).message);
@@ -217,7 +230,7 @@ export async function enterDoomMode(url: string): Promise<void> {
   }
 }
 
-async function startDoom(url: string, gen: number): Promise<void> {
+async function startDoom(url: string, gen: number, flow: DoomFlowHooks): Promise<void> {
   const daemonActive = await isWhisplayDaemonActive();
   if (gen !== generation) return;
   const blocked = doomBlockedReason(daemonActive);
@@ -244,7 +257,10 @@ async function startDoom(url: string, gen: number): Promise<void> {
   qrPath = qr;
   unsubscribers.forEach((off) => off());
   unsubscribers = [
-    doomSession.onState((s) => paintForState(s)),
+    doomSession.onState((s) => {
+      if (decideOnEngineStopped(flow.currentFlow(), s.running) === "return-to-sleep") return flow.returnToSleep();
+      paintForState(s);
+    }),
     doomSession.onFrame((frame) => {
       const st = doomSession.state();
       if (screenFaceFor(st.owner, st.controller) !== "qr") {
@@ -252,6 +268,10 @@ async function startDoom(url: string, gen: number): Promise<void> {
       }
     }),
   ];
+  // The engine may have stopped during the QR await, before the listener existed.
+  if (decideOnEngineStopped(flow.currentFlow(), doomSession.state().running) === "return-to-sleep") {
+    return flow.returnToSleep();
+  }
   paintForState(doomSession.state());
 }
 

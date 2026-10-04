@@ -1424,7 +1424,12 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     onButtonReleased(() => handleDoomRelease());
     // The URL lookup is async; if the player already left, don't start the engine.
     void resolveDoomScreenUrl(8090).then((url) => {
-      if (ctx.currentFlowName === "doom") void enterDoomMode(url);
+      if (ctx.currentFlowName === "doom") {
+        void enterDoomMode(url, {
+          currentFlow: () => ctx.currentFlowName,
+          returnToSleep: () => ctx.transitionTo("sleep"),
+        });
+      }
     });
   },
 };

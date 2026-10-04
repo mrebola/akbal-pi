@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { doomScreenUrl, shouldLeaveDoom, doomBlockedReason, withControlToken, doomQrText, screenFaceFor } from "./doom-mode";
+import { doomScreenUrl, shouldLeaveDoom, doomBlockedReason, withControlToken, doomQrText, screenFaceFor, decideOnEngineStopped } from "./doom-mode";
 
 test("uses the Tailscale host when Tailscale is up", () => {
   assert.equal(
@@ -62,4 +62,11 @@ test("screen shows the game or the QR depending on the Pi controller", () => {
   assert.equal(screenFaceFor("pi", true), "game");
   assert.equal(screenFaceFor("pi", false), "qr");
   assert.equal(screenFaceFor(null, false), "qr");
+});
+
+test("a stopped engine returns the Pi to the menu only while the flow is still DOOM", () => {
+  assert.equal(decideOnEngineStopped("doom", false), "return-to-sleep");
+  assert.equal(decideOnEngineStopped("doom", true), "none");
+  assert.equal(decideOnEngineStopped("sleep", false), "none");
+  assert.equal(decideOnEngineStopped("web_chat", false), "none");
 });

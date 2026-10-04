@@ -326,7 +326,7 @@ test("a mirror's play-here is refused while the web owns the game", () => {
   assert.equal(lastState(other).token, undefined);
 });
 
-test("play-here from the Pi's owner is passed through and the web owns it", () => {
+test("play-here from the Pi's owner is passed through and the web owns it", async () => {
   const { session } = makeSession();
   session.start();
   session.claimOwner("pi");
@@ -336,6 +336,7 @@ test("play-here from the Pi's owner is passed through and the web owns it", () =
   const client = fakeClient();
   wss.emit("connection", client as unknown as WebSocket);
   client.emit("message", Buffer.from(JSON.stringify({ type: "play-here" })));
+  await tick();
   assert.equal(session.owner(), "web");
   assert.equal(lastState(client).mirror, false);
 });
@@ -345,7 +346,7 @@ test("decideStartForPlayHere starts the engine only when no game runs", () => {
   assert.equal(decideStartForPlayHere(true), "claim-only");
 });
 
-test("play-here starts the engine when no game runs and leaves the web owning it", () => {
+test("play-here starts the engine when no game runs and leaves the web owning it", async () => {
   const { session } = makeSession();
   assert.equal(session.state().running, false);
   const wss = new EventEmitter();
@@ -354,13 +355,14 @@ test("play-here starts the engine when no game runs and leaves the web owning it
   const client = fakeClient();
   wss.emit("connection", client as unknown as WebSocket);
   client.emit("message", Buffer.from(JSON.stringify({ type: "play-here" })));
+  await tick();
   assert.equal(session.state().running, true, "play-here must start the engine");
   assert.equal(session.owner(), "web");
   assert.equal(lastState(client).mirror, false);
   assert.equal(lastState(client).error, null);
 });
 
-test("play-here reports the start error and keeps the owner when the engine cannot start", () => {
+test("play-here reports the start error and keeps the owner when the engine cannot start", async () => {
   const session = new DoomSession({
     spawnEngine: () => { throw new Error("no debe llamarse"); },
     tokens: new ControlTokens(),
@@ -374,6 +376,7 @@ test("play-here reports the start error and keeps the owner when the engine cann
   const client = fakeClient();
   wss.emit("connection", client as unknown as WebSocket);
   client.emit("message", Buffer.from(JSON.stringify({ type: "play-here" })));
+  await tick();
   assert.equal(session.state().running, false);
   assert.equal(session.owner(), null);
   assert.match(String(lastState(client).error), /Falta el WAD/);
@@ -493,3 +496,32 @@ test("the state carries the audio and music errors when the player reports them"
 function fakeEngineFor(): EngineProcess {
   return { stdout: new PassThrough(), stdin: new PassThrough(), audio: new PassThrough(), control: new PassThrough(), kill: () => {}, onExit: () => {} };
 }
+
+test("play-here refuses to start the engine when the daemon owns the panel", async () => {
+  const { session } = makeSession();
+  const wss = new EventEmitter();
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", {
+    daemonBlockedReason: async () => "DOOM requiere la pantalla directa; el daemon está activo",
+  });
+  const client = fakeClient();
+  wss.emit("connection", client as unknown as WebSocket);
+  client.emit("message", Buffer.from(JSON.stringify({ type: "play-here" })));
+  await tick();
+  assert.equal(session.state().running, false, "the engine must not start");
+  assert.equal(session.owner(), null);
+  assert.match(String(lastState(client).error), /daemon está activo/);
+});
+
+test("play-here starts the engine when the daemon is not active", async () => {
+  const { session } = makeSession();
+  const wss = new EventEmitter();
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", {
+    daemonBlockedReason: async () => null,
+  });
+  const client = fakeClient();
+  wss.emit("connection", client as unknown as WebSocket);
+  client.emit("message", Buffer.from(JSON.stringify({ type: "play-here" })));
+  await tick();
+  assert.equal(session.state().running, true);
+  assert.equal(session.owner(), "web");
+});

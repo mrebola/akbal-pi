@@ -92,7 +92,17 @@ export function isDeadSocket(alive: boolean): boolean {
 
 export interface DoomSocketOptions {
   heartbeatMs?: number;
+  // The same check the Pi's own start uses: a reason string when the
+  // whisplay daemon owns the panel and DOOM cannot start, else null.
+  daemonBlockedReason?: () => Promise<string | null>;
 }
+
+// Production check, from doom-mode.ts. Loaded lazily so that the route module
+// (and its tests) do not pull in the display and network modules.
+const defaultDaemonBlockedReason = async (): Promise<string | null> => {
+  const mode = require("../core/chat-flow/doom-mode") as typeof import("../core/chat-flow/doom-mode");
+  return mode.doomBlockedReason(await mode.isWhisplayDaemonActive());
+};
 
 // Every socket gets state. Only sockets that asked for video get JPEG frames,
 // so an idle Pi with no viewers encodes nothing.
@@ -206,6 +216,35 @@ export function attachDoomSocket(
       if (c) c.alive = true;
     });
     sendState(ws);
+    // Jugar aquí from the web starts the engine, so it passes the same daemon
+    // check as the Pi's own start. Async: the reply waits for the check.
+    const playHere = async () => {
+      if (decideStartForPlayHere(session.state().running) === "start") {
+        const blocked = await (options.daemonBlockedReason ?? defaultDaemonBlockedReason)();
+        if (!clients.has(ws)) return;
+        if (blocked) {
+          sendState(ws, blocked);
+          return;
+        }
+      }
+      let claimError: string | undefined;
+      let r: { ok: boolean; token?: string; error?: string };
+      if (decideStartForPlayHere(session.state().running) === "start") {
+        const started = session.start();
+        r = started.ok ? session.claimOwner("web") : { ok: false, error: started.error };
+      } else r = session.claimOwner("web");
+      if (r.ok) {
+        // One web owner at a time: the previous owner's flag and token go.
+        for (const c of clients.values()) {
+          c.webOwnerFlag = false;
+          c.token = undefined;
+        }
+        const c = clients.get(ws)!;
+        c.webOwnerFlag = true;
+        c.token = r.token;
+      } else claimError = r.error;
+      sendState(ws, claimError);
+    };
     ws.on("message", (raw: RawData) => {
       const msg = parseDoomMessage(raw.toString());
       if (!msg) return;
@@ -218,29 +257,17 @@ export function attachDoomSocket(
         sendState(ws, claimError);
         return;
       }
+      if (msg.type === "play-here") {
+        void playHere();
+        return;
+      }
       if (msg.type === "claim") {
         if (!session.tokenValid(msg.token)) claimError = "Token inválido o vencido";
         else if (!session.claim(id, msg.token)) claimError = "Otro control ya juega";
       } else if (msg.type === "release") session.release(id);
       else if (msg.type === "key") session.key(id, msg.key, msg.down);
       else if (msg.type === "stream") clients.get(ws)!.streaming = msg.on;
-      else if (msg.type === "play-here") {
-        let r: { ok: boolean; token?: string; error?: string };
-        if (decideStartForPlayHere(session.state().running) === "start") {
-          const started = session.start();
-          r = started.ok ? session.claimOwner("web") : { ok: false, error: started.error };
-        } else r = session.claimOwner("web");
-        if (r.ok) {
-          // One web owner at a time: the previous owner's flag and token go.
-          for (const c of clients.values()) {
-            c.webOwnerFlag = false;
-            c.token = undefined;
-          }
-          const c = clients.get(ws)!;
-          c.webOwnerFlag = true;
-          c.token = r.token;
-        } else claimError = r.error;
-      } else if (msg.type === "volume") session.setVolume(clampVolume(msg.value));
+      else if (msg.type === "volume") session.setVolume(clampVolume(msg.value));
       else if (msg.type === "stop") session.stop();
       sendState(ws, claimError);
     });

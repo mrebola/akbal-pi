@@ -27,3 +27,4 @@ __pycache__
 .env.backups
 # wardrive (driving capture) runtime artifacts
 data/wardrive-drive.db*
+doom/

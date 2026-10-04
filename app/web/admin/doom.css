@@ -814,6 +814,108 @@
   pointer-events: none;
 }
 
+/* Desktop, third pass: the game takes the whole left side and the touch pad
+   is a narrow column on the right (keyboard play; the pad is reference).
+   Grid: rows = [status + console] [game | pad start] [pad rows...]. The game
+   cell spans the rows that the pad uses, so its height is the page height
+   minus the topbar (measured in --doom-topbar-h) minus 64 px for the page
+   padding, the status/console row and the row gaps. The frame is 280:175 and
+   as wide as that height allows:
+     frame width = min(100% of the game cell, (100dvh - topbar - 64px) * 1.6)
+   The video switch floats over the game's bottom-left corner, and the QR card
+   over its top-right corner, so neither takes height from the game. */
+@media (min-width: 900px) and (min-height: 500px) {
+  html:not(.doom-control) .doom-page {
+    grid-template-columns: minmax(0, 1fr) 220px;
+    grid-template-rows: auto minmax(0, 1fr) auto auto auto;
+    grid-template-areas: none;
+    column-gap: 16px;
+    row-gap: 8px;
+    padding: 8px 16px;
+  }
+
+  html:not(.doom-control) .controls,
+  html:not(.doom-control) .zone-center {
+    display: contents;
+  }
+
+  html:not(.doom-control) .doom-head { grid-column: 1; grid-row: 1; }
+
+  html:not(.doom-control) .console {
+    grid-column: 2;
+    grid-row: 1;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  html:not(.doom-control) .screen-wrap {
+    grid-column: 1;
+    grid-row: 2 / span 4;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+    gap: 0;
+  }
+
+  html:not(.doom-control) .screen-frame {
+    flex: none;
+    width: min(100%, calc((100dvh - var(--doom-topbar-h, 64px) - 64px) * 1.6));
+    height: auto;
+  }
+
+  html:not(.doom-control) .switch {
+    position: absolute;
+    left: 8px;
+    bottom: 8px;
+    z-index: 1;
+    min-height: 36px;
+    padding: 0 8px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.6);
+    font-size: 0.85rem;
+  }
+
+  html:not(.doom-control) #qr-card {
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: end;
+    align-self: start;
+    z-index: 2;
+    width: auto;
+    margin: 8px;
+    padding: 8px;
+  }
+
+  html:not(.doom-control) #qr-img { max-width: 120px; }
+
+  html:not(.doom-control) .zone-move {
+    grid-column: 2;
+    grid-row: 2;
+    min-height: 0;
+    justify-content: center;
+  }
+
+  html:not(.doom-control) .center-keys { grid-column: 2; grid-row: 3; }
+  html:not(.doom-control) .center-keys .key {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    min-height: 40px;
+  }
+
+  html:not(.doom-control) .zone-actions { grid-column: 2; grid-row: 4; }
+  html:not(.doom-control) .zone-weapons { grid-column: 2; grid-row: 5; }
+  html:not(.doom-control) .weapon-keys { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  html:not(.doom-control) .weapon-keys .key {
+    flex-direction: column;
+    min-height: 40px;
+  }
+}
+
 /* Phones and the QR pad: no logo, no QR card. */
 .logo,
 #qr-card { display: none; }

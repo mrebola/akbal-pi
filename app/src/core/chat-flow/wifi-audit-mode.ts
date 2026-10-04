@@ -33,8 +33,21 @@ let confirmingExit = false;
 const POLL_MS = 2000;
 const HOLD_EXIT_MS = 900;
 
+// This mode listens to the raw button (not the chat-flow double-click hook),
+// so it times a double click itself: two short clicks within this window.
+const DOUBLE_CLICK_MS = 400;
+let lastShortClickAt = 0;
+
 function handleButtonPress(): void {
-  buttonPressedAt = Date.now();
+  const now = Date.now();
+  if (confirmingExit && lastShortClickAt && now - lastShortClickAt < DOUBLE_CLICK_MS) {
+    // Double click on the exit card = back to the live view.
+    lastShortClickAt = 0;
+    confirmingExit = false;
+    paint(getWardriveService().getStatus());
+    return;
+  }
+  buttonPressedAt = now;
   if (!holdCheckTimer) {
     holdCheckTimer = setInterval(() => {
       if (buttonPressedAt !== null && Date.now() - buttonPressedAt >= HOLD_EXIT_MS) {
@@ -66,11 +79,9 @@ function handleButtonRelease(): void {
     clearInterval(holdCheckTimer);
     holdCheckTimer = null;
   }
-  // A short click on the exit card cancels it and returns to the live view.
-  if (confirmingExit && pressedFor > 0 && pressedFor < HOLD_EXIT_MS) {
-    confirmingExit = false;
-    paint(getWardriveService().getStatus());
-  }
+  // A short click is only remembered for double-click detection; on the exit
+  // card it does nothing (hold confirms, double click cancels).
+  if (pressedFor > 0 && pressedFor < HOLD_EXIT_MS) lastShortClickAt = Date.now();
 }
 
 function paint(status: WardriveStatus): void {
@@ -87,7 +98,7 @@ function paint(status: WardriveStatus): void {
       model_ui_index: 0,
       model_ui_total: 0,
       model_ui_active: false,
-      text: "Click: cancelar\nMantén: salir",
+      text: "Mantén: salir\nDoble clic: volver",
     });
     return;
   }

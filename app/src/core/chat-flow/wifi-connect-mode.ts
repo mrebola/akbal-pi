@@ -116,7 +116,7 @@ async function renderView(): Promise<void> {
       model_ui_index: 0,
       model_ui_total: 0,
       model_ui_active: false,
-      text: "Click: cancelar\nMantén: apagar",
+      text: "Mantén: apagar\nDoble clic: volver",
     });
     return;
   }
@@ -241,14 +241,14 @@ export function handleWifiConnectRelease(): void {
   clearHoldTimers();
   pressStartedAt = 0;
   if (busy || !wasHolding) return;
-  // A short click on the off card cancels it, back to the QR view.
+  // A short click on the off card does nothing (hold confirms, double click
+  // cancels).
   if (confirmingOff) {
-    confirmingOff = false;
     void renderView();
     armIdleTimer();
     return;
   }
-  // A short click just flips between the two QR views — the menu is a
+  // On the QR view a short click flips between the two QR views — the menu is a
   // 2-item carousel, nothing to submit.
   currentView = currentView === "wifi" ? "web" : "wifi";
   void renderView();

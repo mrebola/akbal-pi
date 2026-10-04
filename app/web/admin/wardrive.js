@@ -186,14 +186,19 @@ function render(st) {
   }
   renderActiveRadios(st);
   // Live radio badge on the iface HUD item
+  // Count comes from the radios really running (activeRadios), not from the
+  // dual flag: that flag only means "has an attack radio", so 2 or 3
+  // discovery radios without one used to show "1 radio".
   const ifaceEl = el("wd-iface");
-  if (ifaceEl && st.dualRadio) {
-    const discovery = (st.discoveryIfaces || [st.iface]).filter(Boolean).map((i) => i.toUpperCase()).join("·") || "?";
-    ifaceEl.textContent = `${discovery}+${(st.attackIface || "?").toUpperCase()}`;
+  const radios = st.activeRadios || [];
+  if (ifaceEl && st.running && radios.length > 1) {
+    const names = radios.map((r) => (r.iface || "?").toUpperCase()).join("+");
+    ifaceEl.textContent = `${names} · ${radios.length} radios`;
   } else if (ifaceEl && typeof st.iface === "string") {
-    // single mode keeps the plain label (DEMO / IFCACE name)
-    if (!ifaceEl.textContent.includes("+")) ifaceEl.textContent = st.running ? ifaceEl.textContent : st.iface ? st.iface.toUpperCase() : "—";
-    if (st.running && !st.dualRadio) ifaceEl.textContent = `${st.iface ? st.iface.toUpperCase() : "DEMO"} · 1 radio`;
+    // Stopped: plain label again (drops any "+" left over from a dual run).
+    // Running with one radio: plain label plus the count.
+    if (!st.running) ifaceEl.textContent = st.iface ? st.iface.toUpperCase() : "—";
+    else if (radios.length === 1) ifaceEl.textContent = `${st.iface ? st.iface.toUpperCase() : "DEMO"} · 1 radio`;
   }
   // Home-network guard badge: which SSID is protected
   const homeGuard = el("wd-home-guard");

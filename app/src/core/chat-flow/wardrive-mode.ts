@@ -87,7 +87,7 @@ function renderScreen(): void {
       model_ui_index: 0,
       model_ui_total: 0,
       model_ui_active: false,
-      text: "Click: cancelar\nMantén: detener",
+      text: "Mantén: detener\nDoble clic: volver",
     });
     return;
   }
@@ -249,9 +249,9 @@ export function handleWardriveRelease(): void {
   clearHoldTimers();
   pressStartedAt = 0;
   if (!wasHolding) return;
-  // A short click on the stop card cancels it and returns to the live view.
+  // A short click on the stop card does nothing: only a hold confirms and a
+  // double click cancels, so a stray click can't end or dismiss anything.
   if (confirmingStop) {
-    confirmingStop = false;
     renderScreen();
     refreshTimer = setInterval(renderScreen, REFRESH_INTERVAL_MS);
     return;

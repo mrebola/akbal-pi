@@ -308,9 +308,10 @@ export class DriveWardriveService extends EventEmitter {
       this.attackIface = attackRadio?.iface ?? null;
       this.attackIfaceMac = attackRadio?.mac ?? null;
       const discoveryLabel = this.discovery.map((r) => r.iface).join(", ");
+      const totalRadios = this.discovery.length + (this.dualRadio ? 1 : 0);
       console.log(
-        this.dualRadio
-          ? `[wardrive] radios: discovery=${discoveryLabel} attack=${this.attackIface}`
+        totalRadios > 1
+          ? `[wardrive] radios (${totalRadios}): discovery=${discoveryLabel}${this.dualRadio ? ` attack=${this.attackIface}` : ""}`
           : `[wardrive] radio mode: single (discovery=${discoveryLabel})`,
       );
       this.running = true;

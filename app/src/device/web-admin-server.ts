@@ -2367,7 +2367,10 @@ export class WebAdminServer {
     // attach would double the session listeners.
     if (!this.doomWss) {
       this.doomWss = new WebSocketServer({ noServer: true, maxPayload: 4096 });
-      attachDoomSocket(this.doomWss, doomSession, () => this.doomUrl);
+      attachDoomSocket(this.doomWss, doomSession, () => this.doomUrl, {
+        // The same cookie check as the admin pages (see isValidSessionCookie).
+        isAdminSession: (req) => this.isValidSessionCookie(req.headers.cookie),
+      });
     }
     this.refreshDoomUrl();
     if (!this.doomUrlTimer) {

@@ -19,9 +19,7 @@ import { FlowStateMachine } from "./chat-flow/stateMachine";
 import {
   decideMirrorEntry,
   doomSession,
-  isDoomMirrorDismissed,
   leaveDoomMode,
-  noteDoomOwner,
   requestDoomMirror,
   shouldLeaveDoom,
 } from "./chat-flow/doom-mode";
@@ -155,10 +153,7 @@ class ChatFlow implements ChatFlowContext {
 
     // The web starting DOOM while the Pi is idle puts the Pi in the mirror.
     // The Pi's own entry (button) is a different path: it starts the engine.
-    let lastOwner = doomSession.owner();
-    doomSession.onState((s) => {
-      noteDoomOwner(s.owner, lastOwner);
-      lastOwner = s.owner;
+    doomSession.onState(() => {
       this.enterMirrorIfWebOwns();
     });
 
@@ -339,7 +334,7 @@ class ChatFlow implements ChatFlowContext {
 
   private enterMirrorIfWebOwns = (): void => {
     const s = doomSession.state();
-    if (decideMirrorEntry(this.currentFlowName, s.owner, s.running, isDoomMirrorDismissed()) !== "enter-mirror") return;
+    if (decideMirrorEntry(this.currentFlowName, s.owner, s.running) !== "enter-mirror") return;
     requestDoomMirror();
     this.transitionTo("doom");
   };

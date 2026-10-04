@@ -146,6 +146,7 @@ import {
   enterDoomMode,
   handleDoomPress,
   handleDoomRelease,
+  markDoomHoldExit,
   resolveDoomScreenUrl,
   takeDoomEntryIsMirror,
 } from "./doom-mode";
@@ -1426,8 +1427,10 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     // Hold the button to leave; the hold also restores the vertical screen.
     onButtonDoubleClick(null);
     // Leaving is a plain transition: ChatFlow.transitionTo stops the engine
-    // for any exit from "doom" (see shouldLeaveDoom).
+    // for any exit from "doom" (see shouldLeaveDoom). The hold alone ends the
+    // game for everyone, even when the web owns it.
     onButtonPressed(() => handleDoomPress(() => {
+      markDoomHoldExit();
       ctx.transitionTo("sleep");
     }));
     onButtonReleased(() => handleDoomRelease());

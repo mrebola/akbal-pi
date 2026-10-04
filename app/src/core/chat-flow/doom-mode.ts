@@ -6,6 +6,7 @@ import type { Readable } from "stream";
 import type { Status } from "../../device/display";
 import { DoomOwner, DoomSession, DoomState, EngineProcess } from "../../doom/session";
 import { DoomGame, wadFileName } from "../../doom/wad";
+import { scheduleKillIfAlive, terminateChild } from "../../doom/terminate";
 import { AudioOut, AudioProcess } from "../../doom/audio-out";
 import { MusicPlayer, MusicProcess } from "../../doom/music";
 import { ControlTokens } from "../../doom/tokens";
@@ -93,26 +94,8 @@ export function decideMirrorEntry(
   currentFlow: string,
   owner: DoomOwner,
   running: boolean,
-  dismissed: boolean,
 ): "enter-mirror" | "none" {
-  return currentFlow === "sleep" && owner === "web" && running && !dismissed ? "enter-mirror" : "none";
-}
-
-// The Pi left the mirror with the button: it stays out for this game. Cleared
-// when the Pi starts an engine or the owner changes (see noteDoomOwner).
-let mirrorActive = false;
-let mirrorDismissed = false;
-
-export function dismissDoomMirror(): void {
-  if (mirrorActive) mirrorDismissed = true;
-}
-
-export function isDoomMirrorDismissed(): boolean {
-  return mirrorDismissed;
-}
-
-export function noteDoomOwner(owner: DoomOwner, lastOwner: DoomOwner): void {
-  if (owner !== lastOwner) mirrorDismissed = false;
+  return currentFlow === "sleep" && owner === "web" && running ? "enter-mirror" : "none";
 }
 
 // Set by ChatFlow right before it moves to "doom" for a mirror; the doom state
@@ -198,7 +181,7 @@ function spawnDoomEngine(game: DoomGame): EngineProcess {
     stdin: child.stdin!,
     audio: child.stdio[3] as Readable,
     control: child.stdio[4] as Readable,
-    kill: () => child.kill(),
+    kill: () => terminateChild(child),
     onExit: (cb) => {
       child.once("exit", (code) => cb(code));
       child.once("error", () => cb(null));
@@ -212,7 +195,7 @@ function spawnAplay(cmd: string, args: string[]): AudioProcess {
   const child = spawn(cmd, args, { stdio: ["pipe", "ignore", "ignore"] });
   return {
     stdin: child.stdin!,
-    kill: () => child.kill(),
+    kill: () => terminateChild(child),
     onExit: (cb) => {
       child.once("exit", () => cb());
       child.once("error", () => cb());
@@ -228,7 +211,10 @@ function spawnFluidsynth(cmd: string, args: string[]): MusicProcess {
   child.stdin!.on("error", () => {});
   return {
     signal: (sig) => {
-      if (child.pid) process.kill(child.pid, sig);
+      if (!child.pid) return;
+      process.kill(child.pid, sig);
+      // Same escalation as the engine: a fluidsynth that ignores SIGTERM is killed.
+      if (sig === "SIGTERM") scheduleKillIfAlive(child);
     },
     write: (line) => {
       child.stdin!.write(line);
@@ -271,7 +257,6 @@ export function doomQrText(hasQr: boolean, baseUrl: string): string {
 export async function enterDoomMode(url: string, flow: DoomFlowHooks): Promise<void> {
   const gen = ++generation;
   baseScreenUrl = url;
-  mirrorActive = false;
   try {
     await startDoom(url, gen, flow);
   } catch (err) {
@@ -299,7 +284,6 @@ async function startDoom(url: string, gen: number, flow: DoomFlowHooks): Promise
   }
   // Entering from the screen makes the Pi the owner. claimOwner reissues the
   // token, so the QR must carry the token it returns, not start()'s.
-  mirrorDismissed = false;
   const claimed = doomSession.claimOwner("pi");
   if (!claimed.ok) {
     showDoomError(claimed.error ?? "No se pudo iniciar DOOM");
@@ -323,7 +307,6 @@ async function startDoom(url: string, gen: number, flow: DoomFlowHooks): Promise
 // no QR is made. The screen only subscribes and paints.
 export function enterDoomMirror(flow: DoomFlowHooks): void {
   generation++;
-  mirrorActive = true;
   qrPath = "";
   subscribeScreen(flow);
   paintForState(doomSession.state());
@@ -348,14 +331,25 @@ function subscribeScreen(flow: DoomFlowHooks): void {
 
 // Physical exit: give the screen back vertically. The engine stops unless the
 // web owns it: leaving a mirror must not end the web's game.
+// Set by the Pi's button hold right before it leaves DOOM: only that exit ends
+// the game for everyone, the web owner included.
+let holdExit = false;
+export function markDoomHoldExit(): void {
+  holdExit = true;
+}
+
+// A web-chat, reply or approval exit does not end a game the web owns.
+export function shouldStopOnLeave(owner: DoomOwner, hold: boolean): boolean {
+  return hold || owner !== "web";
+}
+
 export function leaveDoomMode(): void {
   generation++;
-  mirrorActive = false;
   unsubscribers.forEach((off) => off());
   unsubscribers = [];
-  // Any leave ends the game for everyone, the web owner included: the hold on
-  // the Pi is the exit the spec gives it.
-  doomSession.stop();
+  const hold = holdExit;
+  holdExit = false;
+  if (shouldStopOnLeave(doomSession.owner(), hold)) doomSession.stop();
   sendDisplay({ game_orientation: 1 });
 }
 

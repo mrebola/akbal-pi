@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { doomScreenUrl, shouldLeaveDoom, doomBlockedReason, withControlToken, doomQrText, screenFaceFor, decideOnEngineStopped, decideMirrorEntry } from "./doom-mode";
+import { doomScreenUrl, shouldLeaveDoom, doomBlockedReason, withControlToken, doomQrText, screenFaceFor, decideOnEngineStopped, decideMirrorEntry, shouldStopOnLeave } from "./doom-mode";
 
 test("uses the Tailscale host when Tailscale is up", () => {
   assert.equal(
@@ -76,17 +76,19 @@ test("a crash keeps the error card on screen instead of returning to the menu", 
 });
 
 test("the Pi enters the mirror only from sleep, with the web owning a running game", () => {
-  assert.equal(decideMirrorEntry("sleep", "web", true, false), "enter-mirror");
-  assert.equal(decideMirrorEntry("answer", "web", true, false), "none");
-  assert.equal(decideMirrorEntry("approval", "web", true, false), "none");
-  assert.equal(decideMirrorEntry("doom", "web", true, false), "none");
-  assert.equal(decideMirrorEntry("web_chat", "web", true, false), "none");
-  assert.equal(decideMirrorEntry("sleep", "web", false, false), "none");
-  assert.equal(decideMirrorEntry("sleep", "pi", true, false), "none");
-  assert.equal(decideMirrorEntry("sleep", null, true, false), "none");
+  assert.equal(decideMirrorEntry("sleep", "web", true), "enter-mirror");
+  assert.equal(decideMirrorEntry("answer", "web", true), "none");
+  assert.equal(decideMirrorEntry("approval", "web", true), "none");
+  assert.equal(decideMirrorEntry("doom", "web", true), "none");
+  assert.equal(decideMirrorEntry("web_chat", "web", true), "none");
+  assert.equal(decideMirrorEntry("sleep", "web", false), "none");
+  assert.equal(decideMirrorEntry("sleep", "pi", true), "none");
+  assert.equal(decideMirrorEntry("sleep", null, true), "none");
 });
 
-test("a mirror dismissed with the button does not come back for the same game", () => {
-  assert.equal(decideMirrorEntry("sleep", "web", true, true), "none");
-  assert.equal(decideMirrorEntry("sleep", "web", true, false), "enter-mirror");
+test("a leave from the web chat, a reply or an approval keeps the game when the web owns it", () => {
+  assert.equal(shouldStopOnLeave("web", false), false);
+  assert.equal(shouldStopOnLeave("web", true), true, "the Pi's hold always ends the game");
+  assert.equal(shouldStopOnLeave("pi", false), true);
+  assert.equal(shouldStopOnLeave(null, false), true);
 });

@@ -1,4 +1,5 @@
 import { WebSocketServer, WebSocket, RawData } from "ws";
+import type { IncomingMessage } from "node:http";
 import { randomUUID } from "node:crypto";
 import { DoomOwner, DoomSession, DoomState } from "../doom/session";
 import { DOOM_KEYS, DoomKey } from "../doom/keymap";
@@ -49,7 +50,14 @@ export interface DoomSocketView {
   // True when some socket is currently the web owner. If the web owner's
   // socket went away, the web's claim is stale and another tab may take it.
   webOwnerOnline: boolean;
+  // The socket's connection carries a valid admin session right now.
+  adminSession: boolean;
 }
+
+// Starting, closing and volume are the admin's: the QR phone has no login and
+// may only look and claim the controller with the token.
+export const ADMIN_ONLY: ReadonlyArray<DoomClientMessage["type"]> = ["play-here", "volume", "stop"];
+export const ADMIN_REQUIRED_MESSAGE = "Inicia sesión en el admin";
 
 // Jugar aquí arranca el motor si no corre; si ya corre solo cambia de dueño.
 export function decideStartForPlayHere(running: boolean): "start" | "claim-only" {
@@ -64,9 +72,9 @@ export function doomMessageAllowed(msg: DoomClientMessage, view: DoomSocketView)
       return !mirror;
     case "volume":
     case "stop":
-      return view.owner === "web" && view.isWebOwner;
+      return view.adminSession && view.owner === "web" && view.isWebOwner;
     case "play-here":
-      return !(view.owner === "web" && view.webOwnerOnline && !view.isWebOwner);
+      return view.adminSession && !(view.owner === "web" && view.webOwnerOnline && !view.isWebOwner);
     default:
       return true;
   }
@@ -97,6 +105,10 @@ export function isDeadSocket(alive: boolean): boolean {
 
 export interface DoomSocketOptions {
   heartbeatMs?: number;
+  // Decides from the upgrade request's cookie whether it carries an admin
+  // session. Checked on every owner action, so a logout takes effect at once.
+  // Absent means no socket is an admin session.
+  isAdminSession?: (req: IncomingMessage) => boolean;
   // The same check the Pi's own start uses: a reason string when the
   // whisplay daemon owns the panel and DOOM cannot start, else null.
   daemonBlockedReason?: () => Promise<string | null>;
@@ -117,16 +129,27 @@ export function attachDoomSocket(
   screenUrl: () => string,
   options: DoomSocketOptions = {},
 ): void {
-  type ClientEntry = { id: string; streaming: boolean; alive: boolean; webOwnerFlag: boolean; token?: string };
+  type ClientEntry = {
+    id: string;
+    streaming: boolean;
+    alive: boolean;
+    webOwnerFlag: boolean;
+    token?: string;
+    req?: IncomingMessage;
+  };
   const clients = new Map<WebSocket, ClientEntry>();
 
   // The flag is only meaningful while the session is owned by the web.
   const isWebOwner = (c: ClientEntry | undefined): boolean => c?.webOwnerFlag === true && session.owner() === "web";
 
+  const adminSessionOf = (c: ClientEntry | undefined): boolean =>
+    options.isAdminSession !== undefined && options.isAdminSession(c?.req as IncomingMessage);
+
   const viewFor = (ws: WebSocket): DoomSocketView => ({
     owner: session.owner(),
     isWebOwner: isWebOwner(clients.get(ws)),
     webOwnerOnline: session.owner() === "web" && [...clients.values()].some((c) => isWebOwner(c)),
+    adminSession: adminSessionOf(clients.get(ws)),
   });
 
   // The claim error (bad token, busy controller) goes only to the socket that
@@ -215,9 +238,9 @@ export function attachDoomSocket(
   }, options.heartbeatMs ?? HEARTBEAT_MS);
   heartbeat.unref();
 
-  wss.on("connection", (ws: WebSocket) => {
+  wss.on("connection", (ws: WebSocket, req?: IncomingMessage) => {
     const id = randomUUID();
-    clients.set(ws, { id, streaming: false, alive: true, webOwnerFlag: false });
+    clients.set(ws, { id, streaming: false, alive: true, webOwnerFlag: false, req });
     ws.on("pong", () => {
       const c = clients.get(ws);
       if (c) c.alive = true;
@@ -258,9 +281,11 @@ export function attachDoomSocket(
       let claimError: string | undefined;
       // Enforced here, not only in the session: a mirror's key, claim, volume
       // or takeover is dropped before it gets anywhere near the engine.
-      if (!doomMessageAllowed(msg, viewFor(ws))) {
-        if (msg.type === "play-here") claimError = "Otro dispositivo ya juega desde la web";
-        if (msg.type === "stop") claimError = "Solo quien juega puede salir";
+      const view = viewFor(ws);
+      if (!doomMessageAllowed(msg, view)) {
+        if (!view.adminSession && ADMIN_ONLY.includes(msg.type)) claimError = ADMIN_REQUIRED_MESSAGE;
+        else if (msg.type === "play-here") claimError = "Otro dispositivo ya juega desde la web";
+        else if (msg.type === "stop") claimError = "Solo quien juega puede salir";
         sendState(ws, claimError);
         return;
       }

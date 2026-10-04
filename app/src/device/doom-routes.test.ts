@@ -83,7 +83,7 @@ const tick = () => new Promise((resolve) => setImmediate(resolve));
 test("claim with the valid token takes the controller; close releases it", async () => {
   const { session, token } = makeSession();
   const wss = new EventEmitter();
-  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", { isAdminSession: () => true });
 
   const client = fakeClient();
   wss.emit("connection", client as unknown as WebSocket);
@@ -98,7 +98,7 @@ test("a claim with a wrong token does not take the controller", () => {
   const { session } = makeSession();
   session.start();
   const wss = new EventEmitter();
-  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", { isAdminSession: () => true });
 
   const client = fakeClient();
   wss.emit("connection", client as unknown as WebSocket);
@@ -109,7 +109,7 @@ test("a claim with a wrong token does not take the controller", () => {
 test("only the holder's keys reach the engine", async () => {
   const { session, written, token } = makeSession();
   const wss = new EventEmitter();
-  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", { isAdminSession: () => true });
 
   const holder = fakeClient();
   const watcher = fakeClient();
@@ -131,7 +131,7 @@ test("only the holder's keys reach the engine", async () => {
 test("a socket error cleans up like close and does not throw", () => {
   const { session, token } = makeSession();
   const wss = new EventEmitter();
-  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", { isAdminSession: () => true });
 
   const client = fakeClient();
   wss.emit("connection", client as unknown as WebSocket);
@@ -165,7 +165,7 @@ test("skips a socket whose send buffer is over 256 KiB", () => {
 test("a client that never answers a ping is dropped and its control released", async () => {
   const { session, token } = makeSession();
   const wss = new EventEmitter();
-  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", { heartbeatMs: 10 });
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", { heartbeatMs: 10, isAdminSession: () => true });
 
   const client = fakeClient();
   wss.emit("connection", client as unknown as WebSocket);
@@ -180,7 +180,7 @@ test("a client that never answers a ping is dropped and its control released", a
 test("a client that answers pings keeps its control", async () => {
   const { session, token } = makeSession();
   const wss = new EventEmitter();
-  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", { heartbeatMs: 10 });
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", { heartbeatMs: 10, isAdminSession: () => true });
 
   const client = fakeClient();
   client.ping = () => client.emit("pong");
@@ -200,7 +200,7 @@ test("isDeadSocket: a socket is dead when it did not answer the last ping", () =
 test("each client is told whether it holds the control", () => {
   const { session, token } = makeSession();
   const wss = new EventEmitter();
-  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", { isAdminSession: () => true });
 
   const holder = fakeClient();
   const other = fakeClient();
@@ -224,7 +224,7 @@ test("a claim with an invalid token says so", () => {
   const { session } = makeSession();
   session.start();
   const wss = new EventEmitter();
-  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", { isAdminSession: () => true });
 
   const client = fakeClient();
   wss.emit("connection", client as unknown as WebSocket);
@@ -244,31 +244,31 @@ test("rejects a volume message without a number", () => {
 });
 
 test("mirrors may not send key or claim while the web plays", () => {
-  const mirror = { owner: "web" as const, isWebOwner: false, webOwnerOnline: true };
+  const mirror = { owner: "web" as const, isWebOwner: false, webOwnerOnline: true, adminSession: true };
   assert.equal(doomMessageAllowed({ type: "key", key: "fire", down: true }, mirror), false);
   assert.equal(doomMessageAllowed({ type: "claim", token: "t" }, mirror), false);
   assert.equal(doomMessageAllowed({ type: "volume", value: 20 }, mirror), false);
 });
 
 test("the web owner may send key, claim and volume", () => {
-  const owner = { owner: "web" as const, isWebOwner: true, webOwnerOnline: true };
+  const owner = { owner: "web" as const, isWebOwner: true, webOwnerOnline: true, adminSession: true };
   assert.equal(doomMessageAllowed({ type: "key", key: "fire", down: true }, owner), true);
   assert.equal(doomMessageAllowed({ type: "claim", token: "t" }, owner), true);
   assert.equal(doomMessageAllowed({ type: "volume", value: 20 }, owner), true);
 });
 
 test("a second web tab cannot take play-here or volume from the web owner", () => {
-  const other = { owner: "web" as const, isWebOwner: false, webOwnerOnline: true };
+  const other = { owner: "web" as const, isWebOwner: false, webOwnerOnline: true, adminSession: true };
   assert.equal(doomMessageAllowed({ type: "play-here" }, other), false);
   assert.equal(doomMessageAllowed({ type: "volume", value: 20 }, other), false);
 });
 
 test("a web client may take play-here from the Pi", () => {
-  assert.equal(doomMessageAllowed({ type: "play-here" }, { owner: "pi", isWebOwner: false, webOwnerOnline: false }), true);
+  assert.equal(doomMessageAllowed({ type: "play-here" }, { owner: "pi", isWebOwner: false, webOwnerOnline: false, adminSession: true }), true);
 });
 
 test("release and stream are always allowed", () => {
-  const mirror = { owner: "pi" as const, isWebOwner: false, webOwnerOnline: false };
+  const mirror = { owner: "pi" as const, isWebOwner: false, webOwnerOnline: false, adminSession: true };
   assert.equal(doomMessageAllowed({ type: "release" }, mirror), true);
   assert.equal(doomMessageAllowed({ type: "stream", on: true }, mirror), true);
 });
@@ -277,7 +277,7 @@ test("a volume change from the web owner reaches the session and every state", (
   const { session } = makeSession();
   session.start();
   const wss = new EventEmitter();
-  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", { isAdminSession: () => true });
 
   const owner = fakeClient();
   const mirror = fakeClient();
@@ -301,7 +301,7 @@ test("a volume change from the web owner reaches the session and every state", (
 });
 
 test("a takeover is allowed when the web owner's socket is gone", () => {
-  const stale = { owner: "web" as const, isWebOwner: false, webOwnerOnline: false };
+  const stale = { owner: "web" as const, isWebOwner: false, webOwnerOnline: false, adminSession: true };
   assert.equal(doomMessageAllowed({ type: "play-here" }, stale), true);
 });
 
@@ -309,7 +309,7 @@ test("a mirror's play-here is refused while the web owns the game", () => {
   const { session } = makeSession();
   session.start();
   const wss = new EventEmitter();
-  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", { isAdminSession: () => true });
 
   const owner = fakeClient();
   const other = fakeClient();
@@ -331,7 +331,7 @@ test("play-here from the Pi's owner is passed through and the web owns it", asyn
   session.start();
   session.claimOwner("pi");
   const wss = new EventEmitter();
-  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", { isAdminSession: () => true });
 
   const client = fakeClient();
   wss.emit("connection", client as unknown as WebSocket);
@@ -350,7 +350,7 @@ test("play-here starts the engine when no game runs and leaves the web owning it
   const { session } = makeSession();
   assert.equal(session.state().running, false);
   const wss = new EventEmitter();
-  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", { isAdminSession: () => true });
 
   const client = fakeClient();
   wss.emit("connection", client as unknown as WebSocket);
@@ -371,7 +371,7 @@ test("play-here reports the start error and keeps the owner when the engine cann
     wadExists: () => false,
   });
   const wss = new EventEmitter();
-  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", { isAdminSession: () => true });
 
   const client = fakeClient();
   wss.emit("connection", client as unknown as WebSocket);
@@ -387,9 +387,9 @@ test("parses stop", () => {
 });
 
 test("only the web owner may stop", () => {
-  const owner = { owner: "web" as const, isWebOwner: true, webOwnerOnline: true };
-  const mirror = { owner: "web" as const, isWebOwner: false, webOwnerOnline: true };
-  const piMirror = { owner: "pi" as const, isWebOwner: false, webOwnerOnline: false };
+  const owner = { owner: "web" as const, isWebOwner: true, webOwnerOnline: true, adminSession: true };
+  const mirror = { owner: "web" as const, isWebOwner: false, webOwnerOnline: true, adminSession: true };
+  const piMirror = { owner: "pi" as const, isWebOwner: false, webOwnerOnline: false, adminSession: true };
   assert.equal(doomMessageAllowed({ type: "stop" }, owner), true);
   assert.equal(doomMessageAllowed({ type: "stop" }, mirror), false);
   assert.equal(doomMessageAllowed({ type: "stop" }, piMirror), false);
@@ -399,7 +399,7 @@ test("the web owner's stop ends the game for everyone", () => {
   const { session } = makeSession();
   session.start();
   const wss = new EventEmitter();
-  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", { isAdminSession: () => true });
 
   const owner = fakeClient();
   const mirror = fakeClient();
@@ -418,7 +418,7 @@ test("a mirror's stop is refused with a clear message and the game keeps running
   const { session } = makeSession();
   session.start();
   const wss = new EventEmitter();
-  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", { isAdminSession: () => true });
 
   const owner = fakeClient();
   const mirror = fakeClient();
@@ -437,7 +437,7 @@ test("with the Pi as owner, a phone with the QR token takes the control", () => 
   session.start();
   const piToken = session.claimOwner("pi").token!;
   const wss = new EventEmitter();
-  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", { isAdminSession: () => true });
 
   const phone = fakeClient();
   wss.emit("connection", phone as unknown as WebSocket);
@@ -452,7 +452,7 @@ test("with the Pi as owner, a claim with a bad token is refused", () => {
   session.start();
   session.claimOwner("pi");
   const wss = new EventEmitter();
-  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", { isAdminSession: () => true });
 
   const phone = fakeClient();
   wss.emit("connection", phone as unknown as WebSocket);
@@ -481,7 +481,7 @@ test("the state carries the audio and music errors when the player reports them"
   });
   session.start();
   const wss = new EventEmitter();
-  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", { isAdminSession: () => true });
   const client = fakeClient();
   wss.emit("connection", client as unknown as WebSocket);
   assert.equal(lastState(client).audioError, null);
@@ -501,6 +501,7 @@ test("play-here refuses to start the engine when the daemon owns the panel", asy
   const { session } = makeSession();
   const wss = new EventEmitter();
   attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", {
+    isAdminSession: () => true,
     daemonBlockedReason: async () => "DOOM requiere la pantalla directa; el daemon está activo",
   });
   const client = fakeClient();
@@ -516,6 +517,7 @@ test("play-here starts the engine when the daemon is not active", async () => {
   const { session } = makeSession();
   const wss = new EventEmitter();
   attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", {
+    isAdminSession: () => true,
     daemonBlockedReason: async () => null,
   });
   const client = fakeClient();
@@ -542,7 +544,7 @@ test("play-here with a game starts that game and the state names it", async () =
     wadExists: () => true,
   });
   const wss = new EventEmitter();
-  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", { isAdminSession: () => true });
   const client = fakeClient();
   wss.emit("connection", client as unknown as WebSocket);
   client.emit("message", Buffer.from(JSON.stringify({ type: "play-here", game: "freedoom1" })));
@@ -555,7 +557,7 @@ test("play-here with a game starts that game and the state names it", async () =
 test("the web's stop reports closed and no game", async () => {
   const { session } = makeSession();
   const wss = new EventEmitter();
-  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", { isAdminSession: () => true });
   const owner = fakeClient();
   wss.emit("connection", owner as unknown as WebSocket);
   owner.emit("message", Buffer.from(JSON.stringify({ type: "play-here" })));
@@ -564,4 +566,69 @@ test("the web's stop reports closed and no game", async () => {
   assert.equal(lastState(owner).running, false);
   assert.equal(lastState(owner).closed, true);
   assert.equal(lastState(owner).game, null);
+});
+
+test("play-here, volume and stop need an admin session; claim and key do not", () => {
+  const noSession = { owner: "web" as const, isWebOwner: false, webOwnerOnline: false, adminSession: false };
+  assert.equal(doomMessageAllowed({ type: "play-here" }, noSession), false);
+  assert.equal(doomMessageAllowed({ type: "volume", value: 20 }, { ...noSession, owner: "web", isWebOwner: true }), false);
+  assert.equal(doomMessageAllowed({ type: "stop" }, { ...noSession, owner: "web", isWebOwner: true }), false);
+  assert.equal(doomMessageAllowed({ type: "claim", token: "t" }, { owner: "pi", isWebOwner: false, webOwnerOnline: false, adminSession: false }), true);
+  assert.equal(doomMessageAllowed({ type: "key", key: "fire", down: true }, { owner: "pi", isWebOwner: false, webOwnerOnline: false, adminSession: false }), true);
+});
+
+test("a socket without an admin session is told so, and its owner actions do nothing", async () => {
+  const { session } = makeSession();
+  session.start();
+  const wss = new EventEmitter();
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", {
+    isAdminSession: () => false,
+  });
+  const phone = fakeClient();
+  wss.emit("connection", phone as unknown as WebSocket, { headers: {} });
+  phone.emit("message", Buffer.from(JSON.stringify({ type: "play-here" })));
+  await tick();
+  assert.equal(session.owner(), null, "play-here without a session must not take the game");
+  assert.equal(lastState(phone).error, "Inicia sesión en el admin");
+
+  session.claimOwner("pi");
+  phone.emit("message", Buffer.from(JSON.stringify({ type: "volume", value: 20 })));
+  assert.equal(session.volume(), 60, "volume without a session must not change");
+  assert.equal(lastState(phone).error, "Inicia sesión en el admin");
+
+  phone.emit("message", Buffer.from(JSON.stringify({ type: "stop" })));
+  assert.equal(session.state().running, true, "stop without a session must not end the game");
+  assert.equal(lastState(phone).error, "Inicia sesión en el admin");
+});
+
+test("the admin session is read from the connection's cookie, on every message", async () => {
+  let loggedIn = true;
+  const { session } = makeSession();
+  const wss = new EventEmitter();
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", {
+    isAdminSession: (req) => loggedIn && req.headers.cookie === "akbal_session=ok",
+  });
+  const admin = fakeClient();
+  wss.emit("connection", admin as unknown as WebSocket, { headers: { cookie: "akbal_session=ok" } });
+  admin.emit("message", Buffer.from(JSON.stringify({ type: "play-here" })));
+  await tick();
+  assert.equal(session.owner(), "web", "a socket with the session may play here");
+
+  loggedIn = false;
+  admin.emit("message", Buffer.from(JSON.stringify({ type: "stop" })));
+  assert.equal(session.state().running, true, "after the admin logs out the socket loses its rights");
+});
+
+test("claim with the QR token works without an admin session", () => {
+  const { session } = makeSession();
+  session.start();
+  const piToken = session.claimOwner("pi").token!;
+  const wss = new EventEmitter();
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", {
+    isAdminSession: () => false,
+  });
+  const phone = fakeClient();
+  wss.emit("connection", phone as unknown as WebSocket, { headers: {} });
+  phone.emit("message", Buffer.from(JSON.stringify({ type: "claim", token: piToken })));
+  assert.equal(session.state().controller, true);
 });

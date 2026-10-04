@@ -16,7 +16,7 @@ import {
   type WhisplayIMApprovalRequest,
 } from "../device/im-bridge";
 import { FlowStateMachine } from "./chat-flow/stateMachine";
-import { leaveDoomMode, shouldLeaveDoom } from "./chat-flow/doom-mode";
+import { doomSession, leaveDoomMode, shouldLeaveDoom } from "./chat-flow/doom-mode";
 import { flowStates } from "./chat-flow/states";
 import { ChatFlowContext, FlowName } from "./chat-flow/types";
 import { onWebChatModeChange } from "./chat-flow/web-chat-state";
@@ -123,6 +123,9 @@ class ChatFlow implements ChatFlowContext {
       },
       ({ charEnd, durationMs }) => {
         if (!this.isAnswerFlow()) return;
+        // Akbal's voice is about to sound: the game's audio waits until the
+        // reply leaves answer (see transitionTo).
+        doomSession.pauseAudio();
         if (!durationMs || durationMs <= 0) return;
         // This fires right as this sentence's audio is about to play — the
         // one true moment to switch the character to "hablando" (see the
@@ -302,6 +305,12 @@ class ChatFlow implements ChatFlowContext {
     }
     if (shouldLeaveDoom(this.currentFlowName, flowName)) {
       leaveDoomMode();
+    }
+    // Every exit from a spoken reply goes through here (normal end, stop,
+    // interrupt, or a failed LLM/TTS turn falling back to sleep), so this is
+    // where the game's audio always comes back.
+    if (this.isAnswerFlow() && flowName !== "answer" && flowName !== "external_answer") {
+      doomSession.resumeAudio();
     }
     console.log(`[${getCurrentTimeTag()}] switch to:`, flowName);
     this.stateMachine.transitionTo(flowName);

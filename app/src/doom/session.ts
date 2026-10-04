@@ -84,6 +84,8 @@ export class DoomSession {
   private audio: AudioSink | null = null;
   private music: MusicSink | null = null;
   private audioListeners = new Set<(pcm: Buffer) => void>();
+  // Set while Akbal speaks: the engine keeps generating PCM, which is dropped.
+  private audioPaused = false;
   private controlListeners = new Set<(msg: ControlMessage) => void>();
   private stateListeners = new Set<(s: DoomState) => void>();
   // Keys the controller has pressed and not yet released. Sent "up" when the
@@ -137,8 +139,7 @@ export class DoomSession {
     // the sink or listeners of the next one.
     engine.audio.on("data", (chunk: Buffer) => {
       if (this.engine !== engine) return;
-      this.audio?.write(chunk);
-      this.audioListeners.forEach((cb) => cb(chunk));
+      this.deliverAudio(chunk);
     });
     const decoder = new StringDecoder("utf8");
     let pending = "";
@@ -260,6 +261,27 @@ export class DoomSession {
     return () => this.audioListeners.delete(cb);
   }
 
+  // Idempotent. While paused the PCM is dropped and the music player is
+  // paused (SIGSTOP), so the game stays quiet during Akbal's voice reply.
+  pauseAudio(): void {
+    if (this.audioPaused) return;
+    this.audioPaused = true;
+    this.music?.handle({ kind: "pause" });
+  }
+
+  // Idempotent. Undoes pauseAudio: PCM flows again and the music resumes.
+  resumeAudio(): void {
+    if (!this.audioPaused) return;
+    this.audioPaused = false;
+    this.music?.handle({ kind: "resume" });
+  }
+
+  // Test-only: pushes PCM through the same gate as the engine's fd 3 reader,
+  // without a pipe. Production code must not call it.
+  feedAudioForTest(pcm: Buffer): void {
+    this.deliverAudio(pcm);
+  }
+
   onControl(cb: (msg: ControlMessage) => void): () => void {
     this.controlListeners.add(cb);
     return () => this.controlListeners.delete(cb);
@@ -285,6 +307,13 @@ export class DoomSession {
     this.stopMusic();
     engine.kill();
     this.emitState();
+  }
+
+  // The one place PCM leaves the session: to the AudioOut and to the listeners.
+  private deliverAudio(pcm: Buffer): void {
+    if (this.audioPaused) return;
+    this.audio?.write(pcm);
+    this.audioListeners.forEach((cb) => cb(pcm));
   }
 
   private stopAudio(): void {

@@ -497,3 +497,44 @@ test("musicError is cleared when the engine starts again", () => {
   session.start();
   assert.equal(session.state().musicError, null);
 });
+
+// Records the kinds of control messages the session sends to the music player.
+function recordingMusic() {
+  const kinds: string[] = [];
+  const openMusic = () => ({
+    handle: (msg: { kind: string }) => { kinds.push(msg.kind); },
+    setGain: () => {},
+    stop: () => {},
+  });
+  return { kinds, openMusic };
+}
+
+test("pauseAudio drops PCM and pauses music; resumeAudio restores both", () => {
+  const music = recordingMusic();
+  const { session } = makeSession({ openMusic: music.openMusic });
+  session.start();
+  const sent: Buffer[] = [];
+  session.onAudio((pcm) => sent.push(pcm));
+  session.pauseAudio();
+  session.pauseAudio();
+  session.feedAudioForTest(Buffer.alloc(512));
+  assert.equal(sent.length, 0);
+  assert.deepEqual(music.kinds, ["pause"]);
+  session.resumeAudio();
+  session.resumeAudio();
+  session.feedAudioForTest(Buffer.alloc(512));
+  assert.equal(sent.length, 1);
+  assert.deepEqual(music.kinds, ["pause", "resume"]);
+});
+
+test("paused PCM never reaches the AudioOut sink", () => {
+  const { sinks, openAudio } = countingSink();
+  const { session } = makeSession({ openAudio });
+  session.start();
+  session.pauseAudio();
+  session.feedAudioForTest(Buffer.alloc(512));
+  assert.equal(sinks[0].written.length, 0);
+  session.resumeAudio();
+  session.feedAudioForTest(Buffer.alloc(512));
+  assert.equal(sinks[0].written.length, 1);
+});

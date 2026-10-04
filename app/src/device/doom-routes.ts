@@ -58,9 +58,17 @@ export function attachDoomSocket(wss: WebSocketServer, session: DoomSession, scr
       else if (msg.type === "stream") clients.get(ws)!.streaming = msg.on;
       sendState(ws);
     });
-    ws.on("close", () => {
+    const drop = () => {
       session.release(id);
       clients.delete(ws);
+    };
+    ws.on("close", drop);
+    // A malformed frame emits 'error' on the socket. Without a listener Node
+    // throws and takes the whole Akbal process down, so the error only drops
+    // this client.
+    ws.on("error", (err: Error) => {
+      console.warn("[DOOM] socket error:", err.message);
+      drop();
     });
   });
 }

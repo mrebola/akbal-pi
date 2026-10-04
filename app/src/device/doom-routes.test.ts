@@ -104,3 +104,24 @@ test("only the holder's keys reach the engine", async () => {
   await tick();
   assert.equal(written.length, 1, "the holder's key must reach the engine");
 });
+
+test("a socket error cleans up like close and does not throw", () => {
+  const { session, token } = makeSession();
+  const wss = new EventEmitter();
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+
+  const client = fakeClient();
+  wss.emit("connection", client as unknown as WebSocket);
+  client.emit("message", Buffer.from(JSON.stringify({ type: "claim", token: token() })));
+  assert.equal(session.state().controller, true);
+
+  // Without an 'error' listener EventEmitter throws here, which is what a
+  // malformed frame would do to the whole Akbal process.
+  assert.doesNotThrow(() => client.emit("error", new Error("frame malformado")));
+  assert.equal(session.state().controller, false, "an error must release the controller like close does");
+
+  // The client was dropped: a later state change must not be sent to it.
+  const before = client.sent.length;
+  session.start();
+  assert.equal(client.sent.length, before, "a dropped client must not get more messages");
+});

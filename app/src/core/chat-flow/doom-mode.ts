@@ -50,6 +50,14 @@ export function doomScreenUrl(input: {
 // Any flow change away from DOOM is an exit, whatever caused it (the hold,
 // a web chat, an approval, a spoken answer). ChatFlow.transitionTo calls
 // leaveDoomMode when this says so.
+// The QR carries the control token, so a phone that scans it can claim the
+// controller. Only the QR gets it: the socket state never echoes the token.
+export function withControlToken(url: string, token: string): string {
+  const u = new URL(url);
+  u.searchParams.set("t", token);
+  return u.toString();
+}
+
 export function shouldLeaveDoom(from: string, to: string): boolean {
   return from === "doom" && to !== "doom";
 }
@@ -132,23 +140,24 @@ let generation = 0;
 
 export async function enterDoomMode(url: string): Promise<void> {
   const gen = ++generation;
-  screenUrl = url;
-  const [qr, daemonActive] = await Promise.all([
-    generateConnectQr(url).catch(() => ""),
-    isWhisplayDaemonActive(),
-  ]);
+  const daemonActive = await isWhisplayDaemonActive();
   if (gen !== generation) return;
   const blocked = doomBlockedReason(daemonActive);
   if (blocked) {
     showDoomError(blocked);
     return;
   }
-  qrPath = qr;
   const started = doomSession.start();
   if (!started.ok) {
     showDoomError(started.error ?? "No se pudo iniciar DOOM");
     return;
   }
+  // The token only exists once the engine starts, so the QR is built after it.
+  // If the player left during the await, leaveDoomMode already stopped the engine.
+  screenUrl = withControlToken(url, started.token!);
+  const qr = await generateConnectQr(screenUrl).catch(() => "");
+  if (gen !== generation) return;
+  qrPath = qr;
   unsubscribers.forEach((off) => off());
   unsubscribers = [
     doomSession.onState((s) => paintForState(s)),

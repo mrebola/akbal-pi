@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { doomScreenUrl, shouldLeaveDoom, doomBlockedReason } from "./doom-mode";
+import { doomScreenUrl, shouldLeaveDoom, doomBlockedReason, withControlToken } from "./doom-mode";
 
 test("uses the Tailscale host when Tailscale is up", () => {
   assert.equal(
@@ -39,4 +39,9 @@ test("staying in DOOM and entering it from elsewhere is not an exit", () => {
 test("refuses to start when the Whisplay daemon owns the screen", () => {
   assert.equal(doomBlockedReason(true), "DOOM requiere la pantalla directa; el daemon está activo");
   assert.equal(doomBlockedReason(false), null);
+});
+
+test("withControlToken adds t=<token> to the screen URL", () => {
+  assert.equal(withControlToken("http://h:8090/doom", "abc"), "http://h:8090/doom?t=abc");
+  assert.equal(withControlToken("http://h:8090/doom?lang=es", "abc"), "http://h:8090/doom?lang=es&t=abc");
 });

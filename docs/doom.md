@@ -87,7 +87,8 @@ con el HAT conectado y anota el resultado:
 4. **Desconexión libera el control.** Un celular tiene el control; desconéctalo
    (cierra la página o apaga datos). Otro celular debe poder tomarlo.
 5. **Motor muerto.** Con DOOM corriendo, ejecuta `pkill doom-engine`. La pantalla
-   vuelve a vertical y al menú; mantener el botón 900 ms también debe regresar al menú.
+   muestra la tarjeta de error en vertical y se queda ahí; mantener el botón 900 ms sale
+   del modo y regresa al menú.
 
 Además, la rotación a horizontal (MADCTL `0xA0`) y el regreso a vertical (`0xC0`)
 están validados en la Pi desde el diseño; confírmalos en cada prueba.

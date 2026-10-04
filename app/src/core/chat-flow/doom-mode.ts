@@ -132,14 +132,36 @@ export const doomSession = new DoomSession({
 });
 
 let unsubscribers: Array<() => void> = [];
-let screenUrl = "";
+let baseScreenUrl = "";
 let qrPath = "";
 // Bumped on every enter and leave, so an enter still generating its QR
 // cannot start the engine after the player already left.
 let generation = 0;
 
+// The QR text is shown on the device, and display() logs a preview of it, so
+// it carries the base URL only. The token lives in the QR image.
+export function doomQrText(hasQr: boolean, baseUrl: string): string {
+  return hasQr ? "Escanea el QR para controlar DOOM" : `Abre ${baseUrl} para controlar DOOM`;
+}
+
+// Entry from the flow. Any failure ends in the error card, never in a
+// half-built screen: subscriptions are dropped and the engine is stopped.
 export async function enterDoomMode(url: string): Promise<void> {
   const gen = ++generation;
+  baseScreenUrl = url;
+  try {
+    await startDoom(url, gen);
+  } catch (err) {
+    if (gen !== generation) return;
+    console.warn("[DOOM] enter failed:", (err as Error).message);
+    unsubscribers.forEach((off) => off());
+    unsubscribers = [];
+    doomSession.stop();
+    showDoomError("No se pudo iniciar DOOM");
+  }
+}
+
+async function startDoom(url: string, gen: number): Promise<void> {
   const daemonActive = await isWhisplayDaemonActive();
   if (gen !== generation) return;
   const blocked = doomBlockedReason(daemonActive);
@@ -154,8 +176,8 @@ export async function enterDoomMode(url: string): Promise<void> {
   }
   // The token only exists once the engine starts, so the QR is built after it.
   // If the player left during the await, leaveDoomMode already stopped the engine.
-  screenUrl = withControlToken(url, started.token!);
-  const qr = await generateConnectQr(screenUrl).catch(() => "");
+  const tokenUrl = withControlToken(url, started.token!);
+  const qr = await generateConnectQr(tokenUrl).catch(() => "");
   if (gen !== generation) return;
   qrPath = qr;
   unsubscribers.forEach((off) => off());
@@ -194,7 +216,7 @@ function showDoomQr(): void {
     status: "doom",
     emoji: "🎮",
     RGB: "#ff3030",
-    text: qrPath ? "Escanea el QR para controlar DOOM" : `Abre ${screenUrl} para controlar DOOM`,
+    text: doomQrText(qrPath !== "", baseScreenUrl),
     game_qr_path: qrPath,
     game_orientation: 3,
   });

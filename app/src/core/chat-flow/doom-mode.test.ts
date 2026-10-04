@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { doomScreenUrl, shouldLeaveDoom, doomBlockedReason, withControlToken } from "./doom-mode";
+import { doomScreenUrl, shouldLeaveDoom, doomBlockedReason, withControlToken, doomQrText } from "./doom-mode";
 
 test("uses the Tailscale host when Tailscale is up", () => {
   assert.equal(
@@ -44,4 +44,11 @@ test("refuses to start when the Whisplay daemon owns the screen", () => {
 test("withControlToken adds t=<token> to the screen URL", () => {
   assert.equal(withControlToken("http://h:8090/doom", "abc"), "http://h:8090/doom?t=abc");
   assert.equal(withControlToken("http://h:8090/doom?lang=es", "abc"), "http://h:8090/doom?lang=es&t=abc");
+});
+
+test("the QR fallback text never shows the control token", () => {
+  assert.equal(doomQrText(true, "http://h:8090/doom"), "Escanea el QR para controlar DOOM");
+  const text = doomQrText(false, "http://h:8090/doom");
+  assert.equal(text, "Abre http://h:8090/doom para controlar DOOM");
+  assert.ok(!text.includes("t="), "the token must stay in the QR only");
 });

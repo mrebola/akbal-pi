@@ -3,7 +3,7 @@
 // fetch-doom-engine.sh (Task 4).
 export const DOOM_KEYS = [
   "forward", "back", "left", "right", "strafeLeft", "strafeRight",
-  "fire", "use", "run", "menu",
+  "fire", "use", "run", "menu", "enter",
   "weapon1", "weapon2", "weapon3", "weapon4", "weapon5", "weapon6", "weapon7",
 ] as const;
 
@@ -20,6 +20,7 @@ export const KEY_CODES: Record<DoomKey, number> = {
   use: 0xa2,          // KEY_USE (E / space)
   run: 0xb6,          // KEY_RSHIFT
   menu: 27,           // KEY_ESCAPE
+  enter: 13,          // KEY_ENTER (title screen "start")
   weapon1: 0x31,
   weapon2: 0x32,
   weapon3: 0x33,
@@ -42,6 +43,7 @@ const BROWSER_TO_KEY: Record<string, DoomKey> = {
   KeyE: "use",
   ShiftLeft: "run", ShiftRight: "run",
   Escape: "menu",
+  Enter: "enter", NumpadEnter: "enter",
   Digit1: "weapon1", Digit2: "weapon2", Digit3: "weapon3", Digit4: "weapon4",
   Digit5: "weapon5", Digit6: "weapon6", Digit7: "weapon7",
 };

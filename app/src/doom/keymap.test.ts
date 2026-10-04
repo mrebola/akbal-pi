@@ -23,6 +23,12 @@ test("fire is CTRL or Space, USE is E, RUN is Shift, ESC is menu", () => {
   assert.equal(browserKeyToDoomKey("Escape"), "menu");
 });
 
+test("Enter (and the keypad Enter) start the game from the title screen", () => {
+  assert.equal(browserKeyToDoomKey("Enter"), "enter");
+  assert.equal(browserKeyToDoomKey("NumpadEnter"), "enter");
+  assert.equal(KEY_CODES.enter, 13);
+});
+
 test("digits 1-7 select weapons, anything else is unmapped", () => {
   assert.equal(browserKeyToDoomKey("Digit1"), "weapon1");
   assert.equal(browserKeyToDoomKey("Digit7"), "weapon7");

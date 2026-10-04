@@ -50,7 +50,9 @@
     {
       kind: "group", id: "games", labelKey: "topbar.nav_games", fallback: "Juegos",
       children: [
-        { kind: "page", id: "doom", href: "/doom", labelKey: "topbar.tab_doom", titleKey: "topbar.tab_doom_title", fallback: "DOOM" },
+        // Both games share the /doom page; ?game= picks which one it plays.
+        { kind: "page", id: "doom", game: "doom1", href: "/doom?game=doom1", labelKey: "topbar.tab_doom_original", titleKey: "topbar.tab_doom_title", fallback: "DOOM (original)" },
+        { kind: "page", id: "doom", game: "freedoom1", href: "/doom?game=freedoom1", labelKey: "topbar.tab_doom_freedoom", titleKey: "topbar.tab_doom_title", fallback: "DOOM (Freedoom)" },
       ],
     },
     { kind: "panel", id: "music", labelKey: "topbar.tab_music", fallback: "Jukebox" },
@@ -74,8 +76,10 @@
       }
       return `<a href="/#${item.id}" class="tab-link" data-i18n="${item.labelKey}" role="menuitem">${label}</a>`;
     }
-    // kind === "page"
-    if (page === item.id) {
+    // kind === "page". Items with a `game` are only current on that game's
+    // URL (both DOOM entries share the /doom page).
+    const gameOfPage = new URLSearchParams(location.search).get("game") === "freedoom1" ? "freedoom1" : "doom1";
+    if (page === item.id && (!item.game || item.game === gameOfPage)) {
       return `<span class="tab-link active" data-i18n="${item.labelKey}" aria-current="page">${label}</span>`;
     }
     const titleAttr = item.titleKey ? ` title="${escapeAttr(t(item.titleKey, ""))}" data-i18n-title="${item.titleKey}"` : "";

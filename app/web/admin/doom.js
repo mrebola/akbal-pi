@@ -40,6 +40,9 @@
   const volumeUpBtn = $("volume-up");
   const volumeValueEl = $("volume-value");
   const quitBtn = $("quit-btn");
+  const gameNameEl = $("game-name");
+  const closedPanelEl = $("closed-panel");
+  const playAgainBtn = $("play-again");
   const consoleBar = $("console-bar");
   const warningsEl = $("warnings");
   const audioWarningEl = $("audio-warning");
@@ -65,6 +68,17 @@
   // Opened directly it keeps the full page: menu, video, volume, Jugar aquí.
   const controlOnly = Boolean(currentToken);
   document.documentElement.classList.toggle("doom-control", controlOnly);
+
+  // Which DOOM to play. The topbar's two entries set ?game=; anything else
+  // falls back to the original. The server only accepts these two names.
+  const GAME_NAMES = { doom1: "DOOM (original)", freedoom1: "DOOM (Freedoom)" };
+  const GAMES = Object.keys(GAME_NAMES);
+  const urlGameParam = new URLSearchParams(location.search).get("game");
+  const urlGame = GAMES.includes(urlGameParam) ? urlGameParam : "doom1";
+  // The game that is running, or the last one the server reported. Wins over
+  // the URL, so Jugar aquí and Jugar de nuevo never switch games by accident.
+  let stateGame = null;
+  let closed = false; // the game was closed (Salir or the Pi closed it)
 
   let socket = null;
   let connected = false;
@@ -164,6 +178,7 @@
   function renderStatus() {
     let text;
     if (!connected) text = "Reconectando con Akbal…";
+    else if (closed) text = "El juego fue cerrado.";
     else if (mirror) {
       text = owner === "pi"
         ? "DOOM corre en la Pi. Estás viendo el espejo."
@@ -186,6 +201,13 @@
     playHereBtn.hidden = !(mirror || !running);
     playHereBtn.disabled = !connected;
 
+    // Which game is in play, shown as text only: switching needs a new URL.
+    const shownGame = running && stateGame ? GAME_NAMES[stateGame] : null;
+    gameNameEl.hidden = !shownGame;
+    gameNameEl.textContent = shownGame ? `Juego: ${shownGame}` : "";
+    closedPanelEl.hidden = !closed;
+    playAgainBtn.disabled = !connected;
+
     const canStep = connected && isWebOwner() && volume !== null;
     volumeDownBtn.disabled = !canStep || volume <= VOLUME_MIN;
     volumeUpBtn.disabled = !canStep || volume >= VOLUME_MAX;
@@ -204,11 +226,17 @@
     updateConsoleBar();
   }
 
+  function isPortrait() {
+    return portraitQuery.matches && window.innerWidth < window.innerHeight;
+  }
+
   // The console bar holds claim, volume and stop. In control-only mode it stays
-  // hidden while we hold the control, so the pad gets the whole screen.
+  // hidden while we hold the control, so the pad gets the whole screen. A closed
+  // game hides the bar and the pad; the closed panel offers to play again.
   function updateConsoleBar() {
-    const portrait = portraitQuery.matches && window.innerWidth < window.innerHeight;
-    consoleBar.hidden = portrait || (controlOnly && controller);
+    const portrait = isPortrait();
+    consoleBar.hidden = portrait || closed || (controlOnly && controller);
+    controlsEl.hidden = portrait || closed;
   }
 
   function renderWarnings() {
@@ -222,9 +250,7 @@
   // Portrait hides the controls and shows the rotate hint. The hint sits
   // under the topbar so the hamburger menu still works to leave this page.
   function renderOrientation() {
-    const portrait = portraitQuery.matches && window.innerWidth < window.innerHeight;
-    rotateHintEl.hidden = !portrait;
-    controlsEl.hidden = portrait;
+    rotateHintEl.hidden = !isPortrait();
     updateConsoleBar();
     document.documentElement.style.setProperty("--doom-topbar-h", `${topbarEl.offsetHeight}px`);
   }
@@ -241,6 +267,11 @@
     audioError = msg.audioError || null;
     musicError = msg.musicError || null;
     serverError = msg.error || null;
+    closed = Boolean(msg.closed);
+    if (typeof msg.game === "string" && GAMES.includes(msg.game)) stateGame = msg.game;
+    else if (!closed && !running) stateGame = null;
+    // A closed game leaves no picture behind.
+    if (closed) canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 
     // Rotated token for the web owner. Stored only, never shown or logged.
     if (typeof msg.token === "string" && msg.token) currentToken = msg.token;
@@ -388,9 +419,14 @@
     send({ type: "stream", on });
   });
 
-  playHereBtn.addEventListener("click", () => {
-    send({ type: "play-here" });
-  });
+  // Starts the game in play, or the one in the URL when none is known. Used by
+  // Jugar aquí (take over or start) and by Jugar de nuevo after a close.
+  function playHere() {
+    send({ type: "play-here", game: stateGame || urlGame });
+  }
+
+  playHereBtn.addEventListener("click", playHere);
+  playAgainBtn.addEventListener("click", playHere);
 
   // The step is taken from the last volume the server reported, not from a
   // local guess, so the value always matches what the Pi plays.

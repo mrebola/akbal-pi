@@ -35,6 +35,34 @@
   color: var(--text-muted);
 }
 
+.game-name {
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* Shown in place of the pad once the game is closed. */
+.closed-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+}
+
+.closed-panel p {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.closed-panel .btn {
+  width: 100%;
+}
+
 .warnings {
   display: flex;
   flex-direction: column;

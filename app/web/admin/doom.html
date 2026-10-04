@@ -15,6 +15,7 @@
     <div class="doom-head">
       <h1 class="doom-title">DOOM</h1>
       <p id="status" class="status" role="status" aria-live="polite">Conectando…</p>
+      <p id="game-name" class="game-name" hidden></p>
       <p id="hint" class="hint"></p>
       <div id="warnings" class="warnings" role="alert" hidden>
         <p id="audio-warning" hidden></p>
@@ -31,6 +32,10 @@
     </section>
 
     <section class="console">
+      <div id="closed-panel" class="closed-panel" role="status" hidden>
+        <p>El juego fue cerrado.</p>
+        <button id="play-again" type="button" class="btn play-here">Jugar de nuevo</button>
+      </div>
       <div id="console-bar" class="console-bar">
         <button id="play-here" type="button" class="btn play-here" hidden>Jugar aquí</button>
         <button id="claim" type="button" class="btn claim" disabled>Tomar control</button>

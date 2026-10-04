@@ -49,6 +49,7 @@
     },
     { kind: "panel", id: "music", labelKey: "topbar.tab_music", fallback: "Jukebox" },
     { kind: "panel", id: "settings", labelKey: "topbar.tab_settings", fallback: "Ajustes" },
+    { kind: "page", id: "doom", href: "/doom", labelKey: "topbar.tab_doom", titleKey: "topbar.tab_doom_title", fallback: "DOOM" },
     { kind: "page", id: "about", href: "/about", labelKey: "topbar.tab_about", titleKey: "topbar.tab_about_title", fallback: "Acerca de" },
   ];
 

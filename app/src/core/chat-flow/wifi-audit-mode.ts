@@ -5,8 +5,9 @@ import { WardriveStatus } from "../../wifi-audit/types";
 // Physical-screen companion of the web "Wardriving" tab. NOT a button-driven
 // flow state: entering/leaving wardriving is normally a web-admin action
 // (the radio gets held for the whole session). While the mode is active the
-// physical button gets a dedicated escape hatch — a HOLD (~1.2s, long press)
-// exits wardriving and returns the device to normal Akbal; short clicks are
+// physical button gets a dedicated escape hatch — a HOLD (0.9s, same as every
+// other screen) opens an exit card, and a second hold leaves wardriving and
+// returns the device to normal Akbal; short clicks are
 // ignored (the radio is busy, no menu). This is the physical escape hatch —
 // the web can always cancel the session itself via POST /api/wardrive/exit.
 //
@@ -25,23 +26,32 @@ let pollTimer: ReturnType<typeof setInterval> | null = null;
 // the device is in.
 let buttonPressedAt: number | null = null;
 let holdCheckTimer: ReturnType<typeof setInterval> | null = null;
+// Stopping the audit ends a session, so the first hold only opens a card:
+// click cancels it, a second hold confirms. Same grammar as wardrive-mode.ts.
+let confirmingExit = false;
 
 const POLL_MS = 2000;
-const HOLD_EXIT_MS = 1200;
+const HOLD_EXIT_MS = 900;
 
 function handleButtonPress(): void {
   buttonPressedAt = Date.now();
   if (!holdCheckTimer) {
     holdCheckTimer = setInterval(() => {
-      if (buttonPressedAt !== null && Date.now() - buttonPressedAt >= 1000) {
+      if (buttonPressedAt !== null && Date.now() - buttonPressedAt >= HOLD_EXIT_MS) {
         const st = getWardriveService().getStatus();
         if (st.mode !== "inactive") {
-          console.log("[wifi-audit] physical hold detected — leaving audit");
           buttonPressedAt = null;
           if (holdCheckTimer) {
             clearInterval(holdCheckTimer);
             holdCheckTimer = null;
           }
+          if (!confirmingExit) {
+            confirmingExit = true;
+            paint(st);
+            return;
+          }
+          console.log("[wifi-audit] physical hold confirmed — leaving audit");
+          confirmingExit = false;
           void getWardriveService().exit();
         }
       }
@@ -50,14 +60,37 @@ function handleButtonPress(): void {
 }
 
 function handleButtonRelease(): void {
+  const pressedFor = buttonPressedAt === null ? 0 : Date.now() - buttonPressedAt;
   buttonPressedAt = null;
   if (holdCheckTimer) {
     clearInterval(holdCheckTimer);
     holdCheckTimer = null;
   }
+  // A short click on the exit card cancels it and returns to the live view.
+  if (confirmingExit && pressedFor > 0 && pressedFor < HOLD_EXIT_MS) {
+    confirmingExit = false;
+    paint(getWardriveService().getStatus());
+  }
 }
 
 function paint(status: WardriveStatus): void {
+  if (confirmingExit) {
+    display({
+      status: "wardrive",
+      emoji: "📡",
+      RGB: "#ff9500",
+      wardrive_ui: "",
+      model_ui: "select",
+      model_ui_title: "WIFI AUDIT",
+      model_ui_label: "¿Salir de la auditoría?",
+      model_ui_description: "Termina la sesión actual",
+      model_ui_index: 0,
+      model_ui_total: 0,
+      model_ui_active: false,
+      text: "Click: cancelar\nMantén: salir",
+    });
+    return;
+  }
   const captured = status.session?.targets.filter((t) => t.status === "captured").length || 0;
   const total = status.session?.targets.length || 0;
   const attacking = status.mode === "attacking";
@@ -104,6 +137,7 @@ export function startWardriveDisplayMirror(): void {
     if (payload?.type !== "status") return;
     const st: WardriveStatus = payload.status;
     if (st.mode === "inactive") {
+      confirmingExit = false;
       // Leaving wardriving: give the button back to whatever chat-flow
       // state is actually current (see setMainButtonSuspended below).
       setMainButtonSuspended(false);

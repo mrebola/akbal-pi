@@ -18,7 +18,7 @@ const SHORT_PRESS_MAX_MS = 400;
 // docs/display-ui.md for why this moved from 3s to ~0.9s.
 const CONFIRM_HOLD_MS = 900;
 const HOLD_TICK_MS = 60;
-const IDLE_TIMEOUT_MS = 20000;
+const IDLE_TIMEOUT_MS = 30000;
 
 // What the carousel actually needs — built fresh from `ollama list` every
 // time the menu opens (see resolveOptions), not from MODEL_ALIASES alone,
@@ -94,7 +94,7 @@ function renderSelectScreen(): void {
     model_ui_index: selectedIndex + 1,
     model_ui_total: options.length,
     model_ui_active: isActive,
-    text: isActive ? "Click: siguiente" : "Mantén presionado para activar",
+    text: "Click: siguiente\nMantén: elegir",
   });
 }
 

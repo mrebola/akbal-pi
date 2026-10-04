@@ -1448,15 +1448,16 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     enterWebChatMode();
   },
   doom: (ctx: ChatFlowContext) => {
-    // Hold the button to leave; the hold also restores the vertical screen.
-    onButtonDoubleClick(null);
-    // Leaving is a plain transition: ChatFlow.transitionTo stops the engine
-    // for any exit from "doom" (see shouldLeaveDoom). The hold alone ends the
-    // game for everyone, even when the web owns it.
-    onButtonPressed(() => handleDoomPress(() => {
+    // Hold or double click leaves; both restore the vertical screen. Leaving
+    // is a plain transition: ChatFlow.transitionTo stops the engine for any
+    // exit from "doom" (see shouldLeaveDoom). The exit ends the game for
+    // everyone, even when the web owns it.
+    const leaveDoom = () => {
       markDoomHoldExit();
       ctx.transitionTo("sleep");
-    }));
+    };
+    onButtonDoubleClick(leaveDoom);
+    onButtonPressed(() => handleDoomPress(leaveDoom));
     onButtonReleased(() => handleDoomRelease());
     const flow = {
       currentFlow: () => ctx.currentFlowName,

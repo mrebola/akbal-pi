@@ -56,7 +56,7 @@ const BASE_ITEMS: QuickMenuItem[] = [
 const SHORT_PRESS_MAX_MS = 400;
 const CONFIRM_HOLD_MS = 900;
 const HOLD_TICK_MS = 60;
-const IDLE_TIMEOUT_MS = 20000;
+const IDLE_TIMEOUT_MS = 30000;
 
 let items: QuickMenuItem[] = BASE_ITEMS;
 let selectedIndex = 0;

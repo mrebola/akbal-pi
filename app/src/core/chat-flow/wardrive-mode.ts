@@ -14,6 +14,10 @@ import { DriveStatus } from "../../wardrive/types";
 
 const IDLE_TIMEOUT_MS = 30000;
 const CONFIRM_HOLD_MS = 900;
+// Stopping a running session is the only destructive action here, so it
+// goes through a confirmation card: click cancels (safe default), hold
+// confirms. Double click and hold both just open that card.
+let confirmingStop = false;
 const HOLD_TICK_MS = 60;
 // 3s like the other radar screens: each refresh rewrites the full frame and
 // faster ticks starved the GPIO button polling on real hardware (see
@@ -70,6 +74,23 @@ function fmtDistance(m: number): string {
 
 function renderScreen(): void {
   const st: DriveStatus = getDriveWardriveService().getStatus();
+  if (st.running && confirmingStop) {
+    display({
+      status: "wardrive",
+      emoji: "📡",
+      RGB: "#ff9500",
+      wardrive_ui: "",
+      model_ui: "select",
+      model_ui_title: "WARDRIVE",
+      model_ui_label: "¿Detener captura?",
+      model_ui_description: "Termina la sesión actual",
+      model_ui_index: 0,
+      model_ui_total: 0,
+      model_ui_active: false,
+      text: "Click: cancelar\nMantén: detener",
+    });
+    return;
+  }
   if (st.running) {
     // LIVE SESSION — the wardrive overlay (render_wardrive_screen in
     // chatbot-ui.py): animated scene + counters + one-line status. Keep
@@ -120,6 +141,7 @@ export function resetWardriveControl(): void {
   clearIdleTimer();
   stopRefreshTimer();
   pressStartedAt = 0;
+  confirmingStop = false;
 }
 
 export function onWardriveExit(callback: () => void): void {
@@ -144,12 +166,13 @@ export function handleWardrivePress(): void {
     const percent = Math.min(100, Math.round((elapsed / CONFIRM_HOLD_MS) * 100));
     const st = getDriveWardriveService().getStatus();
     if (st.running) {
-      // Holding while a session runs = the exit gesture. Show the ring too.
+      // Holding while a session runs opens the stop confirmation, and a
+      // hold on that card stops it. The ring shows the same 0.9 s progress.
       display({
         wardrive_ui: "",
         model_ui: "confirm",
         model_ui_title: "WARDRIVE",
-        model_ui_label: "Detener",
+        model_ui_label: confirmingStop ? "Deteniendo..." : "Detener captura",
         model_ui_description: "",
         model_ui_percent: percent,
         text: "Manteniendo presionado...",
@@ -175,8 +198,15 @@ export function handleWardrivePress(): void {
 async function onConfirmHold(): Promise<void> {
   const st = getDriveWardriveService().getStatus();
   if (st.running) {
-    // Exit gesture from the live screen (also works from the web side —
-    // the service is the single source of truth for either entry point).
+    if (!confirmingStop) {
+      // First hold only opens the confirmation card; nothing stops yet.
+      confirmingStop = true;
+      renderScreen();
+      return;
+    }
+    // Confirmed: stop the session and leave (the web side sees the same
+    // service state, so this works for web-started sessions too).
+    confirmingStop = false;
     onExitCallback();
     return;
   }
@@ -219,6 +249,13 @@ export function handleWardriveRelease(): void {
   clearHoldTimers();
   pressStartedAt = 0;
   if (!wasHolding) return;
+  // A short click on the stop card cancels it and returns to the live view.
+  if (confirmingStop) {
+    confirmingStop = false;
+    renderScreen();
+    refreshTimer = setInterval(renderScreen, REFRESH_INTERVAL_MS);
+    return;
+  }
   // A short click just refreshes immediately (session state, counters).
   renderScreen();
   refreshTimer = setInterval(renderScreen, REFRESH_INTERVAL_MS);
@@ -226,7 +263,22 @@ export function handleWardriveRelease(): void {
   if (!st.running) armIdleTimer(); // start-screen still idles out
 }
 
+// Double click = one level back, same as every other screen. With a session
+// running it first opens (or closes) the stop card instead of leaving, so a
+// stray double click can't end a capture.
 export function handleWardriveDoubleClick(): void {
+  if (getDriveWardriveService().getStatus().running) {
+    if (confirmingStop) {
+      confirmingStop = false;
+      renderScreen();
+    } else {
+      confirmingStop = true;
+      stopRefreshTimer();
+      renderScreen();
+      refreshTimer = setInterval(renderScreen, REFRESH_INTERVAL_MS);
+    }
+    return;
+  }
   resetWardriveControl();
   onExitCallback();
 }

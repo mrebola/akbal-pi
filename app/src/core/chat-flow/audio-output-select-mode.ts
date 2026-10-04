@@ -38,7 +38,7 @@ const SHORT_PRESS_MAX_MS = 400;
 // Matches mode-select-mode.ts / model-select-mode.ts / quick-menu-mode.ts.
 const CONFIRM_HOLD_MS = 900;
 const HOLD_TICK_MS = 60;
-const IDLE_TIMEOUT_MS = 20000;
+const IDLE_TIMEOUT_MS = 30000;
 
 let selectedIndex = 0;
 let pressStartedAt = 0;

@@ -14,7 +14,7 @@ const STEP = 10;
 const SHORT_PRESS_MAX_MS = 400;
 const CONFIRM_HOLD_MS = 900;
 const HOLD_TICK_MS = 60;
-const IDLE_TIMEOUT_MS = 20000;
+const IDLE_TIMEOUT_MS = 30000;
 
 let currentLevel = 0;
 let pressStartedAt = 0;
@@ -58,7 +58,7 @@ function renderScreen(): void {
     model_ui_index: 0,
     model_ui_total: 0,
     model_ui_active: false,
-    text: "Click: subir · Mantén: listo",
+    text: "Click: subir\nMantén: listo",
   });
 }
 

@@ -9,7 +9,7 @@ import { generateConnectQr } from "../../utils/network-info";
 // closest relative — paged text, holding ~0.9s or a double click exits),
 // with one extra page at the end for the QR, generated lazily and cached
 // since the URL never changes at runtime.
-const IDLE_TIMEOUT_MS = 25000;
+const IDLE_TIMEOUT_MS = 30000;
 const CONFIRM_HOLD_MS = 900;
 const HOLD_TICK_MS = 60;
 export const BOOK_URL = "https://cypher404.com/book/";

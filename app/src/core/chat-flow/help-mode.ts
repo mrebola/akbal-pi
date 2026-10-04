@@ -6,7 +6,7 @@ import { display } from "../../device/display";
 // every other menu now: click pages through the (at most two) screens,
 // holding the button ~0.9s exits, and so does a double click — no dedicated
 // "SALIR" screen to click through first.
-const IDLE_TIMEOUT_MS = 20000;
+const IDLE_TIMEOUT_MS = 30000;
 const CONFIRM_HOLD_MS = 900;
 const HOLD_TICK_MS = 60;
 const ENTRIES_PER_PAGE = 3;

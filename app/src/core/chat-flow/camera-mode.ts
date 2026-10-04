@@ -1,11 +1,8 @@
 import { display, getCurrentStatus } from "../../device/display";
 
-// Deliberately not the 900ms CONFIRM_HOLD_MS every other menu uses: this
-// isn't "hold to confirm" (releasing early is what takes the photo, see
-// handleCameraModeRelease below) — it's "hold past this to back out
-// instead", so it needs enough slack to aim/frame the shot without
-// accidentally exiting before you meant to release.
-const CAMERA_LONG_PRESS_MS = 2000;
+// Same 0.9 s hold as every other screen: a hold past this backs out. A
+// release before it takes the photo (see handleCameraModeRelease below).
+const CAMERA_LONG_PRESS_MS = 900;
 const CAMERA_EXIT_AFTER_CAPTURE_MS = 2000;
 
 let cameraModePressAt = 0;

@@ -25,7 +25,8 @@ import {
 // reconnect a second device. Holding turns the AP back off and leaves
 // (nmcli can't be a client and an AP at once — see utils/access-point.ts);
 // a double click just leaves with the AP running as-is.
-const IDLE_TIMEOUT_MS = 60000; // longer than other menus — reading/scanning a QR takes a moment
+// Longer than the other menus on purpose: the phone needs time to scan the QR.
+const IDLE_TIMEOUT_MS = 60000;
 const CONFIRM_HOLD_MS = 900;
 const HOLD_TICK_MS = 60;
 const CLIENT_POLL_MS = 2000;
@@ -39,6 +40,9 @@ let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let clientPollTimer: ReturnType<typeof setInterval> | null = null;
 let active = false; // guards stale renders after backing out mid-request
 let busy = false;
+// Turning the hotspot off cuts every connected phone, so the first hold
+// opens a card: click cancels, a second hold confirms. Same as wardrive.
+let confirmingOff = false;
 let currentView: QrView = "wifi";
 let autoSwitched = false; // only auto-switch once per visit — after that it's manual
 let onExitCallback: () => void = () => {};
@@ -103,6 +107,19 @@ function showLoading(label: string): void {
 async function renderView(): Promise<void> {
   const status = await getApStatus();
   if (!active) return;
+  if (confirmingOff) {
+    display({
+      model_ui: "select",
+      model_ui_title: "WIFI DIRECTO",
+      model_ui_label: "¿Apagar el punto de acceso?",
+      model_ui_description: "Se desconectan los teléfonos",
+      model_ui_index: 0,
+      model_ui_total: 0,
+      model_ui_active: false,
+      text: "Click: cancelar\nMantén: apagar",
+    });
+    return;
+  }
   if (currentView === "wifi") {
     const qrPath = await generateApConnectQrFile(status).catch((err) => {
       console.warn("[wifi-connect-mode] generateApConnectQrFile failed:", err);
@@ -115,7 +132,7 @@ async function renderView(): Promise<void> {
       model_ui_label: status.ssid,
       model_ui_description: `Clave: ${status.password}`,
       model_ui_qr_path: qrPath,
-      text: `Conecta tu teléfono a "${status.ssid}" · Click: QR de la web · Mantén: desactivar`,
+      text: "Click: cambiar QR\nMantén: apagar",
     });
   } else {
     const qrPath = await generateApUrlQrFile(status).catch((err) => {
@@ -129,7 +146,7 @@ async function renderView(): Promise<void> {
       model_ui_label: "Abre la web",
       model_ui_description: status.url,
       model_ui_qr_path: qrPath,
-      text: "Escanea para abrir la web · Click: QR del wifi · Mantén: desactivar",
+      text: "Click: cambiar QR\nMantén: apagar",
     });
   }
 }
@@ -138,6 +155,7 @@ export function resetWifiConnectControl(): void {
   clearHoldTimers();
   clearIdleTimer();
   pressStartedAt = 0;
+  confirmingOff = false;
 }
 
 export function onWifiConnectExit(callback: () => void): void {
@@ -191,7 +209,7 @@ export function handleWifiConnectPress(): void {
     display({
       model_ui: "confirm",
       model_ui_title: "WIFI DIRECTO",
-      model_ui_label: "Desactivar y salir",
+      model_ui_label: confirmingOff ? "Apagando..." : "Apagar punto de acceso",
       model_ui_description: "",
       model_ui_percent: percent,
       text: "Manteniendo presionado...",
@@ -199,6 +217,13 @@ export function handleWifiConnectPress(): void {
   }, HOLD_TICK_MS);
   confirmTimer = setTimeout(() => {
     clearHoldTimers();
+    if (!confirmingOff) {
+      confirmingOff = true;
+      void renderView();
+      armIdleTimer();
+      return;
+    }
+    confirmingOff = false;
     busy = true;
     stopClientPoll();
     showLoading("Desactivando...");
@@ -216,6 +241,13 @@ export function handleWifiConnectRelease(): void {
   clearHoldTimers();
   pressStartedAt = 0;
   if (busy || !wasHolding) return;
+  // A short click on the off card cancels it, back to the QR view.
+  if (confirmingOff) {
+    confirmingOff = false;
+    void renderView();
+    armIdleTimer();
+    return;
+  }
   // A short click just flips between the two QR views — the menu is a
   // 2-item carousel, nothing to submit.
   currentView = currentView === "wifi" ? "web" : "wifi";
@@ -223,7 +255,15 @@ export function handleWifiConnectRelease(): void {
   armIdleTimer();
 }
 
+// Double click = one level back. On the off card it closes the card; from the
+// QR view it leaves and the hotspot keeps running.
 export function handleWifiConnectDoubleClick(): void {
+  if (confirmingOff) {
+    confirmingOff = false;
+    void renderView();
+    armIdleTimer();
+    return;
+  }
   resetWifiConnectControl();
   stopClientPoll();
   onExitCallback();

@@ -788,15 +788,19 @@
     margin: 0;
   }
 
-  /* Fullscreen on the frame: only the game and the hint are inside it. */
-  .screen-frame:fullscreen {
+  /* Fullscreen on the frame: only the game and the hint are inside it. The
+     selector carries the same specificity as the desktop frame rule
+     (html:not(.doom-control) .screen-frame) or more, so its border and size
+     win over it. */
+  html:not(.doom-control) .screen-frame:fullscreen {
     width: 100vw;
     height: 100vh;
     aspect-ratio: auto;
     border: 0;
     border-radius: 0;
+    max-width: none;
   }
-  .screen-frame:fullscreen #screen { height: 100%; }
+  html:not(.doom-control) .screen-frame:fullscreen #screen { height: 100%; }
 }
 
 /* Hint over the game while it is fullscreen; hidden elsewhere. */
@@ -861,9 +865,15 @@
     gap: 0;
   }
 
+  /* The game cell is a size container: the frame is as large as the cell lets
+     it be at 280:175, centered. Nothing is reserved by a fixed height, so the
+     frame can never be taller than its cell. */
+  html:not(.doom-control) .screen-wrap {
+    container-type: size;
+  }
   html:not(.doom-control) .screen-frame {
     flex: none;
-    width: min(100%, calc((100dvh - var(--doom-topbar-h, 64px) - 64px) * 1.6));
+    width: min(100cqw, calc(100cqh * 1.6));
     height: auto;
   }
 

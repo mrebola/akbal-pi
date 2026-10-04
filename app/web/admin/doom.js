@@ -54,9 +54,11 @@
   const VOLUME_STEP = 5;
   const portraitQuery = window.matchMedia("(orientation: portrait)");
 
-  // The token comes from the QR URL. It is only ever sent in the "claim"
-  // message, never logged or put in the DOM.
-  const token = new URLSearchParams(location.search).get("t") || "";
+  // The token comes from the QR URL and is the initial value only. The server
+  // rotates it for the web owner and sends the new one in the state as
+  // msg.token. It is only ever sent in the "claim" message, never logged or
+  // put in the DOM.
+  let currentToken = new URLSearchParams(location.search).get("t") || "";
 
   let socket = null;
   let connected = false;
@@ -64,6 +66,7 @@
   let running = false;
   let owner = null; // "pi" | "web" | null, from the server state
   let mirror = false; // true when another device or the Pi is playing
+  let wasMirror = false; // mirror value from the previous state, to detect entering mirror
   let volume = null; // last volume the server reported (0..100), null until known
   let audioError = null;
   let musicError = null;
@@ -163,7 +166,7 @@
     statusEl.textContent = serverError ? `${text} · Error: ${serverError}` : text;
 
     claimBtn.textContent = controller ? "Soltar control" : "Tomar control";
-    claimBtn.disabled = !connected || !token || mirror;
+    claimBtn.disabled = !connected || !currentToken || mirror;
     controlsEl.classList.toggle("locked", !controller);
     controlsEl.classList.toggle("mirror", mirror);
 
@@ -183,7 +186,7 @@
       for (const el of els) el.disabled = mirror;
     }
 
-    if (!token) setHint("Falta el token en la URL. Abre esta página desde el QR de la Pi.");
+    if (!currentToken) setHint("Falta el token en la URL. Abre esta página desde el QR de la Pi.");
   }
 
   function renderWarnings() {
@@ -214,13 +217,17 @@
     musicError = msg.musicError || null;
     serverError = msg.error || null;
 
-    // A mirror always sees the game, so turn the video on once. The user can
-    // still switch it off afterwards.
-    if (mirror && !streamSwitch.checked) {
+    // Rotated token for the web owner. Stored only, never shown or logged.
+    if (typeof msg.token === "string" && msg.token) currentToken = msg.token;
+
+    // Turn the video on only when entering mirror (false -> true), so the user
+    // can switch it off while mirroring without it coming back on each state.
+    if (mirror && !wasMirror && !streamSwitch.checked) {
       streamSwitch.checked = true;
       canvas.hidden = false;
       send({ type: "stream", on: true });
     }
+    wasMirror = mirror;
 
     renderStatus();
     renderWarnings();
@@ -262,7 +269,7 @@
       retryDelay = RETRY_MIN_MS;
       // Claim goes first so the stream toggle restored below reaches a client
       // that already has its control state.
-      if (token) send({ type: "claim", token });
+      if (currentToken) send({ type: "claim", token: currentToken });
       if (streamSwitch.checked) send({ type: "stream", on: true });
       renderStatus();
     };
@@ -338,8 +345,8 @@
   claimBtn.addEventListener("click", () => {
     if (controller) {
       send({ type: "release" });
-    } else if (token) {
-      send({ type: "claim", token });
+    } else if (currentToken) {
+      send({ type: "claim", token: currentToken });
     }
   });
 

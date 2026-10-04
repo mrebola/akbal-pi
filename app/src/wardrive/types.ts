@@ -57,6 +57,8 @@ export type DriveFix = {
   error: string;
 };
 
+import type { ActiveRadio, RadioMode } from "./radio-plan";
+
 // Poll payload for the driving page. Small by design (1Hz): positions are
 // per-bucket (not per-point) and networks are already aggregated.
 export type DriveStatus = {
@@ -75,9 +77,11 @@ export type DriveStatus = {
   // Radio count: one dongle shared by discovery+attacks ("single", blind
   // during attacks) or a dedicated attacker radio ("dual"). Requested
   // mode + what the session actually resolved.
-  radioMode: "auto" | "single" | "dual";
+  radioMode: RadioMode;
   dualRadio: boolean;
   attackIface: string | null; // e.g. wlan2 when dualRadio
+  activeRadios: ActiveRadio[]; // every radio running now, with its role (empty when stopped)
+  radiosConnected: number; // monitor-capable radios found at session start (0 when stopped)
   homeSsid: string | null; // SSID wlan0 is connected to — PROTECTED, never attacked
   error: string;
   channel: number; // current listening channel (0 = not hopping yet)

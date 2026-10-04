@@ -16,6 +16,7 @@ import { DriveCapture, type DriveFrame } from "./capture";
 import { extractEapolToSession, convertCaptureToHash, extractApFrames, PmkidDriveRunner, writeBpfForAp } from "./attack";
 import { driveDb, DRIVE_SESSIONS_ROOT } from "./drive-db";
 import type { DriveStatus, DriveApView, ApSessionState } from "./types";
+import { activeRadiosOf, parseRadioMode, radioCountForMode, type RadioMode } from "./radio-plan";
 
 const execFileAsync = promisify(execFile);
 
@@ -142,12 +143,13 @@ export class DriveWardriveService extends EventEmitter {
   // In-memory air picture (rebuilt every session; the DB is the archive)
   private air = new Map<string, AirAp>();
   private apState = new Map<string, ApSessionState>();
-  // Radio count preference: "single" (one dongle does discovery AND
-  // attacks, with blind windows during attacks) or "dual" (discovery dongle
-  // + dedicated attacker dongle when two monitor-capable adapters are
-  // present). Operator-settable from the web UI; "auto" = dual when 2+
-  // dongles, single otherwise.
-  private radioMode: "auto" | "single" | "dual" = (process.env.WARDRIVE_RADIO_MODE as any) || "auto";
+  // Radio count preference (see radio-plan.ts): "single" (one dongle does
+  // discovery AND attacks, blind during attacks), "dual" (2 radios), "triple"
+  // (3 radios: 1 attack + 2 discovery) or "auto" (every connected monitor
+  // radio). Operator-settable from the web UI; default from WARDRIVE_RADIO_MODE.
+  private radioMode: RadioMode = parseRadioMode(process.env.WARDRIVE_RADIO_MODE) ?? "auto";
+  // Monitor-capable radios found at session start (may be fewer than requested).
+  private radiosConnected = 0;
   // Effective mode for the RUNNING session (resolved at start).
   private dualRadio = false;
   // The dedicated ATTACK radio (dual mode): every hcxdumptool round lives
@@ -255,15 +257,22 @@ export class DriveWardriveService extends EventEmitter {
         return { ok: false, error: this.error };
       }
       await stopWifiRadarService().catch(() => {});
-      // Single: only the primary. Auto/dual with 2+ dongles: one dedicated
-      // attacker (ath9k_htc first); every other dongle keeps discovering.
-      const radios = this.radioMode === "single" ? [info] : await this.collectMonitorRadios(info);
+      // Single: only the primary. Otherwise every connected monitor radio is
+      // a candidate, and the mode decides how many are used (radio-plan.ts).
+      const candidates = this.radioMode === "single" ? [info] : await this.collectMonitorRadios(info);
+      this.radiosConnected = candidates.length;
+      const wanted = radioCountForMode(this.radioMode, candidates.length);
+      // One dedicated attacker (ath9k_htc first) when 2+ radios are used;
+      // the others keep discovering.
+      const attackCandidate: MonitorAdapter | null = wanted >= 2 ? this.pickAttackRadio(candidates) : null;
+      const discoveryPool = candidates.filter((r) => r !== attackCandidate).slice(0, wanted - (attackCandidate ? 1 : 0));
+      const radios = attackCandidate ? [attackCandidate, ...discoveryPool] : discoveryPool;
       await enterMonitorMode(info.iface!);
       const base = await getAvailable24GhzChannels(info.phy!);
       this.channels = base.length === 0 ? [1, 6, 11] : base;
       // The attacker that can't enter monitor mode falls back to discovery
       // instead of taking the whole session down.
-      let attackRadio: MonitorAdapter | null = radios.length >= 2 ? this.pickAttackRadio(radios) : null;
+      let attackRadio: MonitorAdapter | null = attackCandidate;
       if (attackRadio) {
         try {
           await enterMonitorMode(attackRadio.iface!);
@@ -381,19 +390,20 @@ export class DriveWardriveService extends EventEmitter {
   // ─── Radio mode (1 vs 2 adapters) ──────────────────────────────────────
 
   setRadioMode(mode: string): { ok: boolean; error?: string } {
-    if (mode !== "auto" && mode !== "single" && mode !== "dual") {
-      return { ok: false, error: "mode debe ser 'auto' | 'single' | 'dual'" };
+    const parsed = parseRadioMode(mode);
+    if (!parsed) {
+      return { ok: false, error: "mode debe ser 'auto' | 'single' | 'dual' | 'triple'" };
     }
     if (this.running) {
       return { ok: false, error: "Detené la sesión activa antes de cambiar el modo de radios" };
     }
-    this.radioMode = mode;
-    console.log(`[wardrive] radio mode: ${mode}`);
+    this.radioMode = parsed;
+    console.log(`[wardrive] radio mode: ${parsed}`);
     this.broadcastStatus();
     return { ok: true };
   }
 
-  getRadioMode(): "auto" | "single" | "dual" {
+  getRadioMode(): RadioMode {
     return this.radioMode;
   }
 
@@ -1514,6 +1524,8 @@ export class DriveWardriveService extends EventEmitter {
       radioMode: this.radioMode,
       dualRadio: this.dualRadio,
       attackIface: this.dualRadio ? this.attackIface : null,
+      activeRadios: activeRadiosOf(this.discovery.map((r) => r.iface), this.dualRadio ? this.attackIface : null),
+      radiosConnected: this.running ? this.radiosConnected : 0,
       homeSsid: this.homeSsid,
       error: this.error,
       channel: this.currentChannel,

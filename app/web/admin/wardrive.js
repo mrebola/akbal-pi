@@ -184,6 +184,7 @@ function render(st) {
       void refreshRadioComparison();
     }
   }
+  renderActiveRadios(st);
   // Live radio badge on the iface HUD item
   const ifaceEl = el("wd-iface");
   if (ifaceEl && st.dualRadio) {
@@ -705,9 +706,35 @@ async function refreshDongleList() {
   } catch { /* picker is optional */ }
 }
 
-// ---- Radio count (1 vs 2 adapters) ----
+// ---- Radio count (auto / single / dual / triple) ----
 // Selector in the HUD + efficiency comparison table fed by the
 // attack_rounds DB (hit rate + blind time per mode).
+
+// Radios running right now, with their role. While a triple session has
+// fewer radios than requested, say so instead of silently using fewer.
+function renderActiveRadios(st) {
+  const host = el("wd-radio-active");
+  if (!host) return;
+  if (!st || !st.running) {
+    host.textContent = "";
+    return;
+  }
+  const radios = (st.activeRadios || []).map((r) => {
+    const role = r.role === "attack" ? t("wardrive.radio_role_attack", "ataque") : t("wardrive.radio_role_discovery", "descubrimiento");
+    return `${String(r.iface || "?").toUpperCase()} · ${role}`;
+  });
+  const parts = [radios.join(" · ") || t("wardrive.radios_none", "sin radios activas")];
+  const requested = { single: 1, dual: 2, triple: 3 }[st.radioMode];
+  if (requested && st.radiosConnected < requested) {
+    parts.push(
+      t("wardrive.radios_short", "{mode} pedido, {available} radios disponibles", {
+        mode: t(`wardrive.radios_${st.radioMode}`, st.radioMode),
+        available: st.radiosConnected,
+      }),
+    );
+  }
+  host.textContent = parts.join(" — ");
+}
 
 async function syncRadioModeSelect(st) {
   const sel = el("wd-radio-select");

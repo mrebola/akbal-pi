@@ -11,10 +11,14 @@ export interface EngineProcess {
   onExit(cb: (code: number | null) => void): void;
 }
 
+// Who is playing: the Pi's screen or the web admin. Null while no game runs.
+export type DoomOwner = "pi" | "web" | null;
+
 export interface DoomState {
   running: boolean;
   controller: boolean;
   error: string | null;
+  owner: DoomOwner;
 }
 
 export interface DoomSessionDeps {
@@ -33,6 +37,7 @@ export class DoomSession {
   private engine: EngineProcess | null = null;
   private reader = new FrameReader();
   private error: string | null = null;
+  private ownerValue: DoomOwner = null;
   private frameListeners = new Set<(rgb565: Buffer) => void>();
   private stateListeners = new Set<(s: DoomState) => void>();
   // Keys the controller has pressed and not yet released. Sent "up" when the
@@ -72,12 +77,32 @@ export class DoomSession {
   stop(): void {
     const engine = this.engine;
     this.engine = null;
+    this.ownerValue = null;
     this.releaseKeys(engine);
     this.deps.tokens.revokeAll();
     const holder = this.deps.lock.holder();
     if (holder !== null) this.deps.lock.release(holder);
     engine?.kill();
     this.emitState();
+  }
+
+  owner(): DoomOwner {
+    return this.ownerValue;
+  }
+
+  // Switching owner ends the old owner's input: held keys go up, its lock and
+  // token are dropped, and a fresh token is issued for the new owner.
+  claimOwner(who: "pi" | "web"): { ok: boolean; token?: string; error?: string } {
+    if (!this.engine) return { ok: false, error: "No hay juego corriendo" };
+    if (this.ownerValue === who) return { ok: true, token: this.deps.tokens.current() ?? undefined };
+    this.releaseKeys(this.engine);
+    this.deps.tokens.revokeAll();
+    const holder = this.deps.lock.holder();
+    if (holder !== null) this.deps.lock.release(holder);
+    this.ownerValue = who;
+    const token = this.deps.tokens.issue();
+    this.emitState();
+    return { ok: true, token };
   }
 
   claim(clientId: string, token: string): boolean {
@@ -115,6 +140,7 @@ export class DoomSession {
       running: this.engine !== null,
       controller: this.deps.lock.holder() !== null,
       error: this.error,
+      owner: this.ownerValue,
     };
   }
 
@@ -133,6 +159,7 @@ export class DoomSession {
   private engineLost(engine: EngineProcess, message: string): void {
     if (this.engine !== engine) return;
     this.engine = null;
+    this.ownerValue = null;
     this.releaseKeys(engine);
     const holder = this.deps.lock.holder();
     if (holder !== null) this.deps.lock.release(holder);

@@ -182,3 +182,57 @@ test("stop sends up for keys still held before killing the engine", async () => 
   assert.match(fake.written.join(""), /up 163\n/);
   assert.equal(fake.wasKilled(), true);
 });
+
+test("owner is null until someone claims it, and stop clears it", () => {
+  const { session } = makeSession();
+  session.start();
+  assert.equal(session.owner(), null);
+  const r = session.claimOwner("pi");
+  assert.equal(r.ok, true);
+  assert.equal(session.owner(), "pi");
+  session.stop();
+  assert.equal(session.owner(), null);
+});
+
+test("claimOwner refuses when no game is running", () => {
+  const { session } = makeSession();
+  const r = session.claimOwner("web");
+  assert.equal(r.ok, false);
+  assert.match(r.error!, /No hay juego/);
+});
+
+test("switching owner releases held keys and revokes the old token", () => {
+  const { session, fake } = makeSession();
+  session.start();
+  const pi = session.claimOwner("pi").token!;
+  session.claim("pi-client", pi);
+  session.key("pi-client", "fire", true);
+  const second = session.claimOwner("web");
+  assert.equal(second.ok, true);
+  assert.notEqual(second.token, pi);
+  return new Promise<void>((resolve) => setImmediate(() => {
+    assert.match(fake.written.join(""), /up 163/);
+    assert.equal(session.claim("pi-client", pi), false);
+    resolve();
+  }));
+});
+
+test("switching owner also takes the controller lock away from the old holder", () => {
+  const { session } = makeSession();
+  session.start();
+  const pi = session.claimOwner("pi").token!;
+  session.claim("pi-client", pi);
+  assert.equal(session.isController("pi-client"), true);
+  session.claimOwner("web");
+  assert.equal(session.isController("pi-client"), false);
+  assert.equal(session.state().controller, false);
+  assert.equal(session.claim("pi-client", pi), false);
+});
+
+test("the same owner claiming again keeps the token", () => {
+  const { session } = makeSession();
+  session.start();
+  const a = session.claimOwner("web");
+  const b = session.claimOwner("web");
+  assert.equal(a.token, b.token);
+});

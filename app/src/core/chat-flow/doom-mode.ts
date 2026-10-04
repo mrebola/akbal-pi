@@ -75,10 +75,15 @@ export function screenFaceFor(owner: "pi" | "web" | null, controller: boolean): 
   return "qr";
 }
 
-// The engine stopped while the flow still is DOOM (the web ended the game, or
-// it crashed): the Pi goes back to the menu, the same exit as the button hold.
-export function decideOnEngineStopped(currentFlow: string, running: boolean): "return-to-sleep" | "none" {
-  return currentFlow === "doom" && !running ? "return-to-sleep" : "none";
+// The engine stopped cleanly while the flow still is DOOM (the web ended the
+// game): the Pi goes back to the menu, the same exit as the button hold. A crash
+// (error set) keeps the error card on screen; the button leaves from there.
+export function decideOnEngineStopped(
+  currentFlow: string,
+  running: boolean,
+  error: string | null,
+): "return-to-sleep" | "none" {
+  return currentFlow === "doom" && !running && error === null ? "return-to-sleep" : "none";
 }
 
 // What the DOOM flow lets this module ask of the flow machine. Reads the live
@@ -258,7 +263,7 @@ async function startDoom(url: string, gen: number, flow: DoomFlowHooks): Promise
   unsubscribers.forEach((off) => off());
   unsubscribers = [
     doomSession.onState((s) => {
-      if (decideOnEngineStopped(flow.currentFlow(), s.running) === "return-to-sleep") return flow.returnToSleep();
+      if (decideOnEngineStopped(flow.currentFlow(), s.running, s.error) === "return-to-sleep") return flow.returnToSleep();
       paintForState(s);
     }),
     doomSession.onFrame((frame) => {
@@ -269,7 +274,8 @@ async function startDoom(url: string, gen: number, flow: DoomFlowHooks): Promise
     }),
   ];
   // The engine may have stopped during the QR await, before the listener existed.
-  if (decideOnEngineStopped(flow.currentFlow(), doomSession.state().running) === "return-to-sleep") {
+  const now = doomSession.state();
+  if (decideOnEngineStopped(flow.currentFlow(), now.running, now.error) === "return-to-sleep") {
     return flow.returnToSleep();
   }
   paintForState(doomSession.state());

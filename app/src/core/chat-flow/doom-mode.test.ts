@@ -64,9 +64,13 @@ test("screen shows the game or the QR depending on the Pi controller", () => {
   assert.equal(screenFaceFor(null, false), "qr");
 });
 
-test("a stopped engine returns the Pi to the menu only while the flow is still DOOM", () => {
-  assert.equal(decideOnEngineStopped("doom", false), "return-to-sleep");
-  assert.equal(decideOnEngineStopped("doom", true), "none");
-  assert.equal(decideOnEngineStopped("sleep", false), "none");
-  assert.equal(decideOnEngineStopped("web_chat", false), "none");
+test("a clean engine stop returns the Pi to the menu only while the flow is still DOOM", () => {
+  assert.equal(decideOnEngineStopped("doom", false, null), "return-to-sleep");
+  assert.equal(decideOnEngineStopped("doom", true, null), "none");
+  assert.equal(decideOnEngineStopped("sleep", false, null), "none");
+  assert.equal(decideOnEngineStopped("web_chat", false, null), "none");
+});
+
+test("a crash keeps the error card on screen instead of returning to the menu", () => {
+  assert.equal(decideOnEngineStopped("doom", false, "el motor se cayó"), "none");
 });

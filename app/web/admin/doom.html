@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>DOOM · Akbal</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/doom.css" />
+</head>
+<body>
+  <header class="top">
+    <h1>DOOM</h1>
+    <p id="status" class="status" role="status" aria-live="polite">Conectando…</p>
+    <p id="hint" class="hint"></p>
+  </header>
+
+  <main class="layout">
+    <section class="screen-wrap">
+      <canvas id="screen" width="280" height="175" hidden aria-label="Pantalla de la Pi"></canvas>
+      <label class="switch">
+        <input id="stream" type="checkbox" />
+        <span>Ver pantalla en la web</span>
+      </label>
+    </section>
+
+    <section class="console">
+      <button id="claim" type="button" class="claim" disabled>Tomar control</button>
+
+      <div id="controls" class="controls locked">
+        <div class="dpad" role="group" aria-label="Movimiento">
+          <button class="key" type="button" data-key="strafeLeft" tabindex="-1">
+            <span class="label">Lat. izq.</span><small>A</small>
+          </button>
+          <button class="key" type="button" data-key="forward" tabindex="-1">
+            <span class="label">Avanzar</span><small>W · ↑</small>
+          </button>
+          <button class="key" type="button" data-key="strafeRight" tabindex="-1">
+            <span class="label">Lat. der.</span><small>D</small>
+          </button>
+          <button class="key" type="button" data-key="left" tabindex="-1">
+            <span class="label">Girar izq.</span><small>←</small>
+          </button>
+          <span class="dpad-center" aria-hidden="true"></span>
+          <button class="key" type="button" data-key="right" tabindex="-1">
+            <span class="label">Girar der.</span><small>→</small>
+          </button>
+          <span class="dpad-empty" aria-hidden="true"></span>
+          <button class="key" type="button" data-key="back" tabindex="-1">
+            <span class="label">Retroceder</span><small>S · ↓</small>
+          </button>
+          <span class="dpad-empty" aria-hidden="true"></span>
+        </div>
+
+        <div class="actions" role="group" aria-label="Acciones">
+          <button class="key fire" type="button" data-key="fire" tabindex="-1">
+            <span class="label">Disparar</span><small>Ctrl · Espacio</small>
+          </button>
+          <button class="key" type="button" data-key="use" tabindex="-1">
+            <span class="label">Usar</span><small>E</small>
+          </button>
+          <button class="key" type="button" data-key="run" tabindex="-1">
+            <span class="label">Correr</span><small>Shift</small>
+          </button>
+          <button class="key" type="button" data-key="menu" tabindex="-1">
+            <span class="label">Menú</span><small>Esc</small>
+          </button>
+        </div>
+
+        <div class="weapons" role="group" aria-label="Armas">
+          <button class="key" type="button" data-key="weapon1" tabindex="-1"><span class="label">Arma 1</span><small>1</small></button>
+          <button class="key" type="button" data-key="weapon2" tabindex="-1"><span class="label">Arma 2</span><small>2</small></button>
+          <button class="key" type="button" data-key="weapon3" tabindex="-1"><span class="label">Arma 3</span><small>3</small></button>
+          <button class="key" type="button" data-key="weapon4" tabindex="-1"><span class="label">Arma 4</span><small>4</small></button>
+          <button class="key" type="button" data-key="weapon5" tabindex="-1"><span class="label">Arma 5</span><small>5</small></button>
+          <button class="key" type="button" data-key="weapon6" tabindex="-1"><span class="label">Arma 6</span><small>6</small></button>
+          <button class="key" type="button" data-key="weapon7" tabindex="-1"><span class="label">Arma 7</span><small>7</small></button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/doom.js" defer></script>
+</body>
+</html>

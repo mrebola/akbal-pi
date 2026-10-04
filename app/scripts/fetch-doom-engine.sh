@@ -10,8 +10,19 @@ SRC_DIR="$APP_DIR/doom/src"
 BIN_DIR="$APP_DIR/doom/bin"
 BIN="$BIN_DIR/doom-engine"
 
-if [ -x "$BIN" ]; then
-  echo "[DOOM] Motor ya compilado: $BIN"
+# Recompila si no hay binario o si el script o alguna fuente de la capa
+# Akbal Pi es más nueva que el binario (un binario viejo no trae el sonido).
+needs_build=0
+if [ ! -x "$BIN" ]; then
+  needs_build=1
+else
+  if [ "$APP_DIR/scripts/fetch-doom-engine.sh" -nt "$BIN" ]; then needs_build=1; fi
+  for f in "$APP_DIR"/doom/engine/*.c; do
+    if [ -f "$f" ] && [ "$f" -nt "$BIN" ]; then needs_build=1; fi
+  done
+fi
+if [ "$needs_build" -eq 0 ]; then
+  echo "[DOOM] Motor al día: $BIN"
   exit 0
 fi
 

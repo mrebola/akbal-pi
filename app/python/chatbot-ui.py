@@ -1027,16 +1027,19 @@ class RenderThread(threading.Thread):
         # Node renders the QR PNG (same generator as the WiFi direct screen)
         # and sends its path; this side only pastes it.
         frame = Image.new("RGB", (GAME_WIDTH, GAME_HEIGHT), (0, 0, 0))
+        has_qr = False
         if current_game_qr_path and os.path.exists(current_game_qr_path):
             try:
                 qr = Image.open(current_game_qr_path).convert("RGBA").resize(
                     (GAME_QR_SIZE, GAME_QR_SIZE), Image.NEAREST)
                 frame.paste(qr, ((GAME_WIDTH - GAME_QR_SIZE) // 2, 6), qr)
+                has_qr = True
             except Exception as e:
                 print(f"[Game] Failed to load QR {current_game_qr_path}: {e}")
         draw = ImageDraw.Draw(frame)
         lines = [line for line in TextUtils.wrap_text(draw, text or "", self.model_ui_hint_font, GAME_WIDTH - 24) if line][:2]
-        y = 6 + GAME_QR_SIZE + 8
+        # Without a QR (the web mirror), the text is centered instead of sitting under an empty gap.
+        y = 6 + GAME_QR_SIZE + 8 if has_qr else (GAME_HEIGHT - 18 * len(lines)) // 2
         for line in lines:
             self._draw_centered(draw, line, self.model_ui_hint_font, y, GAME_WIDTH // 2, TEXT_PRIMARY)
             y += 18

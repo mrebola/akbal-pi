@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { doomScreenUrl, shouldLeaveDoom, doomBlockedReason, withControlToken, doomQrText } from "./doom-mode";
+import { doomScreenUrl, shouldLeaveDoom, doomBlockedReason, withControlToken, doomQrText, screenFaceFor } from "./doom-mode";
 
 test("uses the Tailscale host when Tailscale is up", () => {
   assert.equal(
@@ -51,4 +51,15 @@ test("the QR fallback text never shows the control token", () => {
   const text = doomQrText(false, "http://h:8090/doom");
   assert.equal(text, "Abre http://h:8090/doom para controlar DOOM");
   assert.ok(!text.includes("t="), "the token must stay in the QR only");
+});
+
+test("screen shows the mirror when the web owns the game", () => {
+  assert.equal(screenFaceFor("web", true), "mirror");
+  assert.equal(screenFaceFor("web", false), "mirror");
+});
+
+test("screen shows the game or the QR depending on the Pi controller", () => {
+  assert.equal(screenFaceFor("pi", true), "game");
+  assert.equal(screenFaceFor("pi", false), "qr");
+  assert.equal(screenFaceFor(null, false), "qr");
 });

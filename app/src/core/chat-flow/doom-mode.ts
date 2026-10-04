@@ -66,6 +66,15 @@ export function withControlToken(url: string, token: string): string {
   return u.toString();
 }
 
+// What the Whisplay screen shows for the current owner. The web owner gets the
+// mirror (frames only, no QR); the Pi owner gets the game once a phone or the
+// Pi holds the controller, and the QR until then.
+export function screenFaceFor(owner: "pi" | "web" | null, controller: boolean): "qr" | "game" | "mirror" {
+  if (owner === "web") return "mirror";
+  if (owner === "pi" && controller) return "game";
+  return "qr";
+}
+
 export function shouldLeaveDoom(from: string, to: string): boolean {
   return from === "doom" && to !== "doom";
 }
@@ -221,9 +230,15 @@ async function startDoom(url: string, gen: number): Promise<void> {
     showDoomError(started.error ?? "No se pudo iniciar DOOM");
     return;
   }
-  // The token only exists once the engine starts, so the QR is built after it.
+  // Entering from the screen makes the Pi the owner. claimOwner reissues the
+  // token, so the QR must carry the token it returns, not start()'s.
+  const claimed = doomSession.claimOwner("pi");
+  if (!claimed.ok) {
+    showDoomError(claimed.error ?? "No se pudo iniciar DOOM");
+    return;
+  }
   // If the player left during the await, leaveDoomMode already stopped the engine.
-  const tokenUrl = withControlToken(url, started.token!);
+  const tokenUrl = withControlToken(url, claimed.token!);
   const qr = await generateConnectQr(tokenUrl).catch(() => "");
   if (gen !== generation) return;
   qrPath = qr;
@@ -231,7 +246,8 @@ async function startDoom(url: string, gen: number): Promise<void> {
   unsubscribers = [
     doomSession.onState((s) => paintForState(s)),
     doomSession.onFrame((frame) => {
-      if (doomSession.state().controller) {
+      const st = doomSession.state();
+      if (screenFaceFor(st.owner, st.controller) !== "qr") {
         sendDisplay({ game_frame: frame.toString("base64") });
       }
     }),
@@ -251,8 +267,14 @@ export function leaveDoomMode(): void {
 function paintForState(s: DoomState): void {
   if (s.error) return showDoomError(s.error);
   if (!s.running) return;
-  if (s.controller) {
+  const face = screenFaceFor(s.owner, s.controller);
+  if (face === "game") {
     sendDisplay({ status: "doom", text: "", game_orientation: 3 });
+    return;
+  }
+  if (face === "mirror") {
+    // game_qr_path "" drops the QR so the renderer shows only this text until frames arrive.
+    sendDisplay({ status: "doom", text: "Jugando desde la web", game_qr_path: "", game_orientation: 3 });
     return;
   }
   showDoomQr();

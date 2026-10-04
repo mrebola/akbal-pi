@@ -1,0 +1,13 @@
+{
+  "name": "DOOM · Akbal",
+  "short_name": "DOOM",
+  "start_url": "/doom",
+  "scope": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0b0d0f",
+  "theme_color": "#0b0d0f",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

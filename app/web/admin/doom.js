@@ -43,6 +43,8 @@
   const gameNameEl = $("game-name");
   const closedPanelEl = $("closed-panel");
   const playAgainBtn = $("play-again");
+  const fullscreenBtn = $("fullscreen-btn");
+  const installHintEl = $("install-hint");
   const consoleBar = $("console-bar");
   const warningsEl = $("warnings");
   const audioWarningEl = $("audio-warning");
@@ -157,6 +159,7 @@
   }
 
   function releaseAll() {
+    pointers.clear();
     inputs.clear();
     sync();
   }
@@ -165,8 +168,8 @@
     hintEl.textContent = text;
   }
 
-  // Only the web owner's own socket is allowed to change volume; the server
-  // drops the message from anyone else, so the buttons stay off for them too.
+  // The web owner and the control holder may change volume; the server drops
+  // the message from anyone else, so the buttons stay off for them too.
   function isWebOwner() {
     return owner === "web" && !mirror;
   }
@@ -208,7 +211,7 @@
     closedPanelEl.hidden = !closed;
     playAgainBtn.disabled = !connected;
 
-    const canStep = connected && isWebOwner() && volume !== null;
+    const canStep = connected && (controller || isWebOwner()) && volume !== null;
     volumeDownBtn.disabled = !canStep || volume <= VOLUME_MIN;
     volumeUpBtn.disabled = !canStep || volume >= VOLUME_MAX;
     volumeValueEl.textContent = volume === null ? "—" : `${volume}%`;
@@ -356,31 +359,94 @@
     };
   }
 
-  // On-screen buttons. Pointer events cover touch, pen and mouse. Up is sent
-  // on pointerup, pointerleave and pointercancel, so a finger that slides off
-  // or a browser gesture cannot leave a key stuck down on the server.
-  // A button can press more than one logical key. FIRE also sends Enter, so
-  // the game can be started from the same on-screen button. Keyboard keeps its
-  // own mapping (Enter is its own key there).
+  // On-screen buttons, touch first. Each finger (pointerId) owns its own keys.
+  // While a finger is down it can slide: the button under it decides the keys,
+  // so sliding releases the old key and presses the new one without lifting the
+  // finger. Lifting, cancelling or losing focus releases everything the finger
+  // held. Hover is never used, since touch has none.
+  // FIRE also sends Enter: POINTER_KEYS lists every key one button presses.
   const POINTER_KEYS = { fire: ["fire", "enter"] };
+  const pointers = new Map(); // pointerId -> { keys: string[] } currently held
+
+  function keysOf(el) {
+    const key = el.dataset.key;
+    return POINTER_KEYS[key] || [key];
+  }
+
+  // Sends only the difference: keys the finger left are released, keys it
+  // reached are pressed. No button under the finger means no keys.
+  function moveFinger(pointerId, el) {
+    const state = pointers.get(pointerId);
+    if (!state) return;
+    const next = el ? keysOf(el) : [];
+    for (const key of state.keys) {
+      if (!next.includes(key)) release(`ptr:${pointerId}:${key}`);
+    }
+    for (const key of next) {
+      if (!state.keys.includes(key)) press(`ptr:${pointerId}:${key}`, key);
+    }
+    state.keys = next;
+  }
+
+  function endFinger(pointerId) {
+    const state = pointers.get(pointerId);
+    if (!state) return;
+    pointers.delete(pointerId);
+    for (const key of state.keys) release(`ptr:${pointerId}:${key}`);
+  }
+
+  // The button under a screen point, but only one that belongs to the pad.
+  function buttonAt(x, y) {
+    const hit = document.elementFromPoint(x, y);
+    const el = hit && hit.closest ? hit.closest("[data-key]") : null;
+    return el && controlsEl.contains(el) ? el : null;
+  }
+
   document.querySelectorAll("[data-key]").forEach((el) => {
-    const keys = POINTER_KEYS[el.dataset.key] || [el.dataset.key];
     el.addEventListener("pointerdown", (event) => {
       if (event.pointerType === "mouse" && event.button !== 0) return;
       event.preventDefault();
       if (!controller) setHint("Toma el control primero.");
-      for (const key of keys) press(`ptr:${event.pointerId}:${key}`, key);
+      pointers.set(event.pointerId, { keys: [] });
+      // Capture keeps this finger's moves coming even after it leaves the button.
+      try {
+        el.setPointerCapture(event.pointerId);
+      } catch {
+        // Without capture the moves still reach the window listener below.
+      }
+      moveFinger(event.pointerId, el);
     });
-    const up = (event) => {
-      for (const key of keys) release(`ptr:${event.pointerId}:${key}`);
-    };
-    el.addEventListener("pointerup", up);
-    el.addEventListener("pointerleave", up);
-    el.addEventListener("pointercancel", up);
     // A long press on a touch screen opens the context menu and would swallow
     // the release.
     el.addEventListener("contextmenu", (event) => event.preventDefault());
   });
+
+  window.addEventListener("pointermove", (event) => {
+    if (!pointers.has(event.pointerId)) return;
+    moveFinger(event.pointerId, buttonAt(event.clientX, event.clientY));
+  });
+
+  const endPointer = (event) => endFinger(event.pointerId);
+  window.addEventListener("pointerup", endPointer);
+  window.addEventListener("pointercancel", endPointer);
+
+  // Fullscreen works on Android. iPhone Safari has no page fullscreen, so
+  // there the install hint points to "Agregar a inicio" instead.
+  const fullscreenOk = typeof document.documentElement.requestFullscreen === "function"
+    && document.fullscreenEnabled !== false;
+  fullscreenBtn.hidden = !fullscreenOk;
+  fullscreenBtn.addEventListener("click", () => {
+    try {
+      const request = document.documentElement.requestFullscreen();
+      if (request && typeof request.catch === "function") request.catch(() => {});
+    } catch {
+      // Not allowed here: the page stays as it is.
+    }
+  });
+  const isIos = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  const standalone = window.navigator.standalone === true
+    || window.matchMedia("(display-mode: standalone)").matches;
+  installHintEl.hidden = !isIos || standalone;
 
   // Keyboard. keydown/keyup are prevented for mapped codes so Space does not
   // scroll or toggle the focused switch, and so arrows do not scroll the page.

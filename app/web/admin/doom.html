@@ -7,6 +7,9 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="stylesheet" href="/doom.css" />
+  <link rel="manifest" href="/doom-manifest.json" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#0b0d0f" />
 </head>
 <body>
   <header class="topbar" id="topbar" data-page="doom"></header>
@@ -14,9 +17,17 @@
   <main class="doom-page">
     <div class="doom-head">
       <h1 class="doom-title">DOOM</h1>
-      <p id="status" class="status" role="status" aria-live="polite">Conectando…</p>
+      <div class="status-row">
+        <p id="status" class="status" role="status" aria-live="polite">Conectando…</p>
+        <div class="volume" role="group" aria-label="Volumen">
+          <button id="volume-down" type="button" class="btn step" aria-label="Bajar volumen" disabled>−</button>
+          <span id="volume-value" class="volume-value" aria-live="polite">—</span>
+          <button id="volume-up" type="button" class="btn step" aria-label="Subir volumen" disabled>+</button>
+        </div>
+      </div>
       <p id="game-name" class="game-name" hidden></p>
       <p id="hint" class="hint"></p>
+      <p id="install-hint" class="install-hint" hidden>En iPhone: abre Compartir y elige «Agregar a inicio» para abrir DOOM sin la barra del navegador.</p>
       <div id="warnings" class="warnings" role="alert" hidden>
         <p id="audio-warning" hidden></p>
         <p id="music-warning" hidden></p>
@@ -31,11 +42,7 @@
       <div id="console-bar" class="console-bar">
         <button id="play-here" type="button" class="btn play-here" hidden>Jugar aquí</button>
         <button id="claim" type="button" class="btn claim" disabled>Tomar control</button>
-        <div class="volume" role="group" aria-label="Volumen">
-          <button id="volume-down" type="button" class="btn step" aria-label="Bajar volumen" disabled>−</button>
-          <span id="volume-value" class="volume-value" aria-live="polite">—</span>
-          <button id="volume-up" type="button" class="btn step" aria-label="Subir volumen" disabled>+</button>
-        </div>
+        <button id="fullscreen-btn" type="button" class="btn fullscreen" hidden>Pantalla completa</button>
         <button id="quit-btn" type="button" class="btn quit" hidden>Salir del juego</button>
       </div>
     </section>
@@ -131,7 +138,7 @@
 
     <div id="rotate-hint" class="rotate-hint" role="status" hidden>
       <span class="rotate-icon" aria-hidden="true"></span>
-      <p>Gira tu iPhone a horizontal</p>
+      <p>Gira tu celular a horizontal</p>
     </div>
   </main>
 

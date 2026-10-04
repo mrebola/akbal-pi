@@ -37,10 +37,24 @@
 
 .doom-head { display: flex; flex-direction: column; gap: 2px; }
 
+.status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
 .status {
   margin: 0;
   font-size: 0.95rem;
   color: var(--text-primary);
+}
+
+.install-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
 }
 
 /* Hidden when empty, so it takes no room on a phone. */
@@ -201,6 +215,8 @@
 .controls {
   flex: 1 1 auto;
   min-height: 0;
+  /* Sliding a finger across the pad must not scroll or zoom the page. */
+  touch-action: none;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(112px, 0.7fr) minmax(0, 1fr);
   grid-template-areas:
@@ -513,10 +529,11 @@
 
 .doom-control .doom-title,
 .doom-control .hint,
+.doom-control .install-hint,
 .doom-control .warnings,
 .doom-control .screen-wrap,
-.doom-control .volume,
 .doom-control #quit-btn,
+.doom-control #fullscreen-btn,
 .doom-control #play-here,
 .doom-control .zone-head { display: none; }
 

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import type { WebSocketServer, WebSocket } from "ws";
-import { parseDoomMessage, attachDoomSocket, shouldEncodeNow, canSendTo } from "./doom-routes";
+import { parseDoomMessage, attachDoomSocket, shouldEncodeNow, canSendTo, isDeadSocket } from "./doom-routes";
 import { DoomSession, EngineProcess } from "../doom/session";
 import { ControlTokens } from "../doom/tokens";
 import { ControllerLock } from "../doom/control";
@@ -48,13 +48,32 @@ function makeSession() {
 // Minimal stand-ins for a ws client and the server: enough for attachDoomSocket,
 // which only uses on(), send() and readyState.
 function fakeClient() {
-  const ee = new EventEmitter() as EventEmitter & { readyState: number; send: (d: unknown) => void; sent: string[] };
+  const ee = new EventEmitter() as EventEmitter & {
+    readyState: number;
+    bufferedAmount: number;
+    send: (d: unknown) => void;
+    ping: () => void;
+    terminate: () => void;
+    terminated: boolean;
+    sent: string[];
+  };
   ee.readyState = 1;
+  ee.bufferedAmount = 0;
+  ee.terminated = false;
   ee.sent = [];
   ee.send = (d: unknown) => {
     ee.sent.push(String(d));
   };
+  // A silent client: pings go nowhere, so no pong ever arrives.
+  ee.ping = () => {};
+  ee.terminate = () => {
+    ee.terminated = true;
+  };
   return ee;
+}
+
+function lastState(ws: { sent: string[] }): Record<string, unknown> {
+  return JSON.parse(ws.sent[ws.sent.length - 1]);
 }
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
@@ -137,4 +156,76 @@ test("skips a socket whose send buffer is over 256 KiB", () => {
   assert.equal(canSendTo(0), true);
   assert.equal(canSendTo(256 * 1024), true);
   assert.equal(canSendTo(256 * 1024 + 1), false);
+});
+
+test("a client that never answers a ping is dropped and its control released", async () => {
+  const { session, token } = makeSession();
+  const wss = new EventEmitter();
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", { heartbeatMs: 10 });
+
+  const client = fakeClient();
+  wss.emit("connection", client as unknown as WebSocket);
+  client.emit("message", Buffer.from(JSON.stringify({ type: "claim", token: token() })));
+  assert.equal(session.state().controller, true);
+
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.equal(client.terminated, true, "a silent client must be terminated");
+  assert.equal(session.state().controller, false, "a dead client must release its control");
+});
+
+test("a client that answers pings keeps its control", async () => {
+  const { session, token } = makeSession();
+  const wss = new EventEmitter();
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", { heartbeatMs: 10 });
+
+  const client = fakeClient();
+  client.ping = () => client.emit("pong");
+  wss.emit("connection", client as unknown as WebSocket);
+  client.emit("message", Buffer.from(JSON.stringify({ type: "claim", token: token() })));
+
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.equal(client.terminated, false);
+  assert.equal(session.state().controller, true);
+});
+
+test("isDeadSocket: a socket is dead when it did not answer the last ping", () => {
+  assert.equal(isDeadSocket(true), false);
+  assert.equal(isDeadSocket(false), true);
+});
+
+test("each client is told whether it holds the control", () => {
+  const { session, token } = makeSession();
+  const wss = new EventEmitter();
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+
+  const holder = fakeClient();
+  const other = fakeClient();
+  wss.emit("connection", holder as unknown as WebSocket);
+  wss.emit("connection", other as unknown as WebSocket);
+  holder.emit("message", Buffer.from(JSON.stringify({ type: "claim", token: token() })));
+  other.emit("message", Buffer.from(JSON.stringify({ type: "claim", token: token() })));
+
+  const h = lastState(holder);
+  assert.equal(h.controller, true);
+  assert.equal(h.controlled, true);
+  assert.equal(h.error, null);
+
+  const o = lastState(other);
+  assert.equal(o.controller, false, "the second client must not look like the holder");
+  assert.equal(o.controlled, true, "someone holds the control");
+  assert.equal(o.error, "Otro control ya juega");
+});
+
+test("a claim with an invalid token says so", () => {
+  const { session } = makeSession();
+  session.start();
+  const wss = new EventEmitter();
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+
+  const client = fakeClient();
+  wss.emit("connection", client as unknown as WebSocket);
+  client.emit("message", Buffer.from(JSON.stringify({ type: "claim", token: "0".repeat(32) })));
+  const s = lastState(client);
+  assert.equal(s.controller, false);
+  assert.equal(s.error, "Token inválido o vencido");
 });

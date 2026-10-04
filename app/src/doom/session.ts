@@ -100,6 +100,16 @@ export class DoomSession {
     return true;
   }
 
+  // Lets the socket tell a bad or expired token apart from a busy controller.
+  tokenValid(token: string): boolean {
+    return this.engine !== null && this.deps.tokens.isValid(token);
+  }
+
+  // Per client: the state tells each socket whether it is the one playing.
+  isController(clientId: string): boolean {
+    return this.deps.lock.isHolder(clientId);
+  }
+
   state(): DoomState {
     return {
       running: this.engine !== null,

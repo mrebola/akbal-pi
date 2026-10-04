@@ -31,6 +31,7 @@ export function parseDoomMessage(raw: string): DoomClientMessage | null {
 // newest frame is kept. A slow phone must not queue the Pi's CPU or memory.
 const FRAME_INTERVAL_MS = 100;
 const MAX_BUFFERED_BYTES = 256 * 1024;
+const HEARTBEAT_MS = 5000;
 
 export function shouldEncodeNow(lastEncodedAt: number, now: number, minGapMs = FRAME_INTERVAL_MS): boolean {
   return now - lastEncodedAt >= minGapMs;
@@ -43,14 +44,51 @@ export function canSendTo(bufferedAmount: number, limit = MAX_BUFFERED_BYTES): b
   return bufferedAmount <= limit;
 }
 
+// Heartbeat: each tick clears the flag and pings; a pong sets it again. A
+// socket still unset at the next tick never answered, so it is dead.
+export function isDeadSocket(alive: boolean): boolean {
+  return !alive;
+}
+
+export interface DoomSocketOptions {
+  heartbeatMs?: number;
+}
+
 // Every socket gets state. Only sockets that asked for video get JPEG frames,
 // so an idle Pi with no viewers encodes nothing.
-export function attachDoomSocket(wss: WebSocketServer, session: DoomSession, screenUrl: () => string): void {
-  const clients = new Map<WebSocket, { id: string; streaming: boolean }>();
+export function attachDoomSocket(
+  wss: WebSocketServer,
+  session: DoomSession,
+  screenUrl: () => string,
+  options: DoomSocketOptions = {},
+): void {
+  const clients = new Map<WebSocket, { id: string; streaming: boolean; alive: boolean }>();
 
-  const sendState = (ws: WebSocket) => {
+  // The claim error (bad token, busy controller) goes only to the socket that
+  // sent the claim. Broadcasts carry the engine's own error, if any.
+  const sendState = (ws: WebSocket, claimError?: string) => {
     const s: DoomState = session.state();
-    ws.send(JSON.stringify({ type: "state", ...s, streaming: clients.get(ws)?.streaming ?? false, url: screenUrl() }));
+    const c = clients.get(ws);
+    ws.send(
+      JSON.stringify({
+        type: "state",
+        running: s.running,
+        controller: c ? session.isController(c.id) : false,
+        controlled: s.controller,
+        error: claimError ?? s.error,
+        streaming: c?.streaming ?? false,
+        url: screenUrl(),
+      }),
+    );
+  };
+
+  // Removing a client always releases its control and any keys it held. Safe
+  // to call twice: a second call finds the client already gone.
+  const dropClient = (ws: WebSocket) => {
+    const c = clients.get(ws);
+    if (!c) return;
+    session.release(c.id);
+    clients.delete(ws);
   };
 
   let latest: Buffer | null = null;
@@ -80,33 +118,55 @@ export function attachDoomSocket(wss: WebSocketServer, session: DoomSession, scr
     lastEncodedAt = now;
     for (const [ws] of wanting) ws.send(jpg);
   };
-  // unref: this timer alone must not keep the process alive.
+  // unref: these timers alone must not keep the process alive.
   setInterval(flushFrame, FRAME_INTERVAL_MS).unref();
+
+  // A phone that vanishes without a close frame would otherwise hold the
+  // control and any pressed keys forever.
+  const heartbeat = setInterval(() => {
+    for (const [ws, c] of [...clients]) {
+      if (isDeadSocket(c.alive)) {
+        dropClient(ws);
+        ws.terminate();
+        continue;
+      }
+      c.alive = false;
+      try {
+        ws.ping();
+      } catch {
+        // Already closing: its close event will clean up.
+      }
+    }
+  }, options.heartbeatMs ?? HEARTBEAT_MS);
+  heartbeat.unref();
 
   wss.on("connection", (ws: WebSocket) => {
     const id = randomUUID();
-    clients.set(ws, { id, streaming: false });
+    clients.set(ws, { id, streaming: false, alive: true });
+    ws.on("pong", () => {
+      const c = clients.get(ws);
+      if (c) c.alive = true;
+    });
     sendState(ws);
     ws.on("message", (raw: RawData) => {
       const msg = parseDoomMessage(raw.toString());
       if (!msg) return;
-      if (msg.type === "claim") session.claim(id, msg.token);
-      else if (msg.type === "release") session.release(id);
+      let claimError: string | undefined;
+      if (msg.type === "claim") {
+        if (!session.tokenValid(msg.token)) claimError = "Token inválido o vencido";
+        else if (!session.claim(id, msg.token)) claimError = "Otro control ya juega";
+      } else if (msg.type === "release") session.release(id);
       else if (msg.type === "key") session.key(id, msg.key, msg.down);
       else if (msg.type === "stream") clients.get(ws)!.streaming = msg.on;
-      sendState(ws);
+      sendState(ws, claimError);
     });
-    const drop = () => {
-      session.release(id);
-      clients.delete(ws);
-    };
-    ws.on("close", drop);
+    ws.on("close", () => dropClient(ws));
     // A malformed frame emits 'error' on the socket. Without a listener Node
     // throws and takes the whole Akbal process down, so the error only drops
     // this client.
     ws.on("error", (err: Error) => {
       console.warn("[DOOM] socket error:", err.message);
-      drop();
+      dropClient(ws);
     });
   });
 }

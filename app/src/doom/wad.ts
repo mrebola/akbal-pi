@@ -1,19 +1,15 @@
-// The games the player can choose. doom1 is the commercial WAD the owner puts
-// in data/doom by hand; freedoom1 is the free one fetched by the script.
-export type DoomGame = "doom1" | "freedoom1";
+// The only game: the original DOOM. Its WAD is the commercial file the owner
+// copies into data/doom by hand (Doom1.WAD).
+export type DoomGame = "doom1";
 
-export const DOOM_GAMES: readonly DoomGame[] = ["doom1", "freedoom1"];
+export const DOOM_GAMES: readonly DoomGame[] = ["doom1"];
+
+export const DEFAULT_GAME: DoomGame = "doom1";
 
 const WAD_FILES: Record<DoomGame, string> = {
   doom1: "Doom1.WAD",
-  freedoom1: "freedoom1.wad",
 };
 
 export function wadFileName(game: DoomGame): string {
   return WAD_FILES[game];
-}
-
-// doom1 when the owner has it, otherwise the free WAD that the script fetches.
-export function pickDefaultGame(exists: (game: DoomGame) => boolean): DoomGame {
-  return exists("doom1") ? "doom1" : "freedoom1";
 }

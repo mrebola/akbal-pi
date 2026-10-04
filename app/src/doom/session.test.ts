@@ -58,7 +58,7 @@ test("start refuses with a clear message when the WAD is missing", () => {
   const { session, spawns } = makeSession({ wadExists: () => false });
   const r = session.start();
   assert.equal(r.ok, false);
-  assert.match(r.error!, /fetch-doom-wad\.sh/);
+  assert.match(r.error!, /Doom1\.WAD/);
   assert.equal(spawns(), 0);
 });
 
@@ -622,10 +622,10 @@ test("state.closed is true after a stop and false for a crash or a fresh start",
 });
 
 test("state.game is the game that runs, and null when none does", () => {
-  const { session } = makeSession({ wadExists: (g: string) => g === "freedoom1" });
+  const { session } = makeSession({ wadExists: (g: string) => g === "doom1" });
   assert.equal(session.state().game, null);
   session.start();
-  assert.equal(session.state().game, "freedoom1", "without Doom1.WAD the default is freedoom1");
+  assert.equal(session.state().game, "doom1");
   session.stop();
   assert.equal(session.state().game, null);
 });
@@ -644,9 +644,9 @@ test("an explicit game is spawned with its own WAD", () => {
   const { session } = makeSession({
     spawnEngine: ((game: string) => { seen.push(game); return makeSession().fake.engine; }) as never,
   });
-  const r = session.start("freedoom1");
+  const r = session.start("doom1");
   assert.equal(r.ok, true);
-  assert.deepEqual(seen, ["freedoom1"]);
+  assert.deepEqual(seen, ["doom1"]);
 });
 
 test("a missing WAD names the file of the chosen game", () => {

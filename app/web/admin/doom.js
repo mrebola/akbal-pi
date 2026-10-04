@@ -76,12 +76,10 @@
   const controlOnly = Boolean(currentToken);
   document.documentElement.classList.toggle("doom-control", controlOnly);
 
-  // Which DOOM to play. The topbar's two entries set ?game=; anything else
-  // falls back to the original. The server only accepts these two names.
-  const GAME_NAMES = { doom1: "DOOM (original)", freedoom1: "DOOM (Freedoom)" };
+  // The only game is the original DOOM (the server accepts only "doom1").
+  const GAME_NAMES = { doom1: "DOOM" };
   const GAMES = Object.keys(GAME_NAMES);
-  const urlGameParam = new URLSearchParams(location.search).get("game");
-  const urlGame = GAMES.includes(urlGameParam) ? urlGameParam : "doom1";
+  const urlGame = "doom1";
   // The game that is running, or the last one the server reported. Wins over
   // the URL, so Jugar aquí and Jugar de nuevo never switch games by accident.
   let stateGame = null;

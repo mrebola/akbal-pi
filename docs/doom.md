@@ -15,24 +15,9 @@ Mapa de piezas: `docs/arquitectura.md`.
 Todo se corre desde `app/`. Los dos scripts son de una sola vez; si el archivo ya
 existe, no vuelven a descargar ni recompilar.
 
-1. **WAD de datos (Freedoom 0.13.0, BSD-3).**
-
-   ```bash
-   bash scripts/fetch-doom-wad.sh
-   ```
-
-   Descarga la release oficial, verifica su SHA-256 y deja `freedoom1.wad` en
-   `app/data/doom/` (o en `DOOM_WAD_DIR` si lo defines). No se commitea.
-
-   Hay dos juegos. El WAD se elige por nombre en la web o en la Pi:
-
-   | Juego | Archivo | Quién lo pone |
-   |---|---|---|
-   | `doom1` | `Doom1.WAD` (DOOM original, comercial) | Tú, copiándolo a `app/data/doom/`. No se descarga ni se commitea. |
-   | `freedoom1` | `freedoom1.wad` (Freedoom, libre) | El script de arriba. |
-
-   Sin juego elegido, la Pi arranca `doom1` si `Doom1.WAD` existe y si no
-   `freedoom1` (`pickDefaultGame` en `app/src/doom/wad.ts`).
+1. **WAD de datos (DOOM original).** El WAD es comercial: cópialo tú a
+   `app/data/doom/` como `Doom1.WAD` (o en `DOOM_WAD_DIR` si lo defines). No se
+   descarga ni se commitea.
 
 2. **Motor DoomGeneric.**
 
@@ -116,7 +101,6 @@ la partida y no manda teclas ni volumen.
 | Mensaje (pantalla y web) | Causa | Qué hacer |
 |---|---|---|
 | `Falta el WAD Doom1.WAD: copia el archivo a data/doom` | No existe `Doom1.WAD` en el directorio de datos (juego `doom1`). | Copia tu `Doom1.WAD` a `app/data/doom/`. Akbal sigue vivo. |
-| `Falta el WAD freedoom1.wad: corre scripts/fetch-doom-wad.sh` | No existe `freedoom1.wad` en el directorio de datos (juego `freedoom1`). | Corre el script de WAD. Akbal sigue vivo. |
 | `Falta el motor: corre scripts/fetch-doom-engine.sh` | No existe `app/doom/bin/doom-engine`. | Instala `build-essential` y corre el script del motor. |
 | `DOOM requiere la pantalla directa; el daemon está activo` | El whisplay-daemon controla el panel y no puede girarlo para DOOM. | Detén el daemon antes de entrar a DOOM. |
 | Token inválido o vencido | El QR es de un arranque anterior, o DOOM ya se detuvo. | Vuelve a entrar a DOOM y escanea el QR nuevo. |
@@ -134,7 +118,7 @@ Antes de empezar, en la Pi: `sudo apt install fluidsynth` y
 
 Casos base:
 
-1. **WAD faltante.** Renombra `freedoom1.wad` temporalmente, entra a DOOM. La
+1. **WAD faltante.** Renombra `Doom1.WAD` temporalmente, entra a DOOM. La
    pantalla y la web muestran el mensaje de corrección y Akbal sigue respondiendo.
    Restaura el nombre.
 2. **Dos entradas seguidas.** Entra a DOOM, sal y vuelve a entrar. Debe haber un

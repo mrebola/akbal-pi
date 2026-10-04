@@ -54,7 +54,7 @@ subgraph group_doom["DOOM"]
   node_doomowner["Dueño del juego (Pi o web)<br/>[session.ts]"]
   node_doomaudio["Salida de audio de DOOM<br/>[audio-out.ts]"]
   node_doommusic["Música MIDI de DOOM<br/>[music.ts]"]
-  node_doomwad["Juego elegido (doom1 o freedoom1)<br/>[wad.ts]"]
+  node_doomwad["WAD de DOOM (Doom1.WAD)<br/>[wad.ts]"]
 end
 
 subgraph group_services["Servicios del dispositivo"]

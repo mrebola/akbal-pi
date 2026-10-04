@@ -537,9 +537,10 @@ test("play-here starts the engine when the daemon is not active", async () => {
 });
 
 test("parses play-here with a game, and rejects an unknown game", () => {
-  assert.deepEqual(parseDoomMessage('{"type":"play-here","game":"freedoom1"}'), { type: "play-here", game: "freedoom1" });
+  assert.deepEqual(parseDoomMessage('{"type":"play-here","game":"doom1"}'), { type: "play-here", game: "doom1" });
   assert.deepEqual(parseDoomMessage('{"type":"play-here"}'), { type: "play-here" });
   assert.equal(parseDoomMessage('{"type":"play-here","game":"doom2"}'), null);
+  assert.equal(parseDoomMessage('{"type":"play-here","game":"freedoom1"}'), null, "Freedoom was removed");
 });
 
 test("play-here with a game starts that game and the state names it", async () => {
@@ -555,10 +556,10 @@ test("play-here with a game starts that game and the state names it", async () =
   attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", { isAdminSession: () => true });
   const client = fakeClient();
   wss.emit("connection", client as unknown as WebSocket);
-  client.emit("message", Buffer.from(JSON.stringify({ type: "play-here", game: "freedoom1" })));
+  client.emit("message", Buffer.from(JSON.stringify({ type: "play-here", game: "doom1" })));
   await tick();
-  assert.deepEqual(seen, ["freedoom1"]);
-  assert.equal(lastState(client).game, "freedoom1");
+  assert.deepEqual(seen, ["doom1"]);
+  assert.equal(lastState(client).game, "doom1");
   assert.equal(lastState(client).closed, false);
 });
 

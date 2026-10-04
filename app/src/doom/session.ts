@@ -3,7 +3,7 @@ import { ControlTokens } from "./tokens";
 import { ControllerLock } from "./control";
 import { DoomKey, KEY_CODES } from "./keymap";
 import { VOLUME_DEFAULT, clampVolume, gainFor } from "./volume";
-import { DoomGame, pickDefaultGame, wadFileName } from "./wad";
+import { DEFAULT_GAME, DoomGame, wadFileName } from "./wad";
 import { loadVolume, saveVolume } from "./settings-store";
 import { parseControlLine, type ControlMessage } from "./audio-out";
 import { StringDecoder } from "node:string_decoder";
@@ -102,13 +102,11 @@ export class DoomSession {
 
   constructor(private deps: DoomSessionDeps) {}
 
-  // Without a game, doom1 is used when its WAD is there, else freedoom1.
   start(game?: DoomGame): { ok: boolean; error?: string; token?: string } {
     if (this.engine) return { ok: true, token: this.deps.tokens.current() ?? undefined };
-    const chosen = game ?? pickDefaultGame((g) => this.deps.wadExists(g));
+    const chosen = game ?? DEFAULT_GAME;
     if (!this.deps.wadExists(chosen)) {
-      const hint = chosen === "freedoom1" ? " corre scripts/fetch-doom-wad.sh" : " copia el archivo a data/doom";
-      return { ok: false, error: `Falta el WAD ${wadFileName(chosen)}:${hint}` };
+      return { ok: false, error: `Falta el WAD ${wadFileName(chosen)}: copia el archivo a data/doom` };
     }
     if (!this.deps.binaryExists()) {
       return { ok: false, error: "Falta el motor: corre scripts/fetch-doom-engine.sh" };

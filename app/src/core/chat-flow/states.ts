@@ -147,6 +147,7 @@ import {
   handleDoomPress,
   handleDoomRelease,
   resolveDoomScreenUrl,
+  dismissDoomMirror,
   takeDoomEntryIsMirror,
 } from "./doom-mode";
 import { getDriveWardriveService } from "../../wardrive/service";
@@ -1427,7 +1428,11 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     onButtonDoubleClick(null);
     // Leaving is a plain transition: ChatFlow.transitionTo stops the engine
     // for any exit from "doom" (see shouldLeaveDoom).
-    onButtonPressed(() => handleDoomPress(() => ctx.transitionTo("sleep")));
+    // A hold leaves the mirror for this game too (see dismissDoomMirror).
+    onButtonPressed(() => handleDoomPress(() => {
+      dismissDoomMirror();
+      ctx.transitionTo("sleep");
+    }));
     onButtonReleased(() => handleDoomRelease());
     const flow = {
       currentFlow: () => ctx.currentFlowName,

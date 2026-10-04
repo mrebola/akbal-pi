@@ -92,8 +92,26 @@ export function decideMirrorEntry(
   currentFlow: string,
   owner: DoomOwner,
   running: boolean,
+  dismissed: boolean,
 ): "enter-mirror" | "none" {
-  return currentFlow === "sleep" && owner === "web" && running ? "enter-mirror" : "none";
+  return currentFlow === "sleep" && owner === "web" && running && !dismissed ? "enter-mirror" : "none";
+}
+
+// The Pi left the mirror with the button: it stays out for this game. Cleared
+// when the Pi starts an engine or the owner changes (see noteDoomOwner).
+let mirrorActive = false;
+let mirrorDismissed = false;
+
+export function dismissDoomMirror(): void {
+  if (mirrorActive) mirrorDismissed = true;
+}
+
+export function isDoomMirrorDismissed(): boolean {
+  return mirrorDismissed;
+}
+
+export function noteDoomOwner(owner: DoomOwner, lastOwner: DoomOwner): void {
+  if (owner !== lastOwner) mirrorDismissed = false;
 }
 
 // Set by ChatFlow right before it moves to "doom" for a mirror; the doom state
@@ -247,6 +265,7 @@ export function doomQrText(hasQr: boolean, baseUrl: string): string {
 export async function enterDoomMode(url: string, flow: DoomFlowHooks): Promise<void> {
   const gen = ++generation;
   baseScreenUrl = url;
+  mirrorActive = false;
   try {
     await startDoom(url, gen, flow);
   } catch (err) {
@@ -274,6 +293,7 @@ async function startDoom(url: string, gen: number, flow: DoomFlowHooks): Promise
   }
   // Entering from the screen makes the Pi the owner. claimOwner reissues the
   // token, so the QR must carry the token it returns, not start()'s.
+  mirrorDismissed = false;
   const claimed = doomSession.claimOwner("pi");
   if (!claimed.ok) {
     showDoomError(claimed.error ?? "No se pudo iniciar DOOM");
@@ -297,6 +317,7 @@ async function startDoom(url: string, gen: number, flow: DoomFlowHooks): Promise
 // no QR is made. The screen only subscribes and paints.
 export function enterDoomMirror(flow: DoomFlowHooks): void {
   generation++;
+  mirrorActive = true;
   qrPath = "";
   subscribeScreen(flow);
   paintForState(doomSession.state());
@@ -323,6 +344,7 @@ function subscribeScreen(flow: DoomFlowHooks): void {
 // web owns it: leaving a mirror must not end the web's game.
 export function leaveDoomMode(): void {
   generation++;
+  mirrorActive = false;
   unsubscribers.forEach((off) => off());
   unsubscribers = [];
   if (doomSession.owner() !== "web") doomSession.stop();

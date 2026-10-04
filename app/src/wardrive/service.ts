@@ -155,6 +155,10 @@ export class DriveWardriveService extends EventEmitter {
   // The dedicated ATTACK radio (dual mode): every hcxdumptool round lives
   // here and the discovery captures keep running on their own radios untouched.
   private attackIface: string | null = null;
+  // The attack radio's discovery side (dual mode): it hops its own channel
+  // slice and runs its own capture whenever it is not in an attack round, so
+  // all three radios of a session cover the band. null in single mode.
+  private attackEntry: DiscoveryRadio | null = null;
   private attackIfaceMac: string | null = null;
   // ssid -> handshake knowledge from the DB at session start
   private knownHandshakeSsids = new Set<string>();
@@ -295,7 +299,9 @@ export class DriveWardriveService extends EventEmitter {
         }
         discoveryAdapters.push(r);
       }
-      const slices = splitChannels(this.channels, discoveryAdapters.length);
+      // Dual mode: the attack radio takes the last slice, so every radio of
+      // the session covers its own part of the band (3 radios = 3 slices).
+      const slices = splitChannels(this.channels, discoveryAdapters.length + (attackRadio ? 1 : 0));
       this.discovery = discoveryAdapters.map((r, i) => ({
         iface: r.iface!,
         mac: r.mac,
@@ -307,6 +313,16 @@ export class DriveWardriveService extends EventEmitter {
       this.dualRadio = attackRadio !== null;
       this.attackIface = attackRadio?.iface ?? null;
       this.attackIfaceMac = attackRadio?.mac ?? null;
+      this.attackEntry = attackRadio
+        ? {
+            iface: attackRadio.iface!,
+            mac: attackRadio.mac,
+            channels: slices[discoveryAdapters.length],
+            hopIndex: 0,
+            currentChannel: 0,
+            capture: null,
+          }
+        : null;
       const discoveryLabel = this.discovery.map((r) => r.iface).join(", ");
       const totalRadios = this.discovery.length + (this.dualRadio ? 1 : 0);
       console.log(
@@ -342,6 +358,7 @@ export class DriveWardriveService extends EventEmitter {
     this.pmkidRunner?.stop();
     this.pmkidRunner = null;
     this.stopCaptures();
+    this.attackEntry = null;
     this.finalizeSession();
     this.air.clear();
     this.apState.clear();
@@ -549,19 +566,29 @@ export class DriveWardriveService extends EventEmitter {
     return candidates[0] ?? null;
   }
 
+  // Every radio that listens to the air right now: the discovery ones plus
+  // the attack radio's discovery side (dual mode, while it isn't attacking).
+  private captureRadios(): DiscoveryRadio[] {
+    return this.attackEntry ? [...this.discovery, this.attackEntry] : this.discovery;
+  }
+
   private startCaptures(): void {
-    for (const radio of this.discovery) {
+    for (const radio of this.captureRadios()) {
       if (radio.capture?.isRunning()) continue;
-      const capture = new DriveCapture();
-      capture.on("frame", (frame: DriveFrame) => this.onFrame(frame));
-      capture.on("exit", () => this.onCaptureExit(radio, capture));
-      capture.start(radio.iface, this.ringDir);
-      radio.capture = capture;
+      this.startCaptureFor(radio);
     }
   }
 
+  private startCaptureFor(radio: DiscoveryRadio): void {
+    const capture = new DriveCapture();
+    capture.on("frame", (frame: DriveFrame) => this.onFrame(frame));
+    capture.on("exit", () => this.onCaptureExit(radio, capture));
+    capture.start(radio.iface, this.ringDir);
+    radio.capture = capture;
+  }
+
   private stopCaptures(): void {
-    for (const radio of this.discovery) {
+    for (const radio of this.captureRadios()) {
       radio.capture?.stop();
       radio.capture = null;
     }
@@ -570,6 +597,16 @@ export class DriveWardriveService extends EventEmitter {
   private onCaptureExit(radio: DiscoveryRadio, capture: DriveCapture): void {
     if (!this.running || radio.capture !== capture) return;
     radio.capture = null;
+    if (radio === this.attackEntry) {
+      // The attack radio's discovery side: unplugged = it leaves the rotation;
+      // any other failure just stops listening on it until the next round.
+      if (!fs.existsSync(`/sys/class/net/${radio.iface}`)) {
+        this.attackEntry = null;
+        this.error = `Radio de ataque ${radio.iface} desconectada — sigo con ${this.discovery.length} radio(s) de descubrimiento`;
+      }
+      this.broadcastStatus();
+      return;
+    }
     // Unplugged mid-drive vs. some other capture failure: only the former
     // drops that radio. The session keeps going on the rest and ends only
     // when no discovery radio is left.
@@ -670,11 +707,17 @@ export class DriveWardriveService extends EventEmitter {
     const hop = () => {
       this.hopTimer = null;
       if (!this.running) return;
-      if (!this.hopTimerPause && !(this.attackBssid && Date.now() < this.attackUntil)) {
+      // An attack round only freezes the hopper when it shares the discovery
+      // radio (single mode). With a dedicated attack radio the discovery
+      // radios keep hopping; freezing them there left 2 of 3 radios parked.
+      const attackingOnSharedRadio = !this.dualRadio && this.attackBssid && Date.now() < this.attackUntil;
+      if (!this.hopTimerPause && !attackingOnSharedRadio) {
         if (this.discovery.length === 0) return;
         this.hopTicks += 1;
         if (this.hopTicks % 2 === 0) this.scoreChannels();
-        for (const radio of this.discovery) {
+        for (const radio of this.captureRadios()) {
+          // The attack radio keeps its channel for the whole round.
+          if (radio === this.attackEntry && this.attackBusy) continue;
           if (radio.channels.length === 0) continue;
           const ch = this.nextChannel(radio);
           radio.currentChannel = ch;
@@ -887,7 +930,27 @@ export class DriveWardriveService extends EventEmitter {
   // Aggro pass (driving efficiency): with short windows + 12s cooldown the
   // engine now cycles targets fast while in range; the historical budget
   // still prevents the burn-on-one-AP failure mode.
+  // Dual mode: the attack radio leaves its discovery capture for the round
+  // (hcxdumptool needs the iface) and rejoins the air afterwards, even when
+  // the round exits early. Single mode has no attack entry and is unchanged.
   private async attackAp(ap: AirAp, st: ApSessionState): Promise<void> {
+    if (this.discovery.length === 0 || !this.running || this.attackBusy) return;
+    const entry = this.attackEntry;
+    if (entry) {
+      const capture = entry.capture;
+      entry.capture = null; // before stop(): its exit event must be ignored
+      capture?.stop();
+    }
+    try {
+      await this.attackApRound(ap, st);
+    } finally {
+      if (entry && this.running && this.attackEntry === entry && !entry.capture) {
+        this.startCaptureFor(entry);
+      }
+    }
+  }
+
+  private async attackApRound(ap: AirAp, st: ApSessionState): Promise<void> {
     if (this.discovery.length === 0 || !this.running || this.attackBusy) return;
     this.attackBusy = true;
     this.roundStartedAt = Date.now();

@@ -111,21 +111,24 @@ void DG_SetWindowTitle(const char *title) { (void)title; }
 
 /* Si Node no pasó fd 3, el siguiente dup() tomaría 3 y los cuadros de video
  * compartirían descriptor con el PCM. Reservamos 3 con /dev/null. Si Node sí
- * lo pasó, no se toca. Si falla, se sigue sin guardia (el audio se pierde,
- * el video no). */
-static void reserve_audio_fd(void) {
-  if (fcntl(AUDIO_FD, F_GETFD) >= 0) return;
+ * lo pasó, no se toca. Si no se puede reservar, el motor no arranca: sin fd 3
+ * ocupado el video se corrompe, y un juego sin sonido es preferible. */
+static int reserve_audio_fd(void) {
+  if (fcntl(AUDIO_FD, F_GETFD) >= 0) return 0;
   int nul = open("/dev/null", O_WRONLY);
-  if (nul < 0) { fprintf(stderr, "[DOOM] open(/dev/null) falló: fd 3 sin reservar\n"); return; }
-  if (nul != AUDIO_FD) {
-    if (dup2(nul, AUDIO_FD) < 0) fprintf(stderr, "[DOOM] dup2 a fd 3 falló: fd 3 sin reservar\n");
+  if (nul == AUDIO_FD) return 0;
+  if (nul >= 0) {
+    int ok = dup2(nul, AUDIO_FD) >= 0;
     close(nul);
+    if (ok) return 0;
   }
+  fprintf(stderr, "[DOOM] no se pudo reservar fd 3 para el audio; el motor se detiene\n");
+  return -1;
 }
 
 int main(int argc, char **argv) {
   /* Antes de dup(stdout): el dup de los cuadros no debe tomar fd 3. */
-  reserve_audio_fd();
+  if (reserve_audio_fd() != 0) exit(1);
 
   /* El motor imprime logs con printf/puts a stdout. Guardamos el descriptor
    * original para los cuadros y mandamos stdout a stderr antes de iniciar. */

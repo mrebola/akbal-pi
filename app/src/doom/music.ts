@@ -4,13 +4,23 @@ import { gainFor, VOLUME_DEFAULT } from "./volume";
 import type { ControlMessage } from "./audio-out";
 
 // fluidsynth plays one MIDI file through the same ALSA default device as the
-// sound effects, so the Pi's speaker carries both. -ni: no shell, no MIDI input.
+// sound effects, so the Pi's speaker carries both. -n: no MIDI input driver.
+// No -i: the shell stays on stdin, which is how the gain changes while a song
+// plays (see MusicPlayer.setGain). Without the shell fluidsynth would not read
+// commands at all.
 export function fluidsynthArgs(soundfont: string, midi: string, gain: number): string[] {
-  return ["-ni", "-a", "alsa", "-o", "audio.alsa.device=default", "-g", String(gain), soundfont, midi];
+  return ["-n", "-a", "alsa", "-o", "audio.alsa.device=default", "-g", String(gain), soundfont, midi];
 }
+
+// Shell commands (upstream src/bindings/fluid_cmd.c, doc/usage/shell.txt):
+// "gain <value>" sets the master gain (accepted range 0 < gain < 5), and
+// "player_loop -1" repeats the current song forever.
+export const MIN_GAIN = 0.001;
 
 export interface MusicProcess {
   signal(sig: NodeJS.Signals): void;
+  // Writes one shell line to fluidsynth's stdin. Throws if stdin is gone.
+  write(line: string): void;
   // A non-null error means the process never started (for example, fluidsynth is not installed).
   onExit(cb: (code: number | null, error?: Error) => void): void;
 }
@@ -82,11 +92,14 @@ export class MusicPlayer {
     return this.ok;
   }
 
-  // Applies to the next song started. A song already playing keeps its gain:
-  // live changes are a later phase (see the DOOM audio spec, Riesgos).
+  // Live: a song already playing gets "gain <g>" on its shell. Paused, the value
+  // is only kept and is sent on resume. With no song playing it is kept for the
+  // next one (the -g argument).
   setGain(gain: number): void {
     if (!Number.isFinite(gain)) return;
-    this.gain = Math.min(1, Math.max(0, gain));
+    this.gain = Math.min(1, Math.max(MIN_GAIN, gain));
+    const s = this.song;
+    if (s?.proc && !s.paused) this.send(s.proc, `gain ${this.gain}\n`);
   }
 
   handle(msg: ControlMessage): void {
@@ -111,6 +124,7 @@ export class MusicPlayer {
         if (!s?.proc || !s.paused) return;
         s.paused = false;
         this.signal(s.proc, "SIGCONT");
+        this.send(s.proc, `gain ${this.gain}\n`);
         return;
       }
     }
@@ -132,6 +146,8 @@ export class MusicPlayer {
     }
     s.proc = proc;
     s.startedAt = Date.now();
+    // The shell repeats the song itself; a clean exit is then not how it loops.
+    if (s.loop) this.send(proc, "player_loop -1\n");
     proc.onExit((code, error) => {
       // A stale exit (song replaced or stopped) must not touch the current song.
       if (this.song !== s || s.proc !== proc) return;
@@ -170,6 +186,15 @@ export class MusicPlayer {
     if (s.paused) this.signal(proc, "SIGCONT");
     s.paused = false;
     this.signal(proc, "SIGTERM");
+  }
+
+  // A stdin that is gone means the process is gone; its exit handler reports it.
+  private send(proc: MusicProcess, line: string): void {
+    try {
+      proc.write(line);
+    } catch {
+      // Ignored on purpose, see above.
+    }
   }
 
   private report(message: string): void {

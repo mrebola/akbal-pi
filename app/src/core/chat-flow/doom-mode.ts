@@ -222,10 +222,15 @@ function spawnAplay(cmd: string, args: string[]): AudioProcess {
 // fluidsynth is optional, like aplay: if it is missing the MusicPlayer stays
 // silent and the game plays without music. Its output is dropped on purpose.
 function spawnFluidsynth(cmd: string, args: string[]): MusicProcess {
-  const child = spawn(cmd, args, { stdio: ["ignore", "ignore", "ignore"] });
+  const child = spawn(cmd, args, { stdio: ["pipe", "ignore", "ignore"] });
+  // Without a listener a write to a dead fluidsynth would crash the whole process.
+  child.stdin!.on("error", () => {});
   return {
     signal: (sig) => {
       if (child.pid) process.kill(child.pid, sig);
+    },
+    write: (line) => {
+      child.stdin!.write(line);
     },
     onExit: (cb) => {
       child.once("exit", (code) => cb(code));

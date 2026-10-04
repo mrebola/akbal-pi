@@ -10,11 +10,12 @@ import {
   MISSING_FLUIDSYNTH,
   MISSING_SOUNDFONT,
   MUSIC_STOPPED,
+  MIN_GAIN,
 } from "./music";
 
 test("fluidsynth plays one MIDI file through the shared ALSA default, with gain", () => {
   assert.deepEqual(fluidsynthArgs("/s.sf2", "/m.mid", 0.6), [
-    "-ni", "-a", "alsa", "-o", "audio.alsa.device=default", "-g", "0.6", "/s.sf2", "/m.mid",
+    "-n", "-a", "alsa", "-o", "audio.alsa.device=default", "-g", "0.6", "/s.sf2", "/m.mid",
   ]);
 });
 
@@ -29,7 +30,7 @@ test("without a soundfont the player stays silent and reports unavailable", () =
 // A fake spawn that records every launch, the signals sent to it, and lets the
 // test end a process on demand.
 function fakeSpawn(failWith?: Error) {
-  const launches: Array<{ cmd: string; args: string[]; signals: string[]; exit: (code?: number | null, err?: Error) => void }> = [];
+  const launches: Array<{ cmd: string; args: string[]; signals: string[]; writes: string[]; exit: (code?: number | null, err?: Error) => void }> = [];
   const spawn = (cmd: string, args: string[]): MusicProcess => {
     if (failWith) throw failWith;
     let exitCb: (code: number | null, err?: Error) => void = () => {};
@@ -37,11 +38,13 @@ function fakeSpawn(failWith?: Error) {
       cmd,
       args,
       signals: [] as string[],
+      writes: [] as string[],
       exit: (code: number | null = 0, err?: Error) => exitCb(code, err),
     };
     launches.push(launch);
     return {
       signal: (sig: NodeJS.Signals) => { launch.signals.push(sig); },
+      write: (line: string) => { launch.writes.push(line); },
       onExit: (cb) => { exitCb = cb; },
     };
   };
@@ -199,4 +202,48 @@ test("two quick ends in a row: one relaunch, then the music stops and says so", 
   assert.equal(fake.launches.length, 2, "second quick end does not relaunch");
   assert.equal(errors.length, 1);
   assert.match(errors[0], new RegExp(`^${MUSIC_STOPPED}`));
+});
+
+test("setGain writes the gain line to the running fluidsynth's shell", () => {
+  const fake = fakeSpawn();
+  const player = new MusicPlayer(fake.spawn, soundfont(), () => true);
+  player.handle({ kind: "song", path: "/a.mid", loop: false });
+  player.setGain(0.5);
+  assert.deepEqual(fake.launches[0].writes, ["gain 0.5\n"]);
+});
+
+test("setGain with no song playing only keeps the value for the next launch", () => {
+  const fake = fakeSpawn();
+  const player = new MusicPlayer(fake.spawn, soundfont(), () => true);
+  player.setGain(0.5);
+  assert.equal(fake.launches.length, 0);
+  player.handle({ kind: "song", path: "/a.mid", loop: false });
+  assert.equal(fake.launches[0].args[fake.launches[0].args.indexOf("-g") + 1], "0.5");
+  assert.deepEqual(fake.launches[0].writes, [], "no write before a song is started by the player");
+});
+
+test("while paused the gain is kept and sent on resume", () => {
+  const fake = fakeSpawn();
+  const player = new MusicPlayer(fake.spawn, soundfont(), () => true);
+  player.handle({ kind: "song", path: "/a.mid", loop: false });
+  player.handle({ kind: "pause" });
+  player.setGain(0.3);
+  assert.deepEqual(fake.launches[0].writes, []);
+  player.handle({ kind: "resume" });
+  assert.deepEqual(fake.launches[0].writes, ["gain 0.3\n"]);
+});
+
+test("a looped song asks the shell to repeat it forever", () => {
+  const fake = fakeSpawn();
+  const player = new MusicPlayer(fake.spawn, soundfont(), () => true);
+  player.handle({ kind: "song", path: "/loop.mid", loop: true });
+  assert.deepEqual(fake.launches[0].writes, ["player_loop -1\n"]);
+});
+
+test("gain never reaches the shell as zero", () => {
+  const fake = fakeSpawn();
+  const player = new MusicPlayer(fake.spawn, soundfont(), () => true);
+  player.handle({ kind: "song", path: "/a.mid", loop: false });
+  player.setGain(0);
+  assert.deepEqual(fake.launches[0].writes, [`gain ${MIN_GAIN}\n`]);
 });

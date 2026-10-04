@@ -441,7 +441,7 @@ test("an engine that dies stops its music player", () => {
   assert.equal(players[0].stopped, 1);
 });
 
-test("the music gain follows the volume, for the next song started", () => {
+test("the music gain follows the volume live (the player gets each change)", () => {
   const { players, openMusic } = countingMusic();
   const { session } = makeSession({ openMusic });
   session.start();

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import type { WebSocketServer, WebSocket } from "ws";
-import { parseDoomMessage, attachDoomSocket } from "./doom-routes";
+import { parseDoomMessage, attachDoomSocket, shouldEncodeNow, canSendTo } from "./doom-routes";
 import { DoomSession, EngineProcess } from "../doom/session";
 import { ControlTokens } from "../doom/tokens";
 import { ControllerLock } from "../doom/control";
@@ -124,4 +124,17 @@ test("a socket error cleans up like close and does not throw", () => {
   const before = client.sent.length;
   session.start();
   assert.equal(client.sent.length, before, "a dropped client must not get more messages");
+});
+
+test("encodes at most every 100 ms", () => {
+  assert.equal(shouldEncodeNow(0, 50), false);
+  assert.equal(shouldEncodeNow(0, 100), true);
+  assert.equal(shouldEncodeNow(1000, 1099), false);
+  assert.equal(shouldEncodeNow(1000, 1100), true);
+});
+
+test("skips a socket whose send buffer is over 256 KiB", () => {
+  assert.equal(canSendTo(0), true);
+  assert.equal(canSendTo(256 * 1024), true);
+  assert.equal(canSendTo(256 * 1024 + 1), false);
 });

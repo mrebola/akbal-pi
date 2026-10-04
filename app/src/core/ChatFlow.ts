@@ -147,11 +147,7 @@ class ChatFlow implements ChatFlowContext {
 
     // The web starting DOOM while the Pi is idle puts the Pi in the mirror.
     // The Pi's own entry (button) is a different path: it starts the engine.
-    doomSession.onState((s) => {
-      if (decideMirrorEntry(this.currentFlowName, s.owner, s.running) !== "enter-mirror") return;
-      requestDoomMirror();
-      this.transitionTo("doom");
-    });
+    doomSession.onState(() => this.enterMirrorIfWebOwns());
 
     // Web-side toggle and the physical hold both flip the mode; this is the
     // one place that moves the screen. Leaving also takes the model memory
@@ -323,6 +319,16 @@ class ChatFlow implements ChatFlowContext {
     console.log(`[${getCurrentTimeTag()}] switch to:`, flowName);
     this.stateMachine.transitionTo(flowName);
     display({ text_input_enabled: flowName === "sleep" });
+    // A web game that started while the Pi was busy gets its mirror at the
+    // next sleep. Checked here, after the transition, so no nested display is lost.
+    if (flowName === "sleep") this.enterMirrorIfWebOwns();
+  };
+
+  private enterMirrorIfWebOwns = (): void => {
+    const s = doomSession.state();
+    if (decideMirrorEntry(this.currentFlowName, s.owner, s.running) !== "enter-mirror") return;
+    requestDoomMirror();
+    this.transitionTo("doom");
   };
 
   isAnswerFlow = (): boolean => {

@@ -75,12 +75,10 @@ test("a crash keeps the error card on screen instead of returning to the menu", 
   assert.equal(decideOnEngineStopped("doom", false, "el motor se cayó"), "none");
 });
 
-test("the Pi enters the mirror when the web starts the game from another flow", () => {
+test("the Pi enters the mirror only from sleep, with the web owning a running game", () => {
   assert.equal(decideMirrorEntry("sleep", "web", true), "enter-mirror");
-  assert.equal(decideMirrorEntry("answer", "web", true), "enter-mirror");
-});
-
-test("no mirror entry while the Pi is already in DOOM or in web chat, or without a web-owned running game", () => {
+  assert.equal(decideMirrorEntry("answer", "web", true), "none");
+  assert.equal(decideMirrorEntry("approval", "web", true), "none");
   assert.equal(decideMirrorEntry("doom", "web", true), "none");
   assert.equal(decideMirrorEntry("web_chat", "web", true), "none");
   assert.equal(decideMirrorEntry("sleep", "web", false), "none");

@@ -86,15 +86,14 @@ export function decideOnEngineStopped(
   return currentFlow === "doom" && !running && error === null ? "return-to-sleep" : "none";
 }
 
-// The web started the game while the Pi is idle: the Pi shows the mirror. Not
-// from DOOM itself (already there) nor from web chat (its screen wins).
+// The Pi shows the mirror only from sleep: a spoken reply, an approval or the
+// listening keep their screen, and the mirror waits for the next sleep.
 export function decideMirrorEntry(
   currentFlow: string,
   owner: DoomOwner,
   running: boolean,
 ): "enter-mirror" | "none" {
-  const idle = currentFlow !== "doom" && currentFlow !== "web_chat";
-  return owner === "web" && running && idle ? "enter-mirror" : "none";
+  return currentFlow === "sleep" && owner === "web" && running ? "enter-mirror" : "none";
 }
 
 // Set by ChatFlow right before it moves to "doom" for a mirror; the doom state

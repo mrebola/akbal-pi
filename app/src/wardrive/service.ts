@@ -10,7 +10,7 @@ import { getGpsStatus, type GpsSatellite } from "../utils/gps";
 import { getWifiStatus, armHomeNetworkWatchdog, disarmHomeNetworkWatchdog, checkHomeNetwork } from "../utils/wifi";
 import { registerShutdownHook } from "../device/display";
 import { lookupVendorOrRandom } from "../wifiradar/oui";
-import { stopWifiRadarService, startWifiRadarService } from "../wifiradar/service";
+import { stopWifiRadarService, restoreWifiRadarIfHeld } from "../wifiradar/service";
 import { getPlatformMode } from "../utils/platform-mode";
 import { DriveCapture, type DriveFrame } from "./capture";
 import { extractEapolToSession, convertCaptureToHash, extractApFrames, PmkidDriveRunner, writeBpfForAp } from "./attack";
@@ -394,7 +394,7 @@ export class DriveWardriveService extends EventEmitter {
           console.warn(`[wardrive] failed to restore ${iface}:`, err?.message || err),
         );
       }
-      startWifiRadarService();
+      restoreWifiRadarIfHeld();
     }
     this.demo = false;
     this.broadcastStatus();

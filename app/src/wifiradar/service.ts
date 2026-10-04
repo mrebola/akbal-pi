@@ -293,6 +293,32 @@ export function stopWifiRadarService(): Promise<void> {
   return sharedWifiRadarService.stop();
 }
 
+// Who needs the radar running right now: the physical WiFi Radar screen and
+// the web clients. It starts with the first holder and stops when the last
+// one lets go, so nothing holds the dongle (or its CPU) while nobody looks.
+const radarHolders = new Set<string>();
+let radarBlocked: () => boolean = () => false;
+
+// Wardrive owns the dongle while it runs; the radar must not fight it.
+export function setWifiRadarBlocker(isBlocked: () => boolean): void {
+  radarBlocked = isBlocked;
+}
+
+export function holdWifiRadar(holder: string): void {
+  radarHolders.add(holder);
+  if (!radarBlocked()) startWifiRadarService();
+}
+
+export function releaseWifiRadar(holder: string): void {
+  if (!radarHolders.delete(holder)) return;
+  if (radarHolders.size === 0) void stopWifiRadarService();
+}
+
+// Wardrive hands the dongle back: the radar returns only if someone still holds it.
+export function restoreWifiRadarIfHeld(): void {
+  if (radarHolders.size > 0 && !radarBlocked()) startWifiRadarService();
+}
+
 export function getWifiRadarAdapters(): ReturnType<WifiRadarService["listAdapters"]> {
   return sharedWifiRadarService.listAdapters();
 }

@@ -128,6 +128,7 @@ import {
   handleWifiRadarRelease,
   onWifiRadarExit,
 } from "./wifi-radar-mode";
+import { holdWifiRadar, releaseWifiRadar } from "../../wifiradar/service";
 import {
   enterAircraftRadarMode,
   handleAircraftRadarDoubleClick,
@@ -1401,6 +1402,7 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
   },
   wifi_radar: (ctx: ChatFlowContext) => {
     onWifiRadarExit(() => {
+      releaseWifiRadar("pantalla");
       if (ctx.currentFlowName === "wifi_radar") {
         ctx.transitionTo("sleep");
       }
@@ -1408,6 +1410,7 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     onButtonDoubleClick(() => handleWifiRadarDoubleClick());
     onButtonPressed(() => handleWifiRadarPress());
     onButtonReleased(() => handleWifiRadarRelease());
+    holdWifiRadar("pantalla");
     enterWifiRadarMode();
   },
   aircraft_radar: (ctx: ChatFlowContext) => {

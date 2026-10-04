@@ -1268,7 +1268,7 @@ export class WardriveService extends EventEmitter {
     if (this.source === "demo") {
       void setWifiRadarMode("live").catch(() => {});
     } else {
-      startWifiRadarService();
+      restoreWifiRadarIfHeld();
     }
     this.broadcastStatus();
     console.log("[wardrive] mode OFF");
@@ -2261,6 +2261,6 @@ export function getWardriveService(): WardriveService {
 import {
   getWifiRadarSnapshot,
   stopWifiRadarService,
-  startWifiRadarService,
+  restoreWifiRadarIfHeld,
   setWifiRadarMode,
 } from "../wifiradar/service";

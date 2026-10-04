@@ -5,7 +5,7 @@ import { startWifiStatus } from "./status/wifi-status";
 import { startVpnStatus } from "./status/vpn-status";
 import { WebAdminServer } from "./device/web-admin-server";
 import { registerShutdownHook } from "./device/display";
-import { startWifiRadarService, stopWifiRadarService } from "./wifiradar/service";
+import { setWifiRadarBlocker, stopWifiRadarService } from "./wifiradar/service";
 import { getWardriveService } from "./wifi-audit/service";
 import { startWardriveDisplayMirror } from "./core/chat-flow/wifi-audit-mode";
 import { getDriveWardriveService } from "./wardrive/service";
@@ -40,14 +40,13 @@ startAutoReconnectWatchdog();
 // same file, which only arms during a drive session).
 startAutoReconnectWatchdog();
 
-// Shared between the physical device's "WiFi Radar" menu screen
-// (chat-flow/wifi-radar-mode.ts) and the web WIFIRADAR page — started
-// unconditionally (not gated behind WEB_ADMIN_ENABLED) since the physical
-// menu should work even with the web admin server off. Restoring the
-// AR9271 out of monitor mode has to actually finish before the process
-// exits, or a restart leaves it stuck — see display.ts's shutdown hook
+// The WiFi Radar is NOT started at boot: it runs only while the physical
+// "WiFi Radar" screen or a web client holds it (see holdWifiRadar). While
+// wardrive runs, the radar stays off so the two never fight over the dongle.
+setWifiRadarBlocker(() => getDriveWardriveService().getStatus().running);
+// Restoring the AR9271 out of monitor mode has to actually finish before the
+// process exits, or a restart leaves it stuck — see display.ts's shutdown hook
 // system for why this isn't a plain SIGTERM listener here.
-startWifiRadarService();
 registerShutdownHook(() => stopWifiRadarService());
 // Killing the game also ends its aplay and fluidsynth (see DoomSession.stop).
 registerShutdownHook(() => doomSession.stop());

@@ -17,8 +17,24 @@ import {
   getWifiRadarRequestedMode,
   getWifiRadarAdapters,
   setWifiRadarPreferredAdapter,
+  holdWifiRadar,
+  releaseWifiRadar,
 } from "../wifiradar/service";
 import { detectMonitorAdapter } from "../wifiradar/adapter";
+
+// The web holds the WiFi Radar only while someone asks for it: every request
+// on the radar API renews a lease, and 60 s without one lets it go (the radar
+// is off while nobody is looking). Open radar websockets hold it until closed.
+const WEB_RADAR_IDLE_MS = 60_000;
+let webRadarIdleTimer: ReturnType<typeof setTimeout> | null = null;
+function touchWebRadar(): void {
+  holdWifiRadar("web");
+  if (webRadarIdleTimer) clearTimeout(webRadarIdleTimer);
+  webRadarIdleTimer = setTimeout(() => {
+    webRadarIdleTimer = null;
+    releaseWifiRadar("web");
+  }, WEB_RADAR_IDLE_MS);
+}
 import { getWardriveService } from "../wifi-audit/service";
 import { getDriveWardriveService } from "../wardrive/service";
 import { driveDb, DRIVE_SESSIONS_ROOT } from "../wardrive/drive-db";
@@ -416,6 +432,7 @@ export class WebAdminServer {
     });
 
     router.get("/api/wifiradar/snapshot", (ctx) => {
+      touchWebRadar();
       const revealFullMac = ctx.query.fullMac === "1";
       ctx.body = getWifiRadarSnapshot(revealFullMac);
     });
@@ -2407,6 +2424,12 @@ export class WebAdminServer {
     });
     this.wss.on("connection", (ws: WebSocket, req) => {
       const url = new URL(req.url || "", "http://localhost");
+      if (url.pathname !== "/aircraft-radar/ws") {
+        // A WiFi Radar page holds the radar for as long as its socket is open.
+        const holder = `web-ws-${Date.now()}-${Math.random()}`;
+        holdWifiRadar(holder);
+        ws.on("close", () => releaseWifiRadar(holder));
+      }
       const send = () => {
         if (ws.readyState !== WebSocket.OPEN) return;
         try {

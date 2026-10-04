@@ -160,6 +160,9 @@ export class DriveCapture extends EventEmitter {
     if (this.running) return;
     this.running = true;
 
+    // Per-radio ring prefix: several captures share one ringDir, and dumpcap
+    // would otherwise roll the same file names from every radio.
+    const ifaceTag = iface.replace(/[^A-Za-z0-9_]/g, "");
     const dumpcapArgs = [
       "dumpcap", // NO sudo: dumpcap drops privileges after opening the
       // interface (uid → SUDO_USER, caps dropped — verified on the device
@@ -180,7 +183,7 @@ export class DriveCapture extends EventEmitter {
     // as wifiradar does.
     if (ringDir) {
       dumpcapArgs.push(
-        "-w", shellSingleQuote(`${ringDir}/drive-`),
+        "-w", shellSingleQuote(`${ringDir}/drive-${ifaceTag}-`),
         "-b", `files:${RING_FILES}`,
         "-b", `filesize:${RING_FILE_SIZE_MB * 1_048_576}`,
         "-q",

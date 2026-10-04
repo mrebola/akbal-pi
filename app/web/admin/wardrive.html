@@ -65,14 +65,14 @@
         </select>
       </label>
       <div id="wd-dongle-msg" class="wd-dongle-msg"></div>
-      <!-- Radio count: 1 dongle (shared, blind during attacks) vs 2 dongles
-           (discovery keeps running while the attack radio attacks). -->
-      <label class="wd-dongle" title="Single: 1 dongle compartido (ciego durante ataques). Dual: 2 dongles — discovery sigue en el aire mientras el atacante ataca." data-i18n-title="wardrive.radios_picker_title">
+      <!-- Radio count: 1 dongle (shared, blind during attacks) vs dual (one
+           dedicated attack radio; every other dongle keeps discovering). -->
+      <label class="wd-dongle" title="Single: 1 dongle compartido (ciego durante ataques). Dual: un dongle ataca dedicado y los demás descubren en paralelo (con 3 dongles, 2 descubren)." data-i18n-title="wardrive.radios_picker_title">
         <span class="k" data-i18n="wardrive.radios_label">Radios</span>
         <select id="wd-radio-select">
           <option value="auto">auto</option>
           <option value="single">1 (single)</option>
-          <option value="dual">2 (dual)</option>
+          <option value="dual">dual</option>
         </select>
       </label>
       <div id="wd-radio-msg" class="wd-dongle-msg"></div>

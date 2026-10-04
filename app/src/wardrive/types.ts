@@ -69,7 +69,8 @@ export type DriveStatus = {
     points: number;
   } | null;
   gps: DriveFix;
-  iface: string | null;
+  iface: string | null; // primary discovery radio
+  discoveryIfaces: string[]; // every radio that hops and captures
   preferredMac: string | null; // dongle pinned by the operator, by MAC (null = auto)
   // Radio count: one dongle shared by discovery+attacks ("single", blind
   // during attacks) or a dedicated attacker radio ("dual"). Requested

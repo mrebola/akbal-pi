@@ -488,7 +488,7 @@
     "hud_channel": "Channel",
     "dongle_picker_title": "USB adapter to use — default: AR9271 (deterministic EAPOL capture)",
     "radios_label": "Radios",
-    "radios_picker_title": "Single: 1 shared dongle (blind during attacks). Dual: 2 dongles — discovery keeps running while the attack dongle attacks.",
+    "radios_picker_title": "Single: 1 shared dongle (blind during attacks). Dual: one dongle attacks on its own while the others keep discovering in parallel (with 3 dongles, 2 discover).",
     "home_guard_title": "The network Akbal is connected to is NEVER attacked — the engine excludes it",
     "home_guard_protected": "protected",
     "compare_title": "RADIO EFFICIENCY",

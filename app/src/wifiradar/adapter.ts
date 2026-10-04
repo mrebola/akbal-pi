@@ -105,7 +105,7 @@ const macOf = async (iface: string): Promise<string> =>
 // iface at all) — the single place that reads phy/usb/driver/mac/monitor
 // for a given name, shared by both the auto-detect loop and the picker
 // listing below so they can never disagree about what a given iface is.
-async function describeIfaceIfPresent(iface: string): Promise<MonitorAdapter | null> {
+export async function describeIfaceIfPresent(iface: string): Promise<MonitorAdapter | null> {
   const phy = await phyOf(iface);
   if (!phy) return null;
   if (!(await isUsbIface(iface))) return null;

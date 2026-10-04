@@ -42,6 +42,19 @@
    DEAUTH se enciende solo a baja velocidad.
 4. `■ DETENER` — restaura la radio y deja la sesión en la lista.
 
+## Radios (1, 2 o 3 dongles)
+
+- **auto** (default) y **dual**: todos los dongles con modo monitor entran a
+  la sesión. Uno queda dedicado a ataques (`ath9k_htc` primero, por las
+  capturas EAPOL/PMKID deterministas) y el resto descubre.
+- **Descubrimiento en paralelo**: los canales 2.4 GHz se reparten en turnos
+  entre las radios de descubrimiento. Con 3 dongles, 2 descubren: cada una
+  escucha la mitad de los canales, así que cada canal lo cubre una sola
+  radio y se visita con más frecuencia.
+- **single**: 1 dongle compartido; ciego durante cada ronda de ataque.
+- Si se desconecta una radio de descubrimiento, la sesión sigue con las
+  demás; la sesión se detiene solo cuando no queda ninguna.
+
 ## Decisiones de diseño
 
 - **Un módulo aparte** (`wardrive/`), no un modo más de `wifi-audit/`: el

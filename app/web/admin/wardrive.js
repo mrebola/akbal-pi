@@ -187,7 +187,8 @@ function render(st) {
   // Live radio badge on the iface HUD item
   const ifaceEl = el("wd-iface");
   if (ifaceEl && st.dualRadio) {
-    ifaceEl.textContent = `${(st.iface || "?").toUpperCase()}+${(st.attackIface || "?").toUpperCase()}`;
+    const discovery = (st.discoveryIfaces || [st.iface]).filter(Boolean).map((i) => i.toUpperCase()).join("·") || "?";
+    ifaceEl.textContent = `${discovery}+${(st.attackIface || "?").toUpperCase()}`;
   } else if (ifaceEl && typeof st.iface === "string") {
     // single mode keeps the plain label (DEMO / IFCACE name)
     if (!ifaceEl.textContent.includes("+")) ifaceEl.textContent = st.running ? ifaceEl.textContent : st.iface ? st.iface.toUpperCase() : "—";
@@ -760,7 +761,7 @@ async function refreshRadioComparison() {
         // Row's total discovery-down time (single mode pays it, dual ≈ 0).
         const blindTotal = r.rounds > 0 ? r.blindMs / r.rounds : 0;
         return `<tr>
-          <td>${r.mode === "dual" ? "2 radios" : "1 radio"}</td>
+          <td>${r.mode === "dual" ? "dual" : "1 radio"}</td>
           <td>${r.rounds}</td>
           <td>${r.captured}</td>
           <td>${(r.hitRate * 100).toFixed(0)}%</td>

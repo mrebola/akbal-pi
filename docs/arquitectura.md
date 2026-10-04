@@ -51,6 +51,9 @@ subgraph group_doom["DOOM"]
   node_doomsession["Sesión del motor<br/>[session.ts]"]
   node_doomroutes["Ruta WebSocket de DOOM<br/>[doom-routes.ts]"]
   node_doompage["Página de control<br/>[doom.js]"]
+  node_doomowner["Dueño del juego (Pi o web)<br/>[session.ts]"]
+  node_doomaudio["Salida de audio de DOOM<br/>[audio-out.ts]"]
+  node_doommusic["Música MIDI de DOOM<br/>[music.ts]"]
 end
 
 subgraph group_services["Servicios del dispositivo"]
@@ -106,6 +109,14 @@ node_webserver -->|"monta /ws/doom"| node_doomroutes
 node_webserver -->|"sirve /doom"| node_doompage
 node_person -->|"controla desde el celular"| node_doompage
 node_doompage -->|"claim, teclas y video"| node_doomroutes
+node_doompage -->|"Jugar aquí y volumen"| node_doomowner
+node_doomroutes -->|"valida dueño y espejo"| node_doomowner
+node_doomowner -->|"arranca o detiene el motor"| node_doomsession
+node_doomsession -->|"PCM de efectos"| node_doomaudio
+node_doomsession -->|"comandos de música"| node_doommusic
+node_doommusic -->|"reproduce MIDI con fluidsynth"| node_speaker
+node_doomaudio -->|"aplay a la tarjeta del HAT"| node_speaker
+node_flow -->|"pausa el sonido de DOOM mientras Akbal habla"| node_doomsession
 
 click node_button "https://github.com/mrebola/akbal-pi/blob/main/app/src/device/audio.ts"
 click node_flow "https://github.com/mrebola/akbal-pi/blob/main/app/src/core/ChatFlow.ts"
@@ -137,6 +148,9 @@ click node_doommode "https://github.com/mrebola/akbal-pi/blob/main/app/src/core/
 click node_doomsession "https://github.com/mrebola/akbal-pi/blob/main/app/src/doom/session.ts"
 click node_doomroutes "https://github.com/mrebola/akbal-pi/blob/main/app/src/device/doom-routes.ts"
 click node_doompage "https://github.com/mrebola/akbal-pi/blob/main/app/web/admin/doom.js"
+click node_doomowner "https://github.com/mrebola/akbal-pi/blob/main/app/src/doom/session.ts"
+click node_doomaudio "https://github.com/mrebola/akbal-pi/blob/main/app/src/doom/audio-out.ts"
+click node_doommusic "https://github.com/mrebola/akbal-pi/blob/main/app/src/doom/music.ts"
 
 classDef toneNeutral fill:#f8fafc,stroke:#334155,stroke-width:1.5px,color:#0f172a
 classDef toneBlue fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#172554
@@ -150,7 +164,7 @@ class node_speech,node_llm,node_plugins,node_knowledge,node_tts,node_clips toneA
 class node_admin,node_webserver,node_wifi,node_storage,node_chats,node_commands toneMint
 class node_radar,node_wardrive,node_audit,node_aircraft toneRose
 class node_gps,node_music,node_person,node_externalai,node_radiohardware toneIndigo
-class node_doommode,node_doomsession,node_doomroutes,node_doompage toneTeal
+class node_doommode,node_doomsession,node_doomroutes,node_doompage,node_doomowner,node_doomaudio,node_doommusic toneTeal
 ```
 
 ## Notas
@@ -165,5 +179,10 @@ class node_doommode,node_doomsession,node_doomroutes,node_doompage toneTeal
 - **DOOM:** una sola instancia del motor, que vive en `doom-mode.ts` (singletons
   `doomSession`, `doomTokens` y `doomLock`). La pantalla y la web son vistas y
   control de esa misma partida; ver `docs/doom.md`.
+- **DOOM, dueño y sonido:** el dueño (`session.ts`) decide si la Pi o la web juega; el
+  otro lado es espejo. La salida de efectos (`audio-out.ts`) y la música MIDI
+  (`music.ts`) salen por la bocina de la Pi; el volumen se aplica en el motor (efectos)
+  y en el reproductor de música (ganancia). Ver
+  `docs/doom.md` y el spec `docs/superpowers/specs/2026-10-03-doom-audio-mirror-design.md`.
 - **Voz de las respuestas:** los audios se generan con Piper y se guardan junto al
   chat; no suenan en el altavoz de la Pi (`piper-clips.ts`).

@@ -1,7 +1,7 @@
 # DOOM: sonido, dueño del juego (Pi o web) y control horizontal
 
 Fecha: 2026-10-03
-Estado: Diseño aprobado por el dueño en el chat. Pendiente de revisión del spec antes del plan.
+Estado: Implementado en la rama; pendiente de verificación en la Pi
 Extiende: `docs/superpowers/specs/2026-10-03-doom-design.md` (el spec base).
 
 ## Objetivo

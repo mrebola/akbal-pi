@@ -378,3 +378,53 @@ test("play-here reports the start error and keeps the owner when the engine cann
   assert.equal(session.owner(), null);
   assert.match(String(lastState(client).error), /Falta el WAD/);
 });
+
+test("parses stop", () => {
+  assert.deepEqual(parseDoomMessage('{"type":"stop"}'), { type: "stop" });
+});
+
+test("only the web owner may stop", () => {
+  const owner = { owner: "web" as const, isWebOwner: true, webOwnerOnline: true };
+  const mirror = { owner: "web" as const, isWebOwner: false, webOwnerOnline: true };
+  const piMirror = { owner: "pi" as const, isWebOwner: false, webOwnerOnline: false };
+  assert.equal(doomMessageAllowed({ type: "stop" }, owner), true);
+  assert.equal(doomMessageAllowed({ type: "stop" }, mirror), false);
+  assert.equal(doomMessageAllowed({ type: "stop" }, piMirror), false);
+});
+
+test("the web owner's stop ends the game for everyone", () => {
+  const { session } = makeSession();
+  session.start();
+  const wss = new EventEmitter();
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+
+  const owner = fakeClient();
+  const mirror = fakeClient();
+  wss.emit("connection", owner as unknown as WebSocket);
+  wss.emit("connection", mirror as unknown as WebSocket);
+  owner.emit("message", Buffer.from(JSON.stringify({ type: "play-here" })));
+
+  owner.emit("message", Buffer.from(JSON.stringify({ type: "stop" })));
+  assert.equal(session.state().running, false);
+  assert.equal(session.owner(), null);
+  assert.equal(lastState(owner).running, false);
+  assert.equal(lastState(mirror).running, false, "every client gets the new state");
+});
+
+test("a mirror's stop is refused with a clear message and the game keeps running", () => {
+  const { session } = makeSession();
+  session.start();
+  const wss = new EventEmitter();
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+
+  const owner = fakeClient();
+  const mirror = fakeClient();
+  wss.emit("connection", owner as unknown as WebSocket);
+  wss.emit("connection", mirror as unknown as WebSocket);
+  owner.emit("message", Buffer.from(JSON.stringify({ type: "play-here" })));
+
+  mirror.emit("message", Buffer.from(JSON.stringify({ type: "stop" })));
+  assert.equal(session.state().running, true);
+  assert.equal(session.owner(), "web");
+  assert.equal(lastState(mirror).error, "Solo quien juega puede salir");
+});

@@ -11,7 +11,8 @@ export type DoomClientMessage =
   | { type: "key"; key: DoomKey; down: boolean }
   | { type: "stream"; on: boolean }
   | { type: "play-here" }
-  | { type: "volume"; value: number };
+  | { type: "volume"; value: number }
+  | { type: "stop" };
 
 export function parseDoomMessage(raw: string): DoomClientMessage | null {
   let m: any;
@@ -28,6 +29,7 @@ export function parseDoomMessage(raw: string): DoomClientMessage | null {
   }
   if (m.type === "stream" && typeof m.on === "boolean") return { type: "stream", on: m.on };
   if (m.type === "play-here") return { type: "play-here" };
+  if (m.type === "stop") return { type: "stop" };
   if (m.type === "volume" && typeof m.value === "number") return { type: "volume", value: m.value };
   return null;
 }
@@ -54,6 +56,7 @@ export function doomMessageAllowed(msg: DoomClientMessage, view: DoomSocketView)
     case "claim":
       return !mirror;
     case "volume":
+    case "stop":
       return view.owner === "web" && view.isWebOwner;
     case "play-here":
       return !(view.owner === "web" && view.webOwnerOnline && !view.isWebOwner);
@@ -207,6 +210,7 @@ export function attachDoomSocket(
       // or takeover is dropped before it gets anywhere near the engine.
       if (!doomMessageAllowed(msg, viewFor(ws))) {
         if (msg.type === "play-here") claimError = "Otro dispositivo ya juega desde la web";
+        if (msg.type === "stop") claimError = "Solo quien juega puede salir";
         sendState(ws, claimError);
         return;
       }
@@ -233,6 +237,7 @@ export function attachDoomSocket(
           c.token = r.token;
         } else claimError = r.error;
       } else if (msg.type === "volume") session.setVolume(clampVolume(msg.value));
+      else if (msg.type === "stop") session.stop();
       sendState(ws, claimError);
     });
     ws.on("close", () => dropClient(ws));

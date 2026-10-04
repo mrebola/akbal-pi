@@ -1140,6 +1140,15 @@ export class WebAdminServer {
           console.error("[AdminChat] RAG lookup failed:", err?.message || err);
         }
       }
+      // One system message, at the very start. Qwen3.5's chat template
+      // raises "System message must be at the beginning" (Ollama 500) on
+      // anything else, and the persona + tool rule + RAG knowledge above
+      // would otherwise each be a separate system turn.
+      const systemText = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n");
+      if (systemText) {
+        const turns = messages.filter((m) => m.role !== "system");
+        messages.splice(0, messages.length, { role: "system", content: systemText }, ...turns);
+      }
       if (chat) {
         // Budget = model window minus room for the reply. Falls back to a
         // conservative 4096 when Ollama does not report a window. Messages on

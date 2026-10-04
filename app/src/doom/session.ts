@@ -121,6 +121,8 @@ export class DoomSession {
       this.emitState();
     }) ?? null;
     this.music?.setGain(gainFor(this.volumeValue));
+    // A player opened during Akbal's reply must not play the first song.
+    if (this.audioPaused) this.music?.handle({ kind: "pause" });
     engine.stdout.on("data", (chunk: Buffer) => {
       for (const frame of this.reader.push(chunk)) {
         this.frameListeners.forEach((cb) => cb(frame));
@@ -151,6 +153,8 @@ export class DoomSession {
         pending = pending.slice(nl + 1);
         if (msg && this.engine === engine) {
           this.music?.handle(msg);
+          // A song that starts during the reply waits for resumeAudio.
+          if (msg.kind === "song" && this.audioPaused) this.music?.handle({ kind: "pause" });
           this.controlListeners.forEach((cb) => cb(msg));
         }
         nl = pending.indexOf("\n");

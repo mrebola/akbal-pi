@@ -538,3 +538,32 @@ test("paused PCM never reaches the AudioOut sink", () => {
   session.feedAudioForTest(Buffer.alloc(512));
   assert.equal(sinks[0].written.length, 1);
 });
+
+test("a music player opened while Akbal speaks starts paused", () => {
+  const music = recordingMusic();
+  const { session } = makeSession({ openMusic: music.openMusic });
+  session.pauseAudio();
+  session.start();
+  assert.deepEqual(music.kinds, ["pause"]);
+});
+
+test("a song that starts while Akbal speaks is paused at once and stays silent", async () => {
+  const music = recordingMusic();
+  const { session, fake } = makeSession({ openMusic: music.openMusic });
+  session.start();
+  session.pauseAudio();
+  fake.control.write("song /data/doom/music/0.mid 1\n");
+  await flush();
+  assert.deepEqual(music.kinds, ["pause", "song", "pause"]);
+  session.resumeAudio();
+  assert.deepEqual(music.kinds, ["pause", "song", "pause", "resume"]);
+});
+
+test("a song that starts outside a reply is not paused", async () => {
+  const music = recordingMusic();
+  const { session, fake } = makeSession({ openMusic: music.openMusic });
+  session.start();
+  fake.control.write("song /data/doom/music/0.mid 1\n");
+  await flush();
+  assert.deepEqual(music.kinds, ["song"]);
+});

@@ -38,6 +38,7 @@
   const volumeDownBtn = $("volume-down");
   const volumeUpBtn = $("volume-up");
   const volumeValueEl = $("volume-value");
+  const quitBtn = $("quit-btn");
   const consoleBar = $("console-bar");
   const warningsEl = $("warnings");
   const audioWarningEl = $("audio-warning");
@@ -67,6 +68,8 @@
   let owner = null; // "pi" | "web" | null, from the server state
   let mirror = false; // true when another device or the Pi is playing
   let wasMirror = false; // mirror value from the previous state, to detect entering mirror
+  // Set after a stop is sent, until the next state arrives. Blocks a double tap.
+  let quitPending = false;
   let volume = null; // last volume the server reported (0..100), null until known
   let audioError = null;
   let musicError = null;
@@ -180,6 +183,10 @@
     volumeUpBtn.disabled = !canStep || volume >= VOLUME_MAX;
     volumeValueEl.textContent = volume === null ? "—" : `${volume}%`;
 
+    // Only the web owner can stop the game; the server refuses it otherwise.
+    quitBtn.hidden = !isWebOwner();
+    quitBtn.disabled = !connected || quitPending;
+
     // Keys are disabled while mirroring. sync() would not send them anyway
     // without control, but the disabled look makes the state clear.
     for (const els of keyEls.values()) {
@@ -208,6 +215,9 @@
   }
 
   function handleState(msg) {
+    // Any state answers the last stop, so the button is usable again unless
+    // the game is now gone (renderStatus hides it then).
+    quitPending = false;
     running = Boolean(msg.running);
     controller = Boolean(msg.controller);
     owner = msg.owner === "pi" || msg.owner === "web" ? msg.owner : null;
@@ -367,6 +377,13 @@
     if (volume === null) return;
     send({ type: "volume", value: clampVolume(volume + delta) });
   }
+
+  quitBtn.addEventListener("click", () => {
+    if (quitPending) return;
+    quitPending = true;
+    send({ type: "stop" });
+    renderStatus();
+  });
 
   volumeDownBtn.addEventListener("click", () => stepVolume(-VOLUME_STEP));
   volumeUpBtn.addEventListener("click", () => stepVolume(VOLUME_STEP));

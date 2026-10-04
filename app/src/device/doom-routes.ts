@@ -1,14 +1,17 @@
 import { WebSocketServer, WebSocket, RawData } from "ws";
 import { randomUUID } from "node:crypto";
-import { DoomSession, DoomState } from "../doom/session";
+import { DoomOwner, DoomSession, DoomState } from "../doom/session";
 import { DOOM_KEYS, DoomKey } from "../doom/keymap";
 import { encodeFrameJpeg } from "../doom/frame-jpeg";
+import { clampVolume } from "../doom/volume";
 
 export type DoomClientMessage =
   | { type: "claim"; token: string }
   | { type: "release" }
   | { type: "key"; key: DoomKey; down: boolean }
-  | { type: "stream"; on: boolean };
+  | { type: "stream"; on: boolean }
+  | { type: "play-here" }
+  | { type: "volume"; value: number };
 
 export function parseDoomMessage(raw: string): DoomClientMessage | null {
   let m: any;
@@ -24,7 +27,34 @@ export function parseDoomMessage(raw: string): DoomClientMessage | null {
     return { type: "key", key: m.key, down: m.down };
   }
   if (m.type === "stream" && typeof m.on === "boolean") return { type: "stream", on: m.on };
+  if (m.type === "play-here") return { type: "play-here" };
+  if (m.type === "volume" && typeof m.value === "number") return { type: "volume", value: m.value };
   return null;
+}
+
+// What this socket is allowed to do, decided from the session's owner. A
+// mirror is any socket that is not the web owner while someone owns the game.
+export interface DoomSocketView {
+  owner: DoomOwner;
+  isWebOwner: boolean;
+  // True when some socket is currently the web owner. If the web owner's
+  // socket went away, the web's claim is stale and another tab may take it.
+  webOwnerOnline: boolean;
+}
+
+export function doomMessageAllowed(msg: DoomClientMessage, view: DoomSocketView): boolean {
+  const mirror = view.owner !== null && !view.isWebOwner;
+  switch (msg.type) {
+    case "key":
+    case "claim":
+      return !mirror;
+    case "volume":
+      return view.owner === "web" && view.isWebOwner;
+    case "play-here":
+      return !(view.owner === "web" && view.webOwnerOnline && !view.isWebOwner);
+    default:
+      return true;
+  }
 }
 
 // Video is capped: at most one JPEG every FRAME_INTERVAL_MS, and only the
@@ -62,13 +92,24 @@ export function attachDoomSocket(
   screenUrl: () => string,
   options: DoomSocketOptions = {},
 ): void {
-  const clients = new Map<WebSocket, { id: string; streaming: boolean; alive: boolean }>();
+  type ClientEntry = { id: string; streaming: boolean; alive: boolean; webOwnerFlag: boolean; token?: string };
+  const clients = new Map<WebSocket, ClientEntry>();
+
+  // The flag is only meaningful while the session is owned by the web.
+  const isWebOwner = (c: ClientEntry | undefined): boolean => c?.webOwnerFlag === true && session.owner() === "web";
+
+  const viewFor = (ws: WebSocket): DoomSocketView => ({
+    owner: session.owner(),
+    isWebOwner: isWebOwner(clients.get(ws)),
+    webOwnerOnline: session.owner() === "web" && [...clients.values()].some((c) => isWebOwner(c)),
+  });
 
   // The claim error (bad token, busy controller) goes only to the socket that
   // sent the claim. Broadcasts carry the engine's own error, if any.
   const sendState = (ws: WebSocket, claimError?: string) => {
     const s: DoomState = session.state();
     const c = clients.get(ws);
+    const webOwner = isWebOwner(c);
     ws.send(
       JSON.stringify({
         type: "state",
@@ -78,6 +119,11 @@ export function attachDoomSocket(
         error: claimError ?? s.error,
         streaming: c?.streaming ?? false,
         url: screenUrl(),
+        owner: s.owner,
+        mirror: s.owner !== null && !webOwner,
+        volume: session.volume(),
+        // Only the web owner's own socket ever gets the token.
+        token: webOwner ? c?.token : undefined,
       }),
     );
   };
@@ -142,7 +188,7 @@ export function attachDoomSocket(
 
   wss.on("connection", (ws: WebSocket) => {
     const id = randomUUID();
-    clients.set(ws, { id, streaming: false, alive: true });
+    clients.set(ws, { id, streaming: false, alive: true, webOwnerFlag: false });
     ws.on("pong", () => {
       const c = clients.get(ws);
       if (c) c.alive = true;
@@ -152,12 +198,32 @@ export function attachDoomSocket(
       const msg = parseDoomMessage(raw.toString());
       if (!msg) return;
       let claimError: string | undefined;
+      // Enforced here, not only in the session: a mirror's key, claim, volume
+      // or takeover is dropped before it gets anywhere near the engine.
+      if (!doomMessageAllowed(msg, viewFor(ws))) {
+        if (msg.type === "play-here") claimError = "Otro dispositivo ya juega desde la web";
+        sendState(ws, claimError);
+        return;
+      }
       if (msg.type === "claim") {
         if (!session.tokenValid(msg.token)) claimError = "Token inválido o vencido";
         else if (!session.claim(id, msg.token)) claimError = "Otro control ya juega";
       } else if (msg.type === "release") session.release(id);
       else if (msg.type === "key") session.key(id, msg.key, msg.down);
       else if (msg.type === "stream") clients.get(ws)!.streaming = msg.on;
+      else if (msg.type === "play-here") {
+        const r = session.claimOwner("web");
+        if (r.ok) {
+          // One web owner at a time: the previous owner's flag and token go.
+          for (const c of clients.values()) {
+            c.webOwnerFlag = false;
+            c.token = undefined;
+          }
+          const c = clients.get(ws)!;
+          c.webOwnerFlag = true;
+          c.token = r.token;
+        } else claimError = r.error;
+      } else if (msg.type === "volume") session.setVolume(clampVolume(msg.value));
       sendState(ws, claimError);
     });
     ws.on("close", () => dropClient(ws));

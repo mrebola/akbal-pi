@@ -2,6 +2,7 @@ import { FrameReader } from "./frame-reader";
 import { ControlTokens } from "./tokens";
 import { ControllerLock } from "./control";
 import { DoomKey, KEY_CODES } from "./keymap";
+import { VOLUME_DEFAULT, clampVolume } from "./volume";
 import type { Readable, Writable } from "node:stream";
 
 export interface EngineProcess {
@@ -38,6 +39,7 @@ export class DoomSession {
   private reader = new FrameReader();
   private error: string | null = null;
   private ownerValue: DoomOwner = null;
+  private volumeValue = VOLUME_DEFAULT;
   private frameListeners = new Set<(rgb565: Buffer) => void>();
   private stateListeners = new Set<(s: DoomState) => void>();
   // Keys the controller has pressed and not yet released. Sent "up" when the
@@ -88,6 +90,17 @@ export class DoomSession {
 
   owner(): DoomOwner {
     return this.ownerValue;
+  }
+
+  // Storage only for now: the engine's audio gain is wired in with the sound
+  // task, and settings.json is written there too.
+  volume(): number {
+    return this.volumeValue;
+  }
+
+  setVolume(value: number): void {
+    this.volumeValue = clampVolume(value);
+    this.emitState();
   }
 
   // Switching owner ends the old owner's input: held keys go up, its lock and

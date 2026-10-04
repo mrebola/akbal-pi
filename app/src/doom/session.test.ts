@@ -5,6 +5,7 @@ import { DoomSession, EngineProcess } from "./session";
 import { ControlTokens } from "./tokens";
 import { ControllerLock } from "./control";
 import { FRAME_BYTES } from "./frame-reader";
+import { VOLUME_DEFAULT } from "./volume";
 
 function fakeEngine() {
   const stdout = new PassThrough();
@@ -235,4 +236,15 @@ test("the same owner claiming again keeps the token", () => {
   const a = session.claimOwner("web");
   const b = session.claimOwner("web");
   assert.equal(a.token, b.token);
+});
+
+test("volume starts at the default and setVolume stores a clamped, stepped value", () => {
+  const { session } = makeSession();
+  assert.equal(session.volume(), VOLUME_DEFAULT);
+  session.setVolume(42);
+  assert.equal(session.volume(), 40);
+  session.setVolume(250);
+  assert.equal(session.volume(), 100);
+  session.setVolume(-3);
+  assert.equal(session.volume(), 0);
 });

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import type { WebSocketServer, WebSocket } from "ws";
-import { parseDoomMessage, attachDoomSocket, shouldEncodeNow, canSendTo, isDeadSocket } from "./doom-routes";
+import { parseDoomMessage, attachDoomSocket, shouldEncodeNow, canSendTo, isDeadSocket, doomMessageAllowed } from "./doom-routes";
 import { DoomSession, EngineProcess } from "../doom/session";
 import { ControlTokens } from "../doom/tokens";
 import { ControllerLock } from "../doom/control";
@@ -228,4 +228,110 @@ test("a claim with an invalid token says so", () => {
   const s = lastState(client);
   assert.equal(s.controller, false);
   assert.equal(s.error, "Token inválido o vencido");
+});
+
+test("parses play-here and volume", () => {
+  assert.deepEqual(parseDoomMessage('{"type":"play-here"}'), { type: "play-here" });
+  assert.deepEqual(parseDoomMessage('{"type":"volume","value":65}'), { type: "volume", value: 65 });
+});
+
+test("rejects a volume message without a number", () => {
+  assert.equal(parseDoomMessage('{"type":"volume","value":"alto"}'), null);
+});
+
+test("mirrors may not send key or claim while another owner plays", () => {
+  const mirror = { owner: "pi" as const, isWebOwner: false, webOwnerOnline: false };
+  assert.equal(doomMessageAllowed({ type: "key", key: "fire", down: true }, mirror), false);
+  assert.equal(doomMessageAllowed({ type: "claim", token: "t" }, mirror), false);
+  assert.equal(doomMessageAllowed({ type: "volume", value: 20 }, mirror), false);
+});
+
+test("the web owner may send key, claim and volume", () => {
+  const owner = { owner: "web" as const, isWebOwner: true, webOwnerOnline: true };
+  assert.equal(doomMessageAllowed({ type: "key", key: "fire", down: true }, owner), true);
+  assert.equal(doomMessageAllowed({ type: "claim", token: "t" }, owner), true);
+  assert.equal(doomMessageAllowed({ type: "volume", value: 20 }, owner), true);
+});
+
+test("a second web tab cannot take play-here or volume from the web owner", () => {
+  const other = { owner: "web" as const, isWebOwner: false, webOwnerOnline: true };
+  assert.equal(doomMessageAllowed({ type: "play-here" }, other), false);
+  assert.equal(doomMessageAllowed({ type: "volume", value: 20 }, other), false);
+});
+
+test("a web client may take play-here from the Pi", () => {
+  assert.equal(doomMessageAllowed({ type: "play-here" }, { owner: "pi", isWebOwner: false, webOwnerOnline: false }), true);
+});
+
+test("release and stream are always allowed", () => {
+  const mirror = { owner: "pi" as const, isWebOwner: false, webOwnerOnline: false };
+  assert.equal(doomMessageAllowed({ type: "release" }, mirror), true);
+  assert.equal(doomMessageAllowed({ type: "stream", on: true }, mirror), true);
+});
+
+test("a volume change from the web owner reaches the session and every state", () => {
+  const { session } = makeSession();
+  session.start();
+  const wss = new EventEmitter();
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+
+  const owner = fakeClient();
+  const mirror = fakeClient();
+  wss.emit("connection", owner as unknown as WebSocket);
+  wss.emit("connection", mirror as unknown as WebSocket);
+
+  owner.emit("message", Buffer.from(JSON.stringify({ type: "play-here" })));
+  assert.equal(session.owner(), "web");
+  assert.equal(lastState(owner).mirror, false);
+  assert.equal(typeof lastState(owner).token, "string", "the web owner gets the token");
+  assert.equal(lastState(mirror).mirror, true);
+  assert.equal(lastState(mirror).token, undefined, "a mirror never gets the token");
+
+  mirror.emit("message", Buffer.from(JSON.stringify({ type: "volume", value: 20 })));
+  assert.equal(session.volume(), 60, "a mirror's volume must not reach the session");
+
+  owner.emit("message", Buffer.from(JSON.stringify({ type: "volume", value: 20 })));
+  assert.equal(session.volume(), 20);
+  assert.equal(lastState(owner).volume, 20);
+  assert.equal(lastState(mirror).volume, 20, "every client sees the new volume");
+});
+
+test("a takeover is allowed when the web owner's socket is gone", () => {
+  const stale = { owner: "web" as const, isWebOwner: false, webOwnerOnline: false };
+  assert.equal(doomMessageAllowed({ type: "play-here" }, stale), true);
+});
+
+test("a mirror's play-here is refused while the web owns the game", () => {
+  const { session } = makeSession();
+  session.start();
+  const wss = new EventEmitter();
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+
+  const owner = fakeClient();
+  const other = fakeClient();
+  wss.emit("connection", owner as unknown as WebSocket);
+  wss.emit("connection", other as unknown as WebSocket);
+  owner.emit("message", Buffer.from(JSON.stringify({ type: "play-here" })));
+  const before = session.owner();
+  const tokenBefore = session.state();
+
+  other.emit("message", Buffer.from(JSON.stringify({ type: "play-here" })));
+  assert.equal(session.owner(), before);
+  assert.equal(session.state().running, tokenBefore.running);
+  assert.equal(typeof lastState(other).error, "string");
+  assert.equal(lastState(other).token, undefined);
+});
+
+test("play-here from the Pi's owner is passed through and the web owns it", () => {
+  const { session } = makeSession();
+  session.start();
+  session.claimOwner("pi");
+  const wss = new EventEmitter();
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+
+  const client = fakeClient();
+  wss.emit("connection", client as unknown as WebSocket);
+  client.emit("message", Buffer.from(JSON.stringify({ type: "play-here" })));
+  assert.equal(session.owner(), "web");
+  assert.equal(lastState(client).mirror, false);
 });

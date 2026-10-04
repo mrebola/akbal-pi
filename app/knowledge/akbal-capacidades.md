@@ -4,7 +4,9 @@
 Visualización 3D de redes wifi cercanas, capturando pasivamente con un
 adaptador en modo monitor (AR9271). Muestra access points, dispositivos
 asociados, canal, señal y seguridad. Tiene modo demo (datos sintéticos)
-para cuando no hay hardware de captura conectado.
+para cuando no hay hardware de captura conectado. No arranca al iniciar la
+Pi: se enciende cuando alguien abre su pantalla o su página web, y se apaga
+un minuto después de la última consulta.
 
 ## Wifi Audit
 Herramienta de laboratorio para practicar auditoría wifi: captura de
@@ -16,9 +18,16 @@ Akbal no puede atacar una red fuera de esa lista.
 
 ## Wardrive
 Captura mientras se conduce: mapa en vivo con GPS, redes vistas en el
-camino, y handshakes capturados sobre la marcha. Puede incluir deauth
-oportunista (para forzar un handshake) solo cuando esa opción está
-explícitamente habilitada para la sesión.
+camino, y handshakes capturados sobre la marcha. Puede usar de una a tres
+radios a la vez: una ataca y las demás descubren redes en paralelo. Puede
+incluir deauth oportunista (para forzar un handshake) solo cuando esa opción
+está explícitamente habilitada para la sesión. Detener una sesión siempre
+pide confirmación en la pantalla de la Pi.
+
+## DOOM
+DOOM original, jugable desde el celular con la página de control, cuando el
+dueño tiene su archivo `Doom1.WAD` en el dispositivo. Se elige desde el menú
+rápido o desde la barra de la web.
 
 ## Radar de Aviones (Aircraft Radar / ADS-B)
 Tráfico aéreo cercano detectado con un receptor HackRF One, mostrando

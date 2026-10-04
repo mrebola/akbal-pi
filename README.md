@@ -333,7 +333,9 @@ propio doc. Agrupado por tipo:
 | [`web-ui.md`](docs/web-ui.md) | La interfaz web completa: chat, wifi, USB, WIFIRADAR |
 | [`wifiradar.md`](docs/wifiradar.md) | WIFIRADAR — visualización 3D del espacio WiFi |
 | [`wifi-audit.md`](docs/wifi-audit.md) | Wifi Audit — captura de handshakes para laboratorio/tesis |
-| [`wardrive.md`](docs/wardrive.md) | Wardrive — captura mientras se conduce |
+| [`wardrive.md`](docs/wardrive.md) | Wardrive — captura mientras se conduce, radios y compartir sesiones |
+| [`wardrive-backups.md`](docs/wardrive-backups.md) | Dónde están los respaldos de Wardrive (solo en el dispositivo) |
+| [`doom.md`](docs/doom.md) | DOOM original en la pantalla y en el celular |
 | [`lab-wireless.md`](docs/lab-wireless.md) | El AP de laboratorio dedicado (`akbal_lab`) — la red autorizada para Wifi Audit |
 | [`aircraft-radar.md`](docs/aircraft-radar.md) | Aircraft Radar — ADS-B con HackRF One |
 | [`gps.md`](docs/gps.md) | GPS — posición del dispositivo en un mapa mundial |
@@ -409,9 +411,17 @@ usuario/clave configurados en `WEB_ADMIN_USER`/`WEB_ADMIN_PASSWORD` del `.env`).
 
 ## En el dispositivo físico (botón + pantalla)
 
-El botón tiene tres gestos en reposo, y el mismo lenguaje en todos los menús:
-**click corto** avanza al siguiente elemento, **mantener ~0.9s** confirma/ejecuta,
-**doble clic** cancela/sale sin aplicar nada.
+El botón tiene el mismo lenguaje en todas las pantallas:
+
+- **Click corto** (menos de 0,4 s): avanza al siguiente elemento, o hace la
+  acción principal de la pantalla.
+- **Mantener ~0,9 s**: elige, confirma o sale. Entra a un submenú.
+- **Doble clic**: vuelve un nivel. Desde la raíz de un menú o una herramienta,
+  sale a reposo.
+- **En reposo**: click corto abre el menú rápido; **mantener ~0,4 s** habla con Akbal.
+- Lo que corta algo en curso (detener Wardrive o la auditoría, apagar el punto
+  de acceso) **pide confirmación**: mantener confirma, doble clic vuelve y un
+  clic corto no hace nada.
 
 ### Conversación por voz (uso principal)
 
@@ -440,21 +450,24 @@ con estos modos, cada uno con su propio control:
 
 | Ítem (pantalla) | Qué hace | Gestos dentro del modo |
 |---|---|---|
-| **Modelo** | Elegir modelo de IA entre los descargados en Ollama. Click recorre opciones, mantener confirma (spinner mientras Ollama carga el modelo), doble clic cancela sin cambiar. No reinicia el servicio. |
-| **Modo** | Alterna el origen de las respuestas: **"Modo agente"** (conversa vía OpenClaw, un agente externo puenteado por `whisplay-im` — ver [`docs/agent-mode.md`](docs/agent-mode.md)) o **"Modo local"** (el LLM corre en la propia Pi). Click navega, mantener confirma; queda persistido en `.env`. La pantalla física no indica cuál está activo (ver este menú o Ajustes → General en la web para confirmarlo). |
-| **Audio** | Salida de sonido: **bocina de la Pi** (Whisplay HAT, ALSA directo) o **bocina externa Bluetooth** ya emparejada desde la web (Ajustes → Salida de audio — ahí se escanea, vincula y elimina). Al confirmar una BT el dispositivo la conecta y suelta cualquier otra; ver la sección Ajustes para el detalle. Persiste en `.env`. |
-| **OST** | Reproductor dedicado del OST de Cypher con barra de progreso: **click** play/pausa · **doble clic** siguiente pista · **mantener** salir. Muestra título y progreso de la pista actual. |
-| **Volumen** | Cada **click** sube +10% en vivo (barra de progreso en pantalla); **doble clic** sale sin cambios; mantener también sale. |
-| **Ayuda** | Pantalla(s) de referencia con todos los comandos de voz y gestos del botón (a lo sumo 2 pantallas). |
-| **Cámara** | Abre el modo cámara del dispositivo (solo si hay cámara configurada; el menú la oculta si no): **click corto** captura la foto (se usa como contexto para el LLM si luego lo preguntas) · **mantener 2s** sale. La foto queda en `data/images/`. |
-| **WiFi directo** | Convierte la wifi de la Pi en un punto de acceso **`akbal-pi`** con QR en pantalla (misma función que Ajustes → General → "WiFi directo" en la web): escanéalo con un celular para conectarte directo (y abrir la web admin). Dos QR navegables con click: wifi y web. En cuanto un teléfono se conecta, salta solo al QR web. **Mantener** desactiva el AP y sale; **doble clic** sale dejándolo activo. |
-| **Conexión web** | Muestra la IP LAN y de Tailscale del dispositivo + QR apuntando a la web admin (`http://<ip>:8090`). Es la forma de saber a qué URL conectarse. |
-| **WiFi Radar** | Versión de pantalla del radar WiFi (detalle abajo): discos con puntos por red cercana, texto inferior rotando nombre + dBm. **Mantener** para salir. |
-| **Radar de Aviones** | Versión de pantalla del Aircraft Radar (detalle abajo): disco con un punto por aeronave, ubicado por su rumbo/distancia GPS reales. **Mantener** para salir. |
-| **Wardrive** | Arranca/detiene una sesión de captura mientras se conduce (mismo servicio que la página web `/wardrive` — arrancar acá y seguirla desde el celular funciona igual que al revés). **Mantener** inicia la sesión (o la termina si ya está corriendo); **click** refresca contadores en pantalla (tiempo, distancia, redes, handshakes). |
-| **Acerca de** | Por qué existe Akbal Pi y de dónde nace el nombre (Cypher404: El Manifiesto) — **click** pasa de página, última página es un QR para comprar el libro ([cypher404.com/book](https://cypher404.com/book/)). **Mantener** sale. |
+| **Conectar a wifi** | Carrusel de las redes guardadas de la Pi, con su señal o "Fuera de alcance"; la conectada aparece con "● Activo". | Click recorre; **mantener** conecta con el perfil guardado (resultado ~2,5 s); doble clic sale. |
+| **Modo** | Alterna el origen de las respuestas: **agente** (OpenClaw, vía `whisplay-im` — ver [`docs/agent-mode.md`](docs/agent-mode.md)) o **local** (el LLM corre en la Pi). La descripción muestra el modo activo. | Click navega; **mantener** confirma; queda persistido en `.env`. |
+| **WiFi directo** | Convierte la wifi de la Pi en un punto de acceso **`akbal-pi`** con QR (misma función que Ajustes → General → "WiFi directo" en la web). Dos QR navegables: wifi y web. Aparece "● Activo" mientras está encendido. | Click cambia de QR; **mantener** abre "¿Apagar el punto de acceso?" (mantener de nuevo apaga); doble clic vuelve sin apagarlo. |
+| **Wardrive** | Inicia o detiene una sesión de captura mientras se conduce (mismo servicio que `/wardrive`). Con 2 o 3 radios, reparte la banda entre todas. | Sin sesión: **mantener** inicia. Con sesión: **mantener** o **doble clic** abren "¿Detener captura?" (mantener confirma, doble clic vuelve). |
+| **Modelo** | Elige el modelo de IA entre los descargados en Ollama. | Click recorre; **mantener** confirma (spinner mientras Ollama carga el modelo); doble clic cancela sin cambiar. No reinicia el servicio. |
+| **Audio** | Salida de sonido: **bocina de la Pi** (Whisplay HAT) o **bocina Bluetooth** ya emparejada desde la web. Persiste en `.env`. | Click recorre; **mantener** confirma. |
+| **OST** | Reproductor del OST de Cypher con barra de progreso. Muestra título y progreso de la pista actual. | Click play/pausa; doble clic siguiente pista; **mantener** sale. |
+| **Volumen** | Cada click sube +10% en vivo, con barra de progreso. | Click sube; **mantener** o doble clic salen sin cambios (el volumen queda como estaba). |
+| **Ayuda** | Pantallas de referencia con los comandos de voz y los gestos del botón (a lo sumo 2 pantallas). | Click pasa de página; **mantener** o doble clic salen. |
+| **Cámara** | Modo cámara, solo si hay cámara configurada (si no, el menú la oculta). | Click captura la foto (queda en `data/images/`); **mantener** sale. |
+| **Conexión web** | Muestra la IP LAN y de Tailscale del dispositivo + QR hacia la web admin (`http://<ip>:8090`). | Click cambia entre IP y QR; **mantener** o doble clic salen. |
+| **WiFi Radar** | Radar WiFi de pantalla: discos con un punto por red cercana y texto inferior rotando nombre + dBm. Solo corre mientras esta pantalla o una página del radar están abiertas. | **Mantener** o doble clic salen. |
+| **Radar de Aviones** | Aircraft Radar de pantalla: un punto por aeronave, ubicado por su rumbo y distancia GPS. | **Mantener** o doble clic salen. |
+| **DOOM** | Juega DOOM original con el celular (`Doom1.WAD` en `data/doom/`). El juego se controla desde la página `/doom`. | **Mantener** o doble clic salen del juego (y de la pantalla del juego). |
+| **Acerca de** | Por qué existe Akbal Pi y de dónde nace el nombre (Cypher404: El Manifiesto). Última página: QR para comprar el libro ([cypher404.com/book](https://cypher404.com/book/)). | Click pasa de página; **mantener** o doble clic salen. |
 
-El menú se cierra solo tras **60 segundos** sin tocar el botón.
+Los menús se cierran solos tras **30 segundos** sin tocar el botón; WiFi directo
+espera **60 segundos** porque el celular necesita tiempo para escanear el QR.
 
 ### WiFi Radar (pantalla)
 
@@ -464,6 +477,10 @@ franja inferior rota entre las redes visibles. Si no hay adaptador USB con modo
 monitor conectado muestra "Sin adaptador WiFi compatible"; con el toggle global
 en demo muestra datos sintéticos con un prefijo "DEMO · ". Entra desde el menú
 rápido; mantener presionado para salir.
+
+El radar **no arranca al iniciar la Pi**: se enciende mientras la pantalla del
+radar o una página del radar están abiertas, y se apaga 60 segundos después de
+la última consulta. Nunca corre mientras Wardrive tiene la radio.
 
 ### Aircraft Radar (pantalla)
 
@@ -508,7 +525,9 @@ de beacons reales con el dongle USB en modo monitor; DEMO alimenta datos
 sintéticos (sin tocar la radio) para demostrar la interfaz. Si el adaptador se
 desconecta, cae a DEMO solo y se recupera solo cuando vuelve. Pausa el stream
 con **LIVE/PAUSED**, alterna 2D/3D con **3D**, RESET VIEW centra la cámara.
-Solo escucha: nunca transmite nada.
+Solo escucha: nunca transmite nada. El radar se enciende al abrir la página y se
+apaga 60 segundos después de la última consulta (o al cerrar la página, si no
+hay consultas).
 
 El fabricante de cada red/dispositivo se resuelve en tres capas: registro IEEE
 local (`ieee-data`), tabla curada interna y — solo si `MACVENDORS_API_KEY` está
@@ -563,7 +582,11 @@ continua mientras se conduce, sobre la misma radio que el radar/Wifi Audit
    arranca el hop 2.4GHz + el track GPS. Arrancable también desde el menú
    físico ("Wardrive" en el menú rápido) — es el mismo servicio, entrar por
    un lado se ve y se controla igual desde el otro.
-2. Cada red vista se registra por SSID (no por BSSID) en SQLite — un mismo
+2. El selector **Radios** elige entre `auto` (default, todas las radios
+   conectadas), `single`, `dual` y `triple`. Con varias radios, una ataca y el
+   resto descubre en paralelo. Ver [`docs/wardrive.md`](./docs/wardrive.md#radios-1-2-o-3-dongles).
+   La pestaña **Compartir** exporta, importa y borra sesiones en paquetes `.akbal`.
+   Cada red vista se registra por SSID (no por BSSID) en SQLite — un mismo
    SSID visto por varios APs no se re-ataca una vez que uno de ellos ya dio
    handshake (✋ capturado / ✓ cubierto por otro AP / ✕ agotado).
 3. **Deauth oportunista** (toggle rojo, apagado por defecto): solo dispara a

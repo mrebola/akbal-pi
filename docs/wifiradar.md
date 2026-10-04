@@ -272,8 +272,10 @@ probar la interfaz visual sin el hardware.
 
 ## Cómo iniciar WIFIRADAR
 
-No requiere un paso de arranque separado — corre como parte del mismo
-`chatbot.service` que todo lo demás:
+**No arranca al iniciar la Pi.** Se enciende cuando alguien lo usa: la
+pantalla del WiFi Radar o una página del radar abierta. Se apaga 60 segundos
+después de la última consulta, y nunca corre mientras Wardrive tiene la radio.
+Corre dentro del mismo `chatbot.service`:
 
 ```bash
 # En el dispositivo:

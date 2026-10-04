@@ -42,11 +42,20 @@ Ya no usa el diálogo nativo de autenticación básica del navegador —
 - Indicadores en la topbar: batería (%, carga), CPU/RAM/disco del Pi —
   todos se refrescan solos cada 60s sin recargar la página; selector de
   idioma ES/EN siempre visible, ver [`i18n.md`](./i18n.md).
+- **DOOM** (enlace directo en la barra superior): juega DOOM original con el
+  celular desde `/doom`, con control táctil y video opcional. Ver
+  [`doom.md`](./doom.md).
 - Este doc cubre la arquitectura/seguridad del servidor web y las páginas
   originales (chat, wifi, USB, WIFIRADAR, Wifi Audit); el resto de las
-  páginas agregadas después (Wardrive, GPS/GNSS, Aircraft Radar, OST,
+  páginas agregadas después (Wardrive, GPS/GNSS, Aircraft Radar, OST, DOOM,
   Ajustes) están documentadas en el [`README`](../README.md#sitio-web-de-administración-httpip8090)
   y en su propio doc de `docs/`.
+- **Radar WiFi bajo demanda**: la página `/wifiradar` enciende el radar al
+  abrirse y lo apaga 60 s después de la última consulta; no corre al iniciar
+  la Pi. Ver [`wifiradar.md`](./wifiradar.md#cómo-iniciar-wifiradar).
+- **Wardrive**: la pestaña **Compartir** exporta, importa y borra sesiones en
+  paquetes `.akbal`, y el selector **Radios** elige entre 1, 2 o 3 radios. Ver
+  [`wardrive.md`](./wardrive.md).
 
 ## Cómo prenderla/apagarla y cambiar las credenciales
 

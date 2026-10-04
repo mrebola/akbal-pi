@@ -12,7 +12,8 @@ agente. Esto agrega dos formas de gestionarla sin entrar por SSH:
    celular sin necesitar internet ni la wifi de siempre — ver
    [`chat-flow/wifi-connect-mode.ts`](../app/src/core/chat-flow/wifi-connect-mode.ts)
    y la sección de abajo. Un solo botón: click navega entre los dos QR
-   (wifi/web), mantener desactiva y sale.
+   (wifi/web); mantener pide confirmación para apagar el punto de acceso
+   (mantener otra vez lo apaga, doble clic cancela).
 2. **Interfaz web** (ver [`web-ui.md`](./web-ui.md)): ver el estado actual,
    escanear y conectarse a redes (con contraseña si hace falta), "olvidar"
    redes guardadas, y activar/desactivar el mismo modo punto de acceso desde
@@ -112,8 +113,9 @@ Mismo click/mantener/doble-clic que el resto de los menús:
 | Acción | Hace |
 |---|---|
 | Click | Alterna entre el QR de wifi y el QR de la web |
-| Mantener (~0.9s) | Desactiva el punto de acceso y sale (vuelve a la wifi normal) |
-| Doble clic | Sale sin desactivar — el punto de acceso sigue andando |
+| Mantener (~0.9s) | Abre "¿Apagar el punto de acceso?". Mantener de nuevo lo desactiva y sale (vuelve a la wifi normal) |
+| Doble clic | Cierra la confirmación; sin confirmación, sale sin desactivar (el punto de acceso sigue andando) |
+| Clic en la confirmación | No hace nada: solo mantener confirma y doble clic cancela |
 
 Entrar al menú activa el punto de acceso si estaba apagado (si ya había
 alguien conectado de una visita anterior, arranca directo en el QR de la

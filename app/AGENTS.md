@@ -123,7 +123,9 @@ whisplay-ai-chatbot/
 │   │   ├── attack.ts             # airodump/aireplay/hcxdumptool runners
 │   │   ├── crack.ts              # aircrack-ng handshake validation + rockyou dict crack
 │   │   └── session.ts            # ~/wardrive-sessions persistence (incl. cracked passwords)
-│   ├── wardrive/                 # Driving capture: mapa + handshakes en movimiento (docs/wardrive.md)
+│   ├── wardrive/                 # Driving capture: mapa + handshakes en movimiento, 1-3 radios (docs/wardrive.md)
+│   ├── akbal/                    # Paquetes .akbal para compartir sesiones de Wardrive (docs/wardrive.md)
+│   ├── doom/                     # DOOM original: motor, sesión, control y audio (docs/doom.md)
 │   │   ├── service.ts            # orchestrator: sesión, hop, deauth oportunista, GPS, exportes
 │   │   ├── capture.ts            # dumpcap(+ringbuffer)|tshark → beacons/EAPOL/deauth
 │   │   ├── attack.ts             # hcxpcapngtool extractor + DeauthOpRunner (bursts cortos)
@@ -425,6 +427,9 @@ The chat flow uses a finite state machine (`src/core/chat-flow/stateMachine.ts`)
 | `volume_adjust` | Physical volume control from the quick menu — click bumps +10% live, hold/double-click exits (see `chat-flow/volume-adjust-mode.ts`) |
 | `wifi_connect` | Toggles the Pi's own wifi into a direct access point (SSID `akbal-pi`, QR on screen) from the quick menu's "WiFi directo" — same feature as the web's Ajustes > General > "WiFi directo (punto de acceso)" (see `chat-flow/wifi-connect-mode.ts`, `docs/wifi.md`) |
 | `aircraft_radar` | Simplified physical radar for nearby ADS-B traffic (HackRF One), from the quick menu's "Radar de Aviones" (see `chat-flow/aircraft-radar-mode.ts`, `docs/aircraft-radar.md`) |
+| `wifi_radar` | WiFi Radar on screen (`chat-flow/wifi-radar-mode.ts`). The radar is held only while this screen is open (`holdWifiRadar("pantalla")` in `states.ts`) and is released on exit. Hold or double click leaves. |
+| `wardrive` | Wardrive on screen (`chat-flow/wardrive-mode.ts`). With no session: hold starts. With a session: hold or double click open the "¿Detener captura?" card; hold confirms, double click returns, a short click does nothing. |
+| `doom` | DOOM original on screen (`chat-flow/doom-mode.ts`, `states.ts`). Hold or double click leave the game for everyone. |
 
 State transitions are triggered by button events, wake word detection, or completion of async operations.
 

@@ -39,7 +39,9 @@ akbal-pi/
 │   │   ├── cloud-api/     # Proveedores ASR/LLM/TTS (local/ = ollama, whisper, piper)
 │   │   ├── wifiradar/     # Visualización WiFi 3D con AR9271 en modo monitor
 │   │   ├── wifi-audit/    # Captura de handshakes de laboratorio (allowlist, ataques dirigidos)
-│   │   ├── wardrive/      # Captura mientras se conduce (mapa + GPS + deauth oportunista)
+│   │   ├── wardrive/      # Captura mientras se conduce (mapa + GPS + deauth oportunista, 1-3 radios)
+│   │   ├── akbal/         # Paquetes .akbal para compartir sesiones de Wardrive
+│   │   ├── doom/          # DOOM original: sesión del motor, control y audio
 │   │   ├── services/      # adsb/ (Aircraft Radar) y gnss/ (metadata de satélites GNSS)
 │   │   ├── config/        # Tools del LLM: admin-tools/ (chat web) vs llm-tools.ts (voz)
 │   │   └── utils/         # wifi (nmcli), usb, system-stats, volume

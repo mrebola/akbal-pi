@@ -87,7 +87,7 @@ AR9271 (wlan1) — la misma radio del WiFi Radar, exclusión mutua por diseño
   → descubrimiento de objetivos (del snapshot del radar, o iw scan fallback)
   → operador autoriza BSSIDs (allowlist)
   → ciclo de ataque por objetivo (ver abajo)
-  → exit(): restore a managed → startWifiRadarService() (devuelve la radio)
+  → exit(): restore a managed → restoreWifiRadarIfHeld() (devuelve la radio si alguien aún usa el radar)
 ```
 
 - `app/src/wifi-audit/service.ts` — orquestador (singleton compartido, una
@@ -310,8 +310,13 @@ que alimenta el ojo 👁 del listado.
 
 La AR9271 es una sola radio. Al entrar, wardrive llama
 `stopWifiRadarService()` (y su retry loop queda cancelado) para tomarla;
-al salir la restaura a modo managed y llama `startWifiRadarService()` —
-el radar se recupera solo. En modo demo-source el radar se deja en demo
+al salir la restaura a modo managed y el radar vuelve solo si alguien todavía
+lo está usando (`restoreWifiRadarIfHeld()`). Mientras la auditoría o wardrive
+corren, el radar no arranca.
+
+Desde la Pi, mantener 0,9 s durante la auditoría abre la tarjeta "¿Salir de la
+auditoría?": mantener de nuevo sale, doble clic vuelve, y un clic corto no
+hace nada. En modo demo-source el radar se deja en demo
 (no se detiene) y al salir se vuelve a live. El hook de shutdown
 (`registerShutdown`, index.ts:33) restaura la interfaz aunque el proceso
 muera a mitad de sesión.

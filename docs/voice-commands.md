@@ -8,7 +8,8 @@ pantalla estés — nunca triple clic, nunca combinaciones raras:
 | Dónde | Click corto | Mantener (~0.4-0.9s) | Doble clic |
 |---|---|---|---|
 | **Reposo** | Abre el [menú rápido](#menú-rápido) | Push-to-talk (empieza a grabar) | — |
-| **Menús** (modelo, modo, menú rápido, ayuda) | Pasa a la siguiente opción/página | Confirma lo resaltado (~0.9s) | Cancela, vuelve a reposo |
+| **Menús** (modelo, modo, menú rápido, ayuda) | Pasa a la siguiente opción/página | Confirma lo resaltado (~0.9s) | Vuelve un nivel; desde la raíz, vuelve a reposo |
+| **Confirmaciones** (detener Wardrive, apagar WiFi directo, salir de la auditoría) | No hace nada | Confirma la acción | Cancela y vuelve a la pantalla anterior |
 | **Akbal pensando/hablando** | Corta la voz, vuelve a reposo | Interrumpe y empieza a hablar (push-to-talk) | — |
 
 En reposo, si sueltas el botón antes de ~0.4s es un click (menú rápido); si lo
@@ -18,26 +19,35 @@ confirmar en los menús.
 
 ## Menú rápido
 
-Click corto en reposo abre un carrusel con **Modelo → Modo → Audio → OST →
-Volumen → Ayuda → Cámara → WiFi directo → Conexión web → WiFi Radar →
-Radar de Aviones → Wardrive**
+Click corto en reposo abre un carrusel, en este orden: **Conectar a wifi →
+Modo → WiFi directo → Wardrive → Modelo → Audio → OST → Volumen → Ayuda →
+Cámara → Conexión web → WiFi Radar → Radar de Aviones → DOOM → Acerca de**
 (cámara solo si `ENABLE_CAMERA=true`). Click pasa entre opciones, mantener
 ~0.9s confirma la resaltada y entra a esa pantalla — mismo mecanismo que el
 selector de modelo/modo de abajo. Reemplaza al doble clic que antes abría la
-cámara directo desde reposo; ahora todo pasa por aquí. "WiFi directo" activa
-un punto de acceso directo en la propia Pi (SSID `akbal-pi`, con QR en
-pantalla) — misma función que Ajustes > General > "WiFi directo (punto de
-acceso)" en la web (ver [`wifi.md`](./wifi.md)).
+cámara directo desde reposo; ahora todo pasa por aquí.
+
+- **Conectar a wifi** muestra las redes guardadas de la Pi con su señal
+  ("En rango · N%", "Fuera de alcance" o "● Activo" si ya está conectada).
+  Mantener ~0.9s conecta a la red resaltada.
+- **WiFi directo** activa un punto de acceso directo en la propia Pi (SSID
+  `akbal-pi`, con QR en pantalla) — misma función que Ajustes > General >
+  "WiFi directo (punto de acceso)" en la web (ver [`wifi.md`](./wifi.md)).
+- Modo, WiFi directo y Conectar a wifi muestran su estado en vivo con
+  "● Activo" y una descripción corta.
 
 ### Wardrive desde el menú rápido
 
 La opción **Wardrive** abre la pantalla de captura en el auto
 ([`wardrive.md`](./wardrive.md)): mantener ~0.9s **inicia** la sesión (toma
-la radio del radar, monitor + GPS), y manteniendo otro tanto **se detiene**.
-Mientras una sesión corre, la pantalla muestra el overlay de wardrive
-(redes, handshakes y estado) y la web refleja lo mismo — iniciar/parar desde
-cualquier lado es equivalente. Doble clic sale de la pantalla (y detiene la
-sesión si estaba corriendo).
+la radio del radar, monitor + GPS). Mientras una sesión corre, la pantalla
+muestra el overlay de wardrive (redes, handshakes y estado) y la web refleja
+lo mismo.
+
+Para **detener** una sesión, mantener ~0.9s o hacer doble clic abren la
+tarjeta "¿Detener captura?": mantener confirma y detiene; doble clic vuelve al
+overlay; un clic corto no hace nada. Así una pulsación accidental no corta la
+captura.
 
 ### Volumen desde el menú rápido
 
@@ -52,7 +62,7 @@ opciones", así que el gesto es distinto:
   confirmar nada.
 - **Mantener ~0.9s o doble clic**: listo, vuelve a la pantalla normal. No
   hay nada que "cancelar" — cada click ya quedó aplicado.
-- 20 segundos sin tocar el botón también cierra el menú (mismo mecanismo
+- 30 segundos sin tocar el botón también cierra el menú (mismo mecanismo
   que el resto).
 
 Entra mostrando el volumen actual (redondeado al 10% más cercano). No baja
@@ -168,7 +178,7 @@ es el que está corriendo, y la posición ("2 de 4").
   ignorando.
 - **Doble clic**: cancela y vuelve directo al reposo sin cambiar nada — la
   forma explícita de salir del menú.
-- Si no se toca el botón por 20 segundos, el menú también se cierra solo y
+- Si no se toca el botón por 30 segundos, el menú también se cierra solo y
   vuelve al reposo (red de seguridad si te alejás a mitad del menú).
 
 El cambio de modelo (por voz directo o por el menú):
@@ -216,7 +226,7 @@ externo; vale la confirmación explícita con el botón.
 Mismo mecanismo y misma tarjeta que el selector de modelo (ver arriba):
 click corto pasa entre "Modo agente" / "Modo local" (cada uno con su
 descripción de una línea), mantener ~0.9 segundos confirma (con
-"● Activo" en el que está corriendo), doble clic cancela, 20 segundos sin
+"● Activo" en el que está corriendo), doble clic cancela, 30 segundos sin
 tocar el botón cierra el menú solo. El título de la tarjeta dice "MODO" en
 vez de "MODELO" — es la principal seña visual de que estás en un menú
 distinto (ver [`display-ui.md`](./display-ui.md)).
@@ -237,7 +247,7 @@ comando, en dos tonos (etiqueta clara, frase apagada).
   no hay una pantalla "SALIR" separada, mantener el botón *es* la salida,
   igual que confirmar en cualquier otro menú.
 - **Doble clic**: sale directo en cualquier momento.
-- Si no se toca el botón por 20 segundos, la ayuda se cierra sola (mismo
+- Si no se toca el botón por 30 segundos, la ayuda se cierra sola (mismo
   mecanismo que el resto de los menús).
 
 El contenido se define en el array `HELP_ENTRIES` de

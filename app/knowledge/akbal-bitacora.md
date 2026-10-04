@@ -1,5 +1,14 @@
 # Bitácora de Akbal
 
+## 2026-10-04 — Versión 1.1.2: tres radios, confirmaciones y DOOM original
+Wardrive usa hasta tres radios a la vez: una ataca y las demás descubren
+redes en paralelo, así que la banda se recorre más rápido. Detener una sesión
+ahora siempre pide confirmación en la pantalla, para que una pulsación
+accidental no corte la captura. El radar Wi-Fi ya no arranca al iniciar la
+Pi: se enciende cuando alguien lo mira y se apaga solo. El menú de la pantalla
+cambió de orden, con Conectar a wifi primero, y se quitó Freedoom: DOOM ahora
+es solo el original, con su archivo `Doom1.WAD`.
+
 ## 2026-10-03 — El chat web aprende a operar el equipo
 El chat del panel web (antes solo conversaba con el modelo, sin saber nada
 del dispositivo) ganó herramientas propias: puede consultar el estado del

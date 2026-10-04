@@ -68,8 +68,9 @@ existe, no vuelven a descargar ni recompilar.
    mismo mapa.
 5. El interruptor de video en la web muestra la partida en el celular (unos 10 fps).
    Está apagado por defecto.
-6. Para salir, mantén el botón de la Pi 900 ms. Una pulsación corta no sale. La
-   pantalla regresa a vertical y al menú.
+6. Para salir, **mantén el botón de la Pi 0,9 s** o haz **doble clic**. Una
+   pulsación corta no sale. La pantalla regresa a vertical y al menú. Salir
+   termina el juego para todos, también para la web.
 
 El control del celular es horizontal, con estilo de control de SNES; cada botón dice
 qué hace.
@@ -128,8 +129,8 @@ Casos base:
 4. **Desconexión libera el control.** Un celular tiene el control; desconéctalo
    (cierra la página o apaga datos). Otro celular debe poder tomarlo.
 5. **Motor muerto.** Con DOOM corriendo, ejecuta `pkill doom-engine`. La pantalla
-   muestra la tarjeta de error en vertical y se queda ahí; mantener el botón 900 ms sale
-   del modo y regresa al menú.
+   muestra la tarjeta de error en vertical y se queda ahí; mantener el botón 0,9 s o
+   un doble clic sale del modo y regresa al menú.
 
 Sonido y dueño:
 

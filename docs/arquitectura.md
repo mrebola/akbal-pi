@@ -19,6 +19,7 @@ subgraph group_interaction["Interacción y dispositivo"]
   node_displayui["Vista de pantalla<br/>[app.js]"]
   node_memory["Arbitraje de memoria<br/>[memory-arbiter.ts]"]
   node_webmode["Modo chat web en la Pi<br/>[web-chat-mode.ts]"]
+  node_wifisaved["Conectar a wifi (redes guardadas)<br/>[wifi-saved-mode.ts]"]
 end
 
 subgraph group_ai["IA y conocimiento"]
@@ -44,6 +45,8 @@ subgraph group_radio["Radio y ubicación"]
   node_wardrive["Wardriving<br/>[service.ts]"]
   node_audit["Auditoría WiFi<br/>[service.ts]"]
   node_aircraft["Radar ADS-B<br/>[service.ts]"]
+  node_radioplan["Modos de radios de Wardrive<br/>[radio-plan.ts]"]
+  node_akbal["Paquetes .akbal (compartir sesiones)<br/>[package.ts]"]
 end
 
 subgraph group_doom["DOOM"]
@@ -119,6 +122,13 @@ node_doomsession -->|"comandos de música"| node_doommusic
 node_doommusic -->|"reproduce MIDI con fluidsynth"| node_speaker
 node_doomaudio -->|"aplay a la tarjeta del HAT"| node_speaker
 node_flow -->|"pausa el sonido de DOOM mientras Akbal habla"| node_doomsession
+node_flow -->|"menú: conectar a wifi"| node_wifisaved
+node_wifisaved -->|"conecta con el perfil guardado"| node_wifi
+node_flow -->|"enciende el radar al abrir su pantalla"| node_radar
+node_wardrive -->|"elige cuántas radios usar"| node_radioplan
+node_wardrive -.->|"bloquea el radar mientras corre"| node_radar
+node_webserver -->|"exporta e importa sesiones"| node_akbal
+node_akbal -->|"lee y guarda sesiones"| node_wardrive
 
 click node_button "https://github.com/mrebola/akbal-pi/blob/main/app/src/device/audio.ts"
 click node_flow "https://github.com/mrebola/akbal-pi/blob/main/app/src/core/ChatFlow.ts"
@@ -153,6 +163,9 @@ click node_doompage "https://github.com/mrebola/akbal-pi/blob/main/app/web/admin
 click node_doomowner "https://github.com/mrebola/akbal-pi/blob/main/app/src/doom/session.ts"
 click node_doomaudio "https://github.com/mrebola/akbal-pi/blob/main/app/src/doom/audio-out.ts"
 click node_doommusic "https://github.com/mrebola/akbal-pi/blob/main/app/src/doom/music.ts"
+click node_wifisaved "https://github.com/mrebola/akbal-pi/blob/main/app/src/core/chat-flow/wifi-saved-mode.ts"
+click node_radioplan "https://github.com/mrebola/akbal-pi/blob/main/app/src/wardrive/radio-plan.ts"
+click node_akbal "https://github.com/mrebola/akbal-pi/blob/main/app/src/akbal/package.ts"
 
 classDef toneNeutral fill:#f8fafc,stroke:#334155,stroke-width:1.5px,color:#0f172a
 classDef toneBlue fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#172554
@@ -167,6 +180,8 @@ class node_admin,node_webserver,node_wifi,node_storage,node_chats,node_commands 
 class node_radar,node_wardrive,node_audit,node_aircraft toneRose
 class node_gps,node_music,node_person,node_externalai,node_radiohardware toneIndigo
 class node_doommode,node_doomsession,node_doomroutes,node_doompage,node_doomowner,node_doomaudio,node_doommusic toneTeal
+class node_wifisaved toneBlue
+class node_radioplan,node_akbal toneRose
 ```
 
 ## Notas
@@ -186,5 +201,13 @@ class node_doommode,node_doomsession,node_doomroutes,node_doompage,node_doomowne
   (`music.ts`) salen por la bocina de la Pi; el volumen se aplica en el motor (efectos)
   y en el reproductor de música (ganancia). Ver
   `docs/doom.md` y el spec `docs/superpowers/specs/2026-10-03-doom-audio-mirror-design.md`.
+- **Radar WiFi bajo demanda:** el radar no arranca al iniciar la Pi. Lo
+  enciende la pantalla del radar o una página abierta (`holdWifiRadar` en
+  `wifiradar/service.ts`) y lo apaga la última consulta. Wardrive lo bloquea
+  mientras corre, así que nunca comparten la radio.
+- **Radios de Wardrive:** `radio-plan.ts` decide cuántas radios usa cada sesión
+  (auto, single, dual o triple). Con varias, una ataca y el resto descubre.
+- **Compartir sesiones:** `akbal/` empaqueta las sesiones de Wardrive en `.akbal`
+  con manifiesto sha256 y las verifica al importar.
 - **Voz de las respuestas:** los audios se generan con Piper y se guardan junto al
   chat; no suenan en el altavoz de la Pi (`piper-clips.ts`).

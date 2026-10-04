@@ -107,7 +107,26 @@ int DG_GetKey(int *pressed, unsigned char *key) {
 
 void DG_SetWindowTitle(const char *title) { (void)title; }
 
+#define AUDIO_FD 3
+
+/* Si Node no pasó fd 3, el siguiente dup() tomaría 3 y los cuadros de video
+ * compartirían descriptor con el PCM. Reservamos 3 con /dev/null. Si Node sí
+ * lo pasó, no se toca. Si falla, se sigue sin guardia (el audio se pierde,
+ * el video no). */
+static void reserve_audio_fd(void) {
+  if (fcntl(AUDIO_FD, F_GETFD) >= 0) return;
+  int nul = open("/dev/null", O_WRONLY);
+  if (nul < 0) { fprintf(stderr, "[DOOM] open(/dev/null) falló: fd 3 sin reservar\n"); return; }
+  if (nul != AUDIO_FD) {
+    if (dup2(nul, AUDIO_FD) < 0) fprintf(stderr, "[DOOM] dup2 a fd 3 falló: fd 3 sin reservar\n");
+    close(nul);
+  }
+}
+
 int main(int argc, char **argv) {
+  /* Antes de dup(stdout): el dup de los cuadros no debe tomar fd 3. */
+  reserve_audio_fd();
+
   /* El motor imprime logs con printf/puts a stdout. Guardamos el descriptor
    * original para los cuadros y mandamos stdout a stderr antes de iniciar. */
   int frame_fd = dup(STDOUT_FILENO);

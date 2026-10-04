@@ -19,6 +19,11 @@ cmd_update() {
     exit 1
   fi
 
+  # yarn rewrites app/yarn.lock on every install (the registry flag changes
+  # its resolved URLs and prunes other platforms). That is local noise, not
+  # code: restore the committed lock so it never blocks the ff-only pull.
+  git -C "$PROJECT_ROOT" checkout -- yarn.lock 2>/dev/null || true
+
   _bold "[1/3] Pulling latest code..."
   # git_root is PROJECT_ROOT itself on a standalone checkout, or its parent
   # when PROJECT_ROOT is the app/ subdirectory of a cloned akbal-pi monorepo
@@ -31,6 +36,8 @@ cmd_update() {
   _bold "[2/3] Installing dependencies..."
   source ~/.bashrc 2>/dev/null || true
   bash "$PROJECT_ROOT/install_dependencies.sh"
+  # Same noise after the install: leave the tree as committed.
+  git -C "$PROJECT_ROOT" checkout -- yarn.lock 2>/dev/null || true
 
   _bold "[3/3] Building project..."
   pkg_run build

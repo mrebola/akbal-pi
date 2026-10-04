@@ -52,11 +52,13 @@ export interface DoomSocketView {
   webOwnerOnline: boolean;
   // The socket's connection carries a valid admin session right now.
   adminSession: boolean;
+  // This socket holds the game's controller (lock), e.g. the phone with the QR.
+  controller: boolean;
 }
 
 // Starting, closing and volume are the admin's: the QR phone has no login and
 // may only look and claim the controller with the token.
-export const ADMIN_ONLY: ReadonlyArray<DoomClientMessage["type"]> = ["play-here", "volume", "stop"];
+export const ADMIN_ONLY: ReadonlyArray<DoomClientMessage["type"]> = ["play-here", "stop"];
 export const ADMIN_REQUIRED_MESSAGE = "Inicia sesión en el admin";
 
 // Jugar aquí arranca el motor si no corre; si ya corre solo cambia de dueño.
@@ -71,6 +73,8 @@ export function doomMessageAllowed(msg: DoomClientMessage, view: DoomSocketView)
     case "claim":
       return !mirror;
     case "volume":
+      // The admin, or the phone that holds the controller (it has the QR token).
+      return view.adminSession || view.controller;
     case "stop":
       return view.adminSession && view.owner === "web" && view.isWebOwner;
     case "play-here":
@@ -150,6 +154,7 @@ export function attachDoomSocket(
     isWebOwner: isWebOwner(clients.get(ws)),
     webOwnerOnline: session.owner() === "web" && [...clients.values()].some((c) => isWebOwner(c)),
     adminSession: adminSessionOf(clients.get(ws)),
+    controller: clients.get(ws) !== undefined && session.isController(clients.get(ws)!.id),
   });
 
   // The claim error (bad token, busy controller) goes only to the socket that
@@ -283,7 +288,8 @@ export function attachDoomSocket(
       // or takeover is dropped before it gets anywhere near the engine.
       const view = viewFor(ws);
       if (!doomMessageAllowed(msg, view)) {
-        if (!view.adminSession && ADMIN_ONLY.includes(msg.type)) claimError = ADMIN_REQUIRED_MESSAGE;
+        const needsAdmin = msg.type === "volume" ? !view.controller : ADMIN_ONLY.includes(msg.type);
+        if (!view.adminSession && needsAdmin) claimError = ADMIN_REQUIRED_MESSAGE;
         else if (msg.type === "play-here") claimError = "Otro dispositivo ya juega desde la web";
         else if (msg.type === "stop") claimError = "Solo quien juega puede salir";
         sendState(ws, claimError);

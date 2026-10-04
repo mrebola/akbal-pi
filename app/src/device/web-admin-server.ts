@@ -139,7 +139,7 @@ const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days — a LAN admin
 // The DOOM page is public: a phone that scans the QR has no admin session.
 // Its control socket (/ws/doom) is also public; the control token is checked
 // on "claim" in doom-routes.ts, not here.
-const PUBLIC_PATHS = new Set(["/login", "/login.html", "/api/login", "/doom", "/doom.js", "/doom.css", "/styles.css", "/topbar.js"]);
+const PUBLIC_PATHS = new Set(["/login", "/login.html", "/api/login", "/doom", "/doom.js", "/doom.css", "/styles.css", "/topbar.js", "/doom-manifest.json"]);
 const DOOM_WS_PATH = "/ws/doom";
 // Tailscale/AP/LAN can change while the admin runs; the cached screen URL
 // follows them without any lookup on the upgrade path.

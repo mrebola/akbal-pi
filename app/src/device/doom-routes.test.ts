@@ -244,31 +244,36 @@ test("rejects a volume message without a number", () => {
 });
 
 test("mirrors may not send key or claim while the web plays", () => {
-  const mirror = { owner: "web" as const, isWebOwner: false, webOwnerOnline: true, adminSession: true };
+  const mirror = { owner: "web" as const, isWebOwner: false, webOwnerOnline: true, adminSession: true, controller: false };
   assert.equal(doomMessageAllowed({ type: "key", key: "fire", down: true }, mirror), false);
   assert.equal(doomMessageAllowed({ type: "claim", token: "t" }, mirror), false);
-  assert.equal(doomMessageAllowed({ type: "volume", value: 20 }, mirror), false);
+});
+
+test("volume needs an admin session or the controller; a plain socket cannot change it", () => {
+  const plain = { owner: "web" as const, isWebOwner: false, webOwnerOnline: true, adminSession: false, controller: false };
+  assert.equal(doomMessageAllowed({ type: "volume", value: 20 }, plain), false);
+  assert.equal(doomMessageAllowed({ type: "volume", value: 20 }, { ...plain, controller: true }), true, "the holder of the control");
+  assert.equal(doomMessageAllowed({ type: "volume", value: 20 }, { ...plain, adminSession: true }), true, "an admin session");
 });
 
 test("the web owner may send key, claim and volume", () => {
-  const owner = { owner: "web" as const, isWebOwner: true, webOwnerOnline: true, adminSession: true };
+  const owner = { owner: "web" as const, isWebOwner: true, webOwnerOnline: true, adminSession: true, controller: false };
   assert.equal(doomMessageAllowed({ type: "key", key: "fire", down: true }, owner), true);
   assert.equal(doomMessageAllowed({ type: "claim", token: "t" }, owner), true);
   assert.equal(doomMessageAllowed({ type: "volume", value: 20 }, owner), true);
 });
 
-test("a second web tab cannot take play-here or volume from the web owner", () => {
-  const other = { owner: "web" as const, isWebOwner: false, webOwnerOnline: true, adminSession: true };
+test("a second web tab cannot take play-here from the web owner", () => {
+  const other = { owner: "web" as const, isWebOwner: false, webOwnerOnline: true, adminSession: true, controller: false };
   assert.equal(doomMessageAllowed({ type: "play-here" }, other), false);
-  assert.equal(doomMessageAllowed({ type: "volume", value: 20 }, other), false);
 });
 
 test("a web client may take play-here from the Pi", () => {
-  assert.equal(doomMessageAllowed({ type: "play-here" }, { owner: "pi", isWebOwner: false, webOwnerOnline: false, adminSession: true }), true);
+  assert.equal(doomMessageAllowed({ type: "play-here" }, { owner: "pi", isWebOwner: false, webOwnerOnline: false, adminSession: true, controller: false }), true);
 });
 
 test("release and stream are always allowed", () => {
-  const mirror = { owner: "pi" as const, isWebOwner: false, webOwnerOnline: false, adminSession: true };
+  const mirror = { owner: "pi" as const, isWebOwner: false, webOwnerOnline: false, adminSession: true, controller: false };
   assert.equal(doomMessageAllowed({ type: "release" }, mirror), true);
   assert.equal(doomMessageAllowed({ type: "stream", on: true }, mirror), true);
 });
@@ -277,12 +282,15 @@ test("a volume change from the web owner reaches the session and every state", (
   const { session } = makeSession();
   session.start();
   const wss = new EventEmitter();
-  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", { isAdminSession: () => true });
+  // Only the cookie "none" lacks an admin session; the owner connects without one.
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", {
+    isAdminSession: (req) => req?.headers?.cookie !== "none",
+  });
 
   const owner = fakeClient();
   const mirror = fakeClient();
   wss.emit("connection", owner as unknown as WebSocket);
-  wss.emit("connection", mirror as unknown as WebSocket);
+  wss.emit("connection", mirror as unknown as WebSocket, { headers: { cookie: "none" } });
 
   owner.emit("message", Buffer.from(JSON.stringify({ type: "play-here" })));
   assert.equal(session.owner(), "web");
@@ -301,7 +309,7 @@ test("a volume change from the web owner reaches the session and every state", (
 });
 
 test("a takeover is allowed when the web owner's socket is gone", () => {
-  const stale = { owner: "web" as const, isWebOwner: false, webOwnerOnline: false, adminSession: true };
+  const stale = { owner: "web" as const, isWebOwner: false, webOwnerOnline: false, adminSession: true, controller: false };
   assert.equal(doomMessageAllowed({ type: "play-here" }, stale), true);
 });
 
@@ -387,9 +395,9 @@ test("parses stop", () => {
 });
 
 test("only the web owner may stop", () => {
-  const owner = { owner: "web" as const, isWebOwner: true, webOwnerOnline: true, adminSession: true };
-  const mirror = { owner: "web" as const, isWebOwner: false, webOwnerOnline: true, adminSession: true };
-  const piMirror = { owner: "pi" as const, isWebOwner: false, webOwnerOnline: false, adminSession: true };
+  const owner = { owner: "web" as const, isWebOwner: true, webOwnerOnline: true, adminSession: true, controller: false };
+  const mirror = { owner: "web" as const, isWebOwner: false, webOwnerOnline: true, adminSession: true, controller: false };
+  const piMirror = { owner: "pi" as const, isWebOwner: false, webOwnerOnline: false, adminSession: true, controller: false };
   assert.equal(doomMessageAllowed({ type: "stop" }, owner), true);
   assert.equal(doomMessageAllowed({ type: "stop" }, mirror), false);
   assert.equal(doomMessageAllowed({ type: "stop" }, piMirror), false);
@@ -569,12 +577,12 @@ test("the web's stop reports closed and no game", async () => {
 });
 
 test("play-here, volume and stop need an admin session; claim and key do not", () => {
-  const noSession = { owner: "web" as const, isWebOwner: false, webOwnerOnline: false, adminSession: false };
+  const noSession = { owner: "web" as const, isWebOwner: false, webOwnerOnline: false, adminSession: false, controller: false };
   assert.equal(doomMessageAllowed({ type: "play-here" }, noSession), false);
   assert.equal(doomMessageAllowed({ type: "volume", value: 20 }, { ...noSession, owner: "web", isWebOwner: true }), false);
   assert.equal(doomMessageAllowed({ type: "stop" }, { ...noSession, owner: "web", isWebOwner: true }), false);
-  assert.equal(doomMessageAllowed({ type: "claim", token: "t" }, { owner: "pi", isWebOwner: false, webOwnerOnline: false, adminSession: false }), true);
-  assert.equal(doomMessageAllowed({ type: "key", key: "fire", down: true }, { owner: "pi", isWebOwner: false, webOwnerOnline: false, adminSession: false }), true);
+  assert.equal(doomMessageAllowed({ type: "claim", token: "t" }, { owner: "pi", isWebOwner: false, webOwnerOnline: false, adminSession: false, controller: false }), true);
+  assert.equal(doomMessageAllowed({ type: "key", key: "fire", down: true }, { owner: "pi", isWebOwner: false, webOwnerOnline: false, adminSession: false, controller: false }), true);
 });
 
 test("a socket without an admin session is told so, and its owner actions do nothing", async () => {
@@ -631,4 +639,26 @@ test("claim with the QR token works without an admin session", () => {
   wss.emit("connection", phone as unknown as WebSocket, { headers: {} });
   phone.emit("message", Buffer.from(JSON.stringify({ type: "claim", token: piToken })));
   assert.equal(session.state().controller, true);
+});
+
+test("the holder of the control changes the volume without an admin session; a plain socket cannot", () => {
+  const { session } = makeSession();
+  session.start();
+  const piToken = session.claimOwner("pi").token!;
+  const wss = new EventEmitter();
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom", {
+    isAdminSession: () => false,
+  });
+  const holder = fakeClient();
+  const plain = fakeClient();
+  wss.emit("connection", holder as unknown as WebSocket, { headers: {} });
+  wss.emit("connection", plain as unknown as WebSocket, { headers: {} });
+  holder.emit("message", Buffer.from(JSON.stringify({ type: "claim", token: piToken })));
+  assert.equal(session.state().controller, true);
+
+  plain.emit("message", Buffer.from(JSON.stringify({ type: "volume", value: 20 })));
+  assert.equal(session.volume(), 60, "a socket with no control and no session must not change the volume");
+
+  holder.emit("message", Buffer.from(JSON.stringify({ type: "volume", value: 20 })));
+  assert.equal(session.volume(), 20, "the holder of the control may change the volume");
 });

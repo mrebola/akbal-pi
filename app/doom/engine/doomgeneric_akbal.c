@@ -23,6 +23,8 @@ static struct timespec start_ts;
 static uint8_t key_queue[64][2];   /* [pressed, key] */
 static int key_head = 0, key_tail = 0;
 
+void akbal_set_volume(int v);      /* i_akbal_sound.c */
+
 static void queue_key(int pressed, unsigned char key) {
   int next = (key_tail + 1) % 64;
   if (next == key_head) return;    /* drop if full */
@@ -47,6 +49,7 @@ static void pump_stdin(void) {
       int code = 0;
       if (strncmp(line, "down ", 5) == 0) { code = atoi(line + 5); queue_key(1, (unsigned char)code); }
       else if (strncmp(line, "up ", 3) == 0) { code = atoi(line + 3); queue_key(0, (unsigned char)code); }
+      else if (strncmp(line, "volume ", 7) == 0) { akbal_set_volume(atoi(line + 7)); }
       len = 0;
     } else if (len < 63) {
       line[len++] = c;

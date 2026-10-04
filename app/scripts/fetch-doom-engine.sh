@@ -27,10 +27,12 @@ git -C "$SRC_DIR" checkout --quiet "$DOOMGENERIC_REF"
 # Lista explícita de objetos del Makefile upstream (build sin SDL/X11), sin
 # doomgeneric_*.c de plataforma: cada uno define su propio main() y DG_*.
 # La capa de plataforma de Akbal Pi reemplaza a doomgeneric_xlib.c.
+# Sin i_sound.c ni i_cdmus.c: su I_* duplicaría i_akbal_sound.c (que los
+# reemplaza). Los backends SDL/Allegro (i_sdl*, i_allegro*) no están en la lista.
 ENGINE_SRCS=(
   dummy am_map doomdef doomstat dstrings d_event d_items d_iwad d_loop
-  d_main d_mode d_net f_finale f_wipe g_game hu_lib hu_stuff info i_cdmus
-  i_endoom i_joystick i_scale i_sound i_system i_timer memio m_argv m_bbox
+  d_main d_mode d_net f_finale f_wipe g_game hu_lib hu_stuff info
+  i_endoom i_joystick i_scale i_system i_timer memio m_argv m_bbox
   m_cheat m_config m_controls m_fixed m_menu m_misc m_random p_ceilng p_doors
   p_enemy p_floor p_inter p_lights p_map p_maputl p_mobj p_plats p_pspr
   p_saveg p_setup p_sight p_spec p_switch p_telept p_tick p_user r_bsp r_data
@@ -45,5 +47,6 @@ mkdir -p "$BIN_DIR"
 gcc -O2 -DNORMALUNIX -DDOOMGENERIC_RESX=320 -DDOOMGENERIC_RESY=200 \
   -I"$SRC_DIR/doomgeneric" "${SRCS[@]}" \
   "$APP_DIR/doom/engine/doomgeneric_akbal.c" \
+  "$APP_DIR/doom/engine/i_akbal_sound.c" \
   -o "$BIN" -lm
 echo "[DOOM] Listo: $BIN"

@@ -400,3 +400,48 @@ test("audioError is cleared when the engine starts again", () => {
   session.start();
   assert.equal(session.state().audioError, null);
 });
+
+function countingMusic() {
+  const players: Array<{ msgs: unknown[]; gains: number[]; stopped: number }> = [];
+  const openMusic = () => {
+    const player = { msgs: [] as unknown[], gains: [] as number[], stopped: 0 };
+    players.push(player);
+    return {
+      handle: (msg: unknown) => { player.msgs.push(msg); },
+      setGain: (g: number) => { player.gains.push(g); },
+      stop: () => { player.stopped++; },
+    };
+  };
+  return { players, openMusic };
+}
+
+test("one music player per engine run: fd 4 lines go to it, and it stops on stop", async () => {
+  const { players, openMusic } = countingMusic();
+  const { session, fake } = makeSession({ openMusic });
+  session.start();
+  fake.control.write(Buffer.from("song /a.mid 1\npause\n"));
+  await nextTick();
+  assert.equal(players.length, 1);
+  assert.deepEqual(players[0].msgs, [
+    { kind: "song", path: "/a.mid", loop: true },
+    { kind: "pause" },
+  ]);
+  session.stop();
+  assert.equal(players[0].stopped, 1);
+});
+
+test("an engine that dies stops its music player", () => {
+  const { players, openMusic } = countingMusic();
+  const { session, fake } = makeSession({ openMusic });
+  session.start();
+  fake.crash();
+  assert.equal(players[0].stopped, 1);
+});
+
+test("the music gain follows the volume, for the next song started", () => {
+  const { players, openMusic } = countingMusic();
+  const { session } = makeSession({ openMusic });
+  session.start();
+  session.setVolume(35);
+  assert.deepEqual(players[0].gains, [VOLUME_DEFAULT / 100, 0.35]);
+});

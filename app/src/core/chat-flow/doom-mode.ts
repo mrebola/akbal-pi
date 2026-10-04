@@ -6,6 +6,7 @@ import type { Readable } from "stream";
 import type { Status } from "../../device/display";
 import { DoomSession, DoomState, EngineProcess } from "../../doom/session";
 import { AudioOut, AudioProcess } from "../../doom/audio-out";
+import { MusicPlayer, MusicProcess } from "../../doom/music";
 import { ControlTokens } from "../../doom/tokens";
 import { ControllerLock } from "../../doom/control";
 import { getNetworkInfo, generateConnectQr } from "../../utils/network-info";
@@ -18,6 +19,8 @@ const APP_DIR = path.resolve(__dirname, "../../..");
 const DOOM_ENGINE_BIN = path.join(APP_DIR, "doom", "bin", "doom-engine");
 // Absolute on purpose: the engine runs with cwd=APP_DIR, so a relative override would break.
 const DOOM_WAD = path.resolve(process.env.DOOM_WAD_DIR || path.join(APP_DIR, "data", "doom"), "freedoom1.wad");
+// Optional: without it the game runs silent. scripts/fetch-doom-soundfont.sh puts it here.
+const DOOM_SOUNDFONT = path.resolve(process.env.DOOM_WAD_DIR || path.join(APP_DIR, "data", "doom"), "soundfont.sf2");
 
 const CONFIRM_HOLD_MS = 900;
 const HOLD_TICK_MS = 60;
@@ -145,6 +148,21 @@ function spawnAplay(cmd: string, args: string[]): AudioProcess {
   };
 }
 
+// fluidsynth is optional, like aplay: if it is missing the MusicPlayer stays
+// silent and the game plays without music. Its output is dropped on purpose.
+function spawnFluidsynth(cmd: string, args: string[]): MusicProcess {
+  const child = spawn(cmd, args, { stdio: ["ignore", "ignore", "ignore"] });
+  return {
+    signal: (sig) => {
+      if (child.pid) process.kill(child.pid, sig);
+    },
+    onExit: (cb) => {
+      child.once("exit", (code) => cb(code));
+      child.once("error", (err) => cb(null, err));
+    },
+  };
+}
+
 export const doomTokens = new ControlTokens();
 export const doomLock = new ControllerLock();
 export const doomSession = new DoomSession({
@@ -154,6 +172,7 @@ export const doomSession = new DoomSession({
   binaryExists: () => fs.existsSync(DOOM_ENGINE_BIN),
   wadExists: () => fs.existsSync(DOOM_WAD),
   openAudio: (onError) => new AudioOut(spawnAplay, onError),
+  openMusic: () => new MusicPlayer(spawnFluidsynth, DOOM_SOUNDFONT),
 });
 
 let unsubscribers: Array<() => void> = [];

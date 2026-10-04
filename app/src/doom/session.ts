@@ -2,7 +2,7 @@ import { FrameReader } from "./frame-reader";
 import { ControlTokens } from "./tokens";
 import { ControllerLock } from "./control";
 import { DoomKey, KEY_CODES } from "./keymap";
-import { VOLUME_DEFAULT, clampVolume } from "./volume";
+import { VOLUME_DEFAULT, clampVolume, gainFor } from "./volume";
 import { parseControlLine, type ControlMessage } from "./audio-out";
 import { StringDecoder } from "node:string_decoder";
 import type { Readable, Writable } from "node:stream";
@@ -42,9 +42,18 @@ export interface DoomSessionDeps {
   // Optional: without it the game runs silent (tests, or no audio device).
   // onError reports a sink that failed on its own, shown in the state.
   openAudio?: (onError: (message: string) => void) => AudioSink;
+  // Optional, like openAudio: one music player per engine run, fed by fd 4.
+  openMusic?: () => MusicSink;
 }
 
 const ENGINE_STOPPED = "El motor de DOOM se detuvo.";
+
+// What the session needs from the music player (MusicPlayer in production).
+export interface MusicSink {
+  handle(msg: ControlMessage): void;
+  setGain(gain: number): void;
+  stop(): void;
+}
 
 // What the session needs from the sound output (AudioOut in production). One
 // sink lives per engine run: it is opened on start and stopped on stop or loss.
@@ -65,6 +74,7 @@ export class DoomSession {
   private volumeValue = VOLUME_DEFAULT;
   private frameListeners = new Set<(rgb565: Buffer) => void>();
   private audio: AudioSink | null = null;
+  private music: MusicSink | null = null;
   private audioListeners = new Set<(pcm: Buffer) => void>();
   private controlListeners = new Set<(msg: ControlMessage) => void>();
   private stateListeners = new Set<(s: DoomState) => void>();
@@ -93,6 +103,8 @@ export class DoomSession {
       this.emitState();
     }) ?? null;
     this.audio?.start();
+    this.music = this.deps.openMusic?.() ?? null;
+    this.music?.setGain(gainFor(this.volumeValue));
     engine.stdout.on("data", (chunk: Buffer) => {
       for (const frame of this.reader.push(chunk)) {
         this.frameListeners.forEach((cb) => cb(frame));
@@ -122,7 +134,10 @@ export class DoomSession {
       while (nl !== -1) {
         const msg = parseControlLine(pending.slice(0, nl));
         pending = pending.slice(nl + 1);
-        if (msg && this.engine === engine) this.controlListeners.forEach((cb) => cb(msg));
+        if (msg && this.engine === engine) {
+          this.music?.handle(msg);
+          this.controlListeners.forEach((cb) => cb(msg));
+        }
         nl = pending.indexOf("\n");
       }
       if (pending.length > MAX_CONTROL_PENDING) pending = "";
@@ -143,6 +158,7 @@ export class DoomSession {
     const holder = this.deps.lock.holder();
     if (holder !== null) this.deps.lock.release(holder);
     this.stopAudio();
+    this.stopMusic();
     engine?.kill();
     this.emitState();
   }
@@ -159,6 +175,7 @@ export class DoomSession {
   setVolume(value: number): void {
     this.volumeValue = clampVolume(value);
     if (this.engine) this.send(this.engine, `volume ${this.volumeValue}`);
+    this.music?.setGain(gainFor(this.volumeValue));
     this.emitState();
   }
 
@@ -249,6 +266,7 @@ export class DoomSession {
     this.deps.tokens.revokeAll();
     this.error = message;
     this.stopAudio();
+    this.stopMusic();
     engine.kill();
     this.emitState();
   }
@@ -257,6 +275,12 @@ export class DoomSession {
     const sink = this.audio;
     this.audio = null;
     sink?.stop();
+  }
+
+  private stopMusic(): void {
+    const player = this.music;
+    this.music = null;
+    player?.stop();
   }
 
   private releaseKeys(engine: EngineProcess | null): void {

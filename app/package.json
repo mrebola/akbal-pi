@@ -37,6 +37,7 @@
     "crypto": "^1.0.1",
     "dotenv": "^16.5.0",
     "get-audio-duration": "^4.0.1",
+    "jpeg-js": "^0.4.4",
     "koa": "^3.1.2",
     "koa-bodyparser": "^4.4.1",
     "koa-static": "^5.0.0",

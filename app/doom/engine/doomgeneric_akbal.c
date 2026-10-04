@@ -108,27 +108,30 @@ int DG_GetKey(int *pressed, unsigned char *key) {
 void DG_SetWindowTitle(const char *title) { (void)title; }
 
 #define AUDIO_FD 3
+#define MUSIC_CTL_FD 4
 
-/* Si Node no pasó fd 3, el siguiente dup() tomaría 3 y los cuadros de video
- * compartirían descriptor con el PCM. Reservamos 3 con /dev/null. Si Node sí
- * lo pasó, no se toca. Si no se puede reservar, el motor no arranca: sin fd 3
+/* Si Node no pasó el descriptor, el siguiente dup() tomaría ese número y los
+ * cuadros de video compartirían descriptor con el PCM (fd 3) o con el canal
+ * de música (fd 4). Lo reservamos con /dev/null. Si Node sí lo pasó, no se
+ * toca. Si no se puede reservar, el motor no arranca: sin el descriptor
  * ocupado el video se corrompe, y un juego sin sonido es preferible. */
-static int reserve_audio_fd(void) {
-  if (fcntl(AUDIO_FD, F_GETFD) >= 0) return 0;
+static int reserve_fd(int fd) {
+  if (fcntl(fd, F_GETFD) >= 0) return 0;
   int nul = open("/dev/null", O_WRONLY);
-  if (nul == AUDIO_FD) return 0;
+  if (nul == fd) return 0;
   if (nul >= 0) {
-    int ok = dup2(nul, AUDIO_FD) >= 0;
+    int ok = dup2(nul, fd) >= 0;
     close(nul);
     if (ok) return 0;
   }
-  fprintf(stderr, "[DOOM] no se pudo reservar fd 3 para el audio; el motor se detiene\n");
+  fprintf(stderr, "[DOOM] no se pudo reservar fd %d; el motor se detiene\n", fd);
   return -1;
 }
 
 int main(int argc, char **argv) {
-  /* Antes de dup(stdout): el dup de los cuadros no debe tomar fd 3. */
-  if (reserve_audio_fd() != 0) exit(1);
+  /* Antes de dup(stdout): el dup de los cuadros no debe tomar fd 3 ni fd 4. */
+  if (reserve_fd(AUDIO_FD) != 0) exit(1);
+  if (reserve_fd(MUSIC_CTL_FD) != 0) exit(1);
 
   /* El motor imprime logs con printf/puts a stdout. Guardamos el descriptor
    * original para los cuadros y mandamos stdout a stderr antes de iniciar. */

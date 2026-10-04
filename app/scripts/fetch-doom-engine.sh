@@ -38,7 +38,7 @@ ENGINE_SRCS=(
   p_saveg p_setup p_sight p_spec p_switch p_telept p_tick p_user r_bsp r_data
   r_draw r_main r_plane r_segs r_sky r_things sha1 sounds statdump st_lib
   st_stuff s_sound tables v_video wi_stuff w_checksum w_file w_main w_wad
-  z_zone w_file_stdc i_input i_video doomgeneric
+  z_zone w_file_stdc i_input i_video doomgeneric mus2mid
 )
 SRCS=()
 for s in "${ENGINE_SRCS[@]}"; do SRCS+=("$SRC_DIR/doomgeneric/$s.c"); done
@@ -48,5 +48,6 @@ gcc -O2 -DNORMALUNIX -DDOOMGENERIC_RESX=320 -DDOOMGENERIC_RESY=200 \
   -I"$SRC_DIR/doomgeneric" "${SRCS[@]}" \
   "$APP_DIR/doom/engine/doomgeneric_akbal.c" \
   "$APP_DIR/doom/engine/i_akbal_sound.c" \
+  "$APP_DIR/doom/engine/i_akbal_music.c" \
   -o "$BIN" -lm
 echo "[DOOM] Listo: $BIN"

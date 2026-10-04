@@ -2,8 +2,8 @@
  * Sound effects for Akbal Pi. DoomGeneric has no mixer of its own: this file
  * mixes up to 8 DMX samples (11025 Hz, 8-bit unsigned, 8-byte header) into a
  * 16-bit mono stream and writes it to AKBAL_AUDIO_FD (fd 3), where Node plays it.
- * Replaces upstream i_sound.c and i_cdmus.c (duplicate I_* symbols). Music is a
- * no-op here until a music backend exists.
+ * Replaces upstream i_sound.c and i_cdmus.c (duplicate I_* symbols). Music lives
+ * in i_akbal_music.c.
  *
  * I_UpdateSound runs once per game tic (~35 Hz), so the number of samples per
  * call follows the wall clock, not a fixed block size: the stream stays at
@@ -162,15 +162,3 @@ void I_UpdateSound(void) {
     off += (size_t)w;
   }
 }
-
-/* Music: no backend yet. Stubs keep the link working without upstream i_sound.c. */
-void I_InitMusic(void) {}
-void I_ShutdownMusic(void) {}
-void I_SetMusicVolume(int volume) { (void)volume; }
-void I_PauseSong(void) {}
-void I_ResumeSong(void) {}
-void *I_RegisterSong(void *data, int len) { (void)data; (void)len; return NULL; }
-void I_UnRegisterSong(void *handle) { (void)handle; }
-void I_PlaySong(void *handle, boolean looping) { (void)handle; (void)looping; }
-void I_StopSong(void) {}
-boolean I_MusicIsPlaying(void) { return false; }

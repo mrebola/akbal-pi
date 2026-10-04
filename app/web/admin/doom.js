@@ -45,6 +45,8 @@
   const playAgainBtn = $("play-again");
   const fullscreenBtn = $("fullscreen-btn");
   const installHintEl = $("install-hint");
+  const screenFrame = $("screen-frame");
+  const fsHintEl = $("fs-hint");
   const qrCardEl = $("qr-card");
   const qrImg = $("qr-img");
   const qrMsgEl = $("qr-msg");
@@ -482,13 +484,30 @@
   const fullscreenOk = typeof document.documentElement.requestFullscreen === "function"
     && document.fullscreenEnabled !== false;
   fullscreenBtn.hidden = !fullscreenOk;
+  // On desktop only the game goes fullscreen: the frame around the canvas,
+  // which also holds the "Esc" hint. The video is turned on first, because a
+  // hidden canvas cannot go fullscreen. On phones the page goes fullscreen as before.
   fullscreenBtn.addEventListener("click", () => {
     try {
-      const request = document.documentElement.requestFullscreen();
+      let request;
+      if (desktopQuery.matches && typeof screenFrame.requestFullscreen === "function") {
+        if (canvas.hidden) {
+          streamSwitch.checked = true;
+          canvas.hidden = false;
+          send({ type: "stream", on: true });
+        }
+        request = screenFrame.requestFullscreen();
+      } else {
+        request = document.documentElement.requestFullscreen();
+      }
       if (request && typeof request.catch === "function") request.catch(() => {});
     } catch {
       // Not allowed here: the page stays as it is.
     }
+  });
+
+  document.addEventListener("fullscreenchange", () => {
+    fsHintEl.hidden = document.fullscreenElement !== screenFrame;
   });
   const isIos = /iPhone|iPad|iPod/.test(navigator.userAgent);
   const standalone = window.navigator.standalone === true

@@ -82,8 +82,11 @@
 
       <div class="zone zone-center">
         <section class="screen-wrap">
-          <canvas id="screen" width="280" height="175" hidden aria-label="Pantalla de la Pi"></canvas>
-          <p class="logo" aria-hidden="true">DOOM</p>
+          <div id="screen-frame" class="screen-frame">
+            <canvas id="screen" width="280" height="175" hidden aria-label="Pantalla de la Pi"></canvas>
+            <p class="logo" aria-hidden="true">DOOM</p>
+            <p id="fs-hint" class="fs-hint" hidden>Esc para salir de pantalla completa</p>
+          </div>
           <label class="switch">
             <input id="stream" type="checkbox" />
             <span>Ver pantalla en la web</span>

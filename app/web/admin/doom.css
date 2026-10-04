@@ -689,6 +689,131 @@
   }
 }
 
+/* Desktop, second pass: the game is the picture, the pad is a compact row of
+   small keys under it (keyboard play). --desk-reserved is the height the page
+   spends outside the video: topbar, status, console, pad row, weapons, gaps,
+   and the video toggle. The frame is as wide as the height left allows at
+   280:175, so on any window it stays on the screen with no scrolling. */
+.screen-frame {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+}
+
+@media (min-width: 900px) and (min-height: 500px) {
+  html:not(.doom-control) .doom-page {
+    --desk-reserved: 480px;
+    row-gap: 8px;
+    padding: 12px 20px;
+  }
+
+  html:not(.doom-control) .doom-title { font-size: 1rem; }
+  html:not(.doom-control) .zone-head { display: none; }
+  html:not(.doom-control) .console { gap: 6px; }
+  html:not(.doom-control) .console-bar { gap: 6px; }
+
+  /* Console buttons keep their text size, not the row width. */
+  html:not(.doom-control) .console-bar > .btn {
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding: 0 12px;
+    font-size: 0.85rem;
+  }
+
+  html:not(.doom-control) .volume { gap: 4px; }
+  html:not(.doom-control) .step { width: 32px; min-width: 32px; min-height: 32px; font-size: 1rem; }
+
+  html:not(.doom-control) .zone { padding: 6px; gap: 4px; }
+  html:not(.doom-control) .dpad { --cell: 40px; gap: 3px; }
+  html:not(.doom-control) .dpad .key { min-height: 40px; padding: 1px 2px; }
+  html:not(.doom-control) .dpad .key .label { font-size: 0.6rem; }
+  html:not(.doom-control) .dpad .key small { font-size: 0.55rem; margin-top: 0; }
+
+  html:not(.doom-control) .center-keys {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  html:not(.doom-control) .center-keys .key {
+    flex: 0 0 auto;
+    width: 104px;
+    min-width: 96px;
+    min-height: 40px;
+  }
+  html:not(.doom-control) .center-keys .key .label { font-size: 0.75rem; }
+  html:not(.doom-control) .center-keys .key small { font-size: 0.55rem; margin-top: 0; }
+
+  html:not(.doom-control) .round-actions { --round: 40px; gap: 3px; }
+  html:not(.doom-control) .round .label { font-size: 0.45rem; }
+  html:not(.doom-control) .round small { display: block; font-size: 0.4rem; }
+
+  html:not(.doom-control) .weapon-keys { gap: 6px; }
+  html:not(.doom-control) .weapon-keys .key {
+    flex-direction: row;
+    gap: 6px;
+    min-height: 32px;
+  }
+  html:not(.doom-control) .weapon-keys .key .label { font-size: 0.7rem; }
+  html:not(.doom-control) .weapon-keys .key small { margin-top: 0; font-size: 0.6rem; }
+
+  /* The frame keeps 280:175 and takes the height left; the canvas fills it.
+     With the video off, the same frame shows the DOOM logo. */
+  html:not(.doom-control) .screen-wrap {
+    align-items: center;
+    gap: 6px;
+  }
+  html:not(.doom-control) .screen-frame {
+    flex: 0 0 auto;
+    width: min(100%, calc(max(240px, 100dvh - var(--desk-reserved)) * 1.6));
+    aspect-ratio: 280 / 175;
+    background: #000;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  html:not(.doom-control) #screen {
+    flex: none;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+  }
+  html:not(.doom-control) .logo {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+  }
+
+  /* Fullscreen on the frame: only the game and the hint are inside it. */
+  .screen-frame:fullscreen {
+    width: 100vw;
+    height: 100vh;
+    aspect-ratio: auto;
+    border: 0;
+    border-radius: 0;
+  }
+  .screen-frame:fullscreen #screen { height: 100%; }
+}
+
+/* Hint over the game while it is fullscreen; hidden elsewhere. */
+.fs-hint {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 1;
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  pointer-events: none;
+}
+
 /* Phones and the QR pad: no logo, no QR card. */
 .logo,
 #qr-card { display: none; }

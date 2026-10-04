@@ -23,14 +23,6 @@
       </div>
     </div>
 
-    <section class="screen-wrap">
-      <canvas id="screen" width="280" height="175" hidden aria-label="Pantalla de la Pi"></canvas>
-      <label class="switch">
-        <input id="stream" type="checkbox" />
-        <span>Ver pantalla en la web</span>
-      </label>
-    </section>
-
     <section class="console">
       <div id="closed-panel" class="closed-panel" role="status" hidden>
         <p>El juego fue cerrado.</p>
@@ -46,8 +38,16 @@
         </div>
         <button id="quit-btn" type="button" class="btn quit" hidden>Salir del juego</button>
       </div>
+    </section>
 
-      <div id="controls" class="controls locked">
+    <!-- The pad: left = movement, center = video + Empezar + Menú,
+         right = round actions, bottom = weapons. -->
+    <div id="controls" class="controls locked">
+      <div class="zone zone-move">
+        <div class="zone-head">
+          <span class="zone-title">Movimiento</span>
+          <span class="zone-sub">Moverse / Girar</span>
+        </div>
         <div class="dpad" role="group" aria-label="Movimiento">
           <button class="key" type="button" data-key="strafeLeft" tabindex="-1">
             <span class="label">Lat. izq.</span><small>A</small>
@@ -71,36 +71,63 @@
           </button>
           <span class="dpad-empty" aria-hidden="true"></span>
         </div>
+      </div>
 
-        <div class="actions" role="group" aria-label="Acciones">
-          <button class="key run" type="button" data-key="run" tabindex="-1">
-            <span class="label">Correr</span><small>Shift</small>
-          </button>
-          <button class="key use" type="button" data-key="use" tabindex="-1">
-            <span class="label">Abrir / usar</span><small>E</small>
-          </button>
-          <button class="key fire" type="button" data-key="fire" tabindex="-1">
-            <span class="label">Disparar</span><small>Ctrl · Espacio</small>
+      <div class="zone zone-center">
+        <section class="screen-wrap">
+          <canvas id="screen" width="280" height="175" hidden aria-label="Pantalla de la Pi"></canvas>
+          <label class="switch">
+            <input id="stream" type="checkbox" />
+            <span>Ver pantalla en la web</span>
+          </label>
+        </section>
+        <div class="center-keys" role="group" aria-label="Inicio y menú">
+          <button class="key start" type="button" data-key="enter" tabindex="-1">
+            <span class="label">Empezar</span><small>Enter</small>
           </button>
           <button class="key menu" type="button" data-key="menu" tabindex="-1">
             <span class="label">Menú</span><small>Esc</small>
           </button>
         </div>
+      </div>
 
-        <div class="weapons" role="group" aria-label="Cambiar arma">
-          <span class="weapons-title">Cambiar arma</span>
-          <div class="weapon-keys">
-            <button class="key" type="button" data-key="weapon1" tabindex="-1"><span class="label">Arma 1</span><small>1</small></button>
-            <button class="key" type="button" data-key="weapon2" tabindex="-1"><span class="label">Arma 2</span><small>2</small></button>
-            <button class="key" type="button" data-key="weapon3" tabindex="-1"><span class="label">Arma 3</span><small>3</small></button>
-            <button class="key" type="button" data-key="weapon4" tabindex="-1"><span class="label">Arma 4</span><small>4</small></button>
-            <button class="key" type="button" data-key="weapon5" tabindex="-1"><span class="label">Arma 5</span><small>5</small></button>
-            <button class="key" type="button" data-key="weapon6" tabindex="-1"><span class="label">Arma 6</span><small>6</small></button>
-            <button class="key" type="button" data-key="weapon7" tabindex="-1"><span class="label">Arma 7</span><small>7</small></button>
-          </div>
+      <div class="zone zone-actions">
+        <div class="zone-head">
+          <span class="zone-title">Acciones</span>
+          <span class="zone-sub">Disparar / Usar / Correr</span>
+        </div>
+        <div class="round-actions" role="group" aria-label="Acciones">
+          <button class="round fire" type="button" data-key="fire" tabindex="-1" aria-label="Disparar (Ctrl o Espacio)">
+            <span class="label">Disparar</span><small>Ctrl</small>
+          </button>
+          <button class="round use" type="button" data-key="use" tabindex="-1" aria-label="Usar (E)">
+            <span class="label">Usar</span><small>E</small>
+          </button>
+          <button class="round run" type="button" data-key="run" tabindex="-1" aria-label="Correr (Shift)">
+            <span class="label">Correr</span><small>Shift</small>
+          </button>
+          <span class="round weapon-deco" aria-hidden="true">
+            <span class="label">Arma</span><small>1 – 7</small>
+          </span>
         </div>
       </div>
-    </section>
+
+      <div class="zone zone-weapons" role="group" aria-label="Cambiar arma">
+        <div class="zone-head">
+          <span class="zone-title">Armas</span>
+          <span class="zone-sub">Seleccionar arma (1 – 7)</span>
+        </div>
+        <div class="weapon-keys">
+          <button class="key weapon" type="button" data-key="weapon1" tabindex="-1"><span class="label">Arma 1</span><small>1</small></button>
+          <button class="key weapon" type="button" data-key="weapon2" tabindex="-1"><span class="label">Arma 2</span><small>2</small></button>
+          <button class="key weapon" type="button" data-key="weapon3" tabindex="-1"><span class="label">Arma 3</span><small>3</small></button>
+          <button class="key weapon" type="button" data-key="weapon4" tabindex="-1"><span class="label">Arma 4</span><small>4</small></button>
+          <button class="key weapon" type="button" data-key="weapon5" tabindex="-1"><span class="label">Arma 5</span><small>5</small></button>
+          <button class="key weapon" type="button" data-key="weapon6" tabindex="-1"><span class="label">Arma 6</span><small>6</small></button>
+          <button class="key weapon" type="button" data-key="weapon7" tabindex="-1"><span class="label">Arma 7</span><small>7</small></button>
+        </div>
+      </div>
+    </div>
 
     <div id="rotate-hint" class="rotate-hint" role="status" hidden>
       <span class="rotate-icon" aria-hidden="true"></span>

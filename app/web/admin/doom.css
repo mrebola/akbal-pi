@@ -1,17 +1,30 @@
 /* Control page for DOOM. Layout only: colors, radius and type come from the
    :root tokens in styles.css (loaded first), so the page follows the same
-   palette and light/dark rules as the rest of the admin. */
+   palette and light/dark rules as the rest of the admin. The four action
+   colors (fire, use, run, weapon) are the control's own accents. */
 
 [hidden] { display: none !important; }
 
 .doom-page {
+  /* Sizes follow the viewport height and never go below the 56 px touch
+     target. On a 640x360 phone held sideways the whole pad fits without
+     scrolling. */
+  --cell: clamp(56px, 16vh, 104px);   /* D-pad cells, Empezar/Menú, weapon cards */
+  --round: clamp(56px, 15vh, 124px);  /* action circles */
+  --c-fire: #ff5c5c;
+  --c-use: #4d8dff;
+  --c-run: #ffd23f;
+  --c-weapon: #b36bff;
+
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 8px;
+  box-sizing: border-box;
   width: 100%;
-  max-width: 1100px;
+  max-width: 1200px;
+  min-height: calc(100dvh - var(--doom-topbar-h, 56px));
   margin: 0 auto;
-  padding: 16px max(16px, env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  padding: 8px max(12px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -22,21 +35,24 @@
   color: var(--accent);
 }
 
+.doom-head { display: flex; flex-direction: column; gap: 2px; }
+
 .status {
-  margin: 4px 0 0;
+  margin: 0;
   font-size: 0.95rem;
   color: var(--text-primary);
 }
 
+/* Hidden when empty, so it takes no room on a phone. */
 .hint {
-  margin: 4px 0 0;
-  min-height: 1.2em;
+  margin: 0;
   font-size: 0.85rem;
   color: var(--text-muted);
 }
+.hint:empty { display: none; }
 
 .game-name {
-  margin: 4px 0 0;
+  margin: 0;
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--accent);
@@ -67,7 +83,6 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin-top: 8px;
   padding: 8px 12px;
   border: 1px solid var(--warning);
   border-radius: var(--radius-sm);
@@ -78,28 +93,7 @@
 
 .warnings p { margin: 0; }
 
-/* Screen (optional video, always on while mirroring) */
-.screen-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-#screen {
-  display: block;
-  /* Tall enough to see, short enough that the controls still fit on a phone
-     held sideways. */
-  height: min(40vh, 340px);
-  width: auto;
-  max-width: 100%;
-  aspect-ratio: 280 / 175;
-  background: #000;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  image-rendering: pixelated;
-}
-
+/* Switch: a plain touch target, 56 px tall. */
 .switch {
   display: inline-flex;
   align-items: center;
@@ -117,7 +111,7 @@
   accent-color: var(--accent);
 }
 
-/* Buttons outside the pad (claim, play here, volume) */
+/* Buttons outside the pad (claim, play here, volume, stop) */
 .btn {
   min-height: 56px;
   padding: 0 18px;
@@ -140,7 +134,7 @@
 .console {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .console-bar {
@@ -202,69 +196,175 @@
   color: var(--text-primary);
 }
 
-/* SNES-style pad: D-pad in the left column, the action keys in the right
-   column (named areas, so nothing can overlap), weapons across the bottom. */
+/* The pad: movement left, video and Empezar/Menú in the middle, round
+   actions right, weapons across the bottom. Fills the rest of the screen. */
 .controls {
+  flex: 1 1 auto;
+  min-height: 0;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(112px, 0.7fr) minmax(0, 1fr);
   grid-template-areas:
-    "dpad actions"
-    "weapons weapons";
-  gap: 12px 20px;
-  align-items: center;
+    "move center actions"
+    "weapons weapons weapons";
+  gap: 8px;
 }
 
-.controls.locked .key { opacity: 0.45; }
+.controls.locked .key,
+.controls.locked .round { opacity: 0.45; }
 
+.zone {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+}
+
+.zone-move { grid-area: move; justify-content: center; }
+.zone-actions { grid-area: actions; }
+.zone-weapons { grid-area: weapons; }
+
+.zone-center {
+  grid-area: center;
+  min-width: 0;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.zone-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.zone-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.zone-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+/* D-pad: 3x3, the strafe keys sit in the corners, Avanzar/Retroceder on the
+   middle column, Girar on the middle row. */
 .dpad {
-  grid-area: dpad;
   display: grid;
-  grid-template-columns: repeat(3, 60px);
-  grid-auto-rows: 60px;
-  gap: 6px;
+  grid-template-columns: repeat(3, var(--cell));
+  grid-auto-rows: var(--cell);
+  gap: 4px;
+  justify-content: center;
 }
+
+.dpad .key { border-color: var(--accent-dim); }
 
 .dpad-center,
 .dpad-empty {
   display: block;
 }
 
-/* Action keys: Correr and Abrir sit left of Disparar, Menú and Empezar sit
-   under it. Disparar spans two rows, so the layout cannot overlap. */
-.actions {
-  grid-area: actions;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(88px, 1fr));
-  grid-template-areas:
-    "run fire"
-    "use fire"
-    "menu .";
-  grid-auto-rows: 60px;
+/* Video (optional, always on while mirroring) with Empezar and Menú under it. */
+.screen-wrap {
+  display: flex;
+  flex-direction: column;
   gap: 6px;
-  justify-self: end;
-  width: min(100%, 300px);
-  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
 }
 
-.actions .run   { grid-area: run; }
-.actions .use   { grid-area: use; }
-.actions .fire  { grid-area: fire; border-radius: 40px; }
-.actions .menu  { grid-area: menu; }
+#screen {
+  display: block;
+  flex: 1 1 0;
+  min-height: 60px;
+  width: 100%;
+  object-fit: contain;
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  image-rendering: pixelated;
+}
 
-.weapons {
-  grid-area: weapons;
+.center-keys {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.weapons-title {
-  font-size: 0.8rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
+.center-keys .key {
+  width: 100%;
+  min-height: var(--cell);
 }
 
+/* Round actions in a 3x3 grid: fire top, use left, run right, weapon bottom. */
+.round-actions {
+  display: grid;
+  grid-template-columns: repeat(3, var(--round));
+  grid-template-rows: repeat(3, var(--round));
+  grid-template-areas:
+    ". fire ."
+    "use . run"
+    ". weapon .";
+  gap: 6px;
+  justify-content: center;
+  align-content: center;
+}
+
+.round {
+  grid-area: var(--area);
+  width: var(--round);
+  height: var(--round);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 2px solid var(--c);
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  box-shadow: 0 0 12px -3px var(--c);
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.round .label {
+  font-size: clamp(0.6rem, 1.6vh, 0.85rem);
+  font-weight: 700;
+  line-height: 1.05;
+  text-align: center;
+}
+
+.round small {
+  font-size: clamp(0.55rem, 1.3vh, 0.7rem);
+  color: var(--text-muted);
+  line-height: 1.05;
+}
+
+.round.fire { --area: fire; --c: var(--c-fire); }
+.round.use { --area: use; --c: var(--c-use); }
+.round.run { --area: run; --c: var(--c-run); }
+/* Decorative: the weapons are the cards below, so this circle is not a button. */
+.weapon-deco { --area: weapon; --c: var(--c-weapon); pointer-events: none; }
+
+.round:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Weapons: seven cards across the bottom. */
 .weapon-keys {
   display: grid;
   grid-template-columns: repeat(7, minmax(56px, 1fr));
@@ -312,16 +412,24 @@
   text-align: center;
 }
 
+.key.start { border-color: var(--accent); }
+
+/* Pressed look: brighter, for keys and round buttons alike. */
 .key.is-down,
-.key:not(:disabled):active {
+.key:not(:disabled):active,
+.round.is-down,
+.round:not(:disabled):active {
   border-color: var(--accent);
   background: var(--accent-dim);
   color: var(--accent);
+  filter: brightness(1.35);
 }
 
-.key.is-down small { color: var(--accent); }
+.key.is-down small,
+.round.is-down small { color: var(--accent); }
 
 .key:focus-visible,
+.round:focus-visible,
 .btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -368,68 +476,39 @@
   .rotate-icon { animation: none; }
 }
 
-/* Short landscape phones: drop the title and shrink the pad so the whole
-   pad fits without scrolling inside it. Targets stay at 56 px. */
+/* Short landscape phones (e.g. 640x360): no title, no zone headers, tighter
+   gaps. The pad keeps 56 px targets and must fit without scrolling. */
 @media (max-height: 500px) and (orientation: landscape) {
-  .doom-title { display: none; }
-  #screen { height: min(34vh, 200px); }
-  .controls { gap: 8px 16px; }
-  .dpad { grid-template-columns: repeat(3, 56px); grid-auto-rows: 56px; gap: 4px; }
-  .actions { grid-auto-rows: 56px; gap: 4px; }
-  .weapons-title { display: none; }
+  .doom-page { gap: 6px; padding-top: 6px; padding-bottom: 6px; }
+  .doom-title,
+  .zone-head { display: none; }
+  .controls { gap: 6px; }
+  .zone { padding: 6px; gap: 6px; }
+  .dpad { gap: 4px; }
+  .round-actions { gap: 4px; }
+  .weapon-keys { gap: 4px; }
 }
 
-/* Desktop: screen on the left, console on the right, larger targets. */
+/* Tablets and desktop: the same pad, larger. The video takes the room the
+   center column leaves. */
 @media (min-width: 900px) {
-  .doom-page {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    align-items: start;
-    gap: 24px 32px;
-    padding: 24px;
-  }
-
-  .doom-head { grid-column: 1 / -1; }
-
-  .screen-wrap { grid-column: 1; }
-
-  .console { grid-column: 2; }
-
-  #screen {
-    width: 100%;
-    max-width: 560px;
-    height: auto;
-  }
-
-  .dpad {
-    grid-template-columns: repeat(3, 84px);
-    grid-auto-rows: 84px;
-    gap: 8px;
-  }
-
-  .actions {
-    grid-template-columns: repeat(2, minmax(112px, 1fr));
-    grid-auto-rows: 84px;
-    gap: 8px;
-    width: min(100%, 360px);
-  }
-
-  .weapon-keys { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .doom-page { gap: 16px; padding: 24px; }
+  .controls { gap: 12px; }
+  .zone { padding: 12px; gap: 12px; }
+  .weapon-keys { gap: 8px; }
 }
 
 /* Control-only mode (page opened from the QR): just the pad, sized for a
-   phone held sideways. No menu, no video, no volume, no stop. The status line
-   and the claim button appear only when something blocks the pad. */
+   phone held sideways. No menu bar, no video, no volume, no stop. The status
+   line and the claim button appear only when something blocks the pad. */
 .doom-control #topbar { display: none; }
 
 .doom-control .doom-page {
-  display: flex;
   min-height: 100vh;
   min-height: 100dvh;
   max-width: none;
-  justify-content: center;
-  gap: 10px;
-  padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  gap: 6px;
+  padding: max(6px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
 }
 
 .doom-control .doom-title,
@@ -439,12 +518,8 @@
 .doom-control .volume,
 .doom-control #quit-btn,
 .doom-control #play-here,
-.doom-control .weapons-title { display: none; }
+.doom-control .zone-head { display: none; }
 
-.doom-control .doom-head { gap: 6px; text-align: center; }
-.doom-control .status { margin: 0; font-size: 0.9rem; }
-.doom-control .console { gap: 8px; }
-.doom-control .controls { gap: 8px 16px; }
-.doom-control .dpad { grid-template-columns: repeat(3, 60px); grid-auto-rows: 60px; }
-.doom-control .actions { grid-auto-rows: 60px; }
-.doom-control .weapon-keys { gap: 4px; }
+.doom-control .doom-head { text-align: center; }
+.doom-control .status { font-size: 0.9rem; }
+.doom-control .console { gap: 6px; }

@@ -665,3 +665,12 @@ test("the Pi's leave stops the game even while the web owns it", () => {
   assert.equal(session.state().running, false);
   assert.equal(session.state().closed, true);
 });
+
+test("controlToken is the game's token while it runs, and null otherwise", () => {
+  const { session } = makeSession();
+  assert.equal(session.controlToken(), null);
+  const started = session.start().token!;
+  assert.equal(session.controlToken(), started);
+  session.stop();
+  assert.equal(session.controlToken(), null);
+});

@@ -196,6 +196,13 @@ export class DoomSession {
     this.emitState();
   }
 
+  // The token for the control QR: the live one, or a fresh one if the game
+  // runs without it. The owner does not change.
+  controlToken(): string | null {
+    if (!this.engine) return null;
+    return this.deps.tokens.current() ?? this.deps.tokens.issue();
+  }
+
   owner(): DoomOwner {
     return this.ownerValue;
   }

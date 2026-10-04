@@ -129,6 +129,7 @@ import { getGpsStatus, geocodePoint } from "../utils/gps";
 import { getGnssSnapshot, getGnssHistory } from "../services/gnss/service";
 import { setPlatformMode, getPlatformMode } from "../utils/platform-mode";
 import { doomSession, resolveDoomScreenUrl } from "../core/chat-flow/doom-mode";
+import { controlQrFor } from "../doom/control-qr";
 import { attachDoomSocket } from "./doom-routes";
 
 const SESSION_COOKIE = "akbal_session";
@@ -370,6 +371,14 @@ export class WebAdminServer {
       ctx.set("Cache-Control", "no-store");
       ctx.type = "text/html";
       ctx.body = fs.createReadStream(path.resolve(__dirname, "../..", "web", "admin", "about.html"));
+    });
+
+    // Behind the admin session (sessionAuth answers 401 for /api/ paths). The
+    // QR is the control link for the desktop: same token as the phone's.
+    router.get("/api/doom/control-qr", async (ctx) => {
+      const result = await controlQrFor({ token: doomSession.controlToken(), baseUrl: this.doomUrl });
+      ctx.status = result.status;
+      ctx.body = result.body;
     });
 
     router.get("/api/gps/status", async (ctx) => {

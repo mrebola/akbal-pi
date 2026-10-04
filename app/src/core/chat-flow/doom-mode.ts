@@ -62,11 +62,8 @@ export function doomScreenUrl(input: {
 // leaveDoomMode when this says so.
 // The QR carries the control token, so a phone that scans it can claim the
 // controller. Only the QR gets it: the socket state never echoes the token.
-export function withControlToken(url: string, token: string): string {
-  const u = new URL(url);
-  u.searchParams.set("t", token);
-  return u.toString();
-}
+import { withControlToken } from "../../doom/control-qr";
+export { withControlToken };
 
 // What the Whisplay screen shows for the current owner. The web owner gets the
 // mirror (frames only, no QR); the Pi owner gets the game once a phone or the

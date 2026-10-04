@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { doomScreenUrl, shouldLeaveDoom, doomBlockedReason, withControlToken, doomQrText, screenFaceFor, decideOnEngineStopped } from "./doom-mode";
+import { doomScreenUrl, shouldLeaveDoom, doomBlockedReason, withControlToken, doomQrText, screenFaceFor, decideOnEngineStopped, decideMirrorEntry } from "./doom-mode";
 
 test("uses the Tailscale host when Tailscale is up", () => {
   assert.equal(
@@ -73,4 +73,17 @@ test("a clean engine stop returns the Pi to the menu only while the flow is stil
 
 test("a crash keeps the error card on screen instead of returning to the menu", () => {
   assert.equal(decideOnEngineStopped("doom", false, "el motor se cayó"), "none");
+});
+
+test("the Pi enters the mirror when the web starts the game from another flow", () => {
+  assert.equal(decideMirrorEntry("sleep", "web", true), "enter-mirror");
+  assert.equal(decideMirrorEntry("answer", "web", true), "enter-mirror");
+});
+
+test("no mirror entry while the Pi is already in DOOM or in web chat, or without a web-owned running game", () => {
+  assert.equal(decideMirrorEntry("doom", "web", true), "none");
+  assert.equal(decideMirrorEntry("web_chat", "web", true), "none");
+  assert.equal(decideMirrorEntry("sleep", "web", false), "none");
+  assert.equal(decideMirrorEntry("sleep", "pi", true), "none");
+  assert.equal(decideMirrorEntry("sleep", null, true), "none");
 });

@@ -141,7 +141,14 @@ import {
   onWebChatExit,
 } from "./web-chat-mode";
 import { isWebChatModeOn, setWebChatMode } from "./web-chat-state";
-import { enterDoomMode, handleDoomPress, handleDoomRelease, resolveDoomScreenUrl } from "./doom-mode";
+import {
+  enterDoomMirror,
+  enterDoomMode,
+  handleDoomPress,
+  handleDoomRelease,
+  resolveDoomScreenUrl,
+  takeDoomEntryIsMirror,
+} from "./doom-mode";
 import { getDriveWardriveService } from "../../wardrive/service";
 import { isAgentMode, setDeviceMode } from "../../config/device-mode";
 import { setAudioOutputTarget } from "../../config/audio-output";
@@ -1422,14 +1429,18 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
     // for any exit from "doom" (see shouldLeaveDoom).
     onButtonPressed(() => handleDoomPress(() => ctx.transitionTo("sleep")));
     onButtonReleased(() => handleDoomRelease());
+    const flow = {
+      currentFlow: () => ctx.currentFlowName,
+      returnToSleep: () => ctx.transitionTo("sleep"),
+    };
+    // The web already runs the engine: show the mirror, don't start it.
+    if (takeDoomEntryIsMirror()) {
+      enterDoomMirror(flow);
+      return;
+    }
     // The URL lookup is async; if the player already left, don't start the engine.
     void resolveDoomScreenUrl(8090).then((url) => {
-      if (ctx.currentFlowName === "doom") {
-        void enterDoomMode(url, {
-          currentFlow: () => ctx.currentFlowName,
-          returnToSleep: () => ctx.transitionTo("sleep"),
-        });
-      }
+      if (ctx.currentFlowName === "doom") void enterDoomMode(url, flow);
     });
   },
 };

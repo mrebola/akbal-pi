@@ -4,7 +4,7 @@ import path from "path";
 import { spawn } from "child_process";
 import type { Readable } from "stream";
 import type { Status } from "../../device/display";
-import { DoomSession, DoomState, EngineProcess } from "../../doom/session";
+import { DoomOwner, DoomSession, DoomState, EngineProcess } from "../../doom/session";
 import { AudioOut, AudioProcess } from "../../doom/audio-out";
 import { MusicPlayer, MusicProcess } from "../../doom/music";
 import { ControlTokens } from "../../doom/tokens";
@@ -84,6 +84,31 @@ export function decideOnEngineStopped(
   error: string | null,
 ): "return-to-sleep" | "none" {
   return currentFlow === "doom" && !running && error === null ? "return-to-sleep" : "none";
+}
+
+// The web started the game while the Pi is idle: the Pi shows the mirror. Not
+// from DOOM itself (already there) nor from web chat (its screen wins).
+export function decideMirrorEntry(
+  currentFlow: string,
+  owner: DoomOwner,
+  running: boolean,
+): "enter-mirror" | "none" {
+  const idle = currentFlow !== "doom" && currentFlow !== "web_chat";
+  return owner === "web" && running && idle ? "enter-mirror" : "none";
+}
+
+// Set by ChatFlow right before it moves to "doom" for a mirror; the doom state
+// reads it once, so the button entry (which starts the engine) is unchanged.
+let mirrorEntryRequested = false;
+
+export function requestDoomMirror(): void {
+  mirrorEntryRequested = true;
+}
+
+export function takeDoomEntryIsMirror(): boolean {
+  const requested = mirrorEntryRequested;
+  mirrorEntryRequested = false;
+  return requested;
 }
 
 // What the DOOM flow lets this module ask of the flow machine. Reads the live
@@ -260,6 +285,26 @@ async function startDoom(url: string, gen: number, flow: DoomFlowHooks): Promise
   const qr = await generateConnectQr(tokenUrl).catch(() => "");
   if (gen !== generation) return;
   qrPath = qr;
+  subscribeScreen(flow);
+  // The engine may have stopped during the QR await, before the listener existed.
+  const now = doomSession.state();
+  if (decideOnEngineStopped(flow.currentFlow(), now.running, now.error) === "return-to-sleep") {
+    return flow.returnToSleep();
+  }
+  paintForState(doomSession.state());
+}
+
+// Mirror entry: the engine already runs for the web, so nothing starts and
+// no QR is made. The screen only subscribes and paints.
+export function enterDoomMirror(flow: DoomFlowHooks): void {
+  generation++;
+  qrPath = "";
+  subscribeScreen(flow);
+  paintForState(doomSession.state());
+}
+
+// Frames and state for the Pi screen. Shared by the Pi entry and the mirror.
+function subscribeScreen(flow: DoomFlowHooks): void {
   unsubscribers.forEach((off) => off());
   unsubscribers = [
     doomSession.onState((s) => {
@@ -273,20 +318,15 @@ async function startDoom(url: string, gen: number, flow: DoomFlowHooks): Promise
       }
     }),
   ];
-  // The engine may have stopped during the QR await, before the listener existed.
-  const now = doomSession.state();
-  if (decideOnEngineStopped(flow.currentFlow(), now.running, now.error) === "return-to-sleep") {
-    return flow.returnToSleep();
-  }
-  paintForState(doomSession.state());
 }
 
-// Physical exit: stop the engine and give the screen back vertically.
+// Physical exit: give the screen back vertically. The engine stops unless the
+// web owns it: leaving a mirror must not end the web's game.
 export function leaveDoomMode(): void {
   generation++;
   unsubscribers.forEach((off) => off());
   unsubscribers = [];
-  doomSession.stop();
+  if (doomSession.owner() !== "web") doomSession.stop();
   sendDisplay({ game_orientation: 1 });
 }
 

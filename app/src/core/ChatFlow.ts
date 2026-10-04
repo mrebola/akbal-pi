@@ -16,7 +16,7 @@ import {
   type WhisplayIMApprovalRequest,
 } from "../device/im-bridge";
 import { FlowStateMachine } from "./chat-flow/stateMachine";
-import { doomSession, leaveDoomMode, shouldLeaveDoom } from "./chat-flow/doom-mode";
+import { decideMirrorEntry, doomSession, leaveDoomMode, requestDoomMirror, shouldLeaveDoom } from "./chat-flow/doom-mode";
 import { flowStates } from "./chat-flow/states";
 import { ChatFlowContext, FlowName } from "./chat-flow/types";
 import { onWebChatModeChange } from "./chat-flow/web-chat-state";
@@ -144,6 +144,14 @@ class ChatFlow implements ChatFlowContext {
     }
 
     this.transitionTo("sleep");
+
+    // The web starting DOOM while the Pi is idle puts the Pi in the mirror.
+    // The Pi's own entry (button) is a different path: it starts the engine.
+    doomSession.onState((s) => {
+      if (decideMirrorEntry(this.currentFlowName, s.owner, s.running) !== "enter-mirror") return;
+      requestDoomMirror();
+      this.transitionTo("doom");
+    });
 
     // Web-side toggle and the physical hold both flip the mode; this is the
     // one place that moves the screen. Leaving also takes the model memory

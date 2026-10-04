@@ -388,3 +388,35 @@
 
   .weapon-keys { grid-template-columns: repeat(7, minmax(0, 1fr)); }
 }
+
+/* Control-only mode (page opened from the QR): just the pad, sized for a
+   phone held sideways. No menu, no video, no volume, no stop. The status line
+   and the claim button appear only when something blocks the pad. */
+.doom-control #topbar { display: none; }
+
+.doom-control .doom-page {
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+  max-width: none;
+  justify-content: center;
+  gap: 10px;
+  padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+}
+
+.doom-control .doom-title,
+.doom-control .hint,
+.doom-control .warnings,
+.doom-control .screen-wrap,
+.doom-control .volume,
+.doom-control #quit-btn,
+.doom-control #play-here,
+.doom-control .weapons-title { display: none; }
+
+.doom-control .doom-head { gap: 6px; text-align: center; }
+.doom-control .status { margin: 0; font-size: 0.9rem; }
+.doom-control .console { gap: 8px; }
+.doom-control .controls { gap: 8px 16px; }
+.doom-control .dpad { grid-template-columns: repeat(3, 60px); grid-auto-rows: 60px; }
+.doom-control .actions { grid-auto-rows: 60px; }
+.doom-control .weapon-keys { gap: 4px; }

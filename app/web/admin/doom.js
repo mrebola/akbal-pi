@@ -61,6 +61,10 @@
   // msg.token. It is only ever sent in the "claim" message, never logged or
   // put in the DOM.
   let currentToken = new URLSearchParams(location.search).get("t") || "";
+  // Opened from the QR (the URL carries the token): the page is only the pad.
+  // Opened directly it keeps the full page: menu, video, volume, Jugar aquí.
+  const controlOnly = Boolean(currentToken);
+  document.documentElement.classList.toggle("doom-control", controlOnly);
 
   let socket = null;
   let connected = false;
@@ -168,9 +172,12 @@
     else if (controller) text = "Tienes el control";
     else text = "Juego en curso. Toca Tomar control para jugar.";
     statusEl.textContent = serverError ? `${text} · Error: ${serverError}` : text;
+    // Control-only mode shows the status line only when something blocks the pad.
+    statusEl.hidden = controlOnly && connected && running && controller && !mirror && !serverError;
 
     claimBtn.textContent = controller ? "Soltar control" : "Tomar control";
     claimBtn.disabled = !connected || !currentToken || mirror;
+    claimBtn.hidden = controlOnly && (!running || mirror);
     controlsEl.classList.toggle("locked", !controller);
     controlsEl.classList.toggle("mirror", mirror);
 
@@ -194,7 +201,14 @@
       for (const el of els) el.disabled = mirror;
     }
 
-    if (!currentToken) setHint("Falta el token en la URL. Abre esta página desde el QR de la Pi.");
+    updateConsoleBar();
+  }
+
+  // The console bar holds claim, volume and stop. In control-only mode it stays
+  // hidden while we hold the control, so the pad gets the whole screen.
+  function updateConsoleBar() {
+    const portrait = portraitQuery.matches && window.innerWidth < window.innerHeight;
+    consoleBar.hidden = portrait || (controlOnly && controller);
   }
 
   function renderWarnings() {
@@ -211,7 +225,7 @@
     const portrait = portraitQuery.matches && window.innerWidth < window.innerHeight;
     rotateHintEl.hidden = !portrait;
     controlsEl.hidden = portrait;
-    consoleBar.hidden = portrait;
+    updateConsoleBar();
     document.documentElement.style.setProperty("--doom-topbar-h", `${topbarEl.offsetHeight}px`);
   }
 
@@ -233,7 +247,7 @@
 
     // Turn the video on only when entering mirror (false -> true), so the user
     // can switch it off while mirroring without it coming back on each state.
-    if (mirror && !wasMirror && !streamSwitch.checked) {
+    if (mirror && !wasMirror && !streamSwitch.checked && !controlOnly) {
       streamSwitch.checked = true;
       canvas.hidden = false;
       send({ type: "stream", on: true });

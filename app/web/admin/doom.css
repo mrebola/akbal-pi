@@ -577,3 +577,120 @@
 
 .doom-control .status { font-size: 0.9rem; }
 .doom-control .console { gap: 6px; }
+
+/* Desktop web (admin session, no QR token): the game is the big picture and
+   the touch pad is a small row under it, since the keyboard does the playing.
+   Everything here is scoped to html:not(.doom-control) so phones and the QR
+   pad keep the layout above. The pad items are placed directly in the page
+   grid (display: contents on the wrappers), so the video can span two
+   columns. */
+@media (min-width: 900px) {
+  html:not(.doom-control) .doom-page {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 0.8fr);
+    grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "head head head"
+      "console console console"
+      "screen screen qr"
+      "move keys actions"
+      "weapons weapons weapons";
+    column-gap: 16px;
+    row-gap: 12px;
+  }
+
+  html:not(.doom-control) .controls,
+  html:not(.doom-control) .zone-center {
+    display: contents;
+  }
+
+  html:not(.doom-control) .doom-head { grid-area: head; }
+  html:not(.doom-control) .console { grid-area: console; }
+  html:not(.doom-control) .screen-wrap { grid-area: screen; min-height: 0; }
+  html:not(.doom-control) .zone-move { grid-area: move; container-type: normal; }
+  html:not(.doom-control) .center-keys { grid-area: keys; flex-direction: row; justify-content: center; align-items: stretch; }
+  html:not(.doom-control) .zone-actions { grid-area: actions; container-type: normal; }
+  html:not(.doom-control) .zone-weapons { grid-area: weapons; }
+
+  /* The pad is small here: fixed sizes from the window height, not 100cqh. */
+  html:not(.doom-control) .dpad { --cell: clamp(52px, 8vh, 60px); }
+  html:not(.doom-control) .round-actions { --round: clamp(52px, 7vh, 64px); }
+  html:not(.doom-control) .center-keys .key {
+    flex: 1 1 0;
+    width: auto;
+    min-height: clamp(52px, 7vh, 64px);
+  }
+  html:not(.doom-control) .weapon-keys .key { min-height: 52px; }
+  html:not(.doom-control) .key .label { font-size: 0.9rem; }
+  html:not(.doom-control) .key small { display: block; }
+  html:not(.doom-control) .round small { display: block; }
+  html:not(.doom-control) .round .label { font-size: 0.7rem; }
+
+  /* Video takes the whole cell; with it off, the DOOM logo fills the same space. */
+  html:not(.doom-control) .screen-wrap { gap: 8px; }
+  html:not(.doom-control) #screen {
+    width: 100%;
+    max-height: 100%;
+    flex: 1 1 0;
+  }
+  html:not(.doom-control) .logo {
+    display: flex;
+    flex: 1 1 0;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    min-height: 0;
+    font-size: clamp(3rem, 12vw, 8rem);
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    opacity: 0.85;
+  }
+  html:not(.doom-control) #screen:not([hidden]) ~ .logo { display: none; }
+
+  /* QR card: a small block in the top-right corner, next to the video. */
+  html:not(.doom-control) #qr-card {
+    display: flex;
+    grid-area: qr;
+    align-self: start;
+    justify-self: end;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    width: min(100%, 220px);
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-raised);
+  }
+
+  .qr-title {
+    margin: 0;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-align: center;
+    color: var(--text-primary);
+  }
+
+  .qr-msg {
+    margin: 0;
+    font-size: 0.8rem;
+    text-align: center;
+    color: var(--text-muted);
+  }
+
+  #qr-img {
+    display: block;
+    width: 100%;
+    max-width: 196px;
+    aspect-ratio: 1 / 1;
+    border-radius: 8px;
+    background: #fff;
+    image-rendering: pixelated;
+  }
+}
+
+/* Phones and the QR pad: no logo, no QR card. */
+.logo,
+#qr-card { display: none; }
+
+.doom-control #qr-card { display: none; }

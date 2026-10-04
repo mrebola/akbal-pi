@@ -45,6 +45,9 @@
   const playAgainBtn = $("play-again");
   const fullscreenBtn = $("fullscreen-btn");
   const installHintEl = $("install-hint");
+  const qrCardEl = $("qr-card");
+  const qrImg = $("qr-img");
+  const qrMsgEl = $("qr-msg");
   const consoleBar = $("console-bar");
   const warningsEl = $("warnings");
   const audioWarningEl = $("audio-warning");
@@ -288,9 +291,47 @@
     }
     wasMirror = mirror;
 
+    // The QR is fetched when the game starts, not on every state.
+    if (running !== wasRunning) {
+      wasRunning = running;
+      if (running) loadQr();
+      else showQrMessage();
+    }
+
     renderStatus();
     renderWarnings();
     sync();
+  }
+
+  // Desktop only, and only for the admin's own page: the endpoint needs the
+  // admin session, and the QR card is hidden on phones by CSS. The image
+  // carries the link; the link text itself is never written to the DOM.
+  let wasRunning = false;
+  let qrLoading = false;
+  const desktopQuery = window.matchMedia("(min-width: 900px)");
+
+  function showQrMessage() {
+    qrImg.hidden = true;
+    qrImg.removeAttribute("src");
+    qrMsgEl.hidden = false;
+  }
+
+  async function loadQr() {
+    if (controlOnly || !desktopQuery.matches || qrLoading) return;
+    qrLoading = true;
+    try {
+      const res = await fetch("/api/doom/control-qr", { credentials: "same-origin", cache: "no-store" });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      const body = await res.json();
+      if (typeof body.qr !== "string" || !body.qr.startsWith("data:image/")) throw new Error("no image");
+      qrImg.src = body.qr;
+      qrImg.hidden = false;
+      qrMsgEl.hidden = true;
+    } catch {
+      showQrMessage();
+    } finally {
+      qrLoading = false;
+    }
   }
 
   function drawFrame(buffer) {

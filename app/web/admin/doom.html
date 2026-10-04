@@ -83,6 +83,7 @@
       <div class="zone zone-center">
         <section class="screen-wrap">
           <canvas id="screen" width="280" height="175" hidden aria-label="Pantalla de la Pi"></canvas>
+          <p class="logo" aria-hidden="true">DOOM</p>
           <label class="switch">
             <input id="stream" type="checkbox" />
             <span>Ver pantalla en la web</span>
@@ -135,6 +136,12 @@
         </div>
       </div>
     </div>
+
+    <aside id="qr-card" class="qr-card">
+      <p class="qr-title">Juega con tu celular como control</p>
+      <img id="qr-img" alt="Código QR para jugar con el celular" hidden />
+      <p id="qr-msg" class="qr-msg">Inicia el juego para ver el QR</p>
+    </aside>
 
     <div id="rotate-hint" class="rotate-hint" role="status" hidden>
       <span class="rotate-icon" aria-hidden="true"></span>

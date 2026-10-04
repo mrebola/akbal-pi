@@ -42,6 +42,11 @@ export interface DoomSocketView {
   webOwnerOnline: boolean;
 }
 
+// Jugar aquí arranca el motor si no corre; si ya corre solo cambia de dueño.
+export function decideStartForPlayHere(running: boolean): "start" | "claim-only" {
+  return running ? "claim-only" : "start";
+}
+
 export function doomMessageAllowed(msg: DoomClientMessage, view: DoomSocketView): boolean {
   const mirror = view.owner !== null && !view.isWebOwner;
   switch (msg.type) {
@@ -212,7 +217,11 @@ export function attachDoomSocket(
       else if (msg.type === "key") session.key(id, msg.key, msg.down);
       else if (msg.type === "stream") clients.get(ws)!.streaming = msg.on;
       else if (msg.type === "play-here") {
-        const r = session.claimOwner("web");
+        let r: { ok: boolean; token?: string; error?: string };
+        if (decideStartForPlayHere(session.state().running) === "start") {
+          const started = session.start();
+          r = started.ok ? session.claimOwner("web") : { ok: false, error: started.error };
+        } else r = session.claimOwner("web");
         if (r.ok) {
           // One web owner at a time: the previous owner's flag and token go.
           for (const c of clients.values()) {

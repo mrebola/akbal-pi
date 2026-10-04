@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import type { WebSocketServer, WebSocket } from "ws";
-import { parseDoomMessage, attachDoomSocket, shouldEncodeNow, canSendTo, isDeadSocket, doomMessageAllowed } from "./doom-routes";
+import { parseDoomMessage, attachDoomSocket, shouldEncodeNow, canSendTo, isDeadSocket, doomMessageAllowed, decideStartForPlayHere } from "./doom-routes";
 import { DoomSession, EngineProcess } from "../doom/session";
 import { ControlTokens } from "../doom/tokens";
 import { ControllerLock } from "../doom/control";
@@ -334,4 +334,43 @@ test("play-here from the Pi's owner is passed through and the web owns it", () =
   client.emit("message", Buffer.from(JSON.stringify({ type: "play-here" })));
   assert.equal(session.owner(), "web");
   assert.equal(lastState(client).mirror, false);
+});
+
+test("decideStartForPlayHere starts the engine only when no game runs", () => {
+  assert.equal(decideStartForPlayHere(false), "start");
+  assert.equal(decideStartForPlayHere(true), "claim-only");
+});
+
+test("play-here starts the engine when no game runs and leaves the web owning it", () => {
+  const { session } = makeSession();
+  assert.equal(session.state().running, false);
+  const wss = new EventEmitter();
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+
+  const client = fakeClient();
+  wss.emit("connection", client as unknown as WebSocket);
+  client.emit("message", Buffer.from(JSON.stringify({ type: "play-here" })));
+  assert.equal(session.state().running, true, "play-here must start the engine");
+  assert.equal(session.owner(), "web");
+  assert.equal(lastState(client).mirror, false);
+  assert.equal(lastState(client).error, null);
+});
+
+test("play-here reports the start error and keeps the owner when the engine cannot start", () => {
+  const session = new DoomSession({
+    spawnEngine: () => { throw new Error("no debe llamarse"); },
+    tokens: new ControlTokens(),
+    lock: new ControllerLock(),
+    binaryExists: () => true,
+    wadExists: () => false,
+  });
+  const wss = new EventEmitter();
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+
+  const client = fakeClient();
+  wss.emit("connection", client as unknown as WebSocket);
+  client.emit("message", Buffer.from(JSON.stringify({ type: "play-here" })));
+  assert.equal(session.state().running, false);
+  assert.equal(session.owner(), null);
+  assert.match(String(lastState(client).error), /Falta el WAD/);
 });

@@ -79,12 +79,16 @@
   }
 
   // Sends only the difference against what the server already has down.
-  // Without control nothing is sent, but local state still updates so the
+  // Without control nothing new is sent, but local state still updates so the
   // pressed highlight matches the physical input.
   function sync() {
     const want = new Set(inputs.values());
     paint(want);
     if (!connected || !controller) {
+      // The server does not release keys when we lose control, so send the
+      // ups ourselves. send() is a no-op once the socket is gone, which covers
+      // the close case.
+      for (const key of sent) send({ type: "key", key, down: false });
       sent.clear();
       return;
     }

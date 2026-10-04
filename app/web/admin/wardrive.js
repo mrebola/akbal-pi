@@ -137,6 +137,14 @@ async function refresh() {
   let data;
   try {
     const res = await fetch("/api/wardrive/drive/status");
+    // 401 = the login session is gone (the service restarted or the cookie
+    // expired). Say so instead of silently keeping the last state on screen,
+    // which made a stopped session look running. No redirect: the operator
+    // decides when to log in again.
+    if (res.status === 401) {
+      showError("Sesión caducada: recarga la página para volver a iniciar sesión");
+      return;
+    }
     if (!res.ok) return;
     data = await res.json();
   } catch {
@@ -1410,3 +1418,16 @@ el("wd-share-file")?.addEventListener("change", async (e) => {
   e.target.value = "";
   await refreshShare();
 });
+
+// The efficiency card sits under the live-networks panel on desktop. Publish
+// its real height so the panel's max-height leaves room for it (wardrive.css).
+{
+  const compareCard = el("wd-radio-compare");
+  const syncCompareHeight = () => {
+    document.documentElement.style.setProperty("--wd-compare-h", `${compareCard.offsetHeight}px`);
+  };
+  if (compareCard && typeof ResizeObserver !== "undefined") {
+    new ResizeObserver(syncCompareHeight).observe(compareCard);
+  }
+  if (compareCard) syncCompareHeight();
+}

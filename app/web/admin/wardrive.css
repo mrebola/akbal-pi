@@ -262,7 +262,9 @@
   right: 14px;
   z-index: 900;
   width: 330px;
-  max-height: calc(100vh - var(--header-height, 64px) - 120px);
+  /* Leaves room for the efficiency card under it (--wd-compare-h is set
+     from its real height in wardrive.js), so the two never stack. */
+  max-height: calc(100vh - var(--header-height, 64px) - 12px - var(--wd-compare-h, 0px) - 20px);
   display: flex;
   flex-direction: column;
   border-radius: 10px;
@@ -698,7 +700,7 @@
 /* ---- Responsive: panels shrink on narrow screens ---- */
 
 @media (max-width: 900px) {
-  .wd-panel { width: 290px; max-height: calc(100vh - var(--header-height, 64px) - 210px); }
+  .wd-panel { width: 290px; max-height: calc(100vh - var(--header-height, 64px) - 12px - var(--wd-compare-h, 0px) - 20px - 90px); }
   .wd-gps { display: none; }
   .wd-hud { max-width: calc(100vw - 28px); }
 }

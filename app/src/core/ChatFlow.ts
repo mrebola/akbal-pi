@@ -16,6 +16,7 @@ import {
   type WhisplayIMApprovalRequest,
 } from "../device/im-bridge";
 import { FlowStateMachine } from "./chat-flow/stateMachine";
+import { leaveDoomMode, shouldLeaveDoom } from "./chat-flow/doom-mode";
 import { flowStates } from "./chat-flow/states";
 import { ChatFlowContext, FlowName } from "./chat-flow/types";
 import { onWebChatModeChange } from "./chat-flow/web-chat-state";
@@ -298,6 +299,9 @@ class ChatFlow implements ChatFlowContext {
   transitionTo = (flowName: FlowName): void => {
     if (flowName !== "music" && isMusicPlaying()) {
       stopMusicPlayback();
+    }
+    if (shouldLeaveDoom(this.currentFlowName, flowName)) {
+      leaveDoomMode();
     }
     console.log(`[${getCurrentTimeTag()}] switch to:`, flowName);
     this.stateMachine.transitionTo(flowName);

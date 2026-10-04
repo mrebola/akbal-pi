@@ -150,6 +150,9 @@ current_model_ui_qr_path = ""
 game_screen_active = False
 current_game_frame = None  # RGB565 big-endian bytes of the last engine frame
 current_game_qr_path = ""
+# Serializes the orientation switch with game drawing: the panel must not be
+# rotated in the middle of a landscape frame, nor drawn into vertically.
+game_draw_lock = threading.Lock()
 current_help_ui = ""
 current_help_ui_body = ""
 current_help_ui_page = 0
@@ -259,7 +262,10 @@ class RenderThread(threading.Thread):
         global current_image_path, current_image, camera_mode
         self.pending_auto_scroll_after_hold = False
         if game_screen_active:
-            self.render_game_screen(text)
+            try:
+                self.render_game_screen(text)
+            except Exception as e:
+                print(f"[DOOM] Frame dropped: {e}")
             return False
         if camera_mode:
             return False  # Skip rendering if in camera mode
@@ -995,7 +1001,15 @@ class RenderThread(threading.Thread):
         self.last_drawn_frame_index = -1
 
     def render_game_screen(self, text):
-        if current_game_frame is None:
+        with game_draw_lock:
+            # Re-check under the lock: a leave may have landed since render_frame looked.
+            if not game_screen_active:
+                return
+            self._draw_game_screen(text)
+
+    def _draw_game_screen(self, text):
+        frame = current_game_frame
+        if frame is None:
             self.render_game_qr(text)
             return
         top = Image.new("RGB", (GAME_WIDTH, GAME_TOP_BAND), (0, 0, 0))
@@ -1005,7 +1019,7 @@ class RenderThread(threading.Thread):
                                 (GAME_TOP_BAND - 14) // 2, GAME_WIDTH // 2, TEXT_SECONDARY)
         self.whisplay.draw_image(0, 0, GAME_WIDTH, GAME_TOP_BAND,
                                  ImageUtils.image_to_rgb565(top, GAME_WIDTH, GAME_TOP_BAND))
-        self.whisplay.draw_image(0, GAME_TOP_BAND, GAME_WIDTH, GAME_FRAME_HEIGHT, list(current_game_frame))
+        self.whisplay.draw_image(0, GAME_TOP_BAND, GAME_WIDTH, GAME_FRAME_HEIGHT, list(frame))
         self.whisplay.draw_image(0, GAME_TOP_BAND + GAME_FRAME_HEIGHT, GAME_WIDTH, GAME_BOTTOM_BAND,
                                  [0] * (GAME_WIDTH * GAME_BOTTOM_BAND * 2))
 
@@ -1032,7 +1046,12 @@ class RenderThread(threading.Thread):
     def run(self):
         frame_interval = 1 / self.fps
         while self.running:
-            animation_active = self.render_frame(current_status, current_text)
+            try:
+                animation_active = self.render_frame(current_status, current_text)
+            except Exception as e:
+                # A failed draw drops this frame; it must not end the render loop.
+                print(f"[Render] Frame dropped: {e}")
+                animation_active = False
             if animation_active:
                 time.sleep(frame_interval)
                 continue
@@ -1052,12 +1071,19 @@ def set_game_orientation(whisplay, mode):
     global game_screen_active, current_game_frame
     mode = int(mode)
     setter = getattr(whisplay, "set_orientation", None)
-    if setter is None:
-        print("[Game] This display backend cannot rotate the screen; DOOM uses the vertical UI")
-        game_screen_active = False
-    else:
-        setter(mode)
-        game_screen_active = mode == 3
+    with game_draw_lock:
+        if setter is None:
+            print("[Game] This display backend cannot rotate the screen; DOOM uses the vertical UI")
+            game_screen_active = False
+        elif mode == 3:
+            setter(mode)
+            game_screen_active = True
+        else:
+            # Leaving: clear the flag before rotating back, so the render
+            # thread stops drawing game frames first.
+            game_screen_active = False
+            current_game_frame = None
+            setter(mode)
     if not game_screen_active:
         current_game_frame = None
         if render_thread is not None:

@@ -1,4 +1,5 @@
 import fs from "fs";
+import net from "net";
 import path from "path";
 import { spawn } from "child_process";
 import type { Status } from "../../device/display";
@@ -46,6 +47,47 @@ export function doomScreenUrl(input: {
   return `http://${input.lanIp ?? "127.0.0.1"}:${input.port}/doom`;
 }
 
+// Any flow change away from DOOM is an exit, whatever caused it (the hold,
+// a web chat, an approval, a spoken answer). ChatFlow.transitionTo calls
+// leaveDoomMode when this says so.
+export function shouldLeaveDoom(from: string, to: string): boolean {
+  return from === "doom" && to !== "doom";
+}
+
+// Pantalla directa = Whisplay driver in this process (WhisplayBoard). When the
+// whisplay-daemon answers, it owns the panel and cannot rotate it for DOOM.
+export function doomBlockedReason(daemonActive: boolean): string | null {
+  return daemonActive ? "DOOM requiere la pantalla directa; el daemon está activo" : null;
+}
+
+// Same check as whisplay_client.create_whisplay_hardware: a health.ping on the
+// daemon socket that answers ok.
+export function isWhisplayDaemonActive(socketPath = "/tmp/whisplay-daemon.sock", timeoutMs = 1000): Promise<boolean> {
+  return new Promise((resolve) => {
+    let buf = "";
+    let settled = false;
+    const sock = net.createConnection(socketPath);
+    const done = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      sock.destroy();
+      resolve(ok);
+    };
+    sock.setTimeout(timeoutMs, () => done(false));
+    sock.on("error", () => done(false));
+    sock.on("connect", () => sock.write(JSON.stringify({ version: 1, cmd: "health.ping", payload: {} }) + "\n"));
+    sock.on("data", (chunk) => {
+      buf += chunk.toString();
+      if (!buf.includes("\n")) return;
+      try {
+        done(JSON.parse(buf.split("\n")[0]).ok === true);
+      } catch {
+        done(false);
+      }
+    });
+  });
+}
+
 export async function resolveDoomScreenUrl(port: number): Promise<string> {
   const net = await getNetworkInfo(port).catch(() => null);
   const ap = await getApStatus().catch(() => null);
@@ -91,8 +133,16 @@ let generation = 0;
 export async function enterDoomMode(url: string): Promise<void> {
   const gen = ++generation;
   screenUrl = url;
-  const qr = await generateConnectQr(url).catch(() => "");
+  const [qr, daemonActive] = await Promise.all([
+    generateConnectQr(url).catch(() => ""),
+    isWhisplayDaemonActive(),
+  ]);
   if (gen !== generation) return;
+  const blocked = doomBlockedReason(daemonActive);
+  if (blocked) {
+    showDoomError(blocked);
+    return;
+  }
   qrPath = qr;
   const started = doomSession.start();
   if (!started.ok) {

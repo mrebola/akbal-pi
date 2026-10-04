@@ -18,6 +18,7 @@
 #define OUT_BYTES (OUT_W * OUT_H * 2)
 
 static uint8_t out_frame[OUT_BYTES];
+static FILE *frame_out;            /* solo cuadros; stdout del motor va a stderr */
 static struct timespec start_ts;
 static uint8_t key_queue[64][2];   /* [pressed, key] */
 static int key_head = 0, key_tail = 0;
@@ -74,10 +75,14 @@ void DG_DrawFrame(void) {
       out_frame[i + 1] = (uint8_t)(v >> 8);
     }
   }
-  uint32_t n = OUT_BYTES;
-  fwrite(&n, 4, 1, stdout);
-  fwrite(out_frame, 1, OUT_BYTES, stdout);
-  fflush(stdout);
+  /* Cabecera little-endian explicita, independiente del endian del host. */
+  uint8_t hdr[4] = {
+    OUT_BYTES & 0xff, (OUT_BYTES >> 8) & 0xff,
+    (OUT_BYTES >> 16) & 0xff, (OUT_BYTES >> 24) & 0xff,
+  };
+  fwrite(hdr, 1, 4, frame_out);
+  fwrite(out_frame, 1, OUT_BYTES, frame_out);
+  fflush(frame_out);
 }
 
 void DG_SleepMs(uint32_t ms) { usleep(ms * 1000); }
@@ -100,6 +105,14 @@ int DG_GetKey(int *pressed, unsigned char *key) {
 void DG_SetWindowTitle(const char *title) { (void)title; }
 
 int main(int argc, char **argv) {
+  /* El motor imprime logs con printf/puts a stdout. Guardamos el descriptor
+   * original para los cuadros y mandamos stdout a stderr antes de iniciar. */
+  int frame_fd = dup(STDOUT_FILENO);
+  if (frame_fd < 0) { fprintf(stderr, "[DOOM] dup(stdout) falló\n"); return 1; }
+  if (dup2(STDERR_FILENO, STDOUT_FILENO) < 0) { fprintf(stderr, "[DOOM] dup2 falló\n"); return 1; }
+  frame_out = fdopen(frame_fd, "wb");
+  if (!frame_out) { fprintf(stderr, "[DOOM] fdopen falló\n"); return 1; }
+
   doomgeneric_Create(argc, argv);
   for (;;) doomgeneric_Tick();
   return 0;

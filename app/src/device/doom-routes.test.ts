@@ -243,8 +243,8 @@ test("rejects a volume message without a number", () => {
   assert.equal(parseDoomMessage('{"type":"volume","value":"alto"}'), null);
 });
 
-test("mirrors may not send key or claim while another owner plays", () => {
-  const mirror = { owner: "pi" as const, isWebOwner: false, webOwnerOnline: false };
+test("mirrors may not send key or claim while the web plays", () => {
+  const mirror = { owner: "web" as const, isWebOwner: false, webOwnerOnline: true };
   assert.equal(doomMessageAllowed({ type: "key", key: "fire", down: true }, mirror), false);
   assert.equal(doomMessageAllowed({ type: "claim", token: "t" }, mirror), false);
   assert.equal(doomMessageAllowed({ type: "volume", value: 20 }, mirror), false);
@@ -428,3 +428,68 @@ test("a mirror's stop is refused with a clear message and the game keeps running
   assert.equal(session.owner(), "web");
   assert.equal(lastState(mirror).error, "Solo quien juega puede salir");
 });
+
+test("with the Pi as owner, a phone with the QR token takes the control", () => {
+  const { session } = makeSession();
+  session.start();
+  const piToken = session.claimOwner("pi").token!;
+  const wss = new EventEmitter();
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+
+  const phone = fakeClient();
+  wss.emit("connection", phone as unknown as WebSocket);
+  assert.equal(lastState(phone).mirror, false, "with the Pi as owner nobody is a mirror");
+  phone.emit("message", Buffer.from(JSON.stringify({ type: "claim", token: piToken })));
+  assert.equal(session.state().controller, true, "the QR token must take the control");
+  assert.equal(lastState(phone).controller, true);
+});
+
+test("with the Pi as owner, a claim with a bad token is refused", () => {
+  const { session } = makeSession();
+  session.start();
+  session.claimOwner("pi");
+  const wss = new EventEmitter();
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+
+  const phone = fakeClient();
+  wss.emit("connection", phone as unknown as WebSocket);
+  phone.emit("message", Buffer.from(JSON.stringify({ type: "claim", token: "0".repeat(32) })));
+  assert.equal(session.state().controller, false);
+  assert.match(String(lastState(phone).error), /Token inválido/);
+});
+
+test("the state carries the audio and music errors when the player reports them", () => {
+  let reportAudio: (m: string) => void = () => {};
+  let reportMusic: (m: string) => void = () => {};
+  const session = new DoomSession({
+    spawnEngine: () => fakeEngineFor(),
+    tokens: new ControlTokens(),
+    lock: new ControllerLock(),
+    binaryExists: () => true,
+    wadExists: () => true,
+    openAudio: (onError) => {
+      reportAudio = onError;
+      return { start: () => {}, write: () => {}, stop: () => {} };
+    },
+    openMusic: (onError) => {
+      reportMusic = onError;
+      return { handle: () => {}, setGain: () => {}, stop: () => {} };
+    },
+  });
+  session.start();
+  const wss = new EventEmitter();
+  attachDoomSocket(wss as unknown as WebSocketServer, session, () => "http://pi.test:8090/doom");
+  const client = fakeClient();
+  wss.emit("connection", client as unknown as WebSocket);
+  assert.equal(lastState(client).audioError, null);
+  assert.equal(lastState(client).musicError, null);
+
+  reportAudio("sin dispositivo de audio");
+  assert.equal(lastState(client).audioError, "sin dispositivo de audio");
+  reportMusic("no hay reproductor de música");
+  assert.equal(lastState(client).musicError, "no hay reproductor de música");
+});
+
+function fakeEngineFor(): EngineProcess {
+  return { stdout: new PassThrough(), stdin: new PassThrough(), audio: new PassThrough(), control: new PassThrough(), kill: () => {}, onExit: () => {} };
+}

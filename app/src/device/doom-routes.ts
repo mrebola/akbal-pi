@@ -35,7 +35,9 @@ export function parseDoomMessage(raw: string): DoomClientMessage | null {
 }
 
 // What this socket is allowed to do, decided from the session's owner. A
-// mirror is any socket that is not the web owner while someone owns the game.
+// mirror is a socket that is not the web owner while the web owns the game.
+// With the Pi as owner nobody is a mirror: a phone with the QR token may take
+// the control (claim and the engine lock check the token).
 export interface DoomSocketView {
   owner: DoomOwner;
   isWebOwner: boolean;
@@ -50,7 +52,7 @@ export function decideStartForPlayHere(running: boolean): "start" | "claim-only"
 }
 
 export function doomMessageAllowed(msg: DoomClientMessage, view: DoomSocketView): boolean {
-  const mirror = view.owner !== null && !view.isWebOwner;
+  const mirror = view.owner === "web" && !view.isWebOwner;
   switch (msg.type) {
     case "key":
     case "claim":
@@ -125,10 +127,12 @@ export function attachDoomSocket(
         controller: c ? session.isController(c.id) : false,
         controlled: s.controller,
         error: claimError ?? s.error,
+        audioError: s.audioError,
+        musicError: s.musicError,
         streaming: c?.streaming ?? false,
         url: screenUrl(),
         owner: s.owner,
-        mirror: s.owner !== null && !webOwner,
+        mirror: s.owner === "web" && !webOwner,
         volume: session.volume(),
         // Only the web owner's own socket ever gets the token.
         token: webOwner ? c?.token : undefined,

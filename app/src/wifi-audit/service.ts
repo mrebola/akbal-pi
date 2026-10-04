@@ -377,7 +377,30 @@ export class WardriveService extends EventEmitter {
   // index themselves differently (wifi-audit: one session.json per dated
   // folder; wardrive: SQLite, drive-* folders) — merging here is what lets
   // one page crack handshakes from either.
+  // Wardrive keeps raw captures one level down (drive-*/ring/), so look in
+  // the session folder and its direct subfolders.
+  private static capOnDisk(sessionId: string, capFile: string | null): boolean {
+    if (!capFile) return false;
+    const dir = path.join(SESSIONS_ROOT, sessionId);
+    const name = path.basename(capFile);
+    try {
+      if (fs.existsSync(path.join(dir, name))) return true;
+      for (const sub of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (sub.isDirectory() && fs.existsSync(path.join(dir, sub.name, name))) return true;
+      }
+    } catch {
+      // session folder gone
+    }
+    return false;
+  }
+
   handshakeInventory(): { items: HandshakeEntry[] } {
+    const { items } = this.handshakeInventoryMetadata();
+    for (const it of items) it.hasFile = WardriveService.capOnDisk(it.sessionId, it.capFile);
+    return { items };
+  }
+
+  private handshakeInventoryMetadata(): { items: HandshakeEntry[] } {
     const items: HandshakeEntry[] = [];
     const active = this.session;
     if (active) {
@@ -388,6 +411,7 @@ export class WardriveService extends EventEmitter {
           bssid: t.bssid,
           ssid: t.ssid,
           hasHandshake: true,
+          hasFile: false,
           password: t.password || null,
           verified: t.verified === true,
           live: true,
@@ -421,6 +445,7 @@ export class WardriveService extends EventEmitter {
             bssid: t.bssid,
             ssid: t.ssid || "",
             hasHandshake: true,
+            hasFile: false,
             password: typeof t.password === "string" ? t.password : null,
             verified: t.verified === true,
             live: false,
@@ -445,6 +470,7 @@ export class WardriveService extends EventEmitter {
           bssid: row.bssid,
           ssid: row.ssid || "",
           hasHandshake: true,
+          hasFile: false,
           password: row.password || null,
           verified: false,
           live: false,

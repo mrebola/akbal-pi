@@ -89,6 +89,10 @@ export type HandshakeEntry = {
   verified: boolean;
   live: boolean; // belongs to the in-progress session
   capFile: string | null; // capture file name (relative to the session dir)
+  // Whether capFile is still on disk. Metadata outlives deleted captures
+  // (session.json / handshakes table), so an entry can exist with no file
+  // left to crack — the page shows those as "sin archivo".
+  hasFile: boolean;
   source: "wifi-audit" | "wardrive";
   capturedAt: number | null; // epoch ms when the handshake was captured
   // GPS at capture time — only Wardrive tracks position (driving sessions);

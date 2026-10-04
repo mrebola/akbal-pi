@@ -202,9 +202,14 @@ function wdRenderCrackStation() {
       // wdRowStatusHtml(). The attack buttons make way for a short status
       // note (there's nothing to click — only one dict crack runs at a time).
       const runningHere = wdDictSync?.running && wdDictBssid === it.bssid;
+      // Metadata can outlive the capture (deleted from the device): nothing
+      // to crack, so no attack buttons — the row says so instead.
+      const noFile = it.hasFile === false;
       let actionsHtml;
       if (it.password) {
         actionsHtml = '<span class="muted">✓</span>';
+      } else if (noFile) {
+        actionsHtml = '<span class="muted" style="font-size:11px;">sin archivo</span>';
       } else if (runningHere) {
         actionsHtml = '<span class="muted" style="font-size:11px;">corriendo…</span>';
       } else {
@@ -232,7 +237,7 @@ function wdRenderCrackStation() {
         <td data-label="Origen">${wdOriginBadge(it.source)}</td>
         <td class="muted" data-label="Fecha" style="font-size:11px; white-space:nowrap;" title="${escapeHtml(wdFormatDateTime(it.capturedAt))}">${escapeHtml(wdFormatDateShort(it.capturedAt))}</td>
         <td data-label="GPS">${gps}</td>
-        <td data-label="Handshake">${it.hasHandshake ? '<span class="wd-verify-badge ok">✓ .cap</span>' : "—"}</td>
+        <td data-label="Handshake">${noFile ? '<span class="muted" style="font-size:11px;">sin archivo</span>' : it.hasHandshake ? '<span class="wd-verify-badge ok">✓ .cap</span>' : "—"}</td>
         <td data-label="Contraseña">${it.password ? `<span class="wd-verify-badge ok" style="max-width:180px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(it.password)}</span>` : "—"}</td>
         <td class="wd-row-status-cell" data-label="Estado">${statusHtml}</td>
         <td data-label="Ataques"><div class="wd-action-group">${actionsHtml}</div></td>

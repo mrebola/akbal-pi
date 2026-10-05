@@ -182,6 +182,10 @@ function render(st) {
   // Activity ticker: always-visible strip at the bottom center of the map
   renderActivityTicker(st);
 
+  // Scan mode toggle labels follow the backend truth (it refuses changes
+  // mid-session, other tabs may switch it too).
+  if (st.scanMode && window._akbalSyncScanToggle) window._akbalSyncScanToggle(st.scanMode);
+
   // Dongle picker state: disabled while running, refreshed occasionally
   if (!render.dongleAt || Date.now() - render.dongleAt > 8000) {
     render.dongleAt = Date.now();
@@ -725,15 +729,26 @@ async function refreshDongleList() {
 
 // Radios running right now, with their role. While a triple session has
 // fewer radios than requested, say so instead of silently using fewer.
+// Role comes from activeRadios (role: "attacking" while that radio hosts a
+// round) so parallel rounds show every busy radio, not just one "attacker".
 function renderActiveRadios(st) {
   const host = el("wd-radio-active");
   if (!host) return;
   if (!st || !st.running) {
     host.textContent = "";
+    const roundsBox = el("wd-rounds");
+    if (roundsBox) {
+      roundsBox.textContent = "";
+      roundsBox.classList.add("hidden");
+    }
     return;
   }
+  const attackingCount = (st.activeRadios || []).filter((r) => r.role === "attacking").length;
   const radios = (st.activeRadios || []).map((r) => {
-    const role = r.role === "attack" ? t("wardrive.radio_role_attack", "ataque") : t("wardrive.radio_role_discovery", "descubrimiento");
+    const role =
+      r.role === "attacking" ? t("wardrive.radio_role_attacking", "atacando")
+      : r.role === "attack" ? t("wardrive.radio_role_attack", "ataque")
+      : t("wardrive.radio_role_discovery", "descubrimiento");
     return `${String(r.iface || "?").toUpperCase()} · ${role}`;
   });
   const parts = [radios.join(" · ") || t("wardrive.radios_none", "sin radios activas")];
@@ -749,8 +764,35 @@ function renderActiveRadios(st) {
             available: st.radiosConnected,
           }),
     );
+  } else if (attackingCount > 1) {
+    parts.push(
+      t("wardrive.radios_parallel", "{count} rondas simultáneas", { count: attackingCount }),
+    );
   }
   host.textContent = parts.join(" — ");
+  renderRounds(st);
+}
+
+// In-flight rounds: one line per radio currently hosting an attack window.
+// e.g. "WLAN2 · PMKID → akbal_lab (ch6)" — parallel rounds each get a line.
+function renderRounds(st) {
+  const box = el("wd-rounds");
+  if (!box) return;
+  const rounds = st.rounds || [];
+  if (!st.running || rounds.length === 0) {
+    box.textContent = "";
+    box.classList.add("hidden");
+    return;
+  }
+  box.classList.remove("hidden");
+  box.innerHTML = rounds
+    .map(
+      (r) =>
+        `<div class="wd-round-line"><span class="wd-round-iface">${escapeHtml(String(r.iface || "?").toUpperCase())}</span> ${escapeHtml(
+          r.method === "deauth" ? "DEAUTH" : "PMKID",
+        )} → ${escapeHtml(r.ssid)} <span class="wd-round-ch">ch${r.channel ?? "?"}</span></div>`,
+    )
+    .join("");
 }
 
 async function syncRadioModeSelect(st) {
@@ -853,8 +895,10 @@ function renderApList(st) {
   setText("wd-count-hs", String(st.stats?.newHandshakes ?? 0));
   // Badge per attack state. 🏴‍☠️ = handshake captured (pirate flag — booty),
   // ⚡ = being attacked right now, 🤝 HS = covered by another AP of the SSID,
-  // ✕ = attempts exhausted. ⚡ button = manual attack NOW.
-  const attackingNow = Boolean(st.currentAttack);
+  // ✕ = attempts exhausted. ⚡ button = manual attack NOW (hidden while the
+  // round slots are full — st.rounds — or in MAPEAR mode, which never attacks).
+  const attackingNow = st.scanMode === "mapear" || (st.rounds?.length ?? 0) >= (st.attackSlots ?? 1);
+  const mapOnly = st.scanMode === "mapear";
   list.innerHTML = recent
     .map((ap) => {
       const badge = ap.handshakeHere
@@ -878,7 +922,7 @@ function renderApList(st) {
         <div class="wd-ap-right">
           ${badge}
           <span class="wd-rssi ${rssiClass(ap.rssi)}">${ap.rssi} dBm</span>
-          ${attackingNow ? "" : ap.handshakeHere || ap.handshakeKnown || ap.security === "OPEN" ? "" : `<button class="wd-ap-attack" title="Atacar ahora (PMKID → deauth)">⚡</button>`}
+          ${attackingNow || mapOnly ? "" : ap.handshakeHere || ap.handshakeKnown || ap.security === "OPEN" ? "" : `<button class="wd-ap-attack" title="Atacar ahora (PMKID → deauth)">⚡</button>`}
         </div>
       </li>`;
     })
@@ -1005,7 +1049,14 @@ function renderActivityTicker(st) {
   // seen and counting, but zero attacks yet, LOOKED stuck even when it
   // wasn't. Same info already sitting in the HUD grid (aps/unique), just
   // surfaced where it's actually glanced at: the always-visible ticker.
+  // MAPEAR mode says so explicitly (a passive session looks identical to a
+  // stuck attacking one — the label is the only difference you see).
   const aps = st?.stats?.aps ?? 0;
+  if (st?.scanMode === "mapear") {
+    const meta = aps > 0 ? `${aps} en el aire` : "";
+    box.innerHTML = `<div class="wd-activity-line idle">🗺 Modo mapear — solo observo…${meta ? `<span class="wd-activity-ts">${meta}</span>` : ""}</div>`;
+    return;
+  }
   const candidates = countAttackCandidates(st?.recent);
   const meta =
     aps === 0
@@ -1339,6 +1390,51 @@ function initHeader() {
       }
     } catch { /* default live */ }
   })();
+
+  // Scan mode toggle (ATACAR / MAPEAR): same visual language as LIVE/DEMO.
+  // Refused mid-session by the backend; the status poll re-syncs the labels.
+  const scan = el("wd-scan-toggle");
+  scan?.addEventListener("click", async (ev) => {
+    const label = ev.target.closest(".plx-toggle-label");
+    if (!label) return;
+    const next = label.dataset.mode;
+    scan.classList.add("busy");
+    try {
+      const res = await fetch("/api/wardrive/drive/scan-mode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: next }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.ok) {
+        for (const l of scan.querySelectorAll(".plx-toggle-label")) {
+          l.classList.toggle("active", l.dataset.mode === next);
+        }
+      } else if (data.error) {
+        showError(data.error);
+        setTimeout(hideError, 6000);
+      }
+    } catch { /* keep previous */ }
+    scan.classList.remove("busy");
+  });
+  void (async () => {
+    try {
+      const res = await fetch("/api/wardrive/drive/scan-mode");
+      if (res.ok) {
+        const mode = (await res.json()).mode || "atacar";
+        syncScanToggle(mode);
+      }
+    } catch { /* default atacar */ }
+  })();
+
+  function syncScanToggle(mode) {
+    for (const l of scan.querySelectorAll(".plx-toggle-label")) {
+      l.classList.toggle("active", l.dataset.mode === mode);
+    }
+  }
+  // Keep the toggle honest on every status poll (session running refused
+  // mode changes; another tab may have switched it).
+  window._akbalSyncScanToggle = syncScanToggle;
 }
 // ── Compartir: .akbal packages of this Pi's sessions and imported ones ──────
 async function refreshShare() {

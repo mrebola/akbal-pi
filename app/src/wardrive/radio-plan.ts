@@ -20,11 +20,34 @@ export function radioCountForMode(mode: RadioMode, connected: number): number {
   return Math.min(3, n);
 }
 
-export type ActiveRadio = { iface: string; role: "attack" | "discovery" };
+// Attack slots a running session can host AT THE SAME TIME. With 2+ radios
+// one of them must keep discovering (fresh air picture while others attack),
+// so the cap is radios − 1; single has no separate attack radio at all (its
+// shared radio attacks with the whole discovery pipeline paused — that
+// global pause is still governed by the caller, this function just says how
+// many radios can host an hcxdumptool round concurrently).
+export function maxConcurrentAttackers(mode: RadioMode, connected: number): number {
+  const n = Math.max(0, Math.floor(connected));
+  if (mode === "single") return 0;
+  if (n <= 1) return 0;
+  if (mode === "dual") return 1;
+  return Math.min(n - 1, 2); // triple and auto: one radio always stays on discovery
+}
 
-// Radios running right now, with their role. The attack radio is listed last.
-export function activeRadiosOf(discoveryIfaces: string[], attackIface: string | null): ActiveRadio[] {
-  const out: ActiveRadio[] = discoveryIfaces.map((iface) => ({ iface, role: "discovery" as const }));
-  if (attackIface) out.push({ iface: attackIface, role: "attack" });
+export type ActiveRadio = { iface: string; role: "attack" | "discovery" | "attacking" };
+
+// Radios running right now, with their role. "attacking" = that radio is
+// hosting an hcxdumptool round right now (a discovery radio mid-round).
+export function activeRadiosOf(
+  discoveryIfaces: string[],
+  attackIface: string | null,
+  attackingIfaces: string[] = [],
+): ActiveRadio[] {
+  const attacking = new Set(attackingIfaces);
+  const out: ActiveRadio[] = discoveryIfaces.map((iface) => ({
+    iface,
+    role: attacking.has(iface) ? ("attacking" as const) : ("discovery" as const),
+  }));
+  if (attackIface && !attacking.has(attackIface)) out.push({ iface: attackIface, role: "attack" });
   return out;
 }

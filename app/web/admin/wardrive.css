@@ -809,6 +809,41 @@
   color: rgba(255, 255, 255, 0.35);
 }
 
+/* ---- In-flight rounds list (HUD, under the radios label) ---- */
+
+.wd-rounds {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 6px;
+  padding: 6px 10px;
+  border-radius: 7px;
+  background: rgba(255, 122, 89, 0.12);
+  border: 1px solid rgba(255, 122, 89, 0.35);
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+  color: #ffb4a2;
+}
+
+.wd-rounds.hidden { display: none; }
+
+.wd-round-iface {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: rgba(255, 122, 89, 0.25);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.wd-round-ch {
+  color: rgba(255, 180, 162, 0.6);
+  font-size: 10px;
+}
+
+/* Scan-mode toggle in the page toolbar: same shell as LIVE/DEMO, slight gap */
+.wd-scan-toggle { margin-left: 8px; }
+
 /* ---- Dongle picker (in the session HUD) ---- */
 
 .wd-dongle {

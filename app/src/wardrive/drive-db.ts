@@ -180,6 +180,14 @@ export class DriveDb {
       `);
       console.log("[wardrive] drive-db migrated: attack_rounds metrics table");
     }
+    // Schema evolution 4: attack_rounds.iface — which radio hosted the
+    // round. With parallel rounds there is no fixed attack radio: this
+    // keeps the ath9k-vs-rt2800usb comparison possible per chip.
+    const roundCols = this.db.prepare(`PRAGMA table_info(attack_rounds)`).all() as { name: string }[];
+    if (roundCols.length > 0 && !roundCols.some((c) => c.name === "iface")) {
+      this.db.exec(`ALTER TABLE attack_rounds ADD COLUMN iface TEXT NOT NULL DEFAULT ''`);
+      console.log("[wardrive] drive-db migrated: attack_rounds.iface");
+    }
   }
 
   // ─── attack_rounds (1 vs 2 adapters comparison dataset) ──────────────────
@@ -193,14 +201,15 @@ export class DriveDb {
     result: "captured" | "captured2" | "failed" | "aborted";
     blindMs: number;
     eapolPairs: number;
+    iface?: string;
   }): void {
     try {
       this.db
         .prepare(
-          `INSERT INTO attack_rounds (ts, bssid, ssidle, method, mode, window_ms, result, blind_ms, eapol_pairs)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO attack_rounds (ts, bssid, ssidle, method, mode, window_ms, result, blind_ms, eapol_pairs, iface)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .run(Date.now(), rec.bssid, rec.ssid || null, rec.method, rec.mode, rec.windowMs, rec.result, rec.blindMs, rec.eapolPairs);
+        .run(Date.now(), rec.bssid, rec.ssid || null, rec.method, rec.mode, rec.windowMs, rec.result, rec.blindMs, rec.eapolPairs, rec.iface ?? "");
     } catch (err) {
       console.warn("[wardrive] recordAttackRound failed:", (err as Error).message);
     }
@@ -635,6 +644,33 @@ export class DriveDb {
       return r.changes > 0;
     } catch {
       return false;
+    }
+  }
+
+  // Startup hygiene: drop session rows whose session FOLDER no longer
+  // exists on disk. The folder is the source of truth for artifacts (ring,
+  // captures, hashes) — a row without it lists a session that opens empty
+  // (no networks beyond the global archive, no downloadable track), which
+  // reads as "many sessions I never made". Rows can outlive their folder
+  // when the folder was removed outside the app or by an interrupted
+  // delete; this single sweep at boot keeps the sessions tab honest.
+  purgeOrphanSessions(sessionsRoot: string): number {
+    try {
+      const rows = this.db.prepare(`SELECT id FROM drive_sessions`).all() as { id: string }[];
+      let removed = 0;
+      for (const { id } of rows) {
+        if (!/^drive-/.test(id)) continue; // only drive sessions have folders
+        if (fs.existsSync(path.join(sessionsRoot, id))) continue;
+        this.db.prepare(`DELETE FROM track_points WHERE session_id = ?`).run(id);
+        this.db.prepare(`DELETE FROM handshakes WHERE session_id = ?`).run(id);
+        this.db.prepare(`DELETE FROM drive_sessions WHERE id = ?`).run(id);
+        removed += 1;
+      }
+      if (removed > 0) console.log(`[wardrive] drive-db: ${removed} sesión(es) huérfana(s) purgada(s) (carpeta inexistente)`);
+      return removed;
+    } catch (err) {
+      console.warn("[wardrive] purgeOrphanSessions failed:", (err as Error).message);
+      return 0;
     }
   }
 

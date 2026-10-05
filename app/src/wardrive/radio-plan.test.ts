@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { activeRadiosOf, parseRadioMode, radioCountForMode } from "./radio-plan";
+import { activeRadiosOf, maxConcurrentAttackers, parseRadioMode, radioCountForMode } from "./radio-plan";
 
 test("auto uses every connected monitor-capable radio", () => {
   assert.equal(radioCountForMode("auto", 1), 1);
@@ -39,6 +39,30 @@ test("activeRadiosOf lists the attack radio and the discovery radios with their 
     { iface: "wlan1", role: "discovery" },
     { iface: "wlan3", role: "discovery" },
     { iface: "wlan2", role: "attack" },
+  ]);
+});
+
+test("maxConcurrentAttackers caps at radios minus one (one radio must keep discovering)", () => {
+  assert.equal(maxConcurrentAttackers("auto", 1), 0);
+  assert.equal(maxConcurrentAttackers("auto", 2), 1);
+  assert.equal(maxConcurrentAttackers("auto", 3), 2);
+  assert.equal(maxConcurrentAttackers("auto", 4), 2); // session radios cap at 3
+  assert.equal(maxConcurrentAttackers("dual", 2), 1);
+  assert.equal(maxConcurrentAttackers("dual", 3), 1);
+  assert.equal(maxConcurrentAttackers("triple", 3), 2);
+  assert.equal(maxConcurrentAttackers("triple", 4), 2);
+});
+
+test("maxConcurrentAttackers: single and single-radio setups have no parallel attackers", () => {
+  assert.equal(maxConcurrentAttackers("single", 3), 0);
+  assert.equal(maxConcurrentAttackers("dual", 1), 0);
+  assert.equal(maxConcurrentAttackers("triple", 1), 0);
+});
+
+test("activeRadiosOf marks radios hosting a round as attacking", () => {
+  assert.deepEqual(activeRadiosOf(["wlan1", "wlan3"], null, ["wlan3"]), [
+    { iface: "wlan1", role: "discovery" },
+    { iface: "wlan3", role: "attacking" },
   ]);
 });
 

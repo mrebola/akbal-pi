@@ -21,6 +21,14 @@
         <span class="plx-toggle-label mode-live" data-mode="live" data-i18n="topbar.live">LIVE</span>
         <span class="plx-toggle-label mode-demo" data-mode="demo" data-i18n="topbar.demo">DEMO</span>
       </div>
+      <!-- Scan mode: ATACAR = what the engine always did ( opportunistic
+           PMKID/deauth). MAPEAR = strictly passive: sight SSIDs, anchor them
+           on the map, save the session with no handshakes. Same visual
+           language as the LIVE/DEMO toggle. -->
+      <div class="plx-toggle wd-scan-toggle" id="wd-scan-toggle" title="ATACAR: captura pasiva + rondas PMKID/deauth oportunistas · MAPEAR: solo observa y ubica redes en el mapa, sin mandar nada al aire" data-i18n-title="wardrive.scan_toggle_title">
+        <span class="plx-toggle-label mode-live" data-mode="atacar" data-i18n="wardrive.scan_mode_attack">ATACAR</span>
+        <span class="plx-toggle-label mode-demo" data-mode="mapear" data-i18n="wardrive.scan_mode_map">MAPEAR</span>
+      </div>
     </div>
   </div>
 
@@ -79,6 +87,9 @@
       </label>
       <div id="wd-radio-msg" class="wd-dongle-msg"></div>
       <div id="wd-radio-active" class="wd-dongle-msg" aria-live="polite"></div>
+      <!-- In-flight attack rounds (multi-radio): one line per radio currently
+           hosting a PMKID/deauth window, e.g. "WLAN2 · PMKID → akbal_lab (ch6)" -->
+      <div id="wd-rounds" class="wd-rounds" aria-live="polite"></div>
       <div class="wd-home-guard" id="wd-home-guard" title="La red a la que Akbal está conectado NUNCA es atacada — el motor la excluye" data-i18n-title="wardrive.home_guard_title">
         🔒 <span id="wd-home-ssid">—</span> <span data-i18n="wardrive.home_guard_protected">protegida</span>
       </div>

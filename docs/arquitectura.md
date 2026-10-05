@@ -125,7 +125,7 @@ node_flow -->|"pausa el sonido de DOOM mientras Akbal habla"| node_doomsession
 node_flow -->|"menú: conectar a wifi"| node_wifisaved
 node_wifisaved -->|"conecta con el perfil guardado"| node_wifi
 node_flow -->|"enciende el radar al abrir su pantalla"| node_radar
-node_wardrive -->|"elige cuántas radios usar"| node_radioplan
+node_wardrive -->|"elige cuántas radios usar y rondas simultáneas"| node_radioplan
 node_wardrive -.->|"bloquea el radar mientras corre"| node_radar
 node_webserver -->|"exporta e importa sesiones"| node_akbal
 node_akbal -->|"lee y guarda sesiones"| node_wardrive

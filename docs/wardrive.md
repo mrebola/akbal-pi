@@ -50,22 +50,30 @@ El modo se elige con el selector **Radios** de la página (o con
 
 - **auto** (default): usa todos los dongles con modo monitor conectados.
 - **single**: 1 dongle compartido. Es ciego durante cada ronda de ataque.
-- **dual**: 2 dongles. Uno ataca y el otro descubre.
-- **triple**: 3 dongles si hay 3; si hay menos, usa los que haya y lo indica.
+- **dual**: 2 dongles. Hasta 1 ronda de ataque a la vez.
+- **triple**: hasta 3 dongles. Hasta **2 rondas simultáneas**: una radio
+  siempre sigue descubriendo mientras las demás atacan.
 
-Con dos o más radios, una es la **radio de ataque** (`ath9k_htc` primero, por
-sus capturas EAPOL/PMKID deterministas) y el resto son **de descubrimiento**.
-
-- **Las tres radios descubren.** La radio de ataque también escucha y salta de
-  canal mientras no está en una ronda. Los 13 canales 2.4 GHz se reparten en
-  tramos, uno por radio, así que el ciclo completo de la banda es más corto
-  con cada radio que se suma.
-- **Una ronda de ataque** solo pausa la captura de su propia radio. Las demás
-  siguen saltando de canal, y al terminar la ronda la radio de ataque vuelve a
-  escuchar.
+- **Rondas por radio**: ya no existe una "radio de ataque" fija. Cualquier
+  radio puede hostear una ronda: al arrancar se pausa solo SU captura, y al
+  terminar vuelve al aire. Las radios libres siguen saltando de canal todo
+  el ciclo (los 13 canales se reparten en tramos, uno por radio).
+- **ath9k preferente**: los slots de ataque los toman primero los AR9271
+  (`ath9k_htc` — TX-feedback determinista en modo monitor, ver la lección
+  "pwnagotchi" en `attack.ts`); el rt2800usb es atacante de reserva y
+  descubre permanentemente cuando los ath9k están ocupados.
+- **Nunca dos rondas sobre el mismo SSID**: el dedup de handshakes es por
+  SSID, así que un segundo slot paralelo sobre el mismo SSID puro desperdicio.
+  Entre rondas simultáneas se prefiere diversidad de canal (menos
+  contention).
+- **Modos**: `atacar` (default) corre rondas PMKID → deauth; `mapear`
+  (toggle en la barra de la página) es captura estrictamente pasiva — ve
+  SSIDs, ubícalos en el mapa y guarda la sesión sin handshakes ni frames
+  generados. Se cambia solo con la sesión detenida; el tipo queda anotado
+  en el `session.json` de la carpeta (`scanMode`).
 - **Etiqueta de radios**: la página muestra las radios que están activas de
-  verdad, por ejemplo `WLAN1+WLAN3+WLAN2 · 3 radios`, con su rol
-  (descubrimiento o ataque).
+  verdad, por ejemplo `WLAN1+WLAN3+WLAN2 · 3 radios — 2 rondas simultáneas`,
+  con su rol en vivo (descubrimiento / atacando ahora).
 - Si se desconecta una radio, la sesión sigue con las demás y solo se detiene
   cuando no queda ninguna de descubrimiento.
 - El selector guarda el modo en memoria: al reiniciar el servicio vuelve al
@@ -130,9 +138,11 @@ Código: `app/src/akbal/` (formato, paquete, archivos de sesión y almacén) y
 
 ## API
 
-- `GET /api/wardrive/drive/status` — todo el estado para la página (poll 1 s).
+- `GET /api/wardrive/drive/status` — todo el estado para la página (poll 1 s,
+  incluye `rounds` = rondas en vuelo por radio y `scanMode`).
 - `POST /api/wardrive/drive/start` / `.../stop` — sesión on/off.
-- `POST /api/wardrive/drive/deauth` `{on}` — toggle oportunista.
+- `GET` / `POST /api/wardrive/drive/scan-mode` — modo `atacar` | `mapear`
+  (el toggle junto al de LIVE/DEMO; solo con la sesión detenida).
 - `GET` / `POST /api/wardrive/drive/radio-mode` — modo de radios (`auto`,
   `single`, `dual` o `triple`). Solo se cambia con la sesión detenida.
 - `POST /api/wardrive/drive/sessions/delete` — borra una sesión.

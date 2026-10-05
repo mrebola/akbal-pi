@@ -2126,6 +2126,24 @@ export class WebAdminServer {
       ctx.body = drive.setRadioMode(String(mode || ""));
     });
 
+    // Scan mode toggle (like the header's LIVE/DEMO): "atacar" = what the
+    // engine always did (PMKID/deauth rounds); "mapear" = strictly passive
+    // capture — sight every SSID, anchor it on the map, save the session
+    // with NO handshakes. Only changeable with the session stopped.
+    router.get("/api/wardrive/drive/scan-mode", (ctx) => {
+      ctx.body = { ok: true, mode: drive.getScanMode() };
+    });
+
+    router.post("/api/wardrive/drive/scan-mode", (ctx) => {
+      const { mode } = (ctx.request.body as any) || {};
+      if (mode !== "mapear" && mode !== "atacar") {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: "mode debe ser 'atacar' o 'mapear'" };
+        return;
+      }
+      ctx.body = drive.setScanMode(mode);
+    });
+
     // 1-vs-2-adapter efficiency comparison, from the attack_rounds table.
     router.get("/api/wardrive/drive/rounds/comparison", (ctx) => {
       ctx.body = { ok: true, comparison: driveDb.roundComparison() };

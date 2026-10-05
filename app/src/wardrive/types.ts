@@ -75,13 +75,19 @@ export type DriveStatus = {
   discoveryIfaces: string[]; // every radio that hops and captures
   preferredMac: string | null; // dongle pinned by the operator, by MAC (null = auto)
   // Radio count: one dongle shared by discovery+attacks ("single", blind
-  // during attacks) or a dedicated attacker radio ("dual"). Requested
-  // mode + what the session actually resolved.
+  // during attacks) or several radios with parallel rounds ("dual").
+  // Requested mode + what the session actually resolved.
   radioMode: RadioMode;
-  dualRadio: boolean;
-  attackIface: string | null; // e.g. wlan2 when dualRadio
+  dualRadio: boolean; // true = any attack capability (1+ slots)
+  attackIface: string | null; // ath9k-preferred round host, null when idle/single
   activeRadios: ActiveRadio[]; // every radio running now, with its role (empty when stopped)
   radiosConnected: number; // monitor-capable radios found at session start (0 when stopped)
+  // Scan mode: "atacar" = passive capture + opportunistic PMKID/deauth
+  // rounds; "mapear" = strictly passive (nothing sent to the air).
+  scanMode: "atacar" | "mapear";
+  attackSlots: number; // max simultaneous rounds this session (radios − 1)
+  // In-flight rounds right now, one entry per attacking radio.
+  rounds: { iface: string; bssid: string; ssid: string; method: "pmkid" | "deauth"; channel: number; startedAt: number }[];
   homeSsid: string | null; // SSID wlan0 is connected to — PROTECTED, never attacked
   error: string;
   channel: number; // current listening channel (0 = not hopping yet)

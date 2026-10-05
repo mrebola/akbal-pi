@@ -64,6 +64,27 @@ export class WardriveSession {
     this.writeMeta();
   }
 
+  // Absorb the session.json truth into the in-memory targets. The session
+  // file can outdate this object's state: persistPastSessionPassword patches
+  // it on disk (Crack Station crack against this session's capture — the
+  // active-session branch calls setFoundPassword, but an OLD service version
+  // or a manual patch may have done the disk write only), and a later
+  // writeMeta from memory would silently erase the recovered password.
+  // Called by every writeMeta: cheap (one small JSON read) and makes disk
+  // always win for the password field.
+  private absorbMetaPasswords(): void {
+    try {
+      const meta = JSON.parse(fs.readFileSync(path.join(this.dir, "session.json"), "utf8"));
+      for (const disk of meta.targets || []) {
+        if (!disk?.bssid || typeof disk?.password !== "string" || !disk.password) continue;
+        const t = this.targets.get(disk.bssid);
+        if (t && !t.password) t.password = disk.password;
+      }
+    } catch {
+      // no/corrupt meta — memory state is the only truth we have
+    }
+  }
+
   // Record a step for UI reconnection. Written to progress-<bssid>.jsonl
   // and kept in memory for the live session.
   addProgress(bssid: string, step: AttackStep, message: string, command?: string, output?: string): void {
@@ -124,6 +145,12 @@ export class WardriveSession {
   writeTargetInfo(bssid: string, passwordTested?: string): void {
     const t = this.targets.get(bssid);
     if (!t) return;
+    // The persisted password (t.password — possibly set by the Crack
+    // Station's disk patch and absorbed by setFoundPassword) must survive
+    // every re-render: if a lab auto-validation later overwrites info.txt
+    // with only a tested-password line, the recovered password would be
+    // lost from the file the operator re-reads.
+    const testedLine = passwordTested ?? "";
     const lines: string[] = [];
     lines.push("═══════════════════════════════════════════════");
     lines.push(" WARDRIVE — resumen de auditoría");
@@ -145,7 +172,7 @@ export class WardriveSession {
     if (t.error) lines.push(`  Error:       ${t.error}`);
     lines.push("");
     lines.push("CONTRASEÑA PROBADA");
-    lines.push(`  ${passwordTested ? passwordTested : "(no se probó ninguna)"}`);
+    lines.push(`  ${testedLine ? testedLine : "(no se probó ninguna)"}`);
     lines.push("");
     lines.push("CONTRASEÑA ENCONTRADA");
     lines.push(`  ${t.password ? t.password : "(ninguna — handshake no crackeado aún)"}`);
@@ -197,7 +224,9 @@ export class WardriveSession {
     const t = this.targets.get(bssid);
     if (!t) return;
     t.password = password;
+    t.verified = true;
     this.writeMeta();
+    this.writeTargetInfo(bssid);
   }
 
   // Passwords per target for the /sessions endpoint (past-session browser).
@@ -257,6 +286,9 @@ export class WardriveSession {
   }
 
   private writeMeta(): void {
+    // Disk truth first: a password patched into session.json by another
+    // writer must survive this serialization (see absorbMetaPasswords).
+    this.absorbMetaPasswords();
     const meta = {
       id: this.id,
       startedAt: this.startedAt,

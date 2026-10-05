@@ -230,6 +230,17 @@ function wdRenderCrackStation() {
              title="${escapeHtml(`${it.ssid || it.bssid} — ${it.lat.toFixed(5)}, ${it.lon.toFixed(5)} — ver en el mapa`)}">📍</button>`
         : "—";
       const rowClass = it.bssid === wdHighlightBssid ? "wd-crack-row-highlight" : "";
+      // Password column: ALWAYS something readable. Cracked → partial
+      // (first 3 chars + ...) inline next to a 👁 that opens the full
+      // password in a modal (copy button included). Uncracked → states.
+      const partial = (pw) => (pw.length > 3 ? pw.slice(0, 3) + "…" : pw[0] + "…");
+      const passCell = it.password
+        ? `<span class="wd-pass-partial mono" title="${t("crackstation.password_masked", "parcial — clic en 👁 para verla completa")}">${escapeHtml(partial(it.password))}</span>
+           <button class="wd-pass-eye" data-bssid="${it.bssid}"
+             title="${escapeHtml(t("crackstation.password_eye_title", "Ver contraseña completa"))}">👁</button>`
+        : noFile
+          ? '<span class="muted" style="font-size:11px;">—</span>'
+          : '<span class="muted" style="font-size:11px;">sin crackear</span>';
       return `<tr class="${rowClass}" data-bssid="${it.bssid}" data-ssid="${escapeHtml(it.ssid || "")}"
                   data-session="${it.sessionId}" data-cap="${escapeHtml(capPath)}">
         <td class="wd-ssid" data-label="SSID">${it.live ? '<span class="demo-badge" style="background:rgba(80,255,120,.12);color:#34d351;">EN VIVO</span> ' : ""}${escapeHtml(it.ssid || "(oculta)")}</td>
@@ -238,7 +249,7 @@ function wdRenderCrackStation() {
         <td class="muted" data-label="Fecha" style="font-size:11px; white-space:nowrap;" title="${escapeHtml(wdFormatDateTime(it.capturedAt))}">${escapeHtml(wdFormatDateShort(it.capturedAt))}</td>
         <td data-label="GPS">${gps}</td>
         <td data-label="Handshake">${noFile ? '<span class="muted" style="font-size:11px;">sin archivo</span>' : it.hasHandshake ? '<span class="wd-verify-badge ok">✓ .cap</span>' : "—"}</td>
-        <td data-label="Contraseña">${it.password ? `<span class="wd-verify-badge ok" style="max-width:180px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(it.password)}</span>` : "—"}</td>
+        <td data-label="Contraseña">${passCell}</td>
         <td class="wd-row-status-cell" data-label="Estado">${statusHtml}</td>
         <td data-label="Ataques"><div class="wd-action-group">${actionsHtml}</div></td>
         <td data-label="Archivos"><button class="wd-crack-files-btn" data-session="${escapeHtml(it.sessionId)}" data-ssid="${escapeHtml(it.ssid || "")}" data-bssid="${it.bssid}" data-source="${it.source}">${escapeHtml(t("crackstation.files_btn", "Ver archivos"))}</button></td>
@@ -420,6 +431,42 @@ el("wd-crack-files-body")?.addEventListener("click", async (ev) => {
 
 el("wd-preview-close")?.addEventListener("click", () => {
   el("wd-preview-modal")?.classList.add("hidden");
+});
+
+// ---- Password reveal (👁 in the Contraseña column) — partial inline,
+// full in the modal, copy button. The password comes from the inventory
+// cache (already on screen); no extra request. ----
+
+el("wd-crack-body")?.addEventListener("click", (ev) => {
+  const eye = ev.target.closest(".wd-pass-eye");
+  if (!eye) return;
+  const it = wdCrackCache.find((x) => x.bssid === eye.dataset.bssid);
+  if (!it?.password) return;
+  setText("wd-pass-ssid", `${it.ssid || "(oculta)"} · ${it.bssid}`);
+  setText("wd-pass-value", it.password);
+  el("wd-pass-modal")?.classList.remove("hidden");
+});
+
+el("wd-pass-close")?.addEventListener("click", () => {
+  el("wd-pass-modal")?.classList.add("hidden");
+});
+
+el("wd-pass-copy")?.addEventListener("click", async () => {
+  const text = el("wd-pass-value")?.textContent || "";
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(t("crackstation.pass_copied", "Contraseña copiada"), "success");
+  } catch {
+    // clipboard API denied (non-secure context) — select for manual copy
+    const range = document.createRange();
+    const node = el("wd-pass-value");
+    if (node) {
+      range.selectNodeContents(node);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    }
+  }
 });
 
 // ---- Capture-location map (GPS column) — Leaflet, same OSM tiles as

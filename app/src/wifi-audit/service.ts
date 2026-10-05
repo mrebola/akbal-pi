@@ -1795,6 +1795,10 @@ export class WardriveService extends EventEmitter {
     if (!password || !this.session) return;
     const capPath = resolveCapPath(this.session.dir, this.targetFiles(bssid));
     if (!capPath) return;
+    // this.session can be nulled while the crack runs (operator exits the
+    // mode mid-validation) — keep a local ref so the completion path never
+    // crashes on "Cannot read properties of null".
+    const session = this.session;
     this.progress(bssid, "done", "Validando handshake con la contraseña del lab...",
       "aircrack-ng -w - -b " + bssid + " <prefix>-01.cap   (contraseña por stdin)");
     const { promise, cancel } = crackCheck(capPath, password, bssid);
@@ -1806,7 +1810,7 @@ export class WardriveService extends EventEmitter {
     if (result.matched) {
       this.foundPasswords.set(bssid, { password, ssid: this.targetMeta.get(bssid)?.ssid || "" });
       // Persist so the past-sessions browser can show it (eye toggle).
-      this.session.setFoundPassword(bssid, password);
+      session.setFoundPassword(bssid, password);
     }
     this.appendLog(bssid, `[validate] aircrack verdict=${result.verdict}${result.cancelled ? " (cancelado)" : ""}`);
     if (result.cancelled) {
@@ -1823,7 +1827,7 @@ export class WardriveService extends EventEmitter {
       this.progress(bssid, "done", `Validación aircrack: ${result.verdict}`,
         undefined, result.output.slice(-600));
     }
-    this.session.writeTargetInfo(bssid, this.lastValidatedPassword.get(bssid));
+    if (this.session) this.session.writeTargetInfo(bssid, this.lastValidatedPassword.get(bssid));
   }
 
   // Associated client MAC from the live WIFIRADAR device table, if any —
@@ -1920,14 +1924,15 @@ export class WardriveService extends EventEmitter {
       this.lastValidatedPassword.set(bssid, result.matched ? password : `${password} (no matchea)`);
       if (result.matched) {
         this.foundPasswords.set(bssid, { password, ssid: target.ssid });
-        this.session.setFoundPassword(bssid, password);
+        this.session?.setFoundPassword(bssid, password);
       }
       this.appendLog(bssid, `[validate] verdict=${result.verdict} (demo)`);
-      this.session.writeTargetInfo(bssid, this.lastValidatedPassword.get(bssid));
+      this.session?.writeTargetInfo(bssid, this.lastValidatedPassword.get(bssid));
       this.broadcastStatus();
       return { ok: true, result };
     }
-    const capPath = resolveCapPath(this.session.dir, this.targetFiles(bssid));
+    const session = this.session;
+    const capPath = resolveCapPath(session.dir, this.targetFiles(bssid));
     if (!capPath) {
       return { ok: false, error: "El objetivo capturado no tiene archivo .cap/.pcapng" };
     }
@@ -1941,10 +1946,10 @@ export class WardriveService extends EventEmitter {
     if (result.matched) {
       this.foundPasswords.set(bssid, { password, ssid: target.ssid });
       // Persist so the past-sessions browser can show it (eye toggle).
-      this.session.setFoundPassword(bssid, password);
+      session.setFoundPassword(bssid, password);
     }
     this.appendLog(bssid, `[validate] verdict=${result.verdict}${result.cancelled ? " (cancelado)" : ""}`);
-    this.session.writeTargetInfo(bssid, this.lastValidatedPassword.get(bssid));
+    session.writeTargetInfo(bssid, this.lastValidatedPassword.get(bssid));
     this.broadcastStatus();
     return { ok: true, result };
   }

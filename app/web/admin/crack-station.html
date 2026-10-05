@@ -177,6 +177,27 @@
     </div>
   </div>
 
+  <!-- Password reveal modal: clicking a cracked handshake's 👁 in the
+       Contraseña column. Shows the full password (big, monospace, click to
+       copy). The table only shows the 👁 button — the masked partial lives
+       here, one click away. -->
+  <div id="wd-pass-modal" class="wd-modal hidden">
+    <div class="wd-modal-backdrop" onclick="document.getElementById('wd-pass-modal').classList.add('hidden')"></div>
+    <div class="wd-modal-content" style="max-width: 460px;">
+      <div class="wd-modal-header">
+        <span id="wd-pass-title" data-i18n="crackstation.pass_title">Contraseña</span>
+        <div class="wd-modal-actions">
+          <button id="wd-pass-copy" class="secondary" data-i18n="crackstation.pass_copy">Copiar</button>
+          <button id="wd-pass-close" class="secondary" data-i18n="crackstation.files_close">Cerrar</button>
+        </div>
+      </div>
+      <div style="padding: 18px 20px;">
+        <div class="muted" style="font-size:12px; margin-bottom:6px;" id="wd-pass-ssid"></div>
+        <div id="wd-pass-value" style="font-family: ui-monospace, monospace; font-size: 18px; letter-spacing: 1px; word-break: break-all; padding: 12px 14px; border-radius: 10px; background: rgba(80,255,120,.08); border: 1px solid rgba(80,255,120,.3); color: #34d351; user-select: all;"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Celebration modal: a dictionary attack actually found the password.
        Same visual pattern as Wifi Audit's handshake-captured celebration
        (confetti + pirate flag), self-contained here since crack-station is

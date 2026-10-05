@@ -1059,3 +1059,25 @@
 #wd-pane-share .wd-session-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; line-height: 1.35; }
 #wd-pane-share .wd-session-list li button { flex: 0 0 auto; font-size: 11px; padding: 5px 10px; white-space: nowrap; }
 #wd-pane-share .muted { font-size: 12px; color: var(--text-muted); }
+
+/* ---- Crack Station: password column (partial inline + 👁 reveal) ---- */
+
+.wd-pass-partial {
+  font-size: 12px;
+  color: rgba(232, 238, 252, 0.85);
+  letter-spacing: 1px;
+}
+
+.wd-pass-eye {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 4px;
+  margin-left: 6px;
+  line-height: 1;
+  vertical-align: middle;
+  transition: transform 0.15s ease;
+}
+
+.wd-pass-eye:hover { transform: scale(1.2); }

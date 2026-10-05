@@ -254,12 +254,16 @@ export class PmkidDriveRunner extends EventEmitter {
       this.emit("exit", { code: -1, signal: null, intentional: false, error: err?.message });
     });
 
-    // dumpcap WRITER — starts right after hcxdumptool (which owns the
-    // iface). hcxdumptool takes the iface down and re-ups it in monitor
-    // mode during its init, so dumpcap retries a few times until the
-    // iface is up (up to ~3s), then runs for the whole window.
+    // dumpcap WRITER — polls for the iface to come up, then writes for the
+    // whole window. hcxdumptool takes the iface down and re-ups it in
+    // monitor mode during its init (1-4s on the ath9k_htc); spawning
+    // dumpcap blindly into that window lost 4+ retries (~3s of the window)
+    // and spammed a warn line per failed spawn. Polling `ip link` is cheap
+    // and starts the writer the moment the iface is actually usable.
     const cap = this;
-    const startDumpcap = (attempt: number): void => {
+    const writerStart = Date.now();
+    let spawnRetryScheduled = false;
+    const startDumpcap = (): void => {
       if (!cap.running) return;
       // NO sudo: with file capabilities on the binary (already applied on
       // the device) running dumpcap as the SERVICE USER works for both the
@@ -280,11 +284,17 @@ export class PmkidDriveRunner extends EventEmitter {
         const text = chunk.toString("utf8").trim();
         if (text && !/^Capturing on|Running as user|packets captured|^File:/i.test(text)) {
           console.warn("[wardrive] attack-dumpcap:", text);
-          // The iface was still down when we raced hcxdumptool's init —
-          // retry up to 6 times with a 700ms gap.
-          if (/not up/i.test(text) && attempt < 4) {
+          // hcxdumptool can bounce the iface again while locking the
+          // channel (up→down→up): retry ONCE per event, single chain
+          // (spawnRetryScheduled guards the duplicate scheduling that used
+          // to fan out one failure into many parallel retry timers).
+          if (/not up|no longer attached/i.test(text) && !spawnRetryScheduled && Date.now() - writerStart < 12_000) {
+            spawnRetryScheduled = true;
             cap.dumpcap = null;
-            setTimeout(() => startDumpcap(attempt + 1), 700);
+            setTimeout(() => {
+              spawnRetryScheduled = false;
+              pollUntilUp(300);
+            }, 700);
           }
         }
       });
@@ -294,7 +304,24 @@ export class PmkidDriveRunner extends EventEmitter {
         }
       });
     };
-    setTimeout(() => startDumpcap(0), 400); // after hcxdumptool's first init beat
+    // Poll `ip -o link show <iface>` until it reports UP (or give up after
+    // 10s — the round has already lost most of its window by then).
+    const pollUntilUp = (intervalMs: number): void => {
+      if (!cap.running) return;
+      execFile("ip", ["-o", "link", "show", cap.iface], (err, stdout) => {
+        if (!cap.running) return;
+        const up = !err && /\bUP\b/i.test(String(stdout)) && !/\bDOWN\b/i.test(String(stdout));
+        if (up) {
+          startDumpcap();
+          return;
+        }
+        if (Date.now() - writerStart > 10_000) {
+          return; // round is nearly over anyway; stop polling quietly
+        }
+        setTimeout(() => pollUntilUp(intervalMs), intervalMs);
+      });
+    };
+    setTimeout(() => pollUntilUp(400), 400); // after hcxdumptool's first init beat
   }
 
   private onStderr(chunk: Buffer): void {

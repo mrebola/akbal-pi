@@ -231,13 +231,13 @@ function wdRenderCrackStation() {
         : "—";
       const rowClass = it.bssid === wdHighlightBssid ? "wd-crack-row-highlight" : "";
       // Password column: ALWAYS something readable. Cracked → partial
-      // (first 3 chars + ...) inline next to a 👁 that opens the full
-      // password in a modal (copy button included). Uncracked → states.
+      // (first 3 chars + …) inline; the 👁/🙈 toggles the FULL password in
+      // the cell itself — no modal, one click un-masks, one click masks.
+      const pwRevealed = wdPassRevealed.has(it.bssid);
       const partial = (pw) => (pw.length > 3 ? pw.slice(0, 3) + "…" : pw[0] + "…");
       const passCell = it.password
-        ? `<span class="wd-pass-partial mono" title="${t("crackstation.password_masked", "parcial — clic en 👁 para verla completa")}">${escapeHtml(partial(it.password))}</span>
-           <button class="wd-pass-eye" data-bssid="${it.bssid}"
-             title="${escapeHtml(t("crackstation.password_eye_title", "Ver contraseña completa"))}">👁</button>`
+        ? `<span class="wd-pass-value mono ${pwRevealed ? "revealed" : ""}">${escapeHtml(pwRevealed ? it.password : partial(it.password))}</span>
+           <button class="wd-pass-eye" data-bssid="${it.bssid}" title="${escapeHtml(t("crackstation.password_eye_title", "Mostrar/ocultar contraseña"))}">${pwRevealed ? "🙈" : "👁"}</button>`
         : noFile
           ? '<span class="muted" style="font-size:11px;">—</span>'
           : '<span class="muted" style="font-size:11px;">sin crackear</span>';
@@ -433,40 +433,20 @@ el("wd-preview-close")?.addEventListener("click", () => {
   el("wd-preview-modal")?.classList.add("hidden");
 });
 
-// ---- Password reveal (👁 in the Contraseña column) — partial inline,
-// full in the modal, copy button. The password comes from the inventory
-// cache (already on screen); no extra request. ----
+// ---- Password column toggle (👁/🙈 in the Contraseña column) — click
+// un-masks the full password IN the cell, click again masks it back to
+// partial. No modal. Set of revealed BSSIDs resets when the inventory
+// refreshes with different content. ----
+
+const wdPassRevealed = new Set();
 
 el("wd-crack-body")?.addEventListener("click", (ev) => {
   const eye = ev.target.closest(".wd-pass-eye");
   if (!eye) return;
-  const it = wdCrackCache.find((x) => x.bssid === eye.dataset.bssid);
-  if (!it?.password) return;
-  setText("wd-pass-ssid", `${it.ssid || "(oculta)"} · ${it.bssid}`);
-  setText("wd-pass-value", it.password);
-  el("wd-pass-modal")?.classList.remove("hidden");
-});
-
-el("wd-pass-close")?.addEventListener("click", () => {
-  el("wd-pass-modal")?.classList.add("hidden");
-});
-
-el("wd-pass-copy")?.addEventListener("click", async () => {
-  const text = el("wd-pass-value")?.textContent || "";
-  try {
-    await navigator.clipboard.writeText(text);
-    toast(t("crackstation.pass_copied", "Contraseña copiada"), "success");
-  } catch {
-    // clipboard API denied (non-secure context) — select for manual copy
-    const range = document.createRange();
-    const node = el("wd-pass-value");
-    if (node) {
-      range.selectNodeContents(node);
-      const sel = window.getSelection();
-      sel?.removeAllRanges();
-      sel?.addRange(range);
-    }
-  }
+  const bssid = eye.dataset.bssid;
+  if (wdPassRevealed.has(bssid)) wdPassRevealed.delete(bssid);
+  else wdPassRevealed.add(bssid);
+  wdRenderCrackStation();
 });
 
 // ---- Capture-location map (GPS column) — Leaflet, same OSM tiles as

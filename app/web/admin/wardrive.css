@@ -1060,12 +1060,19 @@
 #wd-pane-share .wd-session-list li button { flex: 0 0 auto; font-size: 11px; padding: 5px 10px; white-space: nowrap; }
 #wd-pane-share .muted { font-size: 12px; color: var(--text-muted); }
 
-/* ---- Crack Station: password column (partial inline + 👁 reveal) ---- */
+/* ---- Crack Station: password column (partial inline, 👁/🙈 toggles the
+   full password in the cell — no modal) ---- */
 
-.wd-pass-partial {
+.wd-pass-value {
   font-size: 12px;
-  color: rgba(232, 238, 252, 0.85);
   letter-spacing: 1px;
+  color: rgba(232, 238, 252, 0.85);
+  user-select: all;
+}
+
+.wd-pass-value.revealed {
+  color: #34d351;
+  word-break: break-all;
 }
 
 .wd-pass-eye {

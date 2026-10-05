@@ -674,6 +674,48 @@ export class DriveDb {
     }
   }
 
+  // Same hygiene for the handshakes table: a row whose session FOLDER no
+  // longer exists (folder deleted outside the app, interrupted delete,
+  // session purged by purgeOrphanSessions after the handshake row was
+  // written) has no crackable artifact — the Crack Station inventory keeps
+  // listing it as "sin archivo" forever. Drop row + the SSID's
+  // handshake flag in networks_seen, so the network re-enters the hunt.
+  // Rows with a session but no folder under DRIVE_SESSIONS_ROOT are
+  // purged; a row may also reference a session whose folder exists but
+  // the file is gone — the folder check covers both (artifacts live in
+  // the folder; no folder = no artifact).
+  purgeOrphanHandshakes(): number {
+    try {
+      const rows = this.db
+        .prepare(`SELECT bssid, ssid, session_id, session_dir, cap_file FROM handshakes`)
+        .all() as { bssid: string; ssid: string; session_id: string; session_dir: string; cap_file: string }[];
+      let removed = 0;
+      for (const row of rows) {
+        // The session dir recorded in the row is the artifact home; drive
+        // rows carry an absolute dir, audit-born rows fall back to the id.
+        const dir = row.session_dir || path.join(DRIVE_SESSIONS_ROOT, row.session_id || "");
+        const probe = row.cap_file ? path.join(dir, path.basename(row.cap_file)) : dir;
+        if (fs.existsSync(probe)) continue;
+        this.db.prepare(`DELETE FROM handshakes WHERE bssid = ?`).run(row.bssid);
+        // Only clear the SSID flag when no OTHER handshake still covers it.
+        const left = this.db
+          .prepare(`SELECT COUNT(*) AS n FROM handshakes WHERE ssid = ?`)
+          .get(row.ssid) as { n: number };
+        if ((left?.n ?? 0) === 0) {
+          this.db
+            .prepare(`UPDATE networks_seen SET handshake = 0, handshake_bssid = NULL, handshake_at = NULL WHERE ssid = ?`)
+            .run(row.ssid);
+        }
+        removed += 1;
+      }
+      if (removed > 0) console.log(`[wardrive] drive-db: ${removed} handshake(s) huérfano(s) purgado(s) (archivo inexistente)`);
+      return removed;
+    } catch (err) {
+      console.warn("[wardrive] purgeOrphanHandshakes failed:", (err as Error).message);
+      return 0;
+    }
+  }
+
   // All-time historial export: every network ever seen, with position,
   // capture time, handshake state and the artifact file that holds it.
   historialCsv(): string {

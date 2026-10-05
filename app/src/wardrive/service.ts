@@ -516,6 +516,9 @@ export class DriveWardriveService extends EventEmitter {
     // Sessions listing honesty: rows whose folder is gone (hand-deleted,
     // interrupted delete) open empty every time — purge them once per boot.
     driveDb.purgeOrphanSessions(DRIVE_SESSIONS_ROOT);
+    // And handshake rows whose artifact folder is gone — they linger in the
+    // Crack Station inventory as un-crackable "sin archivo" rows forever.
+    driveDb.purgeOrphanHandshakes();
     this.prioritySsids = driveDb.prioritySsids();
     if (demo) {
       this.startDemoFeed();

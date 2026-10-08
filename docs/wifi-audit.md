@@ -16,18 +16,12 @@ Documenta la implementación vigente (app/src/wifi-audit/).
   `session.json` del target (campo `password`, solo con crack verificado) y
   en el `info.txt` (sección "CONTRASEÑA ENCONTRADA"). Vive solo en el
   dispositivo, fuera del árbol git (`~/wardrive-sessions/`).
-- **Ojo 👁 en el listado de SESIONES ANTERIORES**: cada red crackeada de una
-  sesión pasada muestra un botón ojo → modal con SSID + contraseña
-  enmascarada (`abc•••••`); un click en el ojo la revela completa.
+- **Crackeo de handshakes → página propia Crack Station**: el ojo 👁, el
+  dictionary attack y el ataque por máscara de cada red capturada ya no
+  viven dentro de Wifi Audit — se hicieron una página aparte que además
+  junta los handshakes de Wardrive. Ver [`crack-station.md`](./crack-station.md).
 - **Botón "handshake" por sesión**: descarga el `.hc22000` (o el `.cap`)
   del handshake capturado de esa sesión, directo del file browser.
-- **Botón "dictionary attack" por sesión**: lanza aircrack+rockyou contra el
-  `.cap` de una sesión anterior (`POST /api/wardrive/dict/start` con `cap`,
-  ruta resuelta por `resolveSessionPath` — sin path traversal). La barra de
-  progreso (probadas/total, pass/s, cancelable) se espeja dentro del bloque
-  de sesiones. Si la encuentra, la persiste en la `session.json`/`info.txt`
-  de esa sesión vieja (`persistPastSessionPassword`, service.ts) y pasa a
-  ser visible con el ojo.
 - **Toggle iOS live/demo**: el botón REAL/DEMO fue reemplazado por un
   switch estilo iOS arriba a la derecha del toolbar (`mode: live` verde ↔
   `mode: demo` naranja). Mismo endpoint (`POST /api/wardrive/source`).
@@ -364,11 +358,12 @@ sudo apt-get install -y aircrack-ng hcxtools iw
 6. Los archivos capturados se listan abajo y se descargan desde la web.
 7. El **switch live/demo** (arriba a la derecha, estilo iOS) cambia la
    fuente de descubrimiento (ensayo sin hardware).
-8. **SESIONES ANTERIORES** lista cada sesión con fecha; por sesión:
-   👁 (contraseña de redes crackeadas, enmascarada hasta revelar),
-   **handshake** (descarga el `.cap`/`.hc22000`) y **dictionary attack**
-   (rockyou contra esa captura, con progreso y cancelación). "Ver archivos"
-   abre el file browser de la carpeta.
+8. **SESIONES ANTERIORES** lista cada sesión con fecha y el botón
+   **handshake** (descarga el `.cap`/`.hc22000`) y "Ver archivos" (abre el
+   file browser de la carpeta). Crackear esa captura (diccionario o
+   máscara) se hace desde **Crack Station** — enlace directo desde el
+   modal de celebración al capturar un handshake, ver
+   [`crack-station.md`](./crack-station.md).
 9. **Salir** restaura la radio y devuelve el control al radar.
 
 Verificación por log:

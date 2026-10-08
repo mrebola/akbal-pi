@@ -39,6 +39,11 @@ Ya no usa el diálogo nativo de autenticación básica del navegador —
   una tabla con buscador y columnas ordenables; click en una fila abre el
   modal de detalles de la red (BSSID enmascarado `AA:BB:CC:••:••:••`, con
   botón 👁 para revelar — el mismo toggle del radar).
+- **Crack Station** (`/crack-station`, página propia): inventario único de
+  todos los handshakes capturados — de Wifi Audit y de Wardrive — con
+  crackeo por diccionario (rockyou, weakpass) o por máscara con presets
+  administrables, y contraseña revelable inline (sin modal) con 👁/🙈. Ver
+  [`crack-station.md`](./crack-station.md).
 - Indicadores en la topbar: batería (%, carga), CPU/RAM/disco del Pi —
   todos se refrescan solos cada 60s sin recargar la página; selector de
   idioma ES/EN siempre visible, ver [`i18n.md`](./i18n.md).
@@ -54,8 +59,10 @@ Ya no usa el diálogo nativo de autenticación básica del navegador —
   abrirse y lo apaga 60 s después de la última consulta; no corre al iniciar
   la Pi. Ver [`wifiradar.md`](./wifiradar.md#cómo-iniciar-wifiradar).
 - **Wardrive**: la pestaña **Compartir** exporta, importa y borra sesiones en
-  paquetes `.akbal`, y el selector **Radios** elige entre 1, 2 o 3 radios. Ver
-  [`wardrive.md`](./wardrive.md).
+  paquetes `.akbal`, el selector **Radios** elige entre 1, 2 o 3 radios con
+  rondas de ataque simultáneas por radio, y el toggle **ATACAR/MAPEAR**
+  cambia entre rondas PMKID/deauth y captura estrictamente pasiva (solo con
+  la sesión detenida). Ver [`wardrive.md`](./wardrive.md).
 
 ## Cómo prenderla/apagarla y cambiar las credenciales
 

@@ -39,16 +39,19 @@ akbal-pi/
 │   │   ├── cloud-api/     # Proveedores ASR/LLM/TTS (local/ = ollama, whisper, piper)
 │   │   ├── wifiradar/     # Visualización WiFi 3D con AR9271 en modo monitor
 │   │   ├── wifi-audit/    # Captura de handshakes de laboratorio (allowlist, ataques dirigidos)
-│   │   ├── wardrive/      # Captura mientras se conduce (mapa + GPS + deauth oportunista, 1-3 radios)
+│   │   ├── wardrive/      # Captura mientras se conduce (mapa + GPS, 1-3 radios con rondas
+│   │   │                  #   de ataque simultáneas, deauth oportunista)
 │   │   ├── akbal/         # Paquetes .akbal para compartir sesiones de Wardrive
 │   │   ├── doom/          # DOOM original: sesión del motor, control y audio
 │   │   ├── services/      # adsb/ (Aircraft Radar) y gnss/ (metadata de satélites GNSS)
 │   │   ├── config/        # Tools del LLM: admin-tools/ (chat web) vs llm-tools.ts (voz)
 │   │   └── utils/         # wifi (nmcli), usb, system-stats, volume
 │   ├── python/            # Interfaz de hardware (GPIO/SPI/LCD, socket 12345)
-│   ├── web/               # Frontends estáticos sin build: admin/ (+ i18n/) y whisplay-display/
+│   ├── web/               # Frontends estáticos sin build: admin/ (+ i18n/,
+│   │                      #   crack-station.* — ver app/AGENTS.md) y whisplay-display/
 │   ├── soul/              # Identidad editable de Akbal (soul.md) — ver app/AGENTS.md
 │   ├── knowledge/         # Self-knowledge para el RAG (akbal-*.md) — ver app/AGENTS.md
+│   ├── openclaw/          # Spec del bridge para "modo agente" (docs/openclaw-connection.md)
 │   ├── cli/               # CLI bash (bin/whisplay)
 │   └── dist/              # Compilado (no commitear)
 ├── docs/                  # Bitácora: SETUP.md, fixes de hardware, decisiones

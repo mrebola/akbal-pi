@@ -26,11 +26,15 @@ this project, not the upstream fork.
   and reply with deep links to the section it checked
 - **WiFi Radar** (`wifiradar/`): passive 3D visualization of nearby access
   points/devices, real hardware or demo data
-- **Wifi Audit** (`wifi-audit/`): lab handshake capture + dictionary/mask
-  cracking, gated by an explicit BSSID allowlist — never network-wide,
-  see `docs/lab-wireless.md`
+- **Wifi Audit** (`wifi-audit/`): lab handshake capture, gated by an
+  explicit BSSID allowlist — never network-wide, see `docs/lab-wireless.md`
 - **Wardrive** (`wardrive/`): continuous capture while driving, GPS track,
-  optional opportunistic deauth (off by default)
+  simultaneous attack rounds across radios, optional opportunistic deauth
+  (off by default)
+- **Crack Station** (`web/admin/crack-station.js`, `/crack-station`):
+  unified handshake inventory from Wifi Audit + Wardrive, dictionary
+  (rockyou/weakpass) and mask cracking with admin-editable presets — see
+  `docs/crack-station.md`
 - **Aircraft Radar** (`services/adsb/`): nearby ADS-B traffic via a
   HackRF One
 - **GNSS** (`services/gnss/`): offline-first satellite metadata
@@ -121,16 +125,28 @@ whisplay-ai-chatbot/
 │   │   ├── service.ts            # orchestrator: allowlist security boundary
 │   │   ├── discovery.ts          # targets from radar snapshot / iw scan
 │   │   ├── attack.ts             # airodump/aireplay/hcxdumptool runners
-│   │   ├── crack.ts              # aircrack-ng handshake validation + rockyou dict crack
+│   │   ├── crack.ts              # aircrack-ng handshake validation + rockyou/weakpass dict + mask crack
 │   │   └── session.ts            # ~/wardrive-sessions persistence (incl. cracked passwords)
 │   ├── wardrive/                 # Driving capture: mapa + handshakes en movimiento, 1-3 radios (docs/wardrive.md)
-│   ├── akbal/                    # Paquetes .akbal para compartir sesiones de Wardrive (docs/wardrive.md)
-│   ├── doom/                     # DOOM original: motor, sesión, control y audio (docs/doom.md)
-│   │   ├── service.ts            # orchestrator: sesión, hop, deauth oportunista, GPS, exportes
+│   │   ├── service.ts            # orchestrator: sesión, rondas de ataque simultáneas por radio, GPS, exportes
 │   │   ├── capture.ts            # dumpcap(+ringbuffer)|tshark → beacons/EAPOL/deauth
 │   │   ├── attack.ts             # hcxpcapngtool extractor + DeauthOpRunner (bursts cortos)
-│   │   ├── drive-db.ts           # SQLite: redes vistas / handshakes / sesiones / tracks
+│   │   ├── radio-plan.ts         # auto/single/dual/triple: cuántas rondas de ataque a la vez
+│   │   ├── drive-db.ts           # SQLite: redes vistas / handshakes / sesiones / tracks (+ purga de huérfanos)
 │   │   └── types.ts              # DriveStatus, DriveApView, etc.
+│   ├── akbal/                    # Paquetes .akbal para compartir sesiones de Wardrive (docs/wardrive.md)
+│   ├── doom/                     # DOOM original: motor, sesión, control y audio (docs/doom.md)
+│   │   ├── session.ts            # orchestrator: sesión del motor, dueño (Pi o web), claim
+│   │   ├── control.ts            # input táctil/teclas desde el celular
+│   │   ├── control-qr.ts         # QR de control para abrir /doom desde el celular
+│   │   ├── frame-reader.ts       # lee cuadros del framebuffer del motor
+│   │   ├── frame-jpeg.ts         # encode de cuadros a JPEG para la web
+│   │   ├── audio-out.ts          # PCM de efectos → aplay en la tarjeta del HAT
+│   │   ├── music.ts              # música MIDI vía fluidsynth
+│   │   ├── wad.ts                # localiza/valida el WAD (Doom1.WAD)
+│   │   ├── keymap.ts             # mapeo de teclas táctiles → teclado del motor
+│   │   ├── settings-store.ts     # volumen/preferencias persistidas
+│   │   └── tokens.ts, terminate.ts, volume.ts
 │   ├── services/adsb/            # Aircraft Radar: ADS-B via HackRF One (docs/aircraft-radar.md)
 │   │   ├── hackrf-receiver.ts    # readsb --device-type hackrf process + SBS-1 TCP client
 │   │   ├── sbs-parser.ts         # SBS-1/BaseStation CSV → RawAdsbMessage
@@ -174,9 +190,16 @@ whisplay-ai-chatbot/
 │       ├── i18n.js               # Translation engine (ES/EN), shared by every admin page (docs/i18n.md)
 │       ├── i18n/                 # es.json / en.json dictionaries
 │       ├── about.html            # "Acerca de" page — Cypher404: El Manifiesto, buy-the-book QR
+│       ├── crack-station.{html,js,css}  # Top-level page (/crack-station): unified handshake
+│       │                         #   inventory from wifi-audit/ + wardrive/, dict + mask cracking
+│       │                         #   (docs/crack-station.md)
 │       └── img/                  # cypher404-portada.jpg, cypher404-book-qr.png (served as static files)
 ├── soul/                         # Akbal's persona (soul.md) — see "identity" section below
 ├── knowledge/                    # Self-knowledge for RAG (akbal-*.md) — see "identity" section below
+├── openclaw/chennel/whisplay-im/ # Bridge spec for "modo agente" (OpenClaw), docs/openclaw-connection.md
+│                                 #   — just a README here; the bridge itself is
+│                                 #   src/cloud-api/whisplay-im/whisplay-im.ts + src/device/im-bridge.ts,
+│                                 #   see docs/agent-mode.md
 ├── cli/                          # Bash CLI implementation
 │   ├── commands.sh               # Main command dispatcher
 │   ├── plugin.sh                 # Plugin management

@@ -47,6 +47,7 @@ subgraph group_radio["Radio y ubicación"]
   node_aircraft["Radar ADS-B<br/>[service.ts]"]
   node_radioplan["Modos de radios de Wardrive<br/>[radio-plan.ts]"]
   node_akbal["Paquetes .akbal (compartir sesiones)<br/>[package.ts]"]
+  node_crack["Crack Station<br/>[crack-station.js]"]
 end
 
 subgraph group_doom["DOOM"]
@@ -129,6 +130,9 @@ node_wardrive -->|"elige cuántas radios usar y rondas simultáneas"| node_radio
 node_wardrive -.->|"bloquea el radar mientras corre"| node_radar
 node_webserver -->|"exporta e importa sesiones"| node_akbal
 node_akbal -->|"lee y guarda sesiones"| node_wardrive
+node_webserver -->|"sirve /crack-station"| node_crack
+node_crack -->|"crackea handshakes de"| node_audit
+node_crack -->|"crackea handshakes de"| node_wardrive
 
 click node_button "https://github.com/mrebola/akbal-pi/blob/main/app/src/device/audio.ts"
 click node_flow "https://github.com/mrebola/akbal-pi/blob/main/app/src/core/ChatFlow.ts"
@@ -166,6 +170,8 @@ click node_doommusic "https://github.com/mrebola/akbal-pi/blob/main/app/src/doom
 click node_wifisaved "https://github.com/mrebola/akbal-pi/blob/main/app/src/core/chat-flow/wifi-saved-mode.ts"
 click node_radioplan "https://github.com/mrebola/akbal-pi/blob/main/app/src/wardrive/radio-plan.ts"
 click node_akbal "https://github.com/mrebola/akbal-pi/blob/main/app/src/akbal/package.ts"
+click node_crack "https://github.com/mrebola/akbal-pi/blob/main/app/web/admin/crack-station.js"
+click node_doomwad "https://github.com/mrebola/akbal-pi/blob/main/app/src/doom/wad.ts"
 
 classDef toneNeutral fill:#f8fafc,stroke:#334155,stroke-width:1.5px,color:#0f172a
 classDef toneBlue fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#172554
@@ -179,9 +185,9 @@ class node_speech,node_llm,node_plugins,node_knowledge,node_tts,node_clips toneA
 class node_admin,node_webserver,node_wifi,node_storage,node_chats,node_commands toneMint
 class node_radar,node_wardrive,node_audit,node_aircraft toneRose
 class node_gps,node_music,node_person,node_externalai,node_radiohardware toneIndigo
-class node_doommode,node_doomsession,node_doomroutes,node_doompage,node_doomowner,node_doomaudio,node_doommusic toneTeal
+class node_doommode,node_doomsession,node_doomroutes,node_doompage,node_doomowner,node_doomaudio,node_doommusic,node_doomwad toneTeal
 class node_wifisaved toneBlue
-class node_radioplan,node_akbal toneRose
+class node_radioplan,node_akbal,node_crack toneRose
 ```
 
 ## Notas
@@ -206,8 +212,16 @@ class node_radioplan,node_akbal toneRose
   `wifiradar/service.ts`) y lo apaga la última consulta. Wardrive lo bloquea
   mientras corre, así que nunca comparten la radio.
 - **Radios de Wardrive:** `radio-plan.ts` decide cuántas radios usa cada sesión
-  (auto, single, dual o triple). Con varias, una ataca y el resto descubre.
+  (auto, single, dual o triple) y cuántas rondas de ataque pueden correr a
+  la vez (radios−1, una siempre descubre) — no hay una radio de ataque fija.
+  Con una sola radio (single) se conserva el comportamiento legacy: el
+  pipeline se pausa durante la ronda.
 - **Compartir sesiones:** `akbal/` empaqueta las sesiones de Wardrive en `.akbal`
   con manifiesto sha256 y las verifica al importar.
+- **Crack Station:** página propia (`/crack-station`) que junta los
+  handshakes de Wifi Audit y de Wardrive en un solo inventario
+  (`wifi-audit/service.ts`, `handshakeInventory()`) para crackearlos por
+  diccionario (rockyou/weakpass) o por máscara con presets propios. Ver
+  `docs/crack-station.md`.
 - **Voz de las respuestas:** los audios se generan con Piper y se guardan junto al
   chat; no suenan en el altavoz de la Pi (`piper-clips.ts`).

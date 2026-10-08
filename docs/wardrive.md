@@ -104,6 +104,19 @@ El modo se elige con el selector **Radios** de la página (o con
 - **DEMO**: con el toggle LIVE/DEMO del header, el wardrive genera APs y
   track sintéticos (loop alrededor del Zócalo) sin tocar hardware —
   igual que GPS/radar/aviones.
+- **Higiene de sesiones al arrancar** (`beginSession`, `drive-db.ts`):
+  `purgeOrphanSessions` borra filas de `drive_sessions` cuya carpeta ya no
+  existe (sesiones fantasma que seguían apareciendo en el listado), y
+  `purgeOrphanHandshakes` borra la fila de un handshake cuyo
+  `session_dir`/`cap_file` ya no está en disco y limpia el flag de
+  handshake del SSID en `networks_seen` si ninguna otra captura lo cubre
+  — así la red vuelve a quedar disponible para cazar. `RESUME_WINDOW_MS`
+  (60 min) evita que el toggle ATACAR/MAPEAR fragmente un mismo trayecto
+  en varias sesiones.
+
+Para crackear los handshakes capturados (diccionario o máscara), ver
+[`crack-station.md`](./crack-station.md) — es una página aparte que junta
+los de Wardrive con los de Wifi Audit.
 
 ## Compartir sesiones (`.akbal`)
 

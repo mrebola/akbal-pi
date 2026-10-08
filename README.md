@@ -75,6 +75,7 @@ y web admin (pestaña **Acerca de**, `/about`).
 | — | [Aircraft Radar](#aircraft-radar-aircraft-radar-link-radar-de-aviones) | Tráfico aéreo (ADS-B) vía HackRF One |
 | — | [Wifi Audit](#wifi-audit-pestaña) | Auditoría de laboratorio: allowlist, ataques, sesiones |
 | — | [Wardrive](#wardrive-wardrive) | Captura mientras se conduce: mapa GPS + deauth oportunista |
+| — | [Crack Station](#crack-station-crack-station) | Inventario único de handshakes (Wifi Audit + Wardrive): diccionario y máscara |
 | — | [GPS](#gps-página-gps) | Posición en vivo + satélites (GNSS, cacheado y offline-first) |
 | — | [OST](#ost-pestaña-ost) | Jukebox de música |
 | — | [Dispositivos](#dispositivos-pestaña-usb) | USB, montaje, adaptadores WiFi |
@@ -83,7 +84,7 @@ y web admin (pestaña **Acerca de**, `/about`).
 | — | [API HTTP](#api-http-para-integraciones) | Endpoints para integraciones |
 | — | [Idioma (ES/EN)](#idioma-esen) | Selector siempre visible en el topbar |
 | **Documentación completa** (`docs/`) | | |
-| — | [Índice de `docs/`](#documentación-docs) | Las 21 guías: features, fixes de hardware/software, decisiones de diseño |
+| — | [Índice de `docs/`](#documentación-docs) | Las 26 guías: features, fixes de hardware/software, decisiones de diseño |
 
 ## Hardware
 
@@ -112,8 +113,9 @@ Raspberry Pi OS 64-bit, basado en Debian Trixie.
 | Comandos de voz | Volumen, cambio/consulta de modelo de LLM y modo agente/local, resueltos por expresiones regulares antes de llegar al LLM — instantáneo, sin gastar un turno. Decir "ayuda" con el botón presionado muestra un resumen de todos estos comandos en pantalla ([`docs/voice-commands.md`](docs/voice-commands.md)) |
 | Wifi | Menú físico "WiFi directo" (AP directo + QR, ver [`docs/wifi.md`](docs/wifi.md)) + interfaz web con chat a los modelos locales, wifi completo (buscar, conectar con contraseña, olvidar redes), USB y batería/CPU/RAM en vivo en `http://<ip-del-dispositivo>:8090` ([`docs/web-ui.md`](docs/web-ui.md)) |
 | WiFi Radar | Visualización 3D (Three.js) del espacio WiFi alrededor del Pi, capturado pasivamente con cualquier adaptador USB en modo monitor (detección genérica; probado con Atheros AR9271 y Ralink RT5372) — toggle real/demo y caída a demo con datos simulados si no hay hardware conectado. Fabricantes resueltos del registro IEEE local (ieee-data), con fallback opcional a la API de macvendors.com ([`docs/wifiradar.md`](docs/wifiradar.md)) |
-| Wifi Audit | Captura de handshakes para laboratorio/tesis: allowlist explícita de BSSIDs como único mecanismo de autorización, ataques pmkid/deauth con aircrack-ng, sesiones con artifacts descargables desde la web, contraseñas crackeadas visibles por sesión (ojo con revelado) y dictionary attack (rockyou) desde el listado de sesiones — probado contra un AP de laboratorio dedicado ([`docs/wifi-audit.md`](docs/wifi-audit.md), [`docs/lab-wireless.md`](docs/lab-wireless.md)) |
-| Wardrive | Captura mientras se conduce, sobre la misma radio: registro pasivo continuo de redes/handshakes por SSID (SQLite), deauth oportunista opcional (apagado por defecto, con varios frenos de seguridad), track GPS y mapa en vivo, export CSV (WiGLE)/GPX — módulo aparte de Wifi Audit, nunca corren a la vez ([`docs/wardrive.md`](docs/wardrive.md)) |
+| Wifi Audit | Captura de handshakes para laboratorio/tesis: allowlist explícita de BSSIDs como único mecanismo de autorización, ataques pmkid/deauth con aircrack-ng, sesiones con artifacts descargables desde la web — probado contra un AP de laboratorio dedicado ([`docs/wifi-audit.md`](docs/wifi-audit.md), [`docs/lab-wireless.md`](docs/lab-wireless.md)) |
+| Wardrive | Captura mientras se conduce, sobre la misma radio: registro pasivo continuo de redes/handshakes por SSID (SQLite), 1-3 radios con rondas de ataque PMKID/deauth simultáneas por radio (toggle ATACAR/MAPEAR para captura estrictamente pasiva), track GPS y mapa en vivo, export CSV (WiGLE)/GPX — módulo aparte de Wifi Audit, nunca corren a la vez ([`docs/wardrive.md`](docs/wardrive.md)) |
+| Crack Station | Página propia que junta los handshakes de Wifi Audit y Wardrive en un solo inventario para crackearlos: diccionario (rockyou, weakpass) o fuerza bruta por máscara con presets administrables, contraseña revelable inline (sin modal) ([`docs/crack-station.md`](docs/crack-station.md)) |
 | GPS + GNSS | Mapa mundial con la posición en vivo del dongle GPS USB: marcador, precisión, sky plot de satélites (en fix / visibles / necesarios) — [`docs/gps.md`](docs/gps.md). Cada satélite se enriquece con metadata cacheada en SQLite + datos orbitales de CelesTrak (nombre, catálogo NORAD): offline-first, nunca bloquea la UI si falla Internet — [`docs/gnss.md`](docs/gnss.md) |
 | Aircraft Radar | Aeronaves cercanas por ADS-B (1090MHz, decodificado con `readsb`) con un HackRF One en modo RX-only: mapa real en modo oscuro con cada avión moviéndose por su posición real, o radar circular por distancia/rumbo (vía el GPS del Pi); identidad (matrícula/modelo/aerolínea) y ruta resueltas por caché local + adsbdb.com, historial en SQLite y caída a demo si no hay HackRF conectado ([`docs/aircraft-radar.md`](docs/aircraft-radar.md)) |
 | Idioma (i18n) | Selector ES/EN siempre visible en el topbar de la web admin: detecta el idioma del navegador en la primera visita, la selección manual persiste y tiene prioridad — [`docs/i18n.md`](docs/i18n.md) |
@@ -304,9 +306,10 @@ PiSugar).
 
 - [`app/`](app/) — código de la aplicación que corre en la Pi. Nació como fork
   de trabajo de `whisplay-ai-chatbot` (todavía su base para voz/LCD/plugins)
-  y creció muy por encima de eso: WiFi Radar, Wifi Audit, Wardrive, Aircraft
-  Radar, GNSS, el admin web con chat de tool-calling, e identidad editable
-  (Soul) son enteramente de este proyecto, no del fork original. Se despliega
+  y creció muy por encima de eso: WiFi Radar, Wifi Audit, Wardrive, Crack
+  Station, Aircraft Radar, GNSS, el admin web con chat de tool-calling, e
+  identidad editable (Soul) son enteramente de este proyecto, no del fork
+  original. Se despliega
   clonando este repo entero en el dispositivo (ver [`docs/deploy.md`](docs/deploy.md))
   y corriendo todo desde `app/` — `whisplay update` sabe que el repo real
   está un nivel arriba de `app/`, no confundirlo con la instalación
@@ -330,9 +333,11 @@ propio doc. Agrupado por tipo:
 
 | Doc | Contenido |
 |---|---|
+| [`arquitectura.md`](docs/arquitectura.md) | Mapa de todas las piezas y cómo se hablan (diagrama Mermaid) |
 | [`web-ui.md`](docs/web-ui.md) | La interfaz web completa: chat, wifi, USB, WIFIRADAR |
 | [`wifiradar.md`](docs/wifiradar.md) | WIFIRADAR — visualización 3D del espacio WiFi |
 | [`wifi-audit.md`](docs/wifi-audit.md) | Wifi Audit — captura de handshakes para laboratorio/tesis |
+| [`crack-station.md`](docs/crack-station.md) | Crack Station — inventario único de handshakes (Wifi Audit + Wardrive), diccionario y máscara |
 | [`wardrive.md`](docs/wardrive.md) | Wardrive — captura mientras se conduce, radios y compartir sesiones |
 | [`wardrive-backups.md`](docs/wardrive-backups.md) | Dónde están los respaldos de Wardrive (solo en el dispositivo) |
 | [`doom.md`](docs/doom.md) | DOOM original en la pantalla y en el celular |
@@ -342,6 +347,7 @@ propio doc. Agrupado por tipo:
 | [`gnss.md`](docs/gnss.md) | GNSS — metadata de satélites offline-first (CelesTrak) |
 | [`voice-commands.md`](docs/voice-commands.md) | Comandos de voz (volumen, modelo, modo, ayuda) |
 | [`agent-mode.md`](docs/agent-mode.md) | Modo agente (OpenClaw) vs modo local |
+| [`openclaw-connection.md`](docs/openclaw-connection.md) | Cómo conectar la Pi con un agente OpenClaw para el modo agente |
 | [`wifi.md`](docs/wifi.md) | Menú "WiFi directo" y administrador desde la web |
 | [`i18n.md`](docs/i18n.md) | Traducciones del admin web (ES/EN) |
 | [`display-ui.md`](docs/display-ui.md) | Interfaz de pantalla minimalista (íconos + video + texto) |
@@ -565,10 +571,9 @@ Resumen:
    inertes).
 7. Deauth dirigido: pestaña Deauth — lista dispositivos clientes vistos
    hablando en el aire; cada uno requiere autorización individual de MAC.
-8. **SESIONES ANTERIORES**: cada sesión con fecha lista botones por red
-   crackeada — 👁 (ver la contraseña encontrada, enmascarada hasta revelar),
-   **handshake** (descarga el `.cap`/`.hc22000`) y **dictionary attack**
-   (rockyou contra esa captura, con barra de progreso y cancelación).
+8. **SESIONES ANTERIORES**: cada sesión con fecha lista botón **handshake**
+   (descarga el `.cap`/`.hc22000`) por red capturada. Crackearla (diccionario
+   o máscara) se hace desde **Crack Station** — ver más abajo.
 9. **Salir** restaura la radio a modo normal y devuelve el control al radar.
 
 ### Wardrive (`/wardrive`)
@@ -583,9 +588,14 @@ continua mientras se conduce, sobre la misma radio que el radar/Wifi Audit
    físico ("Wardrive" en el menú rápido) — es el mismo servicio, entrar por
    un lado se ve y se controla igual desde el otro.
 2. El selector **Radios** elige entre `auto` (default, todas las radios
-   conectadas), `single`, `dual` y `triple`. Con varias radios, una ataca y el
-   resto descubre en paralelo. Ver [`docs/wardrive.md`](./docs/wardrive.md#radios-1-2-o-3-dongles).
-   La pestaña **Compartir** exporta, importa y borra sesiones en paquetes `.akbal`.
+   conectadas), `single`, `dual` y `triple`. No hay una "radio de ataque" fija:
+   con 2+ radios, hasta radios−1 pueden correr una ronda de ataque PMKID/deauth
+   a la vez — una radio siempre sigue descubriendo. Ver
+   [`docs/wardrive.md`](./docs/wardrive.md#radios-1-2-o-3-dongles). El toggle
+   **ATACAR/MAPEAR** (junto al de LIVE/DEMO) cambia a captura estrictamente
+   pasiva — ve redes y las ubica en el mapa sin disparar nada; solo se cambia
+   con la sesión detenida. La pestaña **Compartir** exporta, importa y borra
+   sesiones en paquetes `.akbal`.
    Cada red vista se registra por SSID (no por BSSID) en SQLite — un mismo
    SSID visto por varios APs no se re-ataca una vez que uno de ellos ya dio
    handshake (✋ capturado / ✓ cubierto por otro AP / ✕ agotado).
@@ -597,6 +607,28 @@ continua mientras se conduce, sobre la misma radio que el radar/Wifi Audit
    capturados; pestaña de sesiones pasadas con export CSV (formato WiGLE) y
    GPX.
 5. **■ DETENER** restaura la radio a modo normal.
+
+### Crack Station (`/crack-station`)
+
+Página propia (no una pestaña ni un modal dentro de Wifi Audit): inventario
+único de todos los handshakes que el dispositivo conoce, vengan de **Wifi
+Audit** o de **Wardrive** — ninguno de los dos módulos crackea por su
+cuenta, ambos enlazan para acá. Detalle completo en
+[`docs/crack-station.md`](./docs/crack-station.md). Resumen:
+
+1. Tabla con SSID, MAC, origen (Wifi Audit/Wardrive), fecha, GPS (📍 al mapa),
+   estado del handshake y **Contraseña**: parcial inline + botón 👁/🙈 que
+   revela/oculta la contraseña completa en la misma celda — sin modal.
+2. Por fila sin crackear: tres ataques — **rockyou** y **weakpass**
+   (diccionario) o **máscara…** (fuerza bruta con patrón, ej. `@@@@` + los
+   últimos 4 hex de la MAC, pensado para contraseñas default tipo router).
+   Solo corre un ataque a la vez en el dispositivo.
+3. Subtab para administrar presets de máscara propios (nombre, patrón,
+   sufijo MAC, descripción) — los presets de fábrica no se pueden borrar.
+4. Metadata sin archivo en disco (sesión borrada) se marca "sin archivo" y
+   no ofrece botones de ataque.
+5. Deep link directo desde el modal de celebración de Wifi Audit
+   ("¡HANDSHAKE CAPTURADO!" → "Abrir Crack Station →"), que resalta la fila.
 
 ### GPS (página /gps)
 
@@ -692,7 +724,8 @@ misma sesión de cookie: `/api/status`, `/api/chat`, `/api/wifi/scan`,
 (`{"mode":"live"|"demo"}`), `/api/aircraft` + `/api/aircraft/:icao` +
 `/api/aircraft/nearest` + `/api/aircraft/history` + `POST /api/aircraft/mode`,
 `/api/wardrive/*` — Wifi Audit, el nombre de ruta no se renombró junto con la
-pestaña (`enter`, `exit`, `source`, `allowlist`, `attack/one`, ...),
+pestaña (`enter`, `exit`, `source`, `allowlist`, `attack/one`, ...) — y bajo
+el mismo prefijo, Crack Station (`handshakes`, `dict/*`, `mask/*`),
 `/api/wardrive/drive/*` — Wardrive/conducción (`start`, `stop`, `status`,
 `sessions`, `export/csv`, `export/gpx`, ...), `/api/gnss/status` +
 `/api/gnss/history`, `/api/music/*`, `/api/usb/*`, `/api/backup/*`.

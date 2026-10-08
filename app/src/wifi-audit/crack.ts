@@ -2,9 +2,61 @@ import { execFile, spawn } from "child_process";
 import { promisify } from "util";
 import { EventEmitter } from "events";
 import fs from "fs";
+import os from "os";
+import crypto from "crypto";
 import path from "path";
 
 const execFileAsync = promisify(execFile);
+
+// aircrack-ng 1.7 only reads classic pcap / IVs — NOT pcapng. The wardrive
+// per-target .cap artifacts are pcapng (cut by hcxpcapngtool from dumpcap's
+// pcapng ring), so aircrack opens them, prints "Unsupported file format (not
+// a pcap or IVs file)" and tests ZERO keys — the "0 / N · 0 pass/s that never
+// moves" symptom. Detect pcapng by its section-header magic (0x0A0D0D0A) and
+// transparently transcode to classic pcap with editcap before handing the
+// path to aircrack. Files already in a format aircrack reads (airodump's
+// classic pcap from wifi-audit) are passed through untouched. cleanup()
+// removes any temp file we created (no-op otherwise); callers MUST call it
+// once aircrack has exited.
+async function ensureAircrackCap(capPath: string): Promise<{ path: string; cleanup: () => void }> {
+  const passthrough = { path: capPath, cleanup: () => {} };
+  let fd: fs.promises.FileHandle | null = null;
+  try {
+    fd = await fs.promises.open(capPath, "r");
+    const magic = Buffer.alloc(4);
+    await fd.read(magic, 0, 4, 0);
+    const isPcapng = magic[0] === 0x0a && magic[1] === 0x0d && magic[2] === 0x0d && magic[3] === 0x0a;
+    if (!isPcapng) return passthrough;
+  } catch {
+    return passthrough; // unreadable — let aircrack surface the error as before
+  } finally {
+    await fd?.close().catch(() => {});
+  }
+  const out = path.join(os.tmpdir(), `akbal-crack-${crypto.randomBytes(6).toString("hex")}.cap`);
+  try {
+    await execFileAsync("editcap", ["-F", "pcap", capPath, out], { timeout: 60_000 });
+    if (!fs.existsSync(out)) return passthrough;
+    return {
+      path: out,
+      cleanup: () => {
+        try {
+          fs.unlinkSync(out);
+        } catch {
+          /* already gone */
+        }
+      },
+    };
+  } catch {
+    // editcap missing or failed: fall back to the original path. aircrack then
+    // reports the format error exactly as before — no worse off than today.
+    try {
+      fs.unlinkSync(out);
+    } catch {
+      /* may never have been created */
+    }
+    return passthrough;
+  }
+}
 
 // Handshake validation v2: the "captured" verdict is not enough — hcxpcapngtool
 // counts a bare EAPOL M1 (PMKID or any half handshake) as "written". The lab
@@ -84,8 +136,10 @@ export function crackCheck(capPath: string, password: string, bssid = ""): { pro
     }
   };
   const promise = (async (): Promise<CrackResult> => {
+    // pcapng → classic pcap if needed (aircrack-ng 1.7 can't read pcapng).
+    const { path: runPath, cleanup } = await ensureAircrackCap(capPath);
     try {
-      const { stdout, stderr } = await execFileAsync("aircrack-ng", ["-w", "-", ...bssidArgs, capPath], {
+      const { stdout, stderr } = await execFileAsync("aircrack-ng", ["-w", "-", ...bssidArgs, runPath], {
         timeout: 120_000,
         maxBuffer: 10 * 1024 * 1024,
       });
@@ -103,8 +157,10 @@ export function crackCheck(capPath: string, password: string, bssid = ""): { pro
       // through spawn, which pipes the password and captures output itself.
       // The cancel() closure above sets `cancelled` directly; killRef routes
       // it to the spawned aircrack (which only exists once we get here).
-      const result = await crackCheckSpawn(capPath, password, bssid, (c) => (child = c));
+      const result = await crackCheckSpawn(runPath, password, bssid, (c) => (child = c));
       return result;
+    } finally {
+      cleanup();
     }
   })();
   return { promise, cancel };
@@ -293,6 +349,7 @@ function maskAt(pattern: string, index: number): string {
 export class MaskCrack extends EventEmitter {
   private proc: any = null;
   private running = false;
+  private stopped = false;
   private state: DictCrackState = {
     running: false,
     progress: { tried: 0, total: 0, fps: 0, elapsedSec: 0 },
@@ -314,14 +371,27 @@ export class MaskCrack extends EventEmitter {
   start(): void {
     if (this.running) return;
     this.running = true;
+    this.stopped = false;
     const total = maskTotal(this.pattern);
     this.state = {
       running: true,
       progress: { tried: 0, total, fps: 0, elapsedSec: 0 },
       result: null,
     };
+    void this.launch(total);
+  }
+
+  private async launch(total: number): Promise<void> {
     const startedAt = Date.now();
-    const child = spawn("aircrack-ng", ["-w", "-", "-b", this.bssid, "-p", "2", this.capPath], {
+    // pcapng → classic pcap if needed (aircrack-ng 1.7 can't read pcapng).
+    const { path: runPath, cleanup } = await ensureAircrackCap(this.capPath);
+    if (this.stopped) {
+      cleanup();
+      this.running = false;
+      this.state.running = false;
+      return;
+    }
+    const child = spawn("aircrack-ng", ["-w", "-", "-b", this.bssid, "-p", "2", runPath], {
       stdio: ["pipe", "pipe", "pipe"],
     });
     this.proc = child;
@@ -366,12 +436,14 @@ export class MaskCrack extends EventEmitter {
       out += chunk.toString("utf8");
     });
     child.on("error", (err) => {
+      cleanup();
       this.running = false;
       this.state.running = false;
       this.state.result = { verdict: "error", matched: false, eapolPackets: 0, handshakeHint: false, output: `aircrack-ng: ${err?.message || err}` };
       this.emit("done", this.state);
     });
     child.on("close", (code) => {
+      cleanup();
       this.running = false;
       this.state.running = false;
       this.state.progress.elapsedSec = Math.round((Date.now() - startedAt) / 1000);
@@ -406,6 +478,7 @@ export class MaskCrack extends EventEmitter {
   }
 
   stop(): void {
+    this.stopped = true;
     if (this.proc?.pid) {
       try {
         this.proc.kill("SIGKILL");
@@ -459,6 +532,7 @@ export class DictCrack extends EventEmitter {
   private proc: any = null; // ChildProcess (aircrack-ng)
   private feederProc: any = null; // ChildProcess (cat/zcat feeding aircrack's stdin)
   private running = false;
+  private stopped = false;
   private knownTotal: number | null;
   private state: DictCrackState = {
     running: false,
@@ -491,12 +565,25 @@ export class DictCrack extends EventEmitter {
   start(): void {
     if (this.running) return;
     this.running = true;
+    this.stopped = false;
     this.state = {
       running: true,
       progress: { tried: 0, total: this.knownTotal || 0, fps: 0, elapsedSec: 0 },
       result: null,
     };
+    void this.launch();
+  }
+
+  private async launch(): Promise<void> {
     const startedAt = Date.now();
+    // pcapng → classic pcap if needed (aircrack-ng 1.7 can't read pcapng).
+    const { path: runPath, cleanup } = await ensureAircrackCap(this.capPath);
+    if (this.stopped) {
+      cleanup();
+      this.running = false;
+      this.state.running = false;
+      return;
+    }
     // `cat` for a plain file, `zcat` for gzip — otherwise identical: its
     // stdout feeds aircrack's stdin directly (Node-level pipe, no shell).
     // Progress is NOT measured from this side of the pipe — tried that
@@ -514,7 +601,7 @@ export class DictCrack extends EventEmitter {
       stdio: ["ignore", "pipe", "ignore"],
     });
     this.feederProc = feeder;
-    const child = spawn("aircrack-ng", ["-w", "-", "-b", this.bssid, "-p", "2", this.capPath], {
+    const child = spawn("aircrack-ng", ["-w", "-", "-b", this.bssid, "-p", "2", runPath], {
       stdio: ["pipe", "pipe", "pipe"],
     });
     feeder.stdout?.pipe(child.stdin);
@@ -540,12 +627,14 @@ export class DictCrack extends EventEmitter {
       out += chunk.toString("utf8");
     });
     child.on("error", (err: any) => {
+      cleanup();
       this.running = false;
       this.state.running = false;
       this.state.result = { verdict: "error", matched: false, eapolPackets: 0, handshakeHint: false, output: `aircrack-ng: ${err?.message || err}` };
       this.emit("done", this.state);
     });
     child.on("close", (code: number | null) => {
+      cleanup();
       this.running = false;
       this.state.running = false;
       this.state.progress.elapsedSec = Math.round((Date.now() - startedAt) / 1000);
@@ -594,6 +683,7 @@ export class DictCrack extends EventEmitter {
   }
 
   stop(): void {
+    this.stopped = true;
     if (this.feederProc?.pid) {
       try {
         this.feederProc.kill("SIGTERM");

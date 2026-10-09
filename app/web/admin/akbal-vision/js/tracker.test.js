@@ -40,3 +40,30 @@ test("dos rostros distintos mantienen IDs separados y estables", () => {
   const near = Object.values(r.state.subjects).find((s) => s.center.x < 500);
   assert.equal(near.id, Object.values(first).find((s) => s.center.x < 500).id);
 });
+
+test("un rostro ausente se mantiene dentro del TTL y se pierde después", () => {
+  const tr = createTracker({ ttlMs: 600 });
+  let r = tr.update([det(100, 100)], emptyWorldState(), 1000, frame);
+  r = tr.update([], r.state, 1300, frame); // 300ms sin verlo: sigue vivo
+  assert.ok(r.state.subjects["SUBJ-0001"], "dentro del TTL sigue");
+  assert.ok(!r.events.some((e) => e.type === "subject.lost"));
+  r = tr.update([], r.state, 2000, frame); // 700ms sin verlo: perdido
+  assert.deepEqual(Object.keys(r.state.subjects), []);
+  assert.ok(r.events.some((e) => e.type === "subject.lost" && e.payload.id === "SUBJ-0001"));
+});
+
+test("cuadro vacío deja estado sin sujetos y sin primary", () => {
+  const tr = createTracker();
+  tr.update([det(100, 100)], emptyWorldState(), 1000, frame);
+  const r = tr.update([], { subjects: {}, primaryId: null, frame, updatedAt: 0 }, 1000, frame);
+  assert.deepEqual(r.state.subjects, {});
+  assert.equal(r.state.primaryId, null);
+});
+
+test("el bbox de mayor área es el Primary Target", () => {
+  const tr = createTracker();
+  const r = tr.update([det(100, 100, 80, 80), det(800, 400, 200, 200)], emptyWorldState(), 1000, frame);
+  assert.equal(r.state.primaryId, r.state.subjects["SUBJ-0002"].id);
+  assert.equal(r.state.subjects["SUBJ-0002"].isPrimary, true);
+  assert.equal(r.state.subjects["SUBJ-0001"].isPrimary, false);
+});

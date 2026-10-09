@@ -1,4 +1,21 @@
 {
+  "akbalvision": {
+    "event_log": "Registro de eventos",
+    "camera": "Cámara",
+    "mode": "Modo",
+    "debug": "Debug",
+    "fullscreen": "Pantalla completa",
+    "privacy": "PROCESAMIENTO LOCAL · SIN SUBIR VIDEO",
+    "target": "Objetivo",
+    "status": "Estado",
+    "tracking": "Rastreando",
+    "confidence": "Confianza",
+    "visible": "Visible",
+    "orientation": "Orientación",
+    "eye_contact": "Contacto visual",
+    "motion": "Movimiento",
+    "no_subject": "Sin sujeto"
+  },
   "topbar": {
     "menu_aria": "Menú",
     "tab_chat": "IA Local",

@@ -1,7 +1,10 @@
 :root { --av-accent:#00FF66; --av-bg:#020805; --av-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace; }
-html,body { margin:0; height:100%; background:var(--av-bg); color:var(--av-accent);
-  font-family:var(--av-mono); overflow:hidden; }
-#av-stage { position:fixed; inset:0; }
+html, body { height: 100%; }
+/* The admin topbar (styles.css) sits on top in normal flow; the stage fills the
+   rest of the viewport below it. The cyberpunk look is scoped to the stage so
+   the shared navbar keeps the admin styling. */
+#av-stage { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden;
+  background: var(--av-bg); color: var(--av-accent); font-family: var(--av-mono); }
 #av-video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
   transform:scaleX(-1); } /* mirror for facingMode:user; the HUD compensates */
 #av-hud,#av-debug { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }

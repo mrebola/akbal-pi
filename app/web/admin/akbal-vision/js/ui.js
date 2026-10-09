@@ -10,6 +10,14 @@ export function bootView(steps, done = false) {
   return { text: "AKBAL VISION\n\n" + steps.map(line).join("\n") + footer, hidden: allOk };
 }
 
+// i18n lookup with a fallback for before the dictionary loads / missing keys
+// (AkbalI18n.t returns the key itself when missing). Used for the per-frame
+// target panel; the static chrome uses data-i18n, which i18n.js translates.
+function tr(key, fallback) {
+  const v = typeof window !== "undefined" && window.AkbalI18n ? window.AkbalI18n.t(key) : null;
+  return v && v !== key ? v : fallback;
+}
+
 const pad = (n) => String(n).padStart(2, "0");
 const clock = () => { const d = new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
 const fmtVisible = (ms) => { const s = Math.floor(ms / 1000); return `${pad(Math.floor(s / 60))}:${pad(s % 60)}`; };
@@ -17,18 +25,25 @@ const fmtVisible = (ms) => { const s = Math.floor(ms / 1000); return `${pad(Math
 export function createUI({ root, bus, config, camera }) {
   root.innerHTML = `
     <section class="av-panel av-target" id="av-target"></section>
-    <section class="av-panel av-log"><h2>EVENT LOG</h2><ul id="av-log-list"></ul></section>
+    <section class="av-panel av-log"><h2 data-i18n="akbalvision.event_log">EVENT LOG</h2><ul id="av-log-list"></ul></section>
     <section class="av-panel av-settings" id="av-settings">
       <h2>AKBAL VISION</h2>
-      <label>CÁMARA <select id="av-cam"></select></label>
-      <label>MODO <select id="av-mode">
+      <label><span data-i18n="akbalvision.camera">CÁMARA</span> <select id="av-cam"></select></label>
+      <label><span data-i18n="akbalvision.mode">MODO</span> <select id="av-mode">
         <option>HIGH</option><option>BALANCED</option><option>LOW</option></select></label>
-      <label><input type="checkbox" id="av-debug-toggle"> DEBUG</label>
-      <button id="av-full">FULLSCREEN</button>
-      <p class="av-privacy">LOCAL PROCESSING · NO VIDEO UPLOAD</p>
+      <label><input type="checkbox" id="av-debug-toggle"> <span data-i18n="akbalvision.debug">DEBUG</span></label>
+      <button id="av-full" data-i18n="akbalvision.fullscreen">FULLSCREEN</button>
+      <p class="av-privacy" data-i18n="akbalvision.privacy">LOCAL PROCESSING · NO VIDEO UPLOAD</p>
     </section>
     <section class="av-panel av-debug-stats hidden" id="av-debug-stats"></section>
     <pre class="av-boot" id="av-boot"></pre>`;
+
+  // Translate the static chrome now and again once the dictionary is ready /
+  // the language toggle fires (i18n.js re-applies to the whole document).
+  if (typeof window !== "undefined" && window.AkbalI18n) {
+    window.AkbalI18n.applyTranslations(root);
+    window.AkbalI18n.ready?.then(() => window.AkbalI18n.applyTranslations(root));
+  }
 
   const logList = root.querySelector("#av-log-list");
   const lines = [];
@@ -58,16 +73,17 @@ export function createUI({ root, bus, config, camera }) {
     renderTarget(snapshot) {
       const p = snapshot.subjects[snapshot.primaryId];
       const el = root.querySelector("#av-target");
-      if (!p) { el.innerHTML = `<h2>TARGET</h2><p class="muted">NO SUBJECT</p>`; return; }
-      el.innerHTML = `<h2>TARGET</h2>
+      const tgt = tr("akbalvision.target", "TARGET");
+      if (!p) { el.innerHTML = `<h2>${tgt}</h2><p class="muted">${tr("akbalvision.no_subject", "NO SUBJECT")}</p>`; return; }
+      el.innerHTML = `<h2>${tgt}</h2>
         <div class="av-id">${p.id}</div>
         <dl>
-          <dt>STATUS</dt><dd>TRACKING</dd>
-          <dt>CONFIDENCE</dt><dd>${(p.confidence * 100).toFixed(1)}%</dd>
-          <dt>VISIBLE</dt><dd>${fmtVisible(p.visibleForMs)}</dd>
-          <dt>ORIENTATION</dt><dd class="muted">${p.orientation}</dd>
-          <dt>EYE CONTACT</dt><dd class="muted">${p.eyeContact}</dd>
-          <dt>MOTION</dt><dd class="muted">${p.motion}</dd>
+          <dt>${tr("akbalvision.status", "STATUS")}</dt><dd>${tr("akbalvision.tracking", "TRACKING")}</dd>
+          <dt>${tr("akbalvision.confidence", "CONFIDENCE")}</dt><dd>${(p.confidence * 100).toFixed(1)}%</dd>
+          <dt>${tr("akbalvision.visible", "VISIBLE")}</dt><dd>${fmtVisible(p.visibleForMs)}</dd>
+          <dt>${tr("akbalvision.orientation", "ORIENTATION")}</dt><dd class="muted">${p.orientation}</dd>
+          <dt>${tr("akbalvision.eye_contact", "EYE CONTACT")}</dt><dd class="muted">${p.eyeContact}</dd>
+          <dt>${tr("akbalvision.motion", "MOTION")}</dt><dd class="muted">${p.motion}</dd>
         </dl>`;
     },
     logEvent(text) {

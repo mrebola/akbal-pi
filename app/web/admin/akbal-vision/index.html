@@ -3,16 +3,24 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>AKBAL VISION</title>
+  <title>Akbal · Akbal Vision</title>
+  <link rel="stylesheet" href="/styles.css" />
   <link rel="stylesheet" href="/akbal-vision/akbal-vision.css" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 </head>
 <body>
+  <!-- Shared admin navbar (built by topbar.js, translated by i18n.js) -->
+  <header class="topbar" id="topbar" data-page="akbal-vision"></header>
+
   <div id="av-stage">
     <video id="av-video" autoplay playsinline muted></video>
     <canvas id="av-hud"></canvas>
     <canvas id="av-debug"></canvas>
     <div id="av-ui"></div>
   </div>
+
+  <script src="/i18n.js"></script>
+  <script src="/topbar.js"></script>
   <script type="module" src="/akbal-vision/js/app.js"></script>
 </body>
 </html>

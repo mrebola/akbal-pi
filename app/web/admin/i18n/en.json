@@ -1,4 +1,21 @@
 {
+  "akbalvision": {
+    "event_log": "Event log",
+    "camera": "Camera",
+    "mode": "Mode",
+    "debug": "Debug",
+    "fullscreen": "Fullscreen",
+    "privacy": "LOCAL PROCESSING · NO VIDEO UPLOAD",
+    "target": "Target",
+    "status": "Status",
+    "tracking": "Tracking",
+    "confidence": "Confidence",
+    "visible": "Visible",
+    "orientation": "Orientation",
+    "eye_contact": "Eye contact",
+    "motion": "Motion",
+    "no_subject": "No subject"
+  },
   "topbar": {
     "menu_aria": "Menu",
     "tab_chat": "Local AI",

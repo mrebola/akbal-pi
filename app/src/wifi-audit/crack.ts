@@ -8,6 +8,12 @@ import path from "path";
 
 const execFileAsync = promisify(execFile);
 
+// aircrack-ng threads for the dictionary/mask crack. WPA is PBKDF2-bound and
+// scales ~linearly with cores, so use every core the box has (the Pi 5 has 4
+// → ~2x over the old hardcoded 2). The crack is an explicit, user-started
+// long job; saturating the cores for its duration is the intended tradeoff.
+const CRACK_THREADS = String(Math.max(1, os.cpus().length));
+
 // aircrack-ng 1.7 only reads classic pcap / IVs — NOT pcapng. The wardrive
 // per-target .cap artifacts are pcapng (cut by hcxpcapngtool from dumpcap's
 // pcapng ring), so aircrack opens them, prints "Unsupported file format (not
@@ -273,6 +279,44 @@ export function capFileFor(targetFiles: string[]): string | null {
   return null;
 }
 
+// Export the capture's WPA handshake(s) to a hashcat 22000 hash file, so the
+// heavy cracking can run on a GPU box (hashcat -m 22000) instead of the Pi's
+// CPU — the only way to get an order-of-magnitude speedup, since WPA's
+// PBKDF2 caps the Pi CPU at ~170 keys/s. hcxpcapngtool reads pcapng natively
+// (no editcap needed) and writes one WPA*01 (PMKID) / WPA*02 (EAPOL) line per
+// usable handshake. Returns the temp file path (the caller streams it, then
+// deletes) and how many hashes were written. Never throws.
+export async function exportHc22000(capPath: string): Promise<{ ok: boolean; path?: string; hashes?: number; error?: string }> {
+  if (!capPath || !fs.existsSync(capPath)) return { ok: false, error: "captura no encontrada" };
+  const out = path.join(os.tmpdir(), `akbal-hc22000-${crypto.randomBytes(6).toString("hex")}.hc22000`);
+  try {
+    await execFileAsync("hcxpcapngtool", ["-o", out, capPath], { timeout: 60_000, maxBuffer: 10 * 1024 * 1024 });
+  } catch (e: any) {
+    try {
+      fs.unlinkSync(out);
+    } catch {
+      /* may not exist */
+    }
+    return { ok: false, error: `hcxpcapngtool: ${e?.message || e}` };
+  }
+  let hashes = 0;
+  try {
+    const content = await fs.promises.readFile(out, "utf8");
+    hashes = content.split("\n").filter((l) => l.trim().length > 0).length;
+  } catch {
+    /* no hash file written — nothing exportable */
+  }
+  if (!hashes) {
+    try {
+      fs.unlinkSync(out);
+    } catch {
+      /* may not exist */
+    }
+    return { ok: false, error: "el handshake no tiene un par EAPOL/PMKID exportable" };
+  }
+  return { ok: true, path: out, hashes };
+}
+
 // Session-file helper: absolute path of the capture for a target's files
 // (they are stored relative to the session dir).
 export function resolveCapPath(sessionDir: string, files: string[]): string | null {
@@ -391,7 +435,7 @@ export class MaskCrack extends EventEmitter {
       this.state.running = false;
       return;
     }
-    const child = spawn("aircrack-ng", ["-w", "-", "-b", this.bssid, "-p", "2", runPath], {
+    const child = spawn("aircrack-ng", ["-w", "-", "-b", this.bssid, "-p", CRACK_THREADS, runPath], {
       stdio: ["pipe", "pipe", "pipe"],
     });
     this.proc = child;
@@ -601,7 +645,7 @@ export class DictCrack extends EventEmitter {
       stdio: ["ignore", "pipe", "ignore"],
     });
     this.feederProc = feeder;
-    const child = spawn("aircrack-ng", ["-w", "-", "-b", this.bssid, "-p", "2", runPath], {
+    const child = spawn("aircrack-ng", ["-w", "-", "-b", this.bssid, "-p", CRACK_THREADS, runPath], {
       stdio: ["pipe", "pipe", "pipe"],
     });
     feeder.stdout?.pipe(child.stdin);
@@ -704,23 +748,24 @@ export class DictCrack extends EventEmitter {
   // incrementally (several distinct snapshots over a 15s run, not one
   // blob at the end):
   //   "[00:00:14] 1958 keys tested (139.83 k/s)"
-  // The rate's unit scales with magnitude (plain /s, k/s, or M/s for a
-  // very fast match) — the earlier version of this only matched a
-  // hardcoded "fps" suffix that real aircrack-ng 1.7 output never
-  // actually uses, which is why progress never moved at all, on EITHER
-  // wordlist, regardless of file-vs-stdin. Total comes from knownTotal
-  // (wordlistLineCount()) — aircrack can't pre-scan a pipe for one.
+  // We take ONLY the tested-key count and the elapsed timer from it, and
+  // compute the rate ourselves (tried / elapsed). aircrack-ng 1.7's own
+  // "(X k/s)" figure is NOT reliable: benchmarked against wall-clock on the
+  // Pi it prints e.g. "82.15 k/s" while actually testing ~82 keys/s — the
+  // "k" prefix overstates the real rate by ~1000x. Deriving fps from its own
+  // key counter sidesteps that unit quirk and always matches reality. Total
+  // comes from knownTotal (wordlistLineCount()) — aircrack can't pre-scan a
+  // pipe for one.
   private parseProgress(text: string, startedAt: number): void {
-    const matches = [...text.matchAll(/\[(\d+):(\d+):(\d+)\]\s+(\d+)\s+keys tested\s*\(([\d.]+)\s*([kKmM]?)\/s\)/g)];
+    const matches = [...text.matchAll(/\[(\d+):(\d+):(\d+)\]\s+(\d+)\s+keys tested/g)];
     if (matches.length > 0) {
       const m = matches[matches.length - 1];
       const elapsed = parseInt(m[1], 10) * 3600 + parseInt(m[2], 10) * 60 + parseInt(m[3], 10);
-      const unit = m[6].toLowerCase();
-      const scale = unit === "k" ? 1_000 : unit === "m" ? 1_000_000 : 1;
+      const tried = parseInt(m[4], 10);
       this.state.progress = {
-        tried: parseInt(m[4], 10),
+        tried,
         total: this.knownTotal || 0,
-        fps: parseFloat(m[5]) * scale,
+        fps: elapsed > 0 ? tried / elapsed : 0,
         elapsedSec: elapsed,
       };
     } else {

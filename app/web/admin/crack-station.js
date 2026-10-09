@@ -220,6 +220,8 @@ function wdRenderCrackStation() {
              title="Ataque de diccionario contra este handshake — weakpass_wifi_1 (wordlist grande, streameada desde el .gz)">weakpass</button>`,
           `<button class="wd-crack-mask" data-bssid="${it.bssid}" data-ssid="${escapeHtml(it.ssid || "")}"
              data-cap="${escapeHtml(capPath)}" title="Fuerza bruta con máscara (p.ej. @@@@+MAC)">máscara…</button>`,
+          `<button class="wd-crack-export" data-bssid="${it.bssid}" data-cap="${escapeHtml(capPath)}"
+             title="Exportar el handshake a .hc22000 para crackear con hashcat en una máquina con GPU (cientos de miles de claves/s, ~1000x más rápido que la Pi)">GPU ⬇</button>`,
         ].join("");
       }
       const statusHtml = runningHere || (wdDictBssid === it.bssid && wdDictSync?.result) ? wdRowStatusHtml() : "—";
@@ -531,6 +533,11 @@ el("wd-crack-body")?.addEventListener("click", async (ev) => {
     void wdOpenMaskPicker(maskBtn.dataset.bssid, maskBtn.dataset.ssid, maskBtn.dataset.cap);
     return;
   }
+  const exportBtn = ev.target.closest(".wd-crack-export");
+  if (exportBtn) {
+    void wdExportHc22000(exportBtn);
+    return;
+  }
   const filesBtn = ev.target.closest(".wd-crack-files-btn");
   if (filesBtn) {
     void wdOpenCrackFiles(filesBtn.dataset.session, filesBtn.dataset.ssid, filesBtn.dataset.bssid, filesBtn.dataset.source);
@@ -546,6 +553,47 @@ el("wd-crack-body")?.addEventListener("click", async (ev) => {
 });
 
 el("wd-crack-refresh")?.addEventListener("click", () => void wdTickCrackStation());
+
+// Export a captured handshake as a hashcat 22000 file. WPA on the Pi's CPU
+// tops out at ~170 claves/s (PBKDF2); the real speedup is cracking this file
+// on a machine with a GPU: `hashcat -m 22000 <archivo>.hc22000 rockyou.txt`.
+async function wdExportHc22000(btn) {
+  const bssid = btn.dataset.bssid || "";
+  const cap = btn.dataset.cap || "";
+  const prev = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "…";
+  try {
+    const url = `/api/wardrive/dict/export?bssid=${encodeURIComponent(bssid)}&cap=${encodeURIComponent(cap)}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      let msg = t("crackstation.export_failed", "No se pudo exportar el handshake");
+      try {
+        const j = await res.json();
+        if (j && j.error) msg = j.error;
+      } catch {
+        /* non-JSON error body */
+      }
+      toast(msg, "error");
+      return;
+    }
+    const blob = await res.blob();
+    const dl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = dl;
+    a.download = `${bssid.replace(/:/g, "")}.hc22000`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(dl);
+    toast(t("crackstation.export_ok", "Handshake exportado — crackéalo con hashcat -m 22000 en una GPU"), "success");
+  } catch (e) {
+    toast(`${t("crackstation.export_failed", "No se pudo exportar el handshake")}: ${e && e.message ? e.message : e}`, "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prev;
+  }
+}
 
 // ---- Dictionary attack (rockyou/weakpass) status ----
 // The numeric % progress was never actually useful to the user ("el

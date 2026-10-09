@@ -22,7 +22,7 @@ import {
 } from "./types";
 import { registerShutdownHook } from "../device/display";
 import { unloadModel } from "../cloud-api/local/ollama-llm";
-import { crackCheck, resolveCapPath, DictCrack, MaskCrack, maskTotal, wordlistLineCount, type CrackResult, type DictCrackState, type MaskRunState, type DictSource } from "./crack";
+import { crackCheck, resolveCapPath, DictCrack, MaskCrack, maskTotal, wordlistLineCount, exportHc22000, type CrackResult, type DictCrackState, type MaskRunState, type DictSource } from "./crack";
 import type { MaskPreset } from "./types";
 import { lookupVendorOrRandomAsync, macvendorsEnabled } from "../wifiradar/oui";
 import { demoTargetsWithPassword, DEMO_WD_TARGETS, type DemoWardriveTarget } from "./discovery";
@@ -883,6 +883,36 @@ export class WardriveService extends EventEmitter {
     if (this.demoDict?.running) this.stopDictDemo();
     this.dictCrack?.stop();
     return { ok: true };
+  }
+
+  // Export a target's captured handshake as a hashcat 22000 file so the heavy
+  // cracking can run on a GPU box off-device. Same cap resolution + traversal
+  // safety as startDictCrack. Returns the generated temp file path for the
+  // HTTP layer to stream (and then delete).
+  async exportHandshakeHc22000(
+    bssidRaw: string,
+    capPathOverride?: string,
+  ): Promise<{ ok: boolean; path?: string; filename?: string; hashes?: number; error?: string }> {
+    const bssid = WardriveService.clean(bssidRaw);
+    if (!bssid) return { ok: false, error: "BSSID inválido" };
+    let capPath: string | null = null;
+    if (capPathOverride) {
+      capPath = this.resolveSessionPath(capPathOverride);
+      if (!capPath || !/\.(cap|pcapng)$/i.test(capPath) || !fs.existsSync(capPath)) {
+        return { ok: false, error: "Archivo .cap inválido o fuera de las sesiones" };
+      }
+    } else {
+      const target = this.targetMeta.get(bssid);
+      if (!target || target.status !== "captured") {
+        return { ok: false, error: "No hay captura para ese objetivo — audítalo primero" };
+      }
+      if (!this.session) return { ok: false, error: "Sin sesión de wardrive activa" };
+      capPath = resolveCapPath(this.session.dir, this.targetFiles(bssid));
+      if (!capPath) return { ok: false, error: "El objetivo no tiene archivo .cap" };
+    }
+    const res = await exportHc22000(capPath);
+    if (!res.ok) return res;
+    return { ...res, filename: `${bssid.replace(/:/g, "")}.hc22000` };
   }
 
   // Dismiss a finished dictionary crack: drops it from memory so the status

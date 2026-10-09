@@ -1650,6 +1650,35 @@ export class WebAdminServer {
       ctx.body = wardrive.dictCrackStatus();
     });
 
+    // Export a captured handshake as a hashcat 22000 file for off-device GPU
+    // cracking (hashcat -m 22000) — the only route to an order-of-magnitude
+    // speedup over the Pi's CPU. `cap` targets a past session's capture
+    // (traversal-checked in the service). Streams the tiny hash file and
+    // deletes the temp.
+    router.get("/api/wardrive/dict/export", async (ctx) => {
+      const bssid = String(ctx.query.bssid || "");
+      const cap = ctx.query.cap ? String(ctx.query.cap) : undefined;
+      const res = await wardrive.exportHandshakeHc22000(bssid, cap);
+      if (!res.ok || !res.path) {
+        ctx.status = 400;
+        ctx.body = { ok: false, error: res.error || "No se pudo exportar el handshake" };
+        return;
+      }
+      try {
+        const buf = fs.readFileSync(res.path);
+        ctx.set("Content-Length", String(buf.length));
+        ctx.set("Content-Disposition", `attachment; filename="${res.filename}"`);
+        ctx.type = "application/octet-stream";
+        ctx.body = buf;
+      } finally {
+        try {
+          fs.unlinkSync(res.path);
+        } catch {
+          /* already gone */
+        }
+      }
+    });
+
     // Notification bell (every admin page's topbar) — dict-crack lifecycle
     // log: start/success/fail with timestamps. Newest first, capped at 20.
     router.get("/api/wardrive/dict/events", (ctx) => {

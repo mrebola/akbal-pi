@@ -47,6 +47,7 @@
         { kind: "page", id: "crack-station", href: "/crack-station", labelKey: "topbar.tab_crackstation", titleKey: "topbar.tab_crackstation_title", fallback: "Crack Station" },
       ],
     },
+    { kind: "page", id: "akbal-vision", href: "/akbal-vision", labelKey: "topbar.tab_akbalvision", titleKey: "topbar.tab_akbalvision_title", fallback: "Akbal Vision" },
     { kind: "page", id: "doom", href: "/doom", labelKey: "topbar.tab_doom", titleKey: "topbar.tab_doom_title", fallback: "DOOM" },
     { kind: "panel", id: "music", labelKey: "topbar.tab_music", fallback: "Jukebox" },
     { kind: "panel", id: "settings", labelKey: "topbar.tab_settings", fallback: "Ajustes" },

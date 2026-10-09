@@ -25,3 +25,7 @@ venv/
 
 # Scripts personales de diagnóstico con datos locales (no se publican)
 app/check-sessions.mjs
+
+# Akbal Vision vendored binaries (downloaded via install-deps.sh)
+app/web/admin/akbal-vision/vendor/mediapipe/
+app/web/admin/akbal-vision/models/

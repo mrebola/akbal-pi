@@ -379,6 +379,15 @@ export class WebAdminServer {
       ctx.body = fs.createReadStream(path.resolve(__dirname, "../..", "web", "admin", "crack-station.html"));
     });
 
+    // AKBAL VISION — local face detection/tracking HUD (camera → MediaPipe →
+    // tracker → Three.js HUD). Self-contained static frontend under
+    // web/admin/akbal-vision/; behind the login like every other section.
+    router.get("/akbal-vision", (ctx) => {
+      ctx.set("Cache-Control", "no-store");
+      ctx.type = "text/html";
+      ctx.body = fs.createReadStream(path.resolve(__dirname, "../..", "web", "admin", "akbal-vision", "index.html"));
+    });
+
     // ACERCA DE — static page: Cypher404: El Manifiesto (the book Akbal is
     // named after, see README.md) + why this project exists. No API calls,
     // same mirror of the physical device's "Acerca de" quick-menu item

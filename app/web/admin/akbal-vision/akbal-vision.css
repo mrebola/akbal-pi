@@ -1,0 +1,9 @@
+:root { --av-accent:#00FF66; --av-bg:#020805; --av-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace; }
+html,body { margin:0; height:100%; background:var(--av-bg); color:var(--av-accent);
+  font-family:var(--av-mono); overflow:hidden; }
+#av-stage { position:fixed; inset:0; }
+#av-video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
+  transform:scaleX(-1); } /* mirror for facingMode:user; the HUD compensates */
+#av-hud,#av-debug { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+#av-ui { position:absolute; inset:0; pointer-events:none; }
+#av-ui .av-panel { pointer-events:auto; }

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { headPose, poseState, eyeContactState, motionState, SELECTED_LANDMARKS } from "./analysis.js";
+import { headPose, poseState, eyeContactState, motionState, SELECTED_LANDMARKS, annotate } from "./analysis.js";
 
 // Column-major 4x4 from a 3x3 rotation R (r[row][col]); translation 0.
 function mat(R) {
@@ -51,4 +51,24 @@ test("motionState: sin prev = STATIC; buckets por delta normalizado", () => {
 
 test("SELECTED_LANDMARKS es un set chico de índices", () => {
   assert.ok(Array.isArray(SELECTED_LANDMARKS) && SELECTED_LANDMARKS.length > 0 && SELECTED_LANDMARKS.length <= 16);
+});
+
+const subj = (id, extra = {}) => ({ id, center: { x: 100, y: 100 }, matrix: null, landmarks: null, ...extra });
+
+test("annotate rellena los campos y motion usa el center previo", () => {
+  const prev = { "SUBJ-0001": subj("SUBJ-0001", { center: { x: 0, y: 0 } }) };
+  const cur = { "SUBJ-0001": subj("SUBJ-0001", { center: { x: 80, y: 0 } }) };
+  const { subjects } = annotate(cur, prev, 1000);
+  assert.equal(subjects["SUBJ-0001"].motion, "HIGH");
+  assert.equal(subjects["SUBJ-0001"].orientation, "FRONTAL"); // matrix null → yaw/pitch 0
+  assert.equal(subjects["SUBJ-0001"].eyeContact, "UNKNOWN"); // sin matriz → UNKNOWN
+});
+
+test("annotate emite subject.eyeContact solo al ENTRAR a LOOKING", () => {
+  const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]; // column-major → frontal → LOOKING
+  const looking = (id) => subj(id, { matrix: identity });
+  let r = annotate({ "SUBJ-0001": looking("SUBJ-0001") }, {}, 1000);
+  assert.ok(r.events.some((e) => e.type === "subject.eyeContact" && e.payload.id === "SUBJ-0001"));
+  r = annotate({ "SUBJ-0001": looking("SUBJ-0001") }, r.subjects, 1000);
+  assert.ok(!r.events.some((e) => e.type === "subject.eyeContact"));
 });

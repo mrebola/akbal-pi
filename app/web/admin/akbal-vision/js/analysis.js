@@ -42,3 +42,23 @@ export function motionState(prevCenter, curCenter, frameDiag) {
   if (d < 0.05) return "MEDIUM";
   return "HIGH";
 }
+
+// Fills pose/orientation/eyeContact/motion on each subject (from its matrix +
+// its previous center) and emits subject.eyeContact only on the transition
+// INTO "LOOKING" (not every frame). Pure: returns the same subjects object
+// mutated in place plus the events for the caller to publish.
+export function annotate(subjects, prevSubjects = {}, frameDiag = 0) {
+  const events = [];
+  for (const s of Object.values(subjects)) {
+    const prev = prevSubjects[s.id] || null;
+    const pose = s.matrix ? headPose(s.matrix) : null;
+    s.pose = pose || { yaw: 0, pitch: 0, roll: 0 };
+    s.orientation = poseState(s.pose);
+    s.eyeContact = eyeContactState(pose);
+    s.motion = motionState(prev ? prev.center : null, s.center, frameDiag);
+    if (s.eyeContact === "LOOKING" && (!prev || prev.eyeContact !== "LOOKING")) {
+      events.push({ type: "subject.eyeContact", payload: s });
+    }
+  }
+  return { subjects, events };
+}

@@ -1,6 +1,7 @@
 import fs from "fs";
 import http from "http";
 import https from "https";
+import net from "net";
 import path from "path";
 
 export type TlsOptions = { key: Buffer; cert: Buffer };
@@ -36,6 +37,21 @@ export function detectTlsScheme(tlsDir: string = defaultTlsDir()): "https" | "ht
   return urlScheme(!!resolveTlsOptions(tlsDir));
 }
 
+// A TLS ClientHello starts with the handshake record type 0x16. Any plaintext
+// HTTP request starts with an ASCII method ("GET", "POST"…), so the first byte
+// disambiguates TLS from HTTP on a shared port.
+export function isTlsClientHello(firstByte: number | undefined): boolean {
+  return firstByte === 0x16;
+}
+
+// Absolute https URL to redirect a plaintext request to, on the same host and
+// the TLS port. Strips any port the client sent and pins the TLS port so a bare
+// "host:8090" typed as http lands on https without the user typing the scheme.
+export function redirectLocation(hostHeader: string | undefined, url: string, port: number): string {
+  const host = hostHeader && hostHeader.trim() ? hostHeader.replace(/:\d+$/, "") : "localhost";
+  return `https://${host}:${port}${url && url.length > 0 ? url : "/"}`;
+}
+
 // Builds the admin HTTP(S) server. With a cert, tries https and — if the cert
 // content is present but invalid (truncated/corrupt), so https.createServer
 // THROWS — falls back to http instead of crashing the whole process (start()
@@ -54,4 +70,38 @@ export function createAdminHttpServer(
     }
   }
   return { server: deps.http.createServer(requestListener), tls: false };
+}
+
+// Builds the listener to bind to the admin port. With TLS, a front net server
+// sniffs the first byte of each connection: a TLS ClientHello goes to the https
+// server; a plaintext HTTP request gets a 301 to https (so typing "host:port"
+// — which browsers attempt as http — lands on https without the scheme). The
+// returned `app` is the real http/https server to attach 'upgrade' to and to
+// close; `listener` is what you call .listen() on. Without TLS (or an invalid
+// cert), listener === app === a plain http server, exactly as before.
+export function createAdminListener(
+  tls: TlsOptions | null,
+  requestListener: http.RequestListener,
+  port: number,
+  deps: { http: typeof http; https: typeof https; net: typeof net } = { http, https, net },
+): { listener: http.Server | net.Server; app: http.Server; tls: boolean } {
+  const built = createAdminHttpServer(tls, requestListener, deps);
+  if (!built.tls) return { listener: built.server, app: built.server, tls: false };
+
+  const httpsServer = built.server as https.Server;
+  const redirector = deps.http.createServer((req, res) => {
+    res.writeHead(301, { Location: redirectLocation(req.headers.host, req.url || "/", port) });
+    res.end();
+  });
+  const front = deps.net.createServer((socket) => {
+    socket.on("error", () => socket.destroy());
+    socket.once("data", (buf: Buffer) => {
+      socket.pause();
+      const target = isTlsClientHello(buf[0]) ? httpsServer : redirector;
+      target.emit("connection", socket);
+      socket.unshift(buf);
+      process.nextTick(() => socket.resume());
+    });
+  });
+  return { listener: front, app: httpsServer, tls: true };
 }

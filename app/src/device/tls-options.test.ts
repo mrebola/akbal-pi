@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { resolveTlsOptions, urlScheme, detectTlsScheme, createAdminHttpServer } from "./tls-options";
+import { resolveTlsOptions, urlScheme, detectTlsScheme, createAdminHttpServer, redirectLocation, isTlsClientHello } from "./tls-options";
 
 function tmpDir() { return fs.mkdtempSync(path.join(os.tmpdir(), "av-tls-")); }
 function withCert(d: string) {
@@ -37,6 +37,19 @@ test("resolveTlsOptions devuelve null si falta uno o está vacío", () => {
 test("urlScheme", () => {
   assert.equal(urlScheme(true), "https");
   assert.equal(urlScheme(false), "http");
+});
+
+test("isTlsClientHello: 0x16 es TLS, lo demás no", () => {
+  assert.equal(isTlsClientHello(0x16), true);
+  assert.equal(isTlsClientHello(0x47), false); // 'G' de GET
+  assert.equal(isTlsClientHello(undefined as any), false);
+});
+
+test("redirectLocation: fuerza https y normaliza el puerto", () => {
+  assert.equal(redirectLocation("akbal-pi:8090", "/crack-station", 8090), "https://akbal-pi:8090/crack-station");
+  assert.equal(redirectLocation("akbal-pi", "/", 8090), "https://akbal-pi:8090/");
+  assert.equal(redirectLocation("akbal-pi:8090", "", 8090), "https://akbal-pi:8090/");
+  assert.equal(redirectLocation(undefined, "/x", 8090), "https://localhost:8090/x");
 });
 
 test("detectTlsScheme: https si el dir tiene cert, http si no", () => {

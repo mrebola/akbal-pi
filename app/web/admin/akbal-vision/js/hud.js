@@ -69,7 +69,13 @@ export function createHud(sceneApi, THREE) {
       lm.geometry.setFromPoints(s.isPrimary && s.landmarks && s.landmarks.length ? landmarkPoints(s.landmarks, metrics) : []);
     }
     for (const [id, entry] of groups) {
-      if (!seen.has(id)) { sceneApi.scene.remove(entry.group); groups.delete(id); }
+      if (!seen.has(id)) {
+        sceneApi.scene.remove(entry.group);
+        // Free GPU buffers: the kiosk runs 24/7, so leaking a geometry+material
+        // per distinct subject seen would grow unbounded over a long session.
+        entry.group.traverse((o) => { o.geometry?.dispose?.(); o.material?.dispose?.(); });
+        groups.delete(id);
+      }
     }
     sceneApi.render();
   }

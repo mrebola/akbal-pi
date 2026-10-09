@@ -17,17 +17,25 @@ No hace reconocimiento de identidad ni estima edad, género o emociones.
 
 ## Decisiones de arquitectura (acordadas en brainstorming)
 
-1. **Integrada en el admin actual.** Akbal Vision es una página más del admin
-   web (servida por el servidor Koa existente, `app/src/device/web-admin-server.ts`),
-   con el look de Akbal y **detrás del login existente**. **Sin base de datos**
-   y, en el Hito 1, **sin API nueva**: es frontend autocontenido.
+1. **Es una sección más de la web de Akbal.** Akbal Vision se sirve como
+   cualquier otra página del admin (servido por el Koa existente,
+   `app/src/device/web-admin-server.ts`): misma app, **mismo puerto**, una
+   ruta más (`/akbal-vision`), con el look de Akbal y **detrás del login
+   existente**. **Sin base de datos** y, en el Hito 1, **sin API nueva**: es
+   frontend autocontenido.
 2. **Cámara y contexto seguro.** `getUserMedia()` exige contexto seguro (https
    o localhost). El admin se sirve hoy por http plano sobre el tailnet, lo que
-   bloquearía la cámara en acceso remoto. Solución: la Pi sirve además **HTTPS
-   con certificado auto-firmado** en un **puerto aparte** (p. ej. 8443) sobre el
-   mismo Koa app; el `http:8090` actual queda intacto. El auto-firmado cubre las
-   tres rutas de acceso (localhost / WiFi directo por IP / Tailscale) con una
-   advertencia-a-aceptar por dispositivo. (Hito 3.)
+   bloquearía la cámara en acceso remoto. Solución: **toda la web de Akbal pasa
+   a servirse por HTTPS con certificado auto-firmado en su puerto actual** (no
+   un puerto aparte); Akbal Vision es solo una ruta más dentro de esa web. El
+   auto-firmado cubre las tres rutas de acceso (localhost / WiFi directo por IP
+   / Tailscale) con una advertencia-a-aceptar por dispositivo. Si el cert no
+   existe, el server cae de vuelta a http (para no romper dev). (Hito 3.)
+   **Efecto en el resto del admin:** todo se accede como `https://…:<puerto>`
+   (el http plano en ese puerto deja de funcionar; hay que actualizar bookmarks)
+   y la advertencia de cert aplica a todo el admin una vez por dispositivo —
+   incluida la página pública **DOOM** (QR desde el celular mostrará la
+   advertencia). Se asume aceptable; se afina en el Hito 3.
 3. **Dependencias locales / offline.** Three.js se reutiliza del vendor ya
    existente (`app/web/admin/vendor/three.module.min.js`). MediaPipe (runtime
    WASM + modelo `face_landmarker.task`) se baja con un script a rutas
@@ -265,8 +273,8 @@ frame; loops separados (ver arquitectura).
 
 ### Raspberry Pi
 Preparada para Pi 5 / Linux / Chromium / webcam USB; ejecución futura
-`chromium --kiosk https://localhost:8443` (o el puerto HTTPS que se defina).
-Modo por defecto en Pi: BALANCED.
+`chromium --kiosk https://localhost:<puerto-del-admin>/akbal-vision` (el
+mismo puerto de la web de Akbal, ya en HTTPS). Modo por defecto en Pi: BALANCED.
 
 ## Hitos
 
@@ -282,9 +290,10 @@ motion), render de landmarks selectos, panel completo, evento `subject.eyeContac
 yaw/pitch/roll en debug.
 
 **Hito 3 — Rendimiento + deploy:** modos HIGH/BALANCED/LOW + conmutación, overlay
-de debug, vendoring/offline completo + `install-deps.sh`, listener HTTPS
-auto-firmado + generación con openssl + ruta `/akbal-vision` en el admin,
-optimización Pi/Chromium kiosk.
+de debug, vendoring/offline completo + `install-deps.sh`, **la web de Akbal pasa
+a HTTPS auto-firmado en su puerto actual** (generación del cert con openssl,
+fallback a http si no existe) + ruta `/akbal-vision` en el admin, optimización
+Pi/Chromium kiosk.
 
 ## Pruebas
 

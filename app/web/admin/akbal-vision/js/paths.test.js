@@ -24,7 +24,7 @@ test("vision.js carga el WASM y el modelo de MediaPipe con rutas absolutas", () 
   // FilesetResolver (wasm loader) and modelAssetPath are fetched DOCUMENT-relative
   // by MediaPipe, so they must be absolute — not the module-relative "../".
   assert.match(js, /forVisionTasks\("\/akbal-vision\/vendor\/mediapipe"\)/);
-  assert.match(js, /modelAssetPath:\s*"\/akbal-vision\/models\/blaze_face_short_range\.tflite"/);
+  assert.match(js, /modelAssetPath:\s*"\/akbal-vision\/models\/face_landmarker\.task"/);
   assert.doesNotMatch(js, /forVisionTasks\("\.\.\/vendor/);
   assert.doesNotMatch(js, /modelAssetPath:\s*"\.\.\/models/);
 });

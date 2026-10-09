@@ -19,10 +19,25 @@ export function createHud(sceneApi, THREE) {
     const group = new THREE.Group();
     const mat = new THREE.LineBasicMaterial({ color: 0x00ff66, transparent: true, opacity: primary ? 1 : 0.5 });
     const geo = new THREE.BufferGeometry();
-    group.add(new THREE.LineSegments(geo, mat));
+    group.add(new THREE.LineSegments(geo, mat)); // children[0] = bbox corners
+    // children[1] = selected landmarks (small crosshairs), primary only
+    const lmMat = new THREE.LineBasicMaterial({ color: 0x00ff66, transparent: true, opacity: 0.85 });
+    group.add(new THREE.LineSegments(new THREE.BufferGeometry(), lmMat));
     group.userData.mat = mat;
     sceneApi.scene.add(group);
     return group;
+  }
+
+  // Short crosshairs at each mapped landmark point (video px → screen px).
+  function landmarkPoints(landmarks, m) {
+    const pts = [];
+    const r = 3;
+    for (const p of landmarks) {
+      const q = mapBox({ x: p.x, y: p.y, w: 0, h: 0 }, m);
+      pts.push(new THREE.Vector3(q.x - r, q.y, 0), new THREE.Vector3(q.x + r, q.y, 0));
+      pts.push(new THREE.Vector3(q.x, q.y - r, 0), new THREE.Vector3(q.x, q.y + r, 0));
+    }
+    return pts;
   }
 
   function cornerPoints(x, y, w, h, c) {
@@ -49,6 +64,9 @@ export function createHud(sceneApi, THREE) {
       const line = entry.group.children[0];
       line.geometry.setFromPoints(cornerPoints(entry.cur.x, entry.cur.y, entry.cur.w, entry.cur.h, c));
       entry.group.userData.mat.opacity = s.isPrimary ? 1 : 0.5;
+      // Landmarks: primary only; cleared otherwise so they never linger.
+      const lm = entry.group.children[1];
+      lm.geometry.setFromPoints(s.isPrimary && s.landmarks && s.landmarks.length ? landmarkPoints(s.landmarks, metrics) : []);
     }
     for (const [id, entry] of groups) {
       if (!seen.has(id)) { sceneApi.scene.remove(entry.group); groups.delete(id); }

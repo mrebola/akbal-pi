@@ -81,9 +81,9 @@ export function createUI({ root, bus, config, camera }) {
           <dt>${tr("akbalvision.status", "STATUS")}</dt><dd>${tr("akbalvision.tracking", "TRACKING")}</dd>
           <dt>${tr("akbalvision.confidence", "CONFIDENCE")}</dt><dd>${(p.confidence * 100).toFixed(1)}%</dd>
           <dt>${tr("akbalvision.visible", "VISIBLE")}</dt><dd>${fmtVisible(p.visibleForMs)}</dd>
-          <dt>${tr("akbalvision.orientation", "ORIENTATION")}</dt><dd class="muted">${p.orientation}</dd>
-          <dt>${tr("akbalvision.eye_contact", "EYE CONTACT")}</dt><dd class="muted">${p.eyeContact}</dd>
-          <dt>${tr("akbalvision.motion", "MOTION")}</dt><dd class="muted">${p.motion}</dd>
+          <dt>${tr("akbalvision.orientation", "ORIENTATION")}</dt><dd>${p.orientation}</dd>
+          <dt>${tr("akbalvision.eye_contact", "EYE CONTACT")}</dt><dd>${p.eyeContact}</dd>
+          <dt>${tr("akbalvision.motion", "MOTION")}</dt><dd>${p.motion}</dd>
         </dl>`;
     },
     logEvent(text) {
@@ -98,7 +98,7 @@ export function createUI({ root, bus, config, camera }) {
     },
     setDebug(stats) {
       root.querySelector("#av-debug-stats").textContent =
-        `CAMERA ${stats.cameraFps} FPS\nVISION ${stats.visionFps} FPS\nRENDER ${stats.renderFps} FPS\nINFERENCE ${stats.inferenceMs} ms\nFACES ${stats.faces}`;
+        `CAMERA ${stats.cameraFps} FPS\nVISION ${stats.visionFps} FPS\nRENDER ${stats.renderFps} FPS\nINFERENCE ${stats.inferenceMs} ms\nFACES ${stats.faces}\nPOSE ${stats.pose || "—"}`;
     },
   };
 }

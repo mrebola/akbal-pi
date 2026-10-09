@@ -8,6 +8,7 @@ import { createVision } from "./vision.js";
 import { createScene } from "./scene.js";
 import { createHud } from "./hud.js";
 import { createUI } from "./ui.js";
+import { annotate } from "./analysis.js";
 
 const video = document.getElementById("av-video");
 const bus = createEventBus();
@@ -26,6 +27,7 @@ bus.on("camera.error", (e) => ui.logEvent(`CAMERA ERROR ${e.name}`));
 bus.on("vision.ready", () => ui.logEvent("VISION READY"));
 bus.on("subject.created", (s) => ui.logEvent(`SUBJECT ACQUIRED ${s.id}`));
 bus.on("subject.lost", (s) => ui.logEvent(`SUBJECT LOST ${s.id}`));
+bus.on("subject.eyeContact", (s) => ui.logEvent(`EYE CONTACT ${s.id}`));
 
 const steps = [
   { label: "CAMERA", ok: false }, { label: "VISION", ok: false },
@@ -59,9 +61,13 @@ function startLoops() {
       const dets = vision.detect(now);
       perf.inferenceMs = Math.round(performance.now() - t0);
       perf.faces = dets.length;
-      const { state, events } = tracker.update(dets, store.snapshot(), now, { w: video.videoWidth, h: video.videoHeight });
+      const prev = store.snapshot();
+      const { state, events } = tracker.update(dets, prev, now, { w: video.videoWidth, h: video.videoHeight });
+      // Hito 2: fill pose/eyeContact/motion and emit eye-contact transitions.
+      const frameDiag = Math.hypot(video.videoWidth || 0, video.videoHeight || 0);
+      const ann = annotate(state.subjects, prev.subjects, frameDiag);
       store.set(state);
-      for (const ev of events) bus.emit(ev.type, ev.payload);
+      for (const ev of [...events, ...ann.events]) bus.emit(ev.type, ev.payload);
       visionFrames++;
       if (now - visionWindow >= 1000) { perf.visionFps = visionFrames; visionFrames = 0; visionWindow = now; }
       visionBusy = false;
@@ -78,6 +84,8 @@ function startLoops() {
     const snap = store.snapshot();
     hud.update(snap, { cssW, cssH, videoW: video.videoWidth || cssW, videoH: video.videoHeight || cssH, mirror: true });
     ui.renderTarget(snap);
+    const primary = snap.subjects[snap.primaryId];
+    perf.pose = primary ? `y${primary.pose.yaw.toFixed(0)} p${primary.pose.pitch.toFixed(0)} r${primary.pose.roll.toFixed(0)}` : "—";
     renderFrames++;
     const now = performance.now();
     if (now - renderWindow >= 1000) { perf.renderFps = renderFrames; renderFrames = 0; renderWindow = now; if (config.debug) ui.setDebug(perf); }

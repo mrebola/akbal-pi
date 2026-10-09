@@ -163,6 +163,7 @@ import { getDriveWardriveService } from "../../wardrive/service";
 import { isAgentMode, setDeviceMode } from "../../config/device-mode";
 import { setAudioOutputTarget } from "../../config/audio-output";
 import { connectSpeaker } from "../../device/bluetooth-audio";
+import { detectTlsScheme } from "../../device/tls-options";
 import { jukebox } from "../../device/music-jukebox";
 import {
   DEFAULT_OLLAMA_MODEL,
@@ -1472,7 +1473,9 @@ export const flowStates: Record<FlowName, FlowStateHandler> = {
       return;
     }
     // The URL lookup is async; if the player already left, don't start the engine.
-    void resolveDoomScreenUrl(8090).then((url) => {
+    // Pass the real scheme so the on-device QR points at https when the admin
+    // serves TLS — otherwise the phone scans an http URL that a TLS port rejects.
+    void resolveDoomScreenUrl(8090, detectTlsScheme()).then((url) => {
       if (ctx.currentFlowName === "doom") void enterDoomMode(url, flow);
     });
   },

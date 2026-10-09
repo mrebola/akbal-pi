@@ -12,7 +12,10 @@ if [ -s "$TLS_DIR/cert.pem" ] && [ -s "$TLS_DIR/key.pem" ]; then
   exit 0
 fi
 HOST="$(hostname)"
-SANS="DNS:localhost,DNS:${HOST},DNS:${HOST}.local,IP:127.0.0.1"
+# 10.42.0.1 = the Pi's own access-point gateway (WiFi directo), a route the
+# spec lists as covered; without it the camera-over-https path on the AP warns
+# with a name mismatch on top of the self-signed warning.
+SANS="DNS:localhost,DNS:${HOST},DNS:${HOST}.local,IP:127.0.0.1,IP:10.42.0.1"
 if command -v tailscale >/dev/null 2>&1; then
   TS_DNS="$(tailscale status --json 2>/dev/null | sed -n 's/.*"DNSName":"\([^"]*\)\.".*/\1/p' | head -1)"
   TS_IP="$(tailscale ip -4 2>/dev/null | head -1)"

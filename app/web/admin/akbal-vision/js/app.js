@@ -42,7 +42,7 @@ async function bootstrap() {
   ui.setDevices(await camera.listDevices()); // labels appear after permission granted
   try { await vision.init(); steps[1].ok = true; bus.emit("vision.ready"); }
   catch { ui.logEvent("VISION FAIL"); }
-  ui.boot(steps);
+  ui.boot(steps, true); // final: a failed step now shows a legible SYSTEM ERROR, not a hang
   startLoops();
 }
 

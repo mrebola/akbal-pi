@@ -6,9 +6,12 @@ export function createVision({ video }) {
   let detector = null;
 
   async function init() {
-    const files = await FilesetResolver.forVisionTasks("../vendor/mediapipe");
+    // Absolute URLs: MediaPipe fetches the WASM loader and the model
+    // DOCUMENT-relative (not module-relative), and the page is served from the
+    // /akbal-vision/ subdirectory — a "../" here would resolve one level too high.
+    const files = await FilesetResolver.forVisionTasks("/akbal-vision/vendor/mediapipe");
     detector = await FaceDetector.createFromOptions(files, {
-      baseOptions: { modelAssetPath: "../models/blaze_face_short_range.tflite" },
+      baseOptions: { modelAssetPath: "/akbal-vision/models/blaze_face_short_range.tflite" },
       runningMode: "VIDEO",
     });
   }

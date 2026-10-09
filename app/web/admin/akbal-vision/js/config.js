@@ -7,10 +7,13 @@ export const MODES = {
 const KEYS = { mode: "av.mode", cameraId: "av.cameraId", debug: "av.debug" };
 
 // All storage access is guarded: private mode / blocked storage must not throw.
+// Even READING the globalThis.localStorage property throws in sandboxed iframes,
+// so acquiring it goes through this guard too (not just getItem/setItem).
+function safeLocalStorage() { try { return globalThis.localStorage || null; } catch { return null; } }
 function safeGet(storage, k) { try { return storage ? storage.getItem(k) : null; } catch { return null; } }
 function safeSet(storage, k, v) { try { if (storage) storage.setItem(k, v); } catch { /* ignore */ } }
 
-export function createConfig(storage = globalThis.localStorage) {
+export function createConfig(storage = safeLocalStorage()) {
   const storedMode = safeGet(storage, KEYS.mode);
   let mode = MODES[storedMode] ? storedMode : "HIGH";
   let cameraId = safeGet(storage, KEYS.cameraId) || null;

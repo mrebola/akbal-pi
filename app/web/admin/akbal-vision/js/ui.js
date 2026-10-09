@@ -1,3 +1,15 @@
+// Pure: decides boot overlay text + whether to hide it. Once booting is `done`,
+// a failed step renders a legible SYSTEM ERROR instead of a frozen spinner
+// (the overlay is opaque and full-screen, so a hang would hide the EVENT LOG).
+export function bootView(steps, done = false) {
+  const allOk = steps.every((s) => s.ok);
+  const line = (s) => `${s.label.padEnd(12, ".")} ${s.ok ? "OK" : done ? "FAIL" : "…"}`;
+  let footer = "";
+  if (allOk) footer = "\n\nLOCAL PROCESSING ENABLED\nSYSTEM READY";
+  else if (done) footer = `\n\nSYSTEM ERROR\n${steps.filter((s) => !s.ok).map((s) => s.label).join(", ")} — revisa EVENT LOG`;
+  return { text: "AKBAL VISION\n\n" + steps.map(line).join("\n") + footer, hidden: allOk };
+}
+
 const pad = (n) => String(n).padStart(2, "0");
 const clock = () => { const d = new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
 const fmtVisible = (ms) => { const s = Math.floor(ms / 1000); return `${pad(Math.floor(s / 60))}:${pad(s % 60)}`; };
@@ -35,11 +47,13 @@ export function createUI({ root, bus, config, camera }) {
   });
 
   return {
-    boot(steps) {
-      root.querySelector("#av-boot").textContent =
-        "AKBAL VISION\n\n" + steps.map((s) => `${s.label.padEnd(12, ".")} ${s.ok ? "OK" : "…"}`).join("\n") +
-        (steps.every((s) => s.ok) ? "\n\nLOCAL PROCESSING ENABLED\nSYSTEM READY" : "");
-      if (steps.every((s) => s.ok)) setTimeout(() => root.querySelector("#av-boot").classList.add("hidden"), 800);
+    boot(steps, done = false) {
+      const v = bootView(steps, done);
+      const el = root.querySelector("#av-boot");
+      el.textContent = v.text;
+      el.classList.toggle("av-boot-error", done && !v.hidden);
+      if (v.hidden) setTimeout(() => el.classList.add("hidden"), 800);
+      else el.classList.remove("hidden");
     },
     renderTarget(snapshot) {
       const p = snapshot.subjects[snapshot.primaryId];

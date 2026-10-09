@@ -43,3 +43,18 @@ test("sin storage (undefined) usa defaults y no lanza", () => {
   assert.doesNotThrow(() => c.setMode("LOW"));
   assert.equal(c.mode, "LOW");
 });
+
+test("createConfig() no lanza si el acceso a globalThis.localStorage lanza", () => {
+  // sandboxed iframe / blocked storage: reading the PROPERTY throws (not just setItem).
+  const desc = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, get() { throw new Error("blocked"); } });
+  try {
+    let c;
+    assert.doesNotThrow(() => { c = createConfig(); }); // default arg must not touch a throwing getter unguarded
+    assert.equal(c.mode, "HIGH");
+    assert.doesNotThrow(() => c.setMode("LOW"));
+  } finally {
+    if (desc) Object.defineProperty(globalThis, "localStorage", desc);
+    else delete globalThis.localStorage;
+  }
+});

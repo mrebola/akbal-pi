@@ -24,6 +24,8 @@ html,body { margin:0; height:100%; background:var(--av-bg); color:var(--av-accen
 .av-privacy { opacity:.7; font-size:10px; margin:4px 0 0; }
 .av-debug-stats { bottom:16px; right:16px; white-space:pre; }
 .av-boot { position:absolute; inset:0; margin:0; display:flex; flex-direction:column;
-  justify-content:center; align-items:center; background:var(--av-bg); transition:opacity .4s; }
+  justify-content:center; align-items:center; background:var(--av-bg); transition:opacity .4s;
+  white-space:pre; text-align:center; }
+.av-boot-error { color:#ff5a5a; }
 .hidden { display:none !important; } .muted { opacity:.45; }
 @media (max-width:640px){ .av-log{width:60vw} .av-target,.av-settings{font-size:11px} }

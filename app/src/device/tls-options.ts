@@ -95,7 +95,12 @@ export function createAdminListener(
   });
   const front = deps.net.createServer((socket) => {
     socket.on("error", () => socket.destroy());
+    // Drop connections that open but never send the first byte (a slow-loris
+    // would otherwise sit in once("data") forever — the plain http.Server had
+    // its own timeouts). Cleared once the real server takes over the socket.
+    socket.setTimeout(30_000, () => socket.destroy());
     socket.once("data", (buf: Buffer) => {
+      socket.setTimeout(0);
       socket.pause();
       const target = isTlsClientHello(buf[0]) ? httpsServer : redirector;
       target.emit("connection", socket);

@@ -635,6 +635,19 @@ function wdRenderRowStatus() {
 // tried/total/speed line is kept as small supplementary info since it's
 // accurate now, but never the headline. ----
 
+// Seconds → short human duration ("2 h 14 min", "3 min 5 s", "42 s", "1 d 4 h").
+function wdFmtDur(sec) {
+  sec = Math.max(0, Math.round(sec));
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (d > 0) return `${d} d ${h} h`;
+  if (h > 0) return `${h} h ${m} min`;
+  if (m > 0) return `${m} min ${s} s`;
+  return `${s} s`;
+}
+
 function wdRenderDictDetail() {
   const modal = el("wd-dict-detail-modal");
   if (modal?.classList.contains("hidden")) return; // don't bother building it unless it's actually open
@@ -657,12 +670,35 @@ function wdRenderDictDetail() {
         ? `<div class="wd-verify-badge wrong" style="font-size:14px; padding:8px 14px;">✗ ${escapeHtml(t("crackstation.status_notfound", "Sin match"))} — diccionario agotado</div>`
         : `<div class="wd-verify-badge err" style="font-size:14px; padding:8px 14px;">${escapeHtml(wdDictSync.result?.output || "cancelado")}</div>`;
   const total = wdDictSync.total || 0;
+  const running = wdDictSync.running;
+  const fps = wdDictSync.fps || 0;
+  // Interpolate between the 4s server polls so the modal (re-rendered every
+  // 1s) shows elapsed time and the ETA ticking live instead of jumping.
+  const secsSinceSync = running ? Math.max(0, (performance.now() - wdDictSync.syncedAtMs) / 1000) : 0;
+  const elapsedLive = (wdDictSync.elapsedSec || 0) + secsSinceSync;
+  const triedLive = total > 0 ? Math.min(total, wdDictSync.tried + fps * secsSinceSync) : wdDictSync.tried;
+  // ETA only once the run has warmed up (varios items probados) and we have a
+  // real rate — before that the number swings wildly and misleads. It then
+  // re-adjusts on every poll as fps settles.
+  const canEta = running && fps > 0 && total > 0 && elapsedLive >= 5 && triedLive < total;
+  const remaining = canEta ? (total - triedLive) / fps : null;
   const metaLine = total > 0
-    ? `${Math.round(wdDictSync.tried).toLocaleString()} / ${total.toLocaleString()} claves · ${(wdDictSync.fps || 0).toFixed(0)} pass/s`
+    ? `${Math.round(triedLive).toLocaleString()} / ${total.toLocaleString()} claves · ${fps.toFixed(0)} pass/s`
     : `${Math.round(wdDictSync.tried).toLocaleString()} claves probadas`;
+  const timeLine = running
+    ? `⏱ ${escapeHtml(t("crackstation.elapsed", "Transcurrido"))}: ${wdFmtDur(elapsedLive)}` +
+      (canEta
+        ? ` · ${escapeHtml(t("crackstation.eta", "Faltan"))} ~${wdFmtDur(remaining)}`
+        : fps > 0 && total > 0
+          ? ` · ${escapeHtml(t("crackstation.eta_calc", "calculando restante…"))}`
+          : "")
+    : wdDictSync.elapsedSec
+      ? `⏱ ${escapeHtml(t("crackstation.elapsed_total", "Duró"))} ${wdFmtDur(wdDictSync.elapsedSec)}`
+      : "";
   body.innerHTML = `
     ${banner}
     <div class="muted" style="margin-top:10px; font-size:11px;">${metaLine}</div>
+    ${timeLine ? `<div class="muted" style="margin-top:4px; font-size:12px;">${timeLine}</div>` : ""}
     <div style="margin-top:14px;">
       ${wdDictSync.running
         ? `<button class="wd-dict-stop wd-danger">${escapeHtml(t("crackstation.dict_cancel", "Cancelar"))}</button>`
@@ -773,6 +809,7 @@ async function wdSyncDictStatus() {
         tried: data.state.progress.tried,
         total: data.state.progress.total,
         fps: data.state.progress.fps,
+        elapsedSec: data.state.progress.elapsedSec || 0,
         running: data.state.running,
         result: data.state.result,
         wordlist: data.wordlist,

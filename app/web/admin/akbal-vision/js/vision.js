@@ -1,30 +1,41 @@
-import { FilesetResolver, FaceDetector } from "../vendor/mediapipe/vision_bundle.mjs";
+import { FilesetResolver, FaceLandmarker } from "../vendor/mediapipe/vision_bundle.mjs";
+import { SELECTED_LANDMARKS } from "./analysis.js";
 
-// MediaPipe FaceDetector loaded 100% from vendored assets (no CDN). Runs in
-// VIDEO mode against the <video> frame. Output bboxes are in video pixel space.
+// MediaPipe FaceLandmarker (vendored, no CDN). VIDEO mode. Outputs, per face:
+// selected landmarks + full-extent bbox (video pixels) + the 4x4 facial
+// transformation matrix (head pose). Absolute asset URLs (document-relative,
+// not module-relative — the page is served from /akbal-vision/).
 export function createVision({ video }) {
-  let detector = null;
+  let landmarker = null;
 
   async function init() {
-    // Absolute URLs: MediaPipe fetches the WASM loader and the model
-    // DOCUMENT-relative (not module-relative), and the page is served from the
-    // /akbal-vision/ subdirectory — a "../" here would resolve one level too high.
     const files = await FilesetResolver.forVisionTasks("/akbal-vision/vendor/mediapipe");
-    detector = await FaceDetector.createFromOptions(files, {
-      baseOptions: { modelAssetPath: "/akbal-vision/models/blaze_face_short_range.tflite" },
+    landmarker = await FaceLandmarker.createFromOptions(files, {
+      baseOptions: { modelAssetPath: "/akbal-vision/models/face_landmarker.task" },
       runningMode: "VIDEO",
+      numFaces: 4,
+      outputFacialTransformationMatrixes: true,
     });
   }
 
   function detect(nowMs) {
-    if (!detector || !video.videoWidth) return [];
-    const res = detector.detectForVideo(video, nowMs);
-    return (res.detections || []).map((d) => {
-      const bb = d.boundingBox; // originX/originY/width/height in pixels
-      return {
-        bbox: { x: bb.originX, y: bb.originY, w: bb.width, h: bb.height },
-        confidence: d.categories?.[0]?.score ?? 0,
-      };
+    if (!landmarker || !video.videoWidth) return [];
+    const res = landmarker.detectForVideo(video, nowMs);
+    const W = video.videoWidth, H = video.videoHeight;
+    const faces = res.faceLandmarks || [];
+    return faces.map((lm, i) => {
+      let minX = 1, minY = 1, maxX = 0, maxY = 0;
+      for (const p of lm) {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+      }
+      const bbox = { x: minX * W, y: minY * H, w: (maxX - minX) * W, h: (maxY - minY) * H };
+      const landmarks = SELECTED_LANDMARKS.filter((idx) => lm[idx]).map((idx) => ({ x: lm[idx].x * W, y: lm[idx].y * H }));
+      const m = res.facialTransformationMatrixes?.[i]?.data;
+      const matrix = m ? Array.from(m) : null;
+      return { bbox, confidence: 1, landmarks, matrix };
     });
   }
 

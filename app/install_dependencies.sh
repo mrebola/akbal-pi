@@ -245,3 +245,8 @@ else
 fi
 echo "whisplay CLI installed. Run 'whisplay help' to get started."
 echo "If you run into installation issues, ask in our Discord forum: https://discord.gg/NMpCMP8RS8"
+
+# Generate the self-signed TLS cert for the web admin (https → the camera works
+# off-localhost, see docs/superpowers/specs). Non-fatal: if openssl is missing
+# the server falls back to http.
+bash scripts/gen-tls-cert.sh || echo "[tls] cert generation skipped (openssl missing?)"

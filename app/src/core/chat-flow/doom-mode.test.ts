@@ -23,6 +23,17 @@ test("falls back to the LAN address otherwise", () => {
   );
 });
 
+test("doomScreenUrl usa https cuando se le pasa scheme", () => {
+  assert.equal(
+    doomScreenUrl({ tailscaleHost: "tailnet-host.example.ts.net", apActive: false, lanIp: "203.0.113.5", port: 8090, scheme: "https" }),
+    "https://tailnet-host.example.ts.net:8090/doom",
+  );
+  assert.equal(
+    doomScreenUrl({ tailscaleHost: null, apActive: true, lanIp: "203.0.113.5", port: 8090, scheme: "https" }),
+    "https://10.42.0.1:8090/doom",
+  );
+});
+
 test("leaving DOOM for any other flow is a DOOM exit", () => {
   assert.equal(shouldLeaveDoom("doom", "sleep"), true);
   assert.equal(shouldLeaveDoom("doom", "web_chat"), true);

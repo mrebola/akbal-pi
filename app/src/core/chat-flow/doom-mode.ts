@@ -51,10 +51,12 @@ export function doomScreenUrl(input: {
   apActive: boolean;
   lanIp: string | null;
   port: number;
+  scheme?: "http" | "https";
 }): string {
-  if (input.tailscaleHost) return `http://${input.tailscaleHost}:${input.port}/doom`;
-  if (input.apActive) return `http://10.42.0.1:${input.port}/doom`;
-  return `http://${input.lanIp ?? "127.0.0.1"}:${input.port}/doom`;
+  const s = input.scheme ?? "http";
+  if (input.tailscaleHost) return `${s}://${input.tailscaleHost}:${input.port}/doom`;
+  if (input.apActive) return `${s}://10.42.0.1:${input.port}/doom`;
+  return `${s}://${input.lanIp ?? "127.0.0.1"}:${input.port}/doom`;
 }
 
 // Any flow change away from DOOM is an exit, whatever caused it (the hold,
@@ -161,7 +163,7 @@ export function isWhisplayDaemonActive(socketPath = "/tmp/whisplay-daemon.sock",
   });
 }
 
-export async function resolveDoomScreenUrl(port: number): Promise<string> {
+export async function resolveDoomScreenUrl(port: number, scheme: "http" | "https" = "http"): Promise<string> {
   const net = await getNetworkInfo(port).catch(() => null);
   const ap = await getApStatus().catch(() => null);
   return doomScreenUrl({
@@ -169,6 +171,7 @@ export async function resolveDoomScreenUrl(port: number): Promise<string> {
     apActive: ap?.active ?? false,
     lanIp: net?.lanIp ?? null,
     port,
+    scheme,
   });
 }
 

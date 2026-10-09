@@ -153,6 +153,12 @@
     "celebrate_crack": "Abrir Crack Station →"
   },
   "crackstation": {
+    "elapsed": "Transcurrido",
+    "eta": "Faltan",
+    "eta_calc": "calculando restante…",
+    "elapsed_total": "Duró",
+    "export_failed": "No se pudo exportar el handshake",
+    "export_ok": "Handshake exportado — crackéalo con hashcat -m 22000 en una GPU",
     "title": "CRACK STATION — HANDSHAKES CAPTURADOS",
     "subtitle": "Handshakes capturados por Wifi Audit y por Wardrive — un solo inventario para crackearlos.",
     "subtab_inventory": "Inventario",

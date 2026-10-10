@@ -63,12 +63,12 @@ test("blink: flanco abierto→cerrado→abierto cuenta 1 parpadeo", () => {
   assert.equal(out.A.blink, true);
 });
 
-test("appearances: cuenta episodios visibles (perdido→visto)", () => {
+test("history se poda: un ID que ya no está deja de ocupar memoria (kiosk 24/7)", () => {
   const h = createMetricsHistory();
   computeMetrics({ A: S("A", lmOpen) }, {}, frame, h, 1000);
-  computeMetrics({}, { A: S("A", lmOpen) }, frame, h, 1100);
-  const out = computeMetrics({ A: S("A", lmOpen) }, {}, frame, h, 1200);
-  assert.equal(out.A.appearances, 2);
+  assert.equal(h.size, 1);
+  computeMetrics({}, { A: S("A", lmOpen) }, frame, h, 1100); // A ya no está
+  assert.equal(h.size, 0);
 });
 
 test("blinkRate null hasta ~10s; coverage/quality presentes", () => {

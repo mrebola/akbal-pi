@@ -11,10 +11,27 @@ const subj = {
 
 test("buildReport: measured con valores reales; estimated placeholder si vacío", () => {
   const r = buildReport(subj);
-  assert.ok(r.measured.find((x) => /DETECTION/i.test(x.label) && x.value.includes("98.2")));
-  assert.ok(r.measured.find((x) => /COVERAGE/i.test(x.label)));
+  // DETECTION/APPEARANCES se quitaron: no son medibles de verdad (no hay score
+  // por rostro en FaceLandmarker; apariciones requeriría identidad, prohibida).
+  assert.ok(!r.measured.find((x) => /DETECTION/i.test(x.label)));
+  assert.ok(!r.measured.find((x) => /APPEARANCES/i.test(x.label)));
+  assert.ok(r.measured.find((x) => /COVERAGE/i.test(x.label) && x.value.includes("18.7")));
   assert.equal(r.estimated.length, 1);
   assert.match(r.estimated[0].value, /MODEL NOT LOADED/);
+});
+
+test("buildReport: BLINK conserva el rate (sin bug de precedencia)", () => {
+  const r = buildReport({ ...subj, blink: false, blinkRate: 14 });
+  const blink = r.measured.find((x) => /BLINK/i.test(x.label));
+  assert.match(blink.value, /NO/);
+  assert.match(blink.value, /14\/min/);
+});
+
+test("buildReport: MOTION muestra dirección cuando hay vector", () => {
+  const r = buildReport({ ...subj, motion: "MEDIUM", motionVec: { mag: 20, angleDeg: 0 } });
+  const m = r.measured.find((x) => /MOTION/i.test(x.label));
+  assert.match(m.value, /MEDIUM/);
+  assert.ok(/[→←↑↓↗↘↖↙]/.test(m.value));
 });
 
 test("buildReport: estimated con confidence cuando hay estimates", () => {

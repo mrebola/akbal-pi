@@ -59,7 +59,15 @@ export function createUI({ root, bus, config, camera }) {
     else document.exitFullscreen?.();
   });
 
-  const row = (r) => `<div class="av-row"><span class="av-k">${esc(r.label)}</span><span class="av-v">${esc(r.value)}${r.confidence != null ? ` <em>${Math.round(r.confidence * 100)}% EST.</em>` : ""}</span></div>`;
+  const row = (r) => `<div class="av-row"><span class="av-k">${esc(r.label)}</span><span class="av-v">${esc(r.value)}</span></div>`;
+  // Estimated rows ALWAYS carry the EST. tag (ethics: an estimate is never shown
+  // as a bare fact), with the confidence % when present. The "MODEL NOT LOADED"
+  // placeholder (label "—") is not an estimate, so no tag.
+  const estRow = (r) => {
+    const tag = r.label === "—" ? "" : r.confidence != null ? ` <em>${Math.round(r.confidence * 100)}% EST.</em>` : ` <em>EST.</em>`;
+    return `<div class="av-row"><span class="av-k">${esc(r.label)}</span><span class="av-v">${esc(r.value)}${tag}</span></div>`;
+  };
+  let acquiredTimer = null;
 
   return {
     boot(steps, done = false) {
@@ -92,7 +100,7 @@ export function createUI({ root, bus, config, camera }) {
         <h2>AKBAL VISION</h2>
         <h3>TRACK RECORD</h3><div class="av-id">${esc(p.id)}</div>
         <h3>MEASURED</h3>${rep.measured.map(row).join("")}
-        <h3>PROBABILISTIC ANALYSIS</h3>${rep.estimated.map(row).join("")}
+        <h3>PROBABILISTIC ANALYSIS</h3>${rep.estimated.map(estRow).join("")}
         ${sys}${privacy}`;
     },
     renderLabels(snapshot, metrics) {
@@ -117,7 +125,8 @@ export function createUI({ root, bus, config, camera }) {
       el.classList.remove("av-flash");
       void el.offsetWidth; // restart the CSS animation
       el.classList.add("av-flash");
-      setTimeout(() => el.classList.add("hidden"), 1300);
+      clearTimeout(acquiredTimer);
+      acquiredTimer = setTimeout(() => el.classList.add("hidden"), 1300);
     },
     logEvent(text) {
       lines.push(`${pad(new Date().getHours())}:${pad(new Date().getMinutes())}:${pad(new Date().getSeconds())} ${text}`);

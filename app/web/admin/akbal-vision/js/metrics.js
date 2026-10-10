@@ -92,9 +92,7 @@ export function computeMetrics(subjects, prevSubjects = {}, frame = { w: 0, h: 0
     s.landmarkQuality = lm ? Math.round((keys.filter((i) => has(lm, i)).length / keys.length) * 100) : 0;
 
     let h = history.get(s.id);
-    if (!h) { h = { eyeOpen: true, blinks: [], firstSeen: nowMs, seenPrev: false, episodes: 0 }; history.set(s.id, h); }
-    if (!h.seenPrev) h.episodes += 1; // visible episode (lost→seen)
-    s.appearances = h.episodes;
+    if (!h) { h = { eyeOpen: true, blinks: [], firstSeen: nowMs, seenPrev: false }; history.set(s.id, h); }
 
     const open = [s.eyeL, s.eyeR].filter((v) => v != null);
     const avg = open.length ? open.reduce((a, b) => a + b, 0) / open.length : 100;
@@ -107,8 +105,14 @@ export function computeMetrics(subjects, prevSubjects = {}, frame = { w: 0, h: 0
     h.blinks = h.blinks.filter((t) => nowMs - t <= 60000);
     s.blinkRate = windowMs >= BLINKRATE_MIN_MS ? Math.round((h.blinks.length / (windowMs / 60000)) * 10) / 10 : null;
 
-    s.trackQuality = Math.round(Math.min(100, (s.confidence ?? 1) * 100 * (h.seenPrev ? 1 : 0.8)));
+    // Real signal: landmark presence × detection continuity (no fake score).
+    s.trackQuality = Math.round(s.landmarkQuality * (h.seenPrev ? 1 : 0.8));
   }
-  for (const [id, h] of history) h.seenPrev = !!subjects[id];
+  // Advance continuity + prune history for ids no longer tracked (bounds memory
+  // on a 24/7 kiosk, since subject ids are never reused).
+  for (const [id, h] of history) {
+    if (subjects[id]) h.seenPrev = true;
+    else history.delete(id);
+  }
   return subjects;
 }

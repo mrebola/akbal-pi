@@ -80,5 +80,5 @@ export function createHud(sceneApi, THREE) {
     sceneApi.render();
   }
 
-  return { update };
+  return { update, mapBox };
 }

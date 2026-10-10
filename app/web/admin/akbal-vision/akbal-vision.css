@@ -1,34 +1,83 @@
-:root { --av-accent:#00FF66; --av-bg:#020805; --av-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace; }
+:root { --av-accent:#00FF66; --av-bg:#020805; --av-dim:rgba(0,255,102,.55); --av-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace; }
 html, body { height: 100%; }
-/* The admin topbar (styles.css) sits on top in normal flow; the stage fills the
-   rest of the viewport below it. The cyberpunk look is scoped to the stage so
-   the shared navbar keeps the admin styling. */
-#av-stage { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden;
-  background: var(--av-bg); color: var(--av-accent); font-family: var(--av-mono); }
-#av-video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
-  transform:scaleX(-1); } /* mirror for facingMode:user; the HUD compensates */
-#av-hud,#av-debug { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
-#av-ui { position:absolute; inset:0; pointer-events:none; }
-#av-ui .av-panel { pointer-events:auto; }
 
-.av-panel { position:absolute; background:rgba(2,8,5,.72); border:1px solid rgba(0,255,102,.35);
-  padding:10px 12px; font-size:12px; letter-spacing:.5px; box-shadow:0 0 12px rgba(0,255,102,.15); }
-.av-panel h2 { margin:0 0 6px; font-size:11px; opacity:.8; }
-.av-target { top:16px; left:16px; min-width:180px; }
-.av-target .av-id { font-size:18px; margin-bottom:6px; }
-.av-target dl { display:grid; grid-template-columns:auto 1fr; gap:2px 10px; margin:0; }
-.av-target dt { opacity:.6; } .av-target dd { margin:0; text-align:right; }
-.av-log { bottom:16px; left:16px; width:280px; } .av-log ul { margin:0; padding:0; list-style:none; }
-.av-log li { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.av-settings { top:16px; right:16px; display:flex; flex-direction:column; gap:6px; }
-.av-settings label { display:flex; justify-content:space-between; gap:8px; }
-.av-settings button { background:transparent; color:var(--av-accent); border:1px solid var(--av-accent);
-  font-family:inherit; padding:4px; cursor:pointer; }
-.av-privacy { opacity:.7; font-size:10px; margin:4px 0 0; }
-.av-debug-stats { bottom:16px; right:16px; white-space:pre; }
-.av-boot { position:absolute; inset:0; margin:0; display:flex; flex-direction:column;
-  justify-content:center; align-items:center; background:var(--av-bg); transition:opacity .4s;
-  white-space:pre; text-align:center; }
+/* The stage fills the viewport below the (auto-hiding) admin topbar. The
+   cyberpunk look is scoped here so the shared navbar keeps admin styling. */
+#av-stage { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden;
+  background: var(--av-bg); color: var(--av-accent); font-family: var(--av-mono);
+  text-shadow: 0 0 4px rgba(0,255,102,.45); }
+#av-video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; transform:scaleX(-1); }
+#av-hud, #av-debug { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+
+/* CRT overlay: scanlines + vignette + faint flicker. */
+#av-crt { position:absolute; inset:0; pointer-events:none; z-index:5; mix-blend-mode:screen;
+  background:
+    repeating-linear-gradient(0deg, rgba(0,0,0,0) 0 2px, rgba(0,0,0,.18) 2px 3px),
+    radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,.55) 100%);
+  animation: av-flicker 3.2s infinite steps(60); }
+@keyframes av-flicker { 0%,96%{opacity:.9} 97%{opacity:.78} 98%{opacity:.95} 100%{opacity:.88} }
+
+#av-ui { position:absolute; inset:0; z-index:10; pointer-events:none; }
+#av-ui button, #av-ui select, #av-ui input, #av-ui .av-flabel { pointer-events:auto; }
+
+/* Top line */
+.av-topline { position:absolute; top:0; left:0; right:0; display:flex; align-items:center; gap:18px;
+  padding:8px 14px; font-size:12px; letter-spacing:2px;
+  background:linear-gradient(180deg, rgba(2,8,5,.75), rgba(2,8,5,0)); }
+.av-topline .av-brand { font-weight:700; }
+.av-topline .av-cam { opacity:.7; }
+.av-topline .av-clock { margin-left:auto; opacity:.85; font-variant-numeric:tabular-nums; }
+.av-live { color:#9effc4; animation:av-pulse 1.4s ease-in-out infinite; }
+@keyframes av-pulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+
+/* Expediente (PRIMARY) — right-side file panel */
+.av-expediente { position:absolute; top:44px; right:16px; width:270px; max-height:calc(100% - 120px);
+  overflow:auto; padding:12px 14px; font-size:12px;
+  background:rgba(2,8,5,.72); border:1px solid rgba(0,255,102,.35); box-shadow:0 0 16px rgba(0,255,102,.12); }
+.av-expediente h2 { margin:0 0 8px; font-size:13px; letter-spacing:2px; }
+.av-expediente h3 { margin:12px 0 4px; font-size:10px; letter-spacing:2px; opacity:.6; border-top:1px solid rgba(0,255,102,.18); padding-top:6px; }
+.av-expediente .av-id { font-size:18px; margin-bottom:4px; }
+.av-row { display:flex; justify-content:space-between; gap:10px; line-height:1.5; }
+.av-row .av-k { opacity:.6; } .av-row .av-v { text-align:right; }
+.av-row .av-v em { font-style:normal; opacity:.75; font-size:10px; }
+.av-priv { font-size:10px; opacity:.7; line-height:1.5; }
+
+/* Floating compact labels for non-primary subjects */
+.av-labels { position:absolute; inset:0; }
+.av-flabel { position:absolute; top:0; left:0; white-space:nowrap; font-size:10px; padding:2px 6px;
+  background:rgba(2,8,5,.6); border:1px solid rgba(0,255,102,.3); transform-origin:top left; }
+
+.av-legend { position:absolute; bottom:8px; left:50%; transform:translateX(-50%); font-size:9px; opacity:.5; letter-spacing:1px; }
+
+/* Controls (compact, bottom-right) */
+.av-controls { position:absolute; bottom:12px; right:16px; display:flex; flex-direction:column; gap:5px;
+  font-size:11px; background:rgba(2,8,5,.6); border:1px solid rgba(0,255,102,.25); padding:8px; }
+.av-controls label { display:flex; justify-content:space-between; gap:8px; }
+.av-controls button, .av-controls select { background:transparent; color:var(--av-accent);
+  border:1px solid var(--av-accent); font-family:inherit; font-size:11px; padding:3px; cursor:pointer; }
+
+/* Event log (bottom-left) */
+.av-log { position:absolute; bottom:12px; left:16px; width:300px; font-size:11px;
+  background:rgba(2,8,5,.6); border:1px solid rgba(0,255,102,.25); padding:8px; }
+.av-log h2 { margin:0 0 4px; font-size:10px; letter-spacing:2px; opacity:.6; }
+.av-log ul { margin:0; padding:0; list-style:none; } .av-log li { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+/* TARGET ACQUIRED flash */
+.av-acquired { position:absolute; top:40%; left:50%; transform:translate(-50%,-50%); font-size:22px;
+  letter-spacing:4px; }
+.av-acquired.av-flash { animation:av-acq 1.3s ease-out; }
+@keyframes av-acq { 0%{opacity:0; transform:translate(-50%,-50%) scale(1.3)} 15%{opacity:1} 70%{opacity:1} 100%{opacity:0} }
+
+/* Boot */
+.av-boot { position:absolute; inset:0; margin:0; display:flex; flex-direction:column; justify-content:center;
+  align-items:center; background:var(--av-bg); white-space:pre; text-align:center; z-index:20; transition:opacity .4s; }
 .av-boot-error { color:#ff5a5a; }
 .hidden { display:none !important; } .muted { opacity:.45; }
-@media (max-width:640px){ .av-log{width:60vw} .av-target,.av-settings{font-size:11px} }
+
+/* Auto-hiding admin navbar: the stage is diegetic/fullscreen; the navbar
+   collapses when idle (body.av-navhidden) and returns on mouse move / hover. */
+body.av-navhidden #topbar { transform:translateY(-100%); }
+#topbar { transition:transform .3s ease; }
+#topbar:hover { transform:none; }
+
+@media (max-width:640px){ .av-expediente{width:52vw} .av-log,.av-controls{font-size:10px} }

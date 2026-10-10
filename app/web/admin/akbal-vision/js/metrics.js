@@ -66,3 +66,49 @@ export function motionVector(prevCenter, curCenter) {
   const dx = curCenter.x - prevCenter.x, dy = curCenter.y - prevCenter.y;
   return { mag: Math.hypot(dx, dy), angleDeg: (Math.atan2(dy, dx) * 180) / Math.PI };
 }
+
+const BLINK_OPEN = 60, BLINK_CLOSED = 20; // openness % hysteresis
+const BLINKRATE_MIN_MS = 10000;
+
+export function createMetricsHistory() { return new Map(); } // id -> {eyeOpen, blinks:[], firstSeen, seenPrev, episodes}
+
+// Writes MEASURED metric fields onto each subject (from its lm + previous
+// center) and advances per-id temporal state in `history` (blink FSM, blink
+// timestamps, visible episodes). Pure w.r.t. inputs; `history` is the explicit
+// accumulator the caller owns.
+export function computeMetrics(subjects, prevSubjects = {}, frame = { w: 0, h: 0 }, history = createMetricsHistory(), nowMs = 0) {
+  for (const s of Object.values(subjects)) {
+    const lm = s.lm || null;
+    s.eyeL = eyeOpenness(lm, IDX.LEFT);
+    s.eyeR = eyeOpenness(lm, IDX.RIGHT);
+    s.mouth = mouthOpen(lm);
+    s.gaze = gaze(lm, s.pose);
+    s.coverage = faceCoverage(s.bbox, frame);
+    s.proximity = proximity(s.coverage);
+    s.position = positionPct(s.bbox, frame);
+    const prev = prevSubjects[s.id] || null;
+    s.motionVec = motionVector(prev ? prev.center : null, s.center);
+    const keys = [IDX.LEFT.top, IDX.LEFT.bottom, IDX.RIGHT.top, IDX.RIGHT.bottom, IDX.MOUTH.top, IDX.MOUTH.left, IDX.LEFT.iris, IDX.RIGHT.iris];
+    s.landmarkQuality = lm ? Math.round((keys.filter((i) => has(lm, i)).length / keys.length) * 100) : 0;
+
+    let h = history.get(s.id);
+    if (!h) { h = { eyeOpen: true, blinks: [], firstSeen: nowMs, seenPrev: false, episodes: 0 }; history.set(s.id, h); }
+    if (!h.seenPrev) h.episodes += 1; // visible episode (lost→seen)
+    s.appearances = h.episodes;
+
+    const open = [s.eyeL, s.eyeR].filter((v) => v != null);
+    const avg = open.length ? open.reduce((a, b) => a + b, 0) / open.length : 100;
+    let blink = false;
+    if (h.eyeOpen && avg < BLINK_CLOSED) h.eyeOpen = false;
+    else if (!h.eyeOpen && avg > BLINK_OPEN) { h.eyeOpen = true; h.blinks.push(nowMs); blink = true; }
+    s.blink = blink;
+
+    const windowMs = nowMs - h.firstSeen;
+    h.blinks = h.blinks.filter((t) => nowMs - t <= 60000);
+    s.blinkRate = windowMs >= BLINKRATE_MIN_MS ? Math.round((h.blinks.length / (windowMs / 60000)) * 10) / 10 : null;
+
+    s.trackQuality = Math.round(Math.min(100, (s.confidence ?? 1) * 100 * (h.seenPrev ? 1 : 0.8)));
+  }
+  for (const [id, h] of history) h.seenPrev = !!subjects[id];
+  return subjects;
+}

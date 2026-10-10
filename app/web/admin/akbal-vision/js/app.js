@@ -9,6 +9,8 @@ import { createScene } from "./scene.js";
 import { createHud } from "./hud.js";
 import { createUI } from "./ui.js";
 import { annotate } from "./analysis.js";
+import { createMetricsHistory, computeMetrics } from "./metrics.js";
+import { nullEstimator, filterEstimates } from "./estimator.js";
 
 const video = document.getElementById("av-video");
 const bus = createEventBus();
@@ -20,6 +22,8 @@ const vision = createVision({ video });
 const sceneApi = createScene(document.getElementById("av-hud"));
 const hud = createHud(sceneApi, THREE);
 const ui = createUI({ root: document.getElementById("av-ui"), bus, config, camera });
+const metricsHistory = createMetricsHistory();
+const estimator = nullEstimator; // Phase A: no-op; Phase B swaps in ONNX/TF.js
 
 // Bus → event log (human-readable lines).
 bus.on("camera.ready", () => ui.logEvent("CAMERA READY"));
@@ -66,6 +70,10 @@ function startLoops() {
       // Hito 2: fill pose/eyeContact/motion and emit eye-contact transitions.
       const frameDiag = Math.hypot(video.videoWidth || 0, video.videoHeight || 0);
       const ann = annotate(state.subjects, prev.subjects, frameDiag);
+      // MEASURED metrics (EAR/MAR/gaze/coverage/blink/…) + ESTIMATED seam (no-op in Phase A).
+      computeMetrics(state.subjects, prev.subjects, { w: video.videoWidth, h: video.videoHeight }, metricsHistory, now);
+      const est = await estimator.estimate(state.subjects, video);
+      for (const s of Object.values(state.subjects)) s.estimates = filterEstimates(est[s.id] || {});
       store.set(state);
       for (const ev of [...events, ...ann.events]) bus.emit(ev.type, ev.payload);
       visionFrames++;

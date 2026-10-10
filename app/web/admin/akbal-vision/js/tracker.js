@@ -34,7 +34,7 @@ export function createTracker({ ttlMs = 600, matchFactor = 1.5 } = {}) {
           subjects[best.id] = {
             ...best, bbox: d.bbox, center: c, confidence: d.confidence,
             lastSeen: nowMs, visibleForMs: nowMs - best.firstSeen,
-            landmarks: d.landmarks ?? null, matrix: d.matrix ?? null,
+            landmarks: d.landmarks ?? null, matrix: d.matrix ?? null, lm: d.lm ?? null,
           };
         } else {
           const id = nextId();
@@ -42,7 +42,7 @@ export function createTracker({ ttlMs = 600, matchFactor = 1.5 } = {}) {
             id, bbox: d.bbox, center: c, confidence: d.confidence,
             firstSeen: nowMs, lastSeen: nowMs, visibleForMs: 0, isPrimary: false,
             orientation: "FRONTAL", pose: { yaw: 0, pitch: 0, roll: 0 },
-            eyeContact: "UNKNOWN", motion: "STATIC", landmarks: d.landmarks ?? null, matrix: d.matrix ?? null,
+            eyeContact: "UNKNOWN", motion: "STATIC", landmarks: d.landmarks ?? null, matrix: d.matrix ?? null, lm: d.lm ?? null,
           };
           events.push({ type: "subject.created", payload: subjects[id] });
         }

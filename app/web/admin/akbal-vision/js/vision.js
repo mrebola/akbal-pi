@@ -35,7 +35,9 @@ export function createVision({ video }) {
       const landmarks = SELECTED_LANDMARKS.filter((idx) => lm[idx]).map((idx) => ({ x: lm[idx].x * W, y: lm[idx].y * H }));
       const m = res.facialTransformationMatrixes?.[i]?.data;
       const matrix = m ? Array.from(m) : null;
-      return { bbox, confidence: 1, landmarks, matrix };
+      // Full normalized landmark array for metrics.js (EAR/MAR/gaze by index).
+      const lmNorm = lm.map((p) => ({ x: p.x, y: p.y }));
+      return { bbox, confidence: 1, landmarks, matrix, lm: lmNorm };
     });
   }
 
